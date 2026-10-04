@@ -2,6 +2,7 @@
 /dist
 /deps
 /output
+/.module-cache
 /*.cer
 /*.pfx
 *.exe

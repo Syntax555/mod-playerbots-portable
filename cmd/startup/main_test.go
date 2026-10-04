@@ -447,7 +447,7 @@ MyCustomOption = 42
 		t.Errorf("worldserver.conf missing content: %s", worldConf)
 	}
 
-	// Verify modules/playerbots.conf created with DisabledWithoutRealPlayer = 1
+	// Verify the fresh bot configuration runs autonomously, including without players.
 	playerbotsConfBytes, err := os.ReadFile(filepath.Join(modulesDir, "playerbots.conf"))
 	if err != nil {
 		t.Fatalf("failed to read created playerbots.conf: %v", err)
@@ -456,8 +456,27 @@ MyCustomOption = 42
 	if !strings.Contains(playerbotsConf, "Playerbots.Updates.EnableDatabases = 1") {
 		t.Errorf("playerbots.conf missing content: %s", playerbotsConf)
 	}
-	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 1") {
-		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 1: %s", playerbotsConf)
+	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 0") {
+		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 0: %s", playerbotsConf)
+	}
+	for _, setting := range []string{"AiPlayerbot.MinRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.NaturalProgression = 1", "AiPlayerbot.RandombotStartingLevel = 1"} {
+		if !strings.Contains(playerbotsConf, setting) {
+			t.Errorf("playerbots.conf missing setting %s", setting)
+		}
+	}
+	customBots := "# Existing administrator choices\nAiPlayerbot.MinRandomBots = 25\nAiPlayerbot.NaturalProgression = 0\n"
+	if err := os.WriteFile(filepath.Join(modulesDir, "playerbots.conf"), []byte(customBots), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureConfigFiles(baseDir, baseDir, mysqlExe); err != nil {
+		t.Fatal(err)
+	}
+	unchangedBots, err := os.ReadFile(filepath.Join(modulesDir, "playerbots.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unchangedBots) != customBots {
+		t.Error("existing customized playerbots.conf was overwritten")
 	}
 
 	// Verify my.cnf was created in mysql directory with loopback
@@ -1001,4 +1020,3 @@ func TestEnsureClientData(t *testing.T) {
 		t.Errorf("client data was not properly installed into %s", filepath.Join(freshWorkDir, "data"))
 	}
 }
-

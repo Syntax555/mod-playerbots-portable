@@ -1373,9 +1373,9 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, mysqlDir ..
 				content = strings.Replace(content, `MySQLExecutable = ""`, fmt.Sprintf(`MySQLExecutable = "%s"`, mysqlExeForConf), 1)
 				content = strings.Replace(content, `BindIP = "0.0.0.0"`, `BindIP = "127.0.0.1"`, 1)
 
-				// Enable AiPlayerbot.DisabledWithoutRealPlayer by default to reduce disk writes when no real players are online
-				if strings.Contains(info.Name(), "playerbots") {
-					content = strings.Replace(content, "AiPlayerbot.DisabledWithoutRealPlayer = 0", "AiPlayerbot.DisabledWithoutRealPlayer = 1", 1)
+				content, err = applyConfigProfile(info.Name(), content)
+				if err != nil {
+					return err
 				}
 
 				if err := os.MkdirAll(filepath.Dir(targetConfPath), 0755); err != nil {
@@ -1473,7 +1473,8 @@ func main() {
 
 	// Ensure config files (e.g. worldserver.conf, authserver.conf, modules/playerbots.conf, mysql/my.cnf) exist in workDir
 	if err := ensureConfigFiles(baseDir, workDir, binaries.mysql, opts.mysqlDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to ensure config files: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: failed to ensure config files: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Ensure client data files (maps, vmaps, mmaps, dbc) are present

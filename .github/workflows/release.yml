@@ -1,20 +1,27 @@
-name: Build and Release
+name: Build portable ZIP
 
 on:
   push:
     tags:
       - 'v*'
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: portable-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  build:
+    name: Build and verify Windows ZIP
     runs-on: windows-2022
+    timeout-minutes: 360
 
     steps:
-      - name: Checkout repository and submodules
+      - name: Checkout pinned submodules
         uses: actions/checkout@v7
         with:
           submodules: recursive
@@ -22,8 +29,16 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26.6'
+          go-version-file: go.mod
           cache: true
+
+      - name: Test startup launcher
+        shell: pwsh
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher tests failed.' }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher vet failed.' }
 
       - name: Install Boost
         uses: MarkusJx/install-boost@v2
@@ -31,7 +46,7 @@ jobs:
         with:
           boost_version: 1.84.0
 
-      - name: Cache Build Dependencies (MySQL, OpenSSL)
+      - name: Cache MySQL and OpenSSL
         uses: actions/cache@v6
         with:
           path: |
@@ -39,125 +54,166 @@ jobs:
             C:\tools\openssl\current
           key: win-deps-mysql-8.0.40-openssl-3.5.7
 
-      - name: Setup Dependencies (MySQL, OpenSSL)
+      - name: Setup build and bundled runtime dependencies
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $boostRoot = '${{ steps.install-boost.outputs.BOOST_ROOT }}'
+          "BOOST_ROOT_DIR=$boostRoot" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-          # 1. Set BOOST_ROOT from install-boost step
-          $boostRoot = "${{ steps.install-boost.outputs.BOOST_ROOT }}"
-          "BOOST_ROOT=$boostRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "Using Boost at $boostRoot"
-
-          # 2. MySQL Community Server 8.0 (64-bit)
           if (-not (Test-Path 'C:\tools\mysql\current\bin\mysqld.exe')) {
-              Write-Host "Downloading MySQL Server 8.0..."
-              $mysqlZip = Join-Path $env:RUNNER_TEMP 'mysql-8.0-winx64.zip'
-              curl.exe --fail -sSL --retry 3 -A "Mozilla/5.0" "https://cdn.mysql.com/archives/mysql-8.0/mysql-8.0.40-winx64.zip" -o $mysqlZip
-              New-Item -ItemType Directory -Force -Path 'C:\tools\mysql' | Out-Null
-              Expand-Archive -Path $mysqlZip -DestinationPath 'C:\tools\mysql' -Force
-              if (Test-Path 'C:\tools\mysql\current') { Remove-Item -Recurse -Force 'C:\tools\mysql\current' }
-              $extractedDir = Get-ChildItem -Path 'C:\tools\mysql' -Directory | Where-Object { $_.Name -like 'mysql-8.0*' } | Select-Object -First 1
-              Rename-Item $extractedDir.FullName 'C:\tools\mysql\current'
-              # Remove PDB debug symbols to save runner disk space and cache overhead
-              Get-ChildItem -Path 'C:\tools\mysql\current' -Recurse -Filter '*.pdb' | Remove-Item -Force -ErrorAction SilentlyContinue
+              $mysqlZip = Join-Path $env:RUNNER_TEMP 'mysql-8.0.40-winx64.zip'
+              curl.exe --fail -sSL --retry 3 'https://cdn.mysql.com/archives/mysql-8.0/mysql-8.0.40-winx64.zip' -o $mysqlZip
+              if ($LASTEXITCODE -ne 0) { throw 'MySQL download failed.' }
+              New-Item -ItemType Directory -Force 'C:\tools\mysql' | Out-Null
+              Expand-Archive $mysqlZip 'C:\tools\mysql' -Force
+              if (Test-Path 'C:\tools\mysql\current') { Remove-Item 'C:\tools\mysql\current' -Recurse -Force }
+              Move-Item 'C:\tools\mysql\mysql-8.0.40-winx64' 'C:\tools\mysql\current'
+              Get-ChildItem 'C:\tools\mysql\current' -Recurse -Filter '*.pdb' | Remove-Item -Force
           }
-          "MYSQL_ROOT_DIR=C:\tools\mysql\current" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          'MYSQL_ROOT_DIR=C:\tools\mysql\current' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-          # 3. FireDaemon OpenSSL 3.5.7 (64-bit)
           if (-not (Test-Path 'C:\tools\openssl\current\x64\include\openssl\opensslv.h')) {
-              Write-Host "Downloading FireDaemon OpenSSL 3.5.7..."
               $opensslZip = Join-Path $env:RUNNER_TEMP 'openssl-3.5.7.zip'
-              curl.exe --fail -sSL --retry 3 -A "Mozilla/5.0" "https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-3.5.7.zip" -o $opensslZip
-              New-Item -ItemType Directory -Force -Path 'C:\tools\openssl\current' | Out-Null
-              Expand-Archive -Path $opensslZip -DestinationPath 'C:\tools\openssl\current' -Force
+              curl.exe --fail -sSL --retry 3 'https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-3.5.7.zip' -o $opensslZip
+              if ($LASTEXITCODE -ne 0) { throw 'OpenSSL download failed.' }
+              New-Item -ItemType Directory -Force 'C:\tools\openssl\current' | Out-Null
+              Expand-Archive $opensslZip 'C:\tools\openssl\current' -Force
           }
-          "OPENSSL_ROOT_DIR=C:\tools\openssl\current\x64" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "Using OpenSSL at C:\tools\openssl\current\x64"
+          'OPENSSL_ROOT_DIR=C:\tools\openssl\current\x64' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Ensure mod-playerbots module path
+      - name: Determine package version
+        id: version
         shell: pwsh
         run: |
-          if (-not (Test-Path "azerothcore-wotlk/modules/mod-playerbots/src")) {
-              Write-Host "Syncing mod-playerbots into azerothcore-wotlk/modules/mod-playerbots..."
-              New-Item -ItemType Directory -Force -Path "azerothcore-wotlk/modules/mod-playerbots" | Out-Null
-              Copy-Item -Recurse -Force "mod-playerbots/*" "azerothcore-wotlk/modules/mod-playerbots/"
+          if ('${{ github.event_name }}' -eq 'push' -and $env:GITHUB_REF -like 'refs/tags/v*') {
+              $version = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+              $version = 'dev-${{ github.run_number }}'
           }
+          if ($version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') { throw 'Invalid package version.' }
+          "value=$version" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "PACKAGE_VERSION=$version" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Determine Version
-        id: get_version
+      - name: Configure pinned server and all modules
         shell: pwsh
         run: |
-          $ver = $env:GITHUB_REF_NAME.TrimStart('v')
-          Write-Host "Release version: $ver"
-          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "PACKAGE_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Configure CMake
-        shell: pwsh
-        run: |
-          cmake -B build -S . `
-            -G "Visual Studio 17 2022" -A x64 `
+          cmake -B build -S . -G 'Visual Studio 17 2022' -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
-            -DPACKAGE_VERSION="${{ steps.get_version.outputs.version }}" `
+            -DPACKAGE_VERSION='${{ steps.version.outputs.value }}' `
             -DMYSQL_ROOT_DIR="$env:MYSQL_ROOT_DIR" `
             -DOPENSSL_ROOT_DIR="$env:OPENSSL_ROOT_DIR" `
-            -DBOOST_ROOT_DIR="$env:BOOST_ROOT"
+            -DBOOST_ROOT_DIR="$env:BOOST_ROOT_DIR"
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
 
-      - name: Build & Assemble Distribution
+      - name: Compile and assemble complete distribution
         shell: pwsh
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel 4
+          if ($LASTEXITCODE -ne 0) { throw 'Server build failed.' }
 
-      - name: Create Portable Zip Package
+      - name: Bundle Visual C++ runtime
         shell: pwsh
         run: |
-          cmake --build build --target package_zip
+          ./scripts/CopyWindowsRuntime.ps1 -DistDir dist
 
-      - name: Generate Release Notes
+      - name: Smoke test bundled server and database executables
         shell: pwsh
         run: |
-          $ver = "${{ steps.get_version.outputs.version }}"
-          $acoreSha = (git -C azerothcore-wotlk rev-parse HEAD).Trim()
-          $acoreShort = $acoreSha.Substring(0, 8)
-          $acoreDate = (git -C azerothcore-wotlk log -1 --format=%cs).Trim()
-
-          $modSha = (git -C mod-playerbots rev-parse HEAD).Trim()
-          $modShort = $modSha.Substring(0, 8)
-          $modDate = (git -C mod-playerbots log -1 --format=%cs).Trim()
-
-          $bt           = '`'
-          $bt3          = '```'
-
-          $lines = [System.Collections.Generic.List[string]]::new()
-          $lines.Add("Turnkey Windows portable distribution for AzerothCore WotLK (3.3.5a) and mod-playerbots with an automated startup orchestrator and client data downloader.")
-          $lines.Add("")
-          $lines.Add("### Upstream Versions")
-          $lines.Add("- **azerothcore-wotlk**: [$bt$acoreShort$bt](https://github.com/mod-playerbots/azerothcore-wotlk/commit/$acoreSha) (${bt}Playerbot${bt} branch, $acoreDate)")
-          $lines.Add("- **mod-playerbots**: [$bt$modShort$bt](https://github.com/mod-playerbots/mod-playerbots/commit/$modSha) (${bt}master${bt} branch, $modDate)")
-          $lines.Add("")
-          $lines.Add("### Quick Start")
-          $lines.Add("1. Download and extract **${bt}mod-playerbots-portable-$ver.zip${bt}** from the Assets below.")
-          $lines.Add("2. Run **${bt}startup.exe${bt}** (on first run, required client data and database will be initialized automatically).")
-          $lines.Add("3. Set realmlist to ${bt}set realmlist 127.0.0.1${bt} and create an account via the server console:")
-          $lines.Add("   ${bt3}text")
-          $lines.Add("   account create <username> <password>")
-          $lines.Add("   account set gmlevel <username> 3 -1")
-          $lines.Add("   ${bt3}")
-
-          $notes = $lines -join "`n"
-          [System.IO.File]::WriteAllText("release_notes.md", $notes, [System.Text.UTF8Encoding]::new($false))
-          Write-Host "Generated release notes:"
-          Write-Host $notes
-
-          Write-Host ""
-          Write-Host "=== Artifact SHA-256 Checksums ==="
-          Get-ChildItem -Path output -File | ForEach-Object {
-              $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
-              Write-Host "$hash  $($_.Name)"
+          $ErrorActionPreference = 'Stop'
+          # Restrict search to the Windows system and bundled application DLLs.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Push-Location dist
+          try {
+              foreach ($exe in @('authserver.exe', 'worldserver.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqld.exe', 'mysql/bin/mysqladmin.exe')) {
+                  & "./$exe" --version
+                  if ($LASTEXITCODE -ne 0) { throw "Bundled runtime smoke test failed: $exe" }
+              }
+              & './dbimport.exe' --help
+              if ($LASTEXITCODE -ne 0) { throw 'Bundled database import tool failed to load.' }
+              $PSNativeCommandUseErrorActionPreference = $false
+              $usage = & './vmap4_assembler.exe' unused unused unused
+              if ($LASTEXITCODE -ne 1 -or ($usage -join "`n") -notmatch 'usage:') { throw 'Bundled map assembler failed to load.' }
+          } finally {
+              Pop-Location
           }
 
-      - name: Publish GitHub Release
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          cmake --build build --target package_zip --config Release
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP packaging failed.' }
+
+      - name: Verify complete ZIP contents
+        shell: pwsh
+        run: |
+          ./cmake/VerifyPortableZip.ps1 -ZipPath 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip'
+          $hash = (Get-FileHash 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip' -Algorithm SHA256).Hash.ToLower()
+          Write-Host "SHA-256: $hash"
+
+      - name: Generate release notes with locked versions
+        shell: pwsh
+        run: |
+          $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
+          $version = '${{ steps.version.outputs.value }}'
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add('Prebuilt Windows x64 AzerothCore server with playerbots, AutoBalance, individual progression, AH bot plus and dungeon clear.')
+          $lines.Add('')
+          $lines.Add('Download and extract mod-playerbots-portable-' + $version + '.zip, then run startup.exe. Required client data and databases are downloaded/initialized on first launch. No compiler is required.')
+          $lines.Add('')
+          $lines.Add('Fresh installations use Vanilla progression and 2,500 level-1 bots with natural farming defaults. See README.md and defaults/ in the ZIP for details.')
+          $lines.Add('')
+          $lines.Add('### Locked upstream versions')
+          foreach ($dependency in @($lock.core) + @($lock.modules)) {
+              $repo = $dependency.url -replace '\.git$', ''
+              $lines.Add('- **' + $dependency.name + '**: [' + $dependency.revision.Substring(0, 12) + '](' + $repo + '/commit/' + $dependency.revision + ')')
+          }
+          $lines.Add('')
+          $lines.Add('### Included client addons')
+          foreach ($addon in @($lock.clientAddons)) {
+              $repo = $addon.url -replace '\.git$', ''
+              $lines.Add('- **' + $addon.name + '**: [' + $addon.revision.Substring(0, 12) + '](' + $repo + '/commit/' + $addon.revision + ') for WoW 3.3.5a. Copy addons/' + $addon.name + ' into your client Interface/AddOns/ folder.')
+          }
+          $lines.Add('')
+          $lines.Add('The playerbots natural-progression patch is included in this build; the upstream revision remains pinned.')
+          [System.IO.File]::WriteAllText('release_notes.md', ($lines -join "`n"), [System.Text.UTF8Encoding]::new($false))
+
+      - name: Upload compiled ZIP for review
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-zip
+          path: output/*.zip
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload release notes
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release_notes.md
+          if-no-files-found: error
+
+  release:
+    name: Publish tagged ZIP release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified ZIP
+        uses: actions/download-artifact@v7
+        with:
+          name: portable-zip
+          path: output
+
+      - name: Download release notes
+        uses: actions/download-artifact@v7
+        with:
+          name: release-notes
+
+      - name: Publish ZIP release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
@@ -165,5 +221,5 @@ jobs:
           body_path: release_notes.md
           prerelease: false
           draft: false
-          files: |
-            output/*.zip
+          files: output/*.zip
+          fail_on_unmatched_files: true
