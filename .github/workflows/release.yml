@@ -45,6 +45,9 @@ jobs:
         id: install-boost
         with:
           boost_version: 1.84.0
+          toolset: msvc
+          link: static
+          platform_version: 2022
 
       - name: Cache MySQL and OpenSSL
         uses: actions/cache@v6
