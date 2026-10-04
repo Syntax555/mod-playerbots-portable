@@ -1,2 +1,2 @@
 # Unified diff context prefixes include a space on blank lines.
-*.patch -whitespace
+*.patch text eol=lf -whitespace
