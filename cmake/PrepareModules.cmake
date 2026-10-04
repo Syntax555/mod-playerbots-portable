@@ -97,7 +97,15 @@ foreach(_index RANGE 0 ${_last_module})
             endif()
             file(SHA256 "${_patch_file}" _patch_hash)
             string(APPEND _stamp "${_patch}: ${_patch_hash}\n")
-            list(APPEND _patches "${_patch_file}")
+            # Windows checkouts created before the LF attribute can still have
+            # CRLF patches. Apply an LF copy against the archived source files;
+            # keep the checked-in patch and its dependency/hash unchanged.
+            file(READ "${_patch_file}" _patch_contents)
+            string(REPLACE "\r\n" "\n" _patch_contents "${_patch_contents}")
+            file(MAKE_DIRECTORY "${PORTABLE_SOURCE_DIR}/.module-cache/patches")
+            set(_prepared_patch "${PORTABLE_SOURCE_DIR}/.module-cache/patches/${_name}-${_patch_index}.patch")
+            file(WRITE "${_prepared_patch}" "${_patch_contents}")
+            list(APPEND _patches "${_prepared_patch}")
         endforeach()
     endif()
 
