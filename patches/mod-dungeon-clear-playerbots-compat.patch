@@ -1,0 +1,143 @@
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcRaidMuster.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcRaidMuster.cpp
+index 2b33513..541f65d 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DcRaidMuster.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DcRaidMuster.cpp
+@@ -17,12 +17,71 @@
+ #include "PlayerbotAI.h"
+ #include "Playerbots.h"
+ #include "Timer.h"
++#include <algorithm>
+ #include <string>
+ 
+ namespace
+ {
+ // --- RAID pre-boss muster (Plan C; see DcRaidMusterDecision.h) -----------
+ 
++template <typename AI>
++constexpr bool HasForceRebuff = requires(AI* ai)
++{
++    ai->forceRebuff.Begin(false);
++    ai->forceRebuff.End();
++    ai->forceRebuff.IsPending();
++};
++
++template <typename AI>
++void BeginRebuffWindow(AI* ai)
++{
++    if constexpr (HasForceRebuff<AI>)
++    {
++        if (!ai->HasStrategy("force rebuff", BOT_STATE_NON_COMBAT))
++            ai->ChangeStrategy("+force rebuff", BOT_STATE_NON_COMBAT);
++        ai->forceRebuff.Begin(false);
++    }
++    else if (!ai->HasStrategy("buff", BOT_STATE_NON_COMBAT))
++        ai->ChangeStrategy("+buff", BOT_STATE_NON_COMBAT);
++}
++
++template <typename AI>
++void EndRebuffWindow(AI* ai)
++{
++    if constexpr (HasForceRebuff<AI>)
++        ai->forceRebuff.End();
++}
++
++template <typename AI>
++bool IsRebuffPending(AI* ai)
++{
++    if constexpr (HasForceRebuff<AI>)
++        return ai->forceRebuff.IsPending();
++    else
++        // Legacy buffing exposes no completion state. Give normal spellcasts
++        // the bounded muster window; never fabricate buffs or reagents.
++        return true;
++}
++
++template <typename AI>
++uint32 MusterTimeoutMs(AI* /*ai*/, Player* bot, char const* key)
++{
++    uint32 seconds = DcSettings::GetUInt(bot, key);
++    if constexpr (!HasForceRebuff<AI>)
++    {
++        // Config values, unlike client overrides, are not clamped upstream.
++        // The legacy completion fallback requires finite, nonzero budgets.
++        if (DcSettingDef const* setting = FindDcSetting(key))
++        {
++            if (!seconds)
++                seconds = static_cast<uint32>(setting->defVal);
++            seconds = std::clamp(seconds, static_cast<uint32>(setting->minVal),
++                                static_cast<uint32>(setting->maxVal));
++        }
++    }
++    return seconds * 1000;
++}
++
+ // The muster pushed the rest targets to full so bots actually eat/drink to
+ // the bars; retract on release — but never clobber an override the player
+ // set by hand (we only retract what we applied).
+@@ -49,10 +108,8 @@ void ApplyMusterRestOverride(Player* bot, DcRunState& run)
+     run.musterRestOverride = true;
+ }
+ 
+-// One ForceRebuff round: every same-map bot member opens a rebuff window
+-// (group-variant buffs, reagents, buff-first multiplier — all the stock
+-// machinery). The worldbuff strategy (simulated flasks/food) is installed
+-// by DcStrategyGate on raid maps, so its auras land during the same window.
++// Open one rebuff window for every same-map bot. Older playerbots versions
++// use their normal resource-consuming buff strategy until the muster timeout.
+ void IssueRebuffRound(Player* bot)
+ {
+     Group* group = bot->GetGroup();
+@@ -66,19 +123,12 @@ void IssueRebuffRound(Player* bot)
+         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+         if (!memberAI)
+             continue;  // humans buff themselves
+-        if (!memberAI->HasStrategy("force rebuff", BOT_STATE_NON_COMBAT))
+-            memberAI->ChangeStrategy("+force rebuff", BOT_STATE_NON_COMBAT);
+-        memberAI->forceRebuff.Begin(/*replyToReadyCheck*/ false);
++        BeginRebuffWindow(memberAI);
+     }
+ }
+ 
+-// Close every rebuff window this muster opened. ForceRebuffState::Begin is
+-// its own 2-minute window, and while it is pending stock buff triggers
+-// bypass their check intervals and the buff-first multiplier zeroes healing
+-// out of combat — a window left open outlives the muster and keeps the raid
+-// buffing into the walk-in and the pull. End() is the off-switch; the
+-// always-on "force rebuff" strategy stays installed (AiFactory gives it to
+-// every bot), it simply has nothing pending to drive.
++// Close native force-rebuff windows. Legacy normal buffing needs no special
++// cancellation and remains part of the bot's regular non-combat strategy.
+ void CancelRebuffRound(Player* bot)
+ {
+     Group* group = bot->GetGroup();
+@@ -90,7 +140,7 @@ void CancelRebuffRound(Player* bot)
+         if (!member || member->GetMapId() != bot->GetMapId())
+             continue;
+         if (PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member))
+-            memberAI->forceRebuff.End();
++            EndRebuffWindow(memberAI);
+     }
+ }
+ }
+@@ -153,7 +203,7 @@ bool DcRaidMuster::Holds(Player* bot, PlayerbotAI* botAI, AiObjectContext* conte
+                 continue;
+             if (member != bot && bot->GetDistance(member) > spread)
+                 staged = false;
+-            if (memberAI->forceRebuff.IsPending())
++            if (IsRebuffPending(memberAI))
+                 rebuffPending = true;
+         }
+     }
+@@ -165,9 +215,9 @@ bool DcRaidMuster::Holds(Player* bot, PlayerbotAI* botAI, AiObjectContext* conte
+     in.nowMs = now;
+     in.phaseSinceMs = run.musterPhaseSinceMs;
+     in.armedSinceMs = run.musterArmedMs;
+-    in.restTimeoutMs = DcSettings::GetUInt(bot, "RaidMusterRestTimeoutSecs") * 1000;
+-    in.rebuffTimeoutMs = DcSettings::GetUInt(bot, "RaidMusterRebuffTimeoutSecs") * 1000;
+-    in.totalTimeoutMs = DcSettings::GetUInt(bot, "RaidMusterTotalTimeoutSecs") * 1000;
++    in.restTimeoutMs = MusterTimeoutMs(botAI, bot, "RaidMusterRestTimeoutSecs");
++    in.rebuffTimeoutMs = MusterTimeoutMs(botAI, bot, "RaidMusterRebuffTimeoutSecs");
++    in.totalTimeoutMs = MusterTimeoutMs(botAI, bot, "RaidMusterTotalTimeoutSecs");
+ 
+     auto const before = static_cast<DcRaidMusterDecision::Phase>(run.musterPhase);
+     DcRaidMusterDecision::Verdict const v = DcRaidMusterDecision::Decide(before, in);
