@@ -49,6 +49,7 @@ type startupOptions struct {
 	skipDataCheck    bool
 	dataURL          string
 	downloadDataOnly bool
+	applyProfiles    bool
 }
 
 type mysqlBinaries struct {
@@ -291,6 +292,7 @@ func parseArgs(args []string) (startupOptions, error) {
 	fs.BoolVar(&opts.skipDataCheck, "skip-data-check", false, "Skip checking and downloading client data (maps, vmaps, mmaps, dbc).")
 	fs.StringVar(&opts.dataURL, "data-url", defaultClientDataURL, "Custom URL to download client data Data.zip from.")
 	fs.BoolVar(&opts.downloadDataOnly, "download-data-only", false, "Download and extract client data, then exit.")
+	fs.BoolVar(&opts.applyProfiles, "apply-profiles", false, "Apply recommended server/module settings with config backups, then exit without starting servers.")
 
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage of mod-playerbots startup tool:\n\n")
@@ -300,6 +302,15 @@ func parseArgs(args []string) (startupOptions, error) {
 
 	if err := fs.Parse(args); err != nil {
 		return opts, err
+	}
+	if opts.port < 1 || opts.port > 65535 || opts.authPort < 1 || opts.authPort > 65535 {
+		return opts, errors.New("MySQL and authserver ports must be between 1 and 65535")
+	}
+	if opts.timeout <= 0 {
+		return opts, errors.New("timeout must be greater than zero")
+	}
+	if opts.applyProfiles && (opts.initOnly || opts.downloadDataOnly) {
+		return opts, errors.New("apply-profiles cannot be combined with init-only or download-data-only")
 	}
 
 	return opts, nil
@@ -403,9 +414,13 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   15 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
 		},
 	}
+	defer client.CloseIdleConnections()
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -418,7 +433,9 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	}
 
 	tmpPath := destPath + ".download"
-	_ = os.MkdirAll(filepath.Dir(tmpPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(tmpPath), 0755); err != nil {
+		return fmt.Errorf("failed to create download directory: %w", err)
+	}
 
 	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
@@ -506,14 +523,28 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	}
 
 	fmt.Println()
-	out.Close()
-	cleanedUp = true
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("failed to close downloaded file: %w", err)
+	}
 
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		return fmt.Errorf("failed to finalize downloaded file: %w", err)
 	}
+	cleanedUp = true
 
 	return nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
 }
 
 func extractZip(ctx context.Context, zipPath string, destDir string) error {
@@ -598,11 +629,17 @@ func extractZip(ctx context.Context, zipPath string, destDir string) error {
 			return fmt.Errorf("failed to read zip entry %s: %w", f.Name, err)
 		}
 
-		_, err = io.Copy(outFile, rc)
-		rc.Close()
-		outFile.Close()
+		_, err = io.Copy(outFile, contextReader{ctx: ctx, reader: rc})
+		readCloseErr := rc.Close()
+		writeCloseErr := outFile.Close()
 		if err != nil {
 			return fmt.Errorf("failed writing to %s: %w", targetPath, err)
+		}
+		if readCloseErr != nil {
+			return fmt.Errorf("failed to close zip entry %s: %w", f.Name, readCloseErr)
+		}
+		if writeCloseErr != nil {
+			return fmt.Errorf("failed to close extracted file %s: %w", targetPath, writeCloseErr)
 		}
 
 		if (i+1)%500 == 0 || i+1 == totalFiles {
@@ -638,30 +675,62 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 		dataURL = defaultClientDataURL
 	}
 
-	if err := os.MkdirAll(workDataDir, 0755); err != nil {
-		return fmt.Errorf("failed to create data directory %s: %w", workDataDir, err)
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		return fmt.Errorf("failed to create working directory %s: %w", workDir, err)
 	}
-
-	zipPath := filepath.Join(workDataDir, "Data.zip")
+	stageDir, err := os.MkdirTemp(workDir, ".client-data-stage-")
+	if err != nil {
+		return fmt.Errorf("failed to create client data staging directory: %w", err)
+	}
+	defer os.RemoveAll(stageDir)
+	stageDataDir := filepath.Join(stageDir, "data")
+	zipPath := filepath.Join(stageDir, "Data.zip")
 	fmt.Printf("Downloading client data from %s...\n", dataURL)
 
 	if err := downloadFileWithProgress(ctx, dataURL, zipPath); err != nil {
 		return fmt.Errorf("failed to download client data: %w", err)
 	}
-	defer func() {
-		if fileExists(zipPath) {
-			_ = os.Remove(zipPath)
-		}
-	}()
-
-	if err := extractZip(ctx, zipPath, workDataDir); err != nil {
+	if err := extractZip(ctx, zipPath, stageDataDir); err != nil {
 		return fmt.Errorf("failed to extract client data: %w", err)
 	}
 
-	if !isClientDataPresent(workDataDir) {
-		return fmt.Errorf("client data extraction completed, but required folders (dbc, maps, vmaps, mmaps) are missing in %s", workDataDir)
+	if !isClientDataPresent(stageDataDir) {
+		return errors.New("client data archive is missing populated required folders (dbc, maps, vmaps, mmaps)")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return activateClientData(stageDataDir, workDataDir)
+}
 
+// The previous directory is retained if it contains user data. Only a fully
+// extracted and validated directory can become the active client data.
+func activateClientData(stageDataDir, workDataDir string) error {
+	backupPath := ""
+	if entries, err := os.ReadDir(workDataDir); err == nil {
+		backupPath = workDataDir + ".backup." + time.Now().UTC().Format("20060102T150405.000000000Z")
+		if err := os.Rename(workDataDir, backupPath); err != nil {
+			return fmt.Errorf("failed to preserve previous client data: %w", err)
+		}
+		if len(entries) == 0 {
+			defer os.Remove(backupPath)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to inspect previous client data: %w", err)
+	}
+	if err := os.Rename(stageDataDir, workDataDir); err != nil {
+		if backupPath != "" {
+			if restoreErr := os.Rename(backupPath, workDataDir); restoreErr != nil {
+				return fmt.Errorf("activate client data: %w; restore failed: %v; previous files remain at %s", err, restoreErr, backupPath)
+			}
+		}
+		return fmt.Errorf("failed to activate client data: %w", err)
+	}
+	if backupPath != "" && dirExists(backupPath) {
+		if entries, err := os.ReadDir(backupPath); err == nil && len(entries) > 0 {
+			fmt.Printf("Previous incomplete client data preserved at %s.\n", backupPath)
+		}
+	}
 	return nil
 }
 
@@ -1049,38 +1118,38 @@ func getTotalRAMBytes() uint64 {
 }
 
 func calculateMySQLBufferPoolSettings() (sizeStr string, instances int, totalRAMGB int) {
-	totalRAMBytes := getTotalRAMBytes()
+	return mysqlBufferPoolSettings(getTotalRAMBytes())
+}
+
+func mysqlBufferPoolSettings(totalRAMBytes uint64) (sizeStr string, instances int, totalRAMGB int) {
 	if totalRAMBytes == 0 {
-		// Fallback default: 4G buffer pool, 4 instances
-		return "4G", 4, 0
+		return "1G", 1, 0
 	}
 
 	ramGB := int((totalRAMBytes + (512 * 1024 * 1024)) / (1024 * 1024 * 1024))
-	poolGB := ramGB / 2 // 50% of total RAM
-
-	if poolGB < 1 {
-		return "512M", 1, ramGB
+	// Leave memory available for worldserver, bots and the OS on the same host.
+	poolMB := totalRAMBytes / 4 / (1024 * 1024)
+	if poolMB < 512 {
+		poolMB = 512
+	} else if poolMB > 8192 {
+		poolMB = 8192
 	}
+	poolMB -= poolMB % 256
 
-	instances = poolGB / 2
+	instances = int(poolMB / 2048)
 	if instances < 1 {
 		instances = 1
-	} else if instances > 16 {
-		instances = 16
 	}
-
-	// For specific high-RAM tiers, match recommended fine tuning values
-	if poolGB >= 32 {
-		instances = 12 // Recommended setting for 64GB RAM / 32G pool
+	if poolMB%1024 == 0 {
+		return fmt.Sprintf("%dG", poolMB/1024), instances, ramGB
 	}
-
-	return fmt.Sprintf("%dG", poolGB), instances, ramGB
+	return fmt.Sprintf("%dM", poolMB), instances, ramGB
 }
 
 func generateDefaultMyCnf(poolSize string, poolInstances int, totalRAMGB int) string {
 	ramComment := ""
 	if totalRAMGB > 0 {
-		ramComment = fmt.Sprintf("# System RAM detected: ~%d GB (Buffer pool set to ~50%%: %s)\n", totalRAMGB, poolSize)
+		ramComment = fmt.Sprintf("# System RAM detected: ~%d GB (Shared-host buffer pool: %s)\n", totalRAMGB, poolSize)
 	}
 
 	redoLogCapacity := "1G"
@@ -1091,12 +1160,13 @@ func generateDefaultMyCnf(poolSize string, poolInstances int, totalRAMGB int) st
 	}
 
 	return fmt.Sprintf(`#
-# MySQL / MariaDB Configuration for AzerothCore + mod-playerbots
+# MySQL 8.0 Configuration for AzerothCore + mod-playerbots
 #
 # The default MySQL configuration is not adequate for use with Playerbots,
 # and will lead to increased disk activity and decreased performance.
 #
-%s# Note: Buffer pool size should ideally be 50%% of your total RAM.
+%s# Reserve about 25%% of RAM for this shared-host buffer pool, between 512M and 8G.
+# Worldserver, bots and the operating system need the remaining memory.
 #
 
 [mysqld]
@@ -1127,7 +1197,7 @@ innodb_read_io_threads = 4
 innodb_write_io_threads = 4
 
 # Performance & SSD Lifespan Optimization:
-# Flushes redo log to OS cache every commit and to disk once per second (massive write boost).
+# Flushes redo log to OS cache every commit and to disk once per second.
 innodb_flush_log_at_trx_commit = 2
 
 # Table Cache
@@ -1135,7 +1205,7 @@ table_open_cache = 4000
 table_definition_cache = 2000
 
 # Binary Logging:
-# skip-log-bin reduces ~75-90%% of disk writes by skipping binary logging.
+# Binary logging is disabled for this local standalone database.
 skip-log-bin
 
 # Max age of binary logs if binary logging is re-enabled - 5 days to prevent binary log pileups
@@ -1298,9 +1368,17 @@ func ensureMySQLConfigFile(baseDir, workDir, mysqlDir string) (string, error) {
 }
 
 func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, mysqlDir ...string) error {
+	opts := startupOptions{port: 3306, authPort: 3724}
+	if len(mysqlDir) > 0 {
+		opts.mysqlDir = mysqlDir[0]
+	}
+	return ensureConfigFilesWithOptions(baseDir, workDir, mysqlExePath, opts)
+}
+
+func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, opts startupOptions) error {
 	resolvedMySQLDir := ""
-	if len(mysqlDir) > 0 && mysqlDir[0] != "" {
-		resolvedMySQLDir = mysqlDir[0]
+	if opts.mysqlDir != "" {
+		resolvedMySQLDir = opts.mysqlDir
 	} else if mysqlExePath != "" {
 		resolvedMySQLDir = filepath.Dir(filepath.Dir(mysqlExePath))
 	} else {
@@ -1308,8 +1386,12 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, mysqlDir ..
 	}
 
 	// 1. Ensure MySQL configuration file (my.cnf) exists with fine-tuning settings
-	if _, err := ensureMySQLConfigFile(baseDir, workDir, resolvedMySQLDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to ensure MySQL config file: %v\n", err)
+	if opts.mysqlCnf != "" {
+		if !fileExists(opts.mysqlCnf) {
+			return fmt.Errorf("specified MySQL config file does not exist: %s", opts.mysqlCnf)
+		}
+	} else if _, err := ensureMySQLConfigFile(baseDir, workDir, resolvedMySQLDir); err != nil {
+		return fmt.Errorf("failed to ensure MySQL config file: %w", err)
 	}
 
 	// 2. Ensure server configs and logs directory in workDir
@@ -1374,6 +1456,10 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, mysqlDir ..
 				content = strings.Replace(content, `BindIP = "0.0.0.0"`, `BindIP = "127.0.0.1"`, 1)
 
 				content, err = applyConfigProfile(info.Name(), content)
+				if err != nil {
+					return err
+				}
+				content, err = applyRuntimePorts(info.Name(), content, opts)
 				if err != nil {
 					return err
 				}
@@ -1455,7 +1541,7 @@ func main() {
 	authserverExe := findExecutable(baseDir, "authserver")
 	worldserverExe := findExecutable(baseDir, "worldserver")
 
-	if !opts.initOnly {
+	if !opts.initOnly && !opts.applyProfiles {
 		if authserverExe == "" {
 			fmt.Fprintf(os.Stderr, "Error: authserver executable not found in %s or PATH\n", baseDir)
 			os.Exit(1)
@@ -1472,9 +1558,21 @@ func main() {
 	}
 
 	// Ensure config files (e.g. worldserver.conf, authserver.conf, modules/playerbots.conf, mysql/my.cnf) exist in workDir
-	if err := ensureConfigFiles(baseDir, workDir, binaries.mysql, opts.mysqlDir); err != nil {
+	if err := ensureConfigFilesWithOptions(baseDir, workDir, binaries.mysql, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to ensure config files: %v\n", err)
 		os.Exit(1)
+	}
+	if opts.applyProfiles {
+		backups, err := applyRecommendedProfiles(workDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error applying recommended profiles: %v\n", err)
+			os.Exit(1)
+		}
+		for _, backup := range backups {
+			fmt.Printf("Updated config; previous settings saved to %s\n", backup)
+		}
+		fmt.Printf("Recommended profiles applied (%d configs updated). Servers were not started.\n", len(backups))
+		return
 	}
 
 	// Ensure client data files (maps, vmaps, mmaps, dbc) are present

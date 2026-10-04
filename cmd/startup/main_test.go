@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -115,6 +116,22 @@ func TestParseArgsCustomFlags(t *testing.T) {
 
 	if !opts.skipSQL {
 		t.Errorf("skipSQL = false, want true")
+	}
+}
+
+func TestParseArgsProfileModeAndInvalidOptions(t *testing.T) {
+	opts, err := parseArgs([]string{"--apply-profiles"})
+	if err != nil || !opts.applyProfiles {
+		t.Fatalf("apply-profiles was not parsed: %+v, %v", opts, err)
+	}
+	for _, args := range [][]string{
+		{"--apply-profiles", "--init-only"},
+		{"--apply-profiles", "--download-data-only"},
+		{"--port", "0"}, {"--port", "65536"}, {"--auth-port", "-1"}, {"--timeout", "0"},
+	} {
+		if _, err := parseArgs(args); err == nil {
+			t.Errorf("accepted invalid options %v", args)
+		}
 	}
 }
 
@@ -447,7 +464,7 @@ MyCustomOption = 42
 		t.Errorf("worldserver.conf missing content: %s", worldConf)
 	}
 
-	// Verify the fresh bot configuration runs autonomously, including without players.
+	// Verify fresh bots run while a real player is connected.
 	playerbotsConfBytes, err := os.ReadFile(filepath.Join(modulesDir, "playerbots.conf"))
 	if err != nil {
 		t.Fatalf("failed to read created playerbots.conf: %v", err)
@@ -456,8 +473,8 @@ MyCustomOption = 42
 	if !strings.Contains(playerbotsConf, "Playerbots.Updates.EnableDatabases = 1") {
 		t.Errorf("playerbots.conf missing content: %s", playerbotsConf)
 	}
-	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 0") {
-		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 0: %s", playerbotsConf)
+	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 1") {
+		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 1: %s", playerbotsConf)
 	}
 	for _, setting := range []string{"AiPlayerbot.MinRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.NaturalProgression = 1", "AiPlayerbot.RandombotStartingLevel = 1"} {
 		if !strings.Contains(playerbotsConf, setting) {
@@ -513,6 +530,77 @@ MyCustomOption = 42
 	}
 	if !fileExists(filepath.Join(configDir, "authserver.conf.dist")) {
 		t.Errorf("authserver.conf.dist template should be preserved")
+	}
+}
+
+func TestEnsureConfigFilesCustomPortsAndExistingConfig(t *testing.T) {
+	baseDir := t.TempDir()
+	configDir := filepath.Join(baseDir, "configs")
+	if err := os.MkdirAll(filepath.Join(configDir, "modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	templates := map[string]string{
+		"worldserver.conf.dist":        "LoginDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_auth\"\nWorldDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_world\"\nCharacterDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_characters\"\n",
+		"authserver.conf.dist":         "LoginDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_auth\"\nRealmServerPort = 3724\n",
+		"modules/playerbots.conf.dist": "PlayerbotsDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_playerbots\"\n",
+	}
+	for name, content := range templates {
+		if err := os.WriteFile(filepath.Join(configDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opts := startupOptions{port: 3307, authPort: 3725}
+	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err != nil {
+		t.Fatal(err)
+	}
+	for name := range templates {
+		content, err := os.ReadFile(filepath.Join(configDir, strings.TrimSuffix(name, ".dist")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(content), ";3306;") || !strings.Contains(string(content), ";3307;") {
+			t.Errorf("database port was not propagated into %s", name)
+		}
+		if name == "authserver.conf.dist" && !strings.Contains(string(content), "RealmServerPort = 3725\n") {
+			t.Error("authserver port was not propagated")
+		}
+	}
+	opts.port, opts.authPort = 3308, 3726
+	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err != nil {
+		t.Fatal(err)
+	}
+	auth, err := os.ReadFile(filepath.Join(configDir, "authserver.conf"))
+	if err != nil || !strings.Contains(string(auth), ";3307;") || !strings.Contains(string(auth), "RealmServerPort = 3725") {
+		t.Errorf("existing config was overwritten: %q, %v", auth, err)
+	}
+}
+
+func TestEnsureConfigFilesPropagatesMySQLError(t *testing.T) {
+	baseDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(baseDir, "mysql"), []byte("directory blocked"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureConfigFiles(baseDir, baseDir, ""); err == nil || !strings.Contains(err.Error(), "failed to ensure MySQL config file") {
+		t.Errorf("MySQL configuration creation error was not propagated: %v", err)
+	}
+}
+
+func TestEnsureConfigFilesUsesExplicitMySQLConfig(t *testing.T) {
+	baseDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(baseDir, "mysql"), []byte("directory blocked"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	customConfig := filepath.Join(baseDir, "custom.ini")
+	if err := os.WriteFile(customConfig, []byte("[mysqld]\ninnodb_buffer_pool_size = 2G\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	opts := startupOptions{port: 3306, authPort: 3724, mysqlCnf: customConfig}
+	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err != nil {
+		t.Fatalf("explicit valid MySQL config should avoid creating an unused default: %v", err)
+	}
+	opts.mysqlCnf = filepath.Join(baseDir, "missing.ini")
+	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err == nil {
+		t.Error("missing explicit MySQL config was silently ignored")
 	}
 }
 
@@ -606,6 +694,28 @@ func TestCalculateMySQLBufferPoolSettings(t *testing.T) {
 	}
 	if instances < 1 {
 		t.Errorf("instances should be >= 1, got %d", instances)
+	}
+}
+
+func TestMySQLBufferPoolSharedHostBudget(t *testing.T) {
+	const gigabyte = uint64(1024 * 1024 * 1024)
+	for _, test := range []struct {
+		ram       uint64
+		size      string
+		instances int
+	}{
+		{0, "1G", 1},
+		{gigabyte, "512M", 1},
+		{4 * gigabyte, "1G", 1},
+		{8 * gigabyte, "2G", 1},
+		{16 * gigabyte, "4G", 2},
+		{32 * gigabyte, "8G", 4},
+		{64 * gigabyte, "8G", 4},
+	} {
+		size, instances, _ := mysqlBufferPoolSettings(test.ram)
+		if size != test.size || instances != test.instances {
+			t.Errorf("RAM %d: pool %s/%d, expected %s/%d", test.ram, size, instances, test.size, test.instances)
+		}
 	}
 }
 
@@ -1018,5 +1128,135 @@ func TestEnsureClientData(t *testing.T) {
 	// Verify client data is now present in freshWorkDir/data
 	if !isClientDataPresent(filepath.Join(freshWorkDir, "data")) {
 		t.Errorf("client data was not properly installed into %s", filepath.Join(freshWorkDir, "data"))
+	}
+}
+
+func TestEnsureClientDataRejectsPartialInstallationAndPreservesExistingFiles(t *testing.T) {
+	workDir := t.TempDir()
+	oldPath := filepath.Join(workDir, "data", "dbc", "custom.dbc")
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldPath, []byte("keep old client data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	zipPath := filepath.Join(t.TempDir(), "bad.zip")
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(zipFile)
+	// All four required directories are populated before the final invalid
+	// entry. These files must not make a failed extraction look complete.
+	for _, name := range []string{"dbc/test.dat", "maps/test.dat", "vmaps/test.dat", "mmaps/test.dat", "../escape.dat"} {
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := entry.Write([]byte("archive data")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := os.ReadFile(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+	err = ensureClientData(context.Background(), workDir, t.TempDir(), server.URL, false)
+	if err == nil || !strings.Contains(err.Error(), "illegal file path") {
+		t.Fatalf("invalid archive was not rejected: %v", err)
+	}
+	old, err := os.ReadFile(oldPath)
+	if err != nil || string(old) != "keep old client data" {
+		t.Errorf("existing files were changed: %q, %v", old, err)
+	}
+	if isClientDataPresent(filepath.Join(workDir, "data")) {
+		t.Error("failed extraction left an apparently complete active dataset")
+	}
+	staging, err := filepath.Glob(filepath.Join(workDir, ".client-data-stage-*"))
+	if err != nil || len(staging) != 0 {
+		t.Errorf("staging directories remain after failure: %v, %v", staging, err)
+	}
+}
+
+func TestEnsureClientDataBacksUpIncompleteDataset(t *testing.T) {
+	workDir := t.TempDir()
+	oldPath := filepath.Join(workDir, "data", "custom.dat")
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldPath, []byte("keep existing file"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	zipPath := filepath.Join(t.TempDir(), "valid.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"dbc/test.dat": "dbc", "maps/test.dat": "maps", "vmaps/test.dat": "vmaps", "mmaps/test.dat": "mmaps",
+	})
+	archive, err := os.ReadFile(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+	if err := ensureClientData(context.Background(), workDir, t.TempDir(), server.URL, false); err != nil {
+		t.Fatal(err)
+	}
+	if !isClientDataPresent(filepath.Join(workDir, "data")) {
+		t.Error("validated dataset was not activated")
+	}
+	backups, err := filepath.Glob(filepath.Join(workDir, "data.backup.*"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("previous dataset was not backed up: %v, %v", backups, err)
+	}
+	previous, err := os.ReadFile(filepath.Join(backups[0], "custom.dat"))
+	if err != nil || string(previous) != "keep existing file" {
+		t.Errorf("backup did not preserve user data: %q, %v", previous, err)
+	}
+}
+
+func TestActivateClientDataRollback(t *testing.T) {
+	directory := t.TempDir()
+	dataDir := filepath.Join(directory, "data")
+	if err := os.Mkdir(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := filepath.Join(dataDir, "existing.dat")
+	if err := os.WriteFile(oldPath, []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := activateClientData(filepath.Join(directory, "missing-stage"), dataDir); err == nil {
+		t.Fatal("activation of a missing staged directory succeeded")
+	}
+	actual, err := os.ReadFile(oldPath)
+	if err != nil || string(actual) != "existing" {
+		t.Errorf("existing data was not restored: %q, %v", actual, err)
+	}
+}
+
+func TestDownloadCancellationBeforeResponseHeaders(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cancel()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	destination := filepath.Join(t.TempDir(), "download.zip")
+	if err := downloadFileWithProgress(ctx, server.URL, destination); !errors.Is(err, context.Canceled) {
+		t.Errorf("download did not preserve context cancellation: %v", err)
+	}
+	if fileExists(destination) || fileExists(destination+".download") {
+		t.Error("canceled download left a file")
 	}
 }

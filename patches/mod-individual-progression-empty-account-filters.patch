@@ -1,0 +1,24 @@
+diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
+index 0d9516b..8cd094c 100644
+--- a/src/IndividualProgression.cpp
++++ b/src/IndividualProgression.cpp
+@@ -371,7 +371,8 @@ bool IndividualProgression::isAttuned(Player* player)
+ 
+ bool IndividualProgression::isExcludedAccount(Player* player)
+ {
+-    if (!player)
++    // An empty account filter excludes nobody and needs no database lookup.
++    if (!player || sIndividualProgression->excludedAccountsRegex.empty())
+         return false;
+ 
+     std::string accountName;
+@@ -383,7 +384,8 @@ bool IndividualProgression::isExcludedAccount(Player* player)
+ 
+ bool IndividualProgression::isBotAccount(Player* player)
+ {
+-    if (!player)
++    // An empty account filter excludes nobody and needs no database lookup.
++    if (!player || sIndividualProgression->botAccountsRegex.empty())
+         return false;
+ 
+     std::string accountName;

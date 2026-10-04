@@ -15,6 +15,26 @@ index 8c20d269..8ddce5fd 100644
  # Randombot count
  AiPlayerbot.MinRandomBots = 500
  AiPlayerbot.MaxRandomBots = 500
+diff --git a/src/Ai/Base/ActionContext.h b/src/Ai/Base/ActionContext.h
+index 6e41eb06..60856f37 100644
+--- a/src/Ai/Base/ActionContext.h
++++ b/src/Ai/Base/ActionContext.h
+@@ -270,6 +270,7 @@ public:
+         creators["pet attack"] = &ActionContext::pet_attack;
+         creators["set pet stance"] = &ActionContext::set_pet_stance;
+ 
++        creators["new rpg natural maintenance"] = &ActionContext::new_rpg_natural_maintenance;
+         creators["new rpg status update"] = &ActionContext::new_rpg_status_update;
+         creators["new rpg go grind"] = &ActionContext::new_rpg_go_grind;
+         creators["new rpg go camp"] = &ActionContext::new_rpg_go_camp;
+@@ -477,6 +478,7 @@ private:
+     static Action* set_pet_stance(PlayerbotAI* ai) { return new SetPetStanceAction(ai); }
+ 
+     static Action* new_rpg_status_update(PlayerbotAI* ai) { return new NewRpgStatusUpdateAction(ai); }
++    static Action* new_rpg_natural_maintenance(PlayerbotAI* ai) { return new NewRpgNaturalMaintenanceAction(ai); }
+     static Action* new_rpg_go_grind(PlayerbotAI* ai) { return new NewRpgGoGrindAction(ai); }
+     static Action* new_rpg_go_camp(PlayerbotAI* ai) { return new NewRpgGoCampAction(ai); }
+     static Action* new_rpg_wander_random(PlayerbotAI* ai) { return new NewRpgWanderRandomAction(ai); }
 diff --git a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
 index 7588abd8..2cec28cb 100644
 --- a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
@@ -61,6 +81,21 @@ index 7588abd8..2cec28cb 100644
      if (!sRandomPlayerbotMgr.IsRandomBot(bot))
          return;
  
+diff --git a/src/Ai/Base/Actions/BuyAction.cpp b/src/Ai/Base/Actions/BuyAction.cpp
+index 0da759b7..49fc7737 100644
+--- a/src/Ai/Base/Actions/BuyAction.cpp
++++ b/src/Ai/Base/Actions/BuyAction.cpp
+@@ -33,6 +33,10 @@ bool BuyAction::Execute(Event event)
+     for (GuidVector::iterator i = vendors.begin(); i != vendors.end(); ++i)
+     {
+         ObjectGuid vendorguid = *i;
++        if (sPlayerbotAIConfig.naturalProgression && event.GetSource() == "natural maintenance" &&
++            vendorguid != bot->GetTarget())
++            continue;
++
+         Creature* pCreature = bot->GetNPCIfCanInteractWith(vendorguid, UNIT_NPC_FLAG_VENDOR);
+         if (!pCreature)
+             continue;
 diff --git a/src/Ai/Base/Actions/ChangeTalentsAction.cpp b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
 index 02c7170d..1c567b6f 100644
 --- a/src/Ai/Base/Actions/ChangeTalentsAction.cpp
@@ -307,10 +342,67 @@ index c1efb7f1..cb2c4e13 100644
          SpellCastTargets targets;
          targets.SetUnitTarget(bot);
 diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
-index c32c9d99..60e57c16 100644
+index c32c9d99..47186abe 100644
 --- a/src/Ai/Base/Actions/TrainerAction.cpp
 +++ b/src/Ai/Base/Actions/TrainerAction.cpp
-@@ -187,7 +187,7 @@ void TrainerAction::TellFooter(uint32 totalCost)
+@@ -76,6 +76,14 @@ bool TrainerAction::isPossible()
+         if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, trainerSpell))
+             continue;
+ 
++        if (sPlayerbotAIConfig.naturalProgression)
++        {
++            uint32 const price = uint32(floor(trainerSpell->MoneyCost * bot->GetReputationPriceDiscount(target)));
++            if (price > AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells)) ||
++                !bot->HasEnoughMoney(price))
++                continue;
++        }
++
+         if (trainer->CanTeachSpell(bot, trainerSpell))
+             return true;
+     }
+@@ -88,6 +96,9 @@ Unit* TrainerAction::GetTarget()
+     // There are just two scenarios: the bot has a master or it doesn't. If the
+     // bot has a master, the master should target a unit; otherwise, the bot
+     // should target the unit itself.
++    if (sPlayerbotAIConfig.naturalProgression && !botAI->HasGameClientMaster())
++        return bot->GetSelectedUnit();
++
+     if (Player* master = GetMaster())
+         return master->GetSelectedUnit();
+ 
+@@ -97,7 +108,11 @@ Unit* TrainerAction::GetTarget()
+ Creature* TrainerAction::GetCreatureTarget()
+ {
+     Unit* target = GetTarget();
+-    return target ? target->ToCreature() : nullptr;
++    Creature* creature = target ? target->ToCreature() : nullptr;
++    if (sPlayerbotAIConfig.naturalProgression)
++        return creature ? bot->GetNPCIfCanInteractWith(creature->GetGUID(), UNIT_NPC_FLAG_TRAINER) : nullptr;
++
++    return creature;
+ }
+ 
+ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId)
+@@ -139,7 +154,17 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
+         out << chat->FormatSpell(spellInfo) << chat->formatMoney(cost);
+ 
+         if (learnSpells)
+-            Learn(spellInfo, cost, out);
++        {
++            if (sPlayerbotAIConfig.naturalProgression)
++            {
++                if (AI_VALUE2(uint32, "free money for", (uint32)NeedMoneyFor::spells) < cost)
++                    out << " - too expensive";
++                else
++                    trainer->TeachSpell(creature, bot, trainerSpell->SpellId);
++            }
++            else
++                Learn(spellInfo, cost, out);
++        }
+ 
+         botAI->TellMaster(out);
+     }
+@@ -187,7 +212,7 @@ void TrainerAction::TellFooter(uint32 totalCost)
  
  bool MaintenanceAction::Execute(Event /*event*/)
  {
@@ -319,7 +411,7 @@ index c32c9d99..60e57c16 100644
      {
          botAI->TellError("maintenance command is not allowed, please check the configuration.");
          return false;
-@@ -288,7 +288,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
+@@ -288,7 +313,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
  
  bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
  {
@@ -328,7 +420,7 @@ index c32c9d99..60e57c16 100644
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "bis_autogear_unavailable_error",
-@@ -311,7 +311,7 @@ bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
+@@ -311,7 +336,7 @@ bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
  
  bool BisGearAction::Execute(Event event)
  {
@@ -337,7 +429,7 @@ index c32c9d99..60e57c16 100644
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "bis_command_unavailable_error",
-@@ -568,7 +568,7 @@ static uint32 GetWornItemLevelAverage(Player* player)
+@@ -568,7 +593,7 @@ static uint32 GetWornItemLevelAverage(Player* player)
  
  bool AutoGearAction::Execute(Event event)
  {
@@ -376,17 +468,267 @@ index 0c9a679f..abd207c0 100644
      std::string const text = event.getParam();
  
      std::vector<uint32> buffs = NeedWorldBuffs(bot);  // Get matching buffs
+diff --git a/src/Ai/Base/TriggerContext.h b/src/Ai/Base/TriggerContext.h
+index 5219992e..39fb7a5c 100644
+--- a/src/Ai/Base/TriggerContext.h
++++ b/src/Ai/Base/TriggerContext.h
+@@ -237,6 +237,7 @@ public:
+         creators["rpg craft"] = &TriggerContext::rpg_craft;
+         creators["rpg trade useful"] = &TriggerContext::rpg_trade_useful;
+         creators["rpg duel"] = &TriggerContext::rpg_duel;
++        creators["new rpg natural maintenance"] = &TriggerContext::natural_maintenance;
+         creators["go grind status"] = &TriggerContext::go_grind_status;
+         creators["go camp status"] = &TriggerContext::go_camp_status;
+         creators["wander random status"] = &TriggerContext::wander_random_status;
+@@ -452,6 +453,7 @@ private:
+     static Trigger* rpg_craft(PlayerbotAI* botAI) { return new RpgCraftTrigger(botAI); }
+     static Trigger* rpg_trade_useful(PlayerbotAI* botAI) { return new RpgTradeUsefulTrigger(botAI); }
+     static Trigger* rpg_duel(PlayerbotAI* botAI) { return new RpgDuelTrigger(botAI); }
++    static Trigger* natural_maintenance(PlayerbotAI* botAI) { return new NewRpgNaturalMaintenanceTrigger(botAI); }
+     static Trigger* go_grind_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_GO_GRIND); }
+     static Trigger* go_camp_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_GO_CAMP); }
+     static Trigger* wander_random_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_WANDER_RANDOM); }
+diff --git a/src/Ai/Base/Value/ItemUsageValue.cpp b/src/Ai/Base/Value/ItemUsageValue.cpp
+index e7c36e43..31116fb9 100644
+--- a/src/Ai/Base/Value/ItemUsageValue.cpp
++++ b/src/Ai/Base/Value/ItemUsageValue.cpp
+@@ -383,7 +383,8 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto,
+ 
+ ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
+ {
+-    if (bot->getClass() != CLASS_HUNTER || bot->getClass() != CLASS_ROGUE || bot->getClass() != CLASS_WARRIOR)
++    if (!sPlayerbotAIConfig.naturalProgression ||
++        (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE && bot->getClass() != CLASS_WARRIOR))
+         return ITEM_USAGE_NONE;
+ 
+     Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
+diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
+index eace9db9..32e34d27 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.cpp
++++ b/src/Ai/Base/Value/MaintenanceValues.cpp
+@@ -5,9 +5,137 @@
+  */
+ 
+ #include "MaintenanceValues.h"
++
++#include <unordered_map>
++
+ #include "BudgetValues.h"
+ #include "ItemUsageValue.h"
++#include "PlayerbotFactory.h"
+ #include "Playerbots.h"
++#include "Trainer.h"
++
++NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
++{
++    if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
++        botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
++        return {};
++
++    bool const canSell = AI_VALUE(bool, "can sell");
++    bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
++    uint32 const spellBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells));
++    uint32 const consumableBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::consumables));
++    uint32 const ammoBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::ammo));
++    bool const needsFood = consumableBudget && AI_VALUE2(uint32, "item count", "food") < 5;
++    bool const needsDrink =
++        consumableBudget && bot->GetMaxPower(POWER_MANA) > 0 && AI_VALUE2(uint32, "item count", "drink") < 5;
++    uint32 ammoSubclass = 0;
++    if (ammoBudget && bot->getClass() == CLASS_HUNTER && AI_VALUE2(uint32, "item count", "ammo") < 200)
++    {
++        if (Item* ranged = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED))
++        {
++            uint32 const subclass = ranged->GetTemplate()->SubClass;
++            if (subclass == ITEM_SUBCLASS_WEAPON_GUN)
++                ammoSubclass = ITEM_SUBCLASS_BULLET;
++            else if (subclass == ITEM_SUBCLASS_WEAPON_BOW || subclass == ITEM_SUBCLASS_WEAPON_CROSSBOW)
++                ammoSubclass = ITEM_SUBCLASS_ARROW;
++        }
++    }
++
++    // Only reagents for spells already learned can become a paid supply goal.
++    std::unordered_map<uint32, uint32> neededReagents;
++    if (spellBudget)
++    {
++        for (auto const& [spellId, spell] : bot->GetSpellMap())
++        {
++            if (spell->State == PLAYERSPELL_REMOVED || !spell->Active)
++                continue;
++
++            SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
++            if (!info || info->IsPassive())
++                continue;
++
++            for (uint8 i = 0; i < MAX_SPELL_REAGENTS; ++i)
++                if (info->Reagent[i] > 0 && info->ReagentCount[i] > 0 &&
++                    bot->GetItemCount(info->Reagent[i], false) < uint32(info->ReagentCount[i]) * 2)
++                    neededReagents[info->Reagent[i]] = info->ReagentCount[i];
++        }
++    }
++
++    if (!canSell && !needsRepair && !spellBudget && !needsFood && !needsDrink && !ammoSubclass)
++        return {};
++
++    // The nearby list is sorted by distance. Expensive inventory/trainer scans run only every 30 seconds.
++    for (ObjectGuid const guid : AI_VALUE(GuidVector, "possible new rpg targets"))
++    {
++        Creature* npc = botAI->GetCreature(guid);
++        if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
++            continue;
++
++        if (canSell && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
++            return {guid, NaturalMaintenanceType::SELL};
++
++        if (needsRepair && npc->HasNpcFlag(UNIT_NPC_FLAG_REPAIR))
++            return {guid, NaturalMaintenanceType::REPAIR};
++
++        if (sPlayerbotAIConfig.allowLearnTrainerSpells && npc->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))
++        {
++            Trainer::Trainer* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
++            if (trainer && trainer->IsTrainerValidForPlayer(bot))
++            {
++                for (Trainer::Spell const& spell : trainer->GetSpells())
++                {
++                    uint32 const price = uint32(floor(spell.MoneyCost * bot->GetReputationPriceDiscount(npc)));
++                    if (price <= spellBudget && bot->HasEnoughMoney(price) &&
++                        PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) &&
++                        trainer->CanTeachSpell(bot, &spell))
++                        return {guid, NaturalMaintenanceType::TRAIN};
++                }
++            }
++        }
++
++        if (!npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
++            continue;
++
++        VendorItemData const* stock = npc->GetVendorItems();
++        if (!stock)
++            continue;
++
++        for (VendorItem const* item : stock->m_items)
++        {
++            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item->item);
++            if (!proto || item->ExtendedCost || bot->CanUseItem(proto) != EQUIP_ERR_OK ||
++                (item->maxcount && npc->GetVendorItemCurrentCount(item) < proto->BuyCount))
++                continue;
++
++            std::string const type = ItemUsageValue::GetConsumableType(proto, bot->GetMaxPower(POWER_MANA) > 0);
++            uint32 budget = 0;
++            NeedMoneyFor budgetType = NeedMoneyFor::none;
++            if ((needsFood && type == "food") || (needsDrink && type == "drink"))
++            {
++                budget = consumableBudget;
++                budgetType = NeedMoneyFor::consumables;
++            }
++            else if (ammoSubclass && proto->Class == ITEM_CLASS_PROJECTILE && proto->SubClass == ammoSubclass)
++            {
++                budget = ammoBudget;
++                budgetType = NeedMoneyFor::ammo;
++            }
++            else if (neededReagents.count(proto->ItemId))
++            {
++                budget = spellBudget;
++                budgetType = NeedMoneyFor::spells;
++            }
++            else
++                continue;
++
++            uint32 const price = uint32(floor(proto->BuyPrice * bot->GetReputationPriceDiscount(npc)));
++            if (price <= budget && bot->HasEnoughMoney(price))
++                return {guid, NaturalMaintenanceType::BUY, proto->ItemId, uint32(budgetType)};
++        }
++    }
++
++    return {};
++}
+ 
+ bool CanMoveAroundValue::Calculate()
+ {
+diff --git a/src/Ai/Base/Value/MaintenanceValues.h b/src/Ai/Base/Value/MaintenanceValues.h
+index 80db8373..323fa083 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.h
++++ b/src/Ai/Base/Value/MaintenanceValues.h
+@@ -11,6 +11,34 @@
+ 
+ class PlayerbotAI;
+ 
++enum class NaturalMaintenanceType : uint8
++{
++    NONE,
++    SELL,
++    REPAIR,
++    TRAIN,
++    BUY
++};
++
++struct NaturalMaintenanceTask
++{
++    ObjectGuid target;
++    NaturalMaintenanceType type = NaturalMaintenanceType::NONE;
++    uint32 itemId = 0;
++    uint32 budgetType = 0;
++};
++
++class NaturalMaintenanceValue : public CalculatedValue<NaturalMaintenanceTask>
++{
++public:
++    NaturalMaintenanceValue(PlayerbotAI* botAI)
++        : CalculatedValue<NaturalMaintenanceTask>(botAI, "natural maintenance", 30 * IN_MILLISECONDS)
++    {
++    }
++
++    NaturalMaintenanceTask Calculate() override;
++};
++
+ class CanMoveAroundValue : public BoolCalculatedValue
+ {
+ public:
+diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
+index 269c87aa..6556dfbb 100644
+--- a/src/Ai/Base/ValueContext.h
++++ b/src/Ai/Base/ValueContext.h
+@@ -282,6 +282,7 @@ public:
+         creators["can move around"] = &ValueContext::can_move_around;
+         creators["should home bind"] = &ValueContext::should_home_bind;
+         creators["should repair"] = &ValueContext::should_repair;
++        creators["natural maintenance"] = &ValueContext::natural_maintenance;
+         creators["can repair"] = &ValueContext::can_repair;
+         creators["should sell"] = &ValueContext::should_sell;
+         creators["can sell"] = &ValueContext::can_sell;
+@@ -538,6 +539,7 @@ private:
+     static UntypedValue* can_move_around(PlayerbotAI* botAI) { return new CanMoveAroundValue(botAI); }
+     static UntypedValue* should_home_bind(PlayerbotAI* botAI) { return new ShouldHomeBindValue(botAI); }
+     static UntypedValue* should_repair(PlayerbotAI* botAI) { return new ShouldRepairValue(botAI); }
++    static UntypedValue* natural_maintenance(PlayerbotAI* botAI) { return new NaturalMaintenanceValue(botAI); }
+     static UntypedValue* can_repair(PlayerbotAI* botAI) { return new CanRepairValue(botAI); }
+     static UntypedValue* should_sell(PlayerbotAI* botAI) { return new ShouldSellValue(botAI); }
+     static UntypedValue* can_sell(PlayerbotAI* botAI) { return new CanSellValue(botAI); }
 diff --git a/src/Ai/Class/Hunter/HunterActions.cpp b/src/Ai/Class/Hunter/HunterActions.cpp
-index 88243d22..a9b02473 100644
+index 88243d22..a75c449c 100644
 --- a/src/Ai/Class/Hunter/HunterActions.cpp
 +++ b/src/Ai/Class/Hunter/HunterActions.cpp
-@@ -50,6 +50,10 @@ Value<Unit*>* CastFreezingTrap::GetTargetValue()
+@@ -50,6 +50,25 @@ Value<Unit*>* CastFreezingTrap::GetTargetValue()
  
  bool FeedPetAction::Execute(Event /*event*/)
  {
-+    // This shortcut fills happiness without consuming food; use actual pet feeding.
 +    if (sPlayerbotAIConfig.naturalProgression)
++    {
++        constexpr uint32 SPELL_FEED_PET = 6991;
++        constexpr uint32 SPELL_PET_FEEDING = 1539;
++        Pet* pet = bot->GetPet();
++        if (!pet || pet->getPetType() != HUNTER_PET || !pet->IsAlive() || pet->IsInCombat() || bot->IsInCombat() ||
++            pet->GetHappinessState() == HAPPY || pet->HasAura(SPELL_PET_FEEDING) || !bot->HasSpell(SPELL_FEED_PET))
++            return false;
++
++        // The learned Feed Pet spell consumes owned food and applies its normal happiness-over-time aura.
++        for (Item* food : AI_VALUE2(std::vector<Item*>, "inventory items", "food"))
++            if (food && pet->HaveInDiet(food->GetTemplate()) &&
++                pet->GetCurrentFoodBenefitLevel(food->GetTemplate()->ItemLevel) > 0 &&
++                botAI->CanCastSpell(SPELL_FEED_PET, bot, true, food))
++                return botAI->CastSpell(SPELL_FEED_PET, bot, food);
++
 +        return false;
++    }
 +
      if (Pet* pet = bot->GetPet(); pet && pet->getPetType() == HUNTER_PET &&
          pet->GetHappinessState() != HAPPY)
@@ -487,8 +829,128 @@ index 42b8d88e..cfd45bcd 100644
      if (!receiver || !giver)
          return;
  
+diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
+index d4bfafe7..b5a3bbd9 100644
+--- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
++++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
+@@ -5,12 +5,19 @@
+  */
+ 
+ #include "NewRpgAction.h"
++
++#include <cmath>
++#include <cstdlib>
++
+ #include "AreaDefines.h"
+ #include "BroadcastHelper.h"
++#include "BudgetValues.h"
+ #include "ChatHelper.h"
+ #include "DBCStores.h"
++#include "G3D/Vector2.h"
+ #include "GossipDef.h"
+ #include "IVMapMgr.h"
++#include "MaintenanceValues.h"
+ #include "MotionMaster.h"
+ #include "MoveSpline.h"
+ #include "NewRpgInfo.h"
+@@ -30,9 +37,74 @@
+ #include "Timer.h"
+ #include "TravelMgr.h"
+ #include "WaypointMovementGenerator.h"
+-#include "G3D/Vector2.h"
+-#include <cmath>
+-#include <cstdlib>
++
++bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
++{
++    Value<NaturalMaintenanceTask>* value = context->GetValue<NaturalMaintenanceTask>("natural maintenance");
++    if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
++        botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
++    {
++        value->Set({});
++        return false;
++    }
++
++    NaturalMaintenanceTask const task = value->Get();
++    Creature* npc = botAI->GetCreature(task.target);
++    if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
++    {
++        value->Set({});
++        return false;
++    }
++
++    if (!bot->IsWithinDistInMap(npc, INTERACTION_DISTANCE))
++    {
++        if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL))
++            return true;
++
++        if (MoveWorldObjectTo(task.target))
++            return true;
++
++        value->Set({});
++        return false;
++    }
++
++    // Clear without Reset: a failed visit must not start another expensive search on the next AI tick.
++    value->Set({});
++    ObjectGuid const oldSelection = bot->GetTarget();
++    bot->SetSelection(task.target);
++    bool result = false;
++    switch (task.type)
++    {
++        case NaturalMaintenanceType::SELL:
++            if (bot->GetNPCIfCanInteractWith(task.target, UNIT_NPC_FLAG_VENDOR))
++                result = botAI->DoSpecificAction("sell", Event("rpg action", "vendor"), true);
++            break;
++        case NaturalMaintenanceType::REPAIR:
++            if (bot->GetNPCIfCanInteractWith(task.target, UNIT_NPC_FLAG_REPAIR) && AI_VALUE(bool, "can repair"))
++                result = botAI->DoSpecificAction("repair", Event("rpg action"), true);
++            break;
++        case NaturalMaintenanceType::TRAIN:
++            if (bot->GetNPCIfCanInteractWith(task.target, UNIT_NPC_FLAG_TRAINER))
++                result = botAI->DoSpecificAction("trainer", Event("rpg action", "learn"), true);
++            break;
++        case NaturalMaintenanceType::BUY:
++            if (ItemTemplate const* proto = sObjectMgr->GetItemTemplate(task.itemId))
++            {
++                uint32 const price = uint32(floor(proto->BuyPrice * bot->GetReputationPriceDiscount(npc)));
++                if (price > AI_VALUE2(uint32, "free money for", task.budgetType) || !bot->HasEnoughMoney(price))
++                    break;
++
++                if (bot->GetNPCIfCanInteractWith(task.target, UNIT_NPC_FLAG_VENDOR))
++                    result = botAI->DoSpecificAction("buy", Event("natural maintenance", ChatHelper::FormatItem(proto)),
++                                                     true);
++            }
++            break;
++        case NaturalMaintenanceType::NONE:
++            break;
++    }
++    bot->SetSelection(oldSelection);
++    return result;
++}
+ 
+ void TellRpgStatusAction::WhisperStatusChange(Player* owner, std::string const& statusName)
+ {
+diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.h b/src/Ai/World/Rpg/Action/NewRpgAction.h
+index d015a87e..5b00a59f 100644
+--- a/src/Ai/World/Rpg/Action/NewRpgAction.h
++++ b/src/Ai/World/Rpg/Action/NewRpgAction.h
+@@ -99,6 +99,13 @@ public:
+     const uint32 npcStayTime = 8 * IN_MILLISECONDS;
+ };
+ 
++class NewRpgNaturalMaintenanceAction : public NewRpgBaseAction
++{
++public:
++    NewRpgNaturalMaintenanceAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg natural maintenance") {}
++    bool Execute(Event event) override;
++};
++
+ class NewRpgDoQuestAction : public NewRpgBaseAction
+ {
+ public:
 diff --git a/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp b/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
-index 12dbf300..c2665ebf 100644
+index 12dbf300..6e852d72 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
 @@ -108,6 +108,9 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
@@ -501,6 +963,54 @@ index 12dbf300..c2665ebf 100644
          AreaTableEntry const* entry = sAreaTableStore.LookupEntry(bot->GetZoneId());
          std::string zone_name = PlayerbotAI::GetLocalizedAreaName(entry);
          LOG_DEBUG(
+@@ -611,6 +614,15 @@ bool NewRpgBaseAction::OrganizeQuestLog()
+             continue;
+ 
+         Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
++        if (!quest)
++            continue;
++
++        // Preserve earned class progression while making room for ordinary quests.
++        if (sPlayerbotAIConfig.naturalProgression && bot->GetQuestStatus(questId) != QUEST_STATUS_FAILED &&
++            ((quest->GetRequiredClasses() & bot->getClassMask()) ||
++             (quest->GetZoneOrSort() < 0 && ClassByQuestSort(-quest->GetZoneOrSort()) == bot->getClass())))
++            continue;
++
+         if (!IsQuestWorthDoing(quest) || !IsQuestCapableDoing(quest) ||
+             bot->GetQuestStatus(questId) == QUEST_STATUS_FAILED)
+         {
+@@ -642,6 +654,15 @@ bool NewRpgBaseAction::OrganizeQuestLog()
+             continue;
+ 
+         Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
++        if (!quest)
++            continue;
++
++        // Preserve earned class progression while making room for ordinary quests.
++        if (sPlayerbotAIConfig.naturalProgression && bot->GetQuestStatus(questId) != QUEST_STATUS_FAILED &&
++            ((quest->GetRequiredClasses() & bot->getClassMask()) ||
++             (quest->GetZoneOrSort() < 0 && ClassByQuestSort(-quest->GetZoneOrSort()) == bot->getClass())))
++            continue;
++
+         const int64_t botZoneId = this->bot->GetZoneId();
+ 
+         if (quest->GetZoneOrSort() < 0 || (quest->GetZoneOrSort() > 0 && quest->GetZoneOrSort() != botZoneId))
+@@ -673,6 +694,15 @@ bool NewRpgBaseAction::OrganizeQuestLog()
+             continue;
+ 
+         Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
++        if (!quest)
++            continue;
++
++        // Preserve earned class progression while making room for ordinary quests.
++        if (sPlayerbotAIConfig.naturalProgression && bot->GetQuestStatus(questId) != QUEST_STATUS_FAILED &&
++            ((quest->GetRequiredClasses() & bot->getClassMask()) ||
++             (quest->GetZoneOrSort() < 0 && ClassByQuestSort(-quest->GetZoneOrSort()) == bot->getClass())))
++            continue;
++
+         LOG_DEBUG("playerbots", "[New RPG] {} drop quest {}", bot->GetName(), questId);
+         WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
+         packet << (uint8)i;
 diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 index e914db17..cc1dcf21 100644
 --- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
@@ -525,6 +1035,55 @@ index e914db17..cc1dcf21 100644
  
      rpg->AfterExecute();
  
+diff --git a/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp b/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
+index 3658aa89..35bfd15d 100644
+--- a/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
++++ b/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
+@@ -18,6 +18,8 @@ std::vector<NextAction> NewRpgStrategy::getDefaultActions()
+ 
+ void NewRpgStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+ {
++    triggers.push_back(
++        new TriggerNode("new rpg natural maintenance", {NextAction("new rpg natural maintenance", ACTION_NORMAL + 2)}));
+     triggers.push_back(
+         new TriggerNode(
+             "go grind status",
+diff --git a/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp b/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
+index c88f24da..326c879a 100644
+--- a/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
++++ b/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
+@@ -4,7 +4,15 @@
+  * or (at your option) any later version.
+  */
+ 
++#include "MaintenanceValues.h"
+ #include "NewRpgTriggers.h"
+ #include "PlayerbotAI.h"
++#include "Playerbots.h"
+ 
+ bool NewRpgStatusTrigger::IsActive() { return status == botAI->rpgInfo.GetStatus(); }
++
++bool NewRpgNaturalMaintenanceTrigger::IsActive()
++{
++    return sPlayerbotAIConfig.naturalProgression &&
++           !AI_VALUE(NaturalMaintenanceTask, "natural maintenance").target.IsEmpty();
++}
+diff --git a/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h b/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h
+index 9449a3cb..d524e20d 100644
+--- a/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h
++++ b/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h
+@@ -23,4 +23,11 @@ protected:
+     NewRpgStatus status;
+ };
+ 
++class NewRpgNaturalMaintenanceTrigger : public Trigger
++{
++public:
++    NewRpgNaturalMaintenanceTrigger(PlayerbotAI* botAI) : Trigger(botAI, "new rpg natural maintenance") {}
++    bool IsActive() override;
++};
++
+ #endif
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
 index 23300d02..a564fa8a 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
@@ -890,11 +1449,120 @@ index 9c87cdb3..b7e5262f 100644
          return ((uint32)mask & (uint32)cheatMask) != 0 ||
                 ((uint32)mask & (uint32)sPlayerbotAIConfig.botCheatMask) != 0;
      }
+diff --git a/src/Bot/PlayerbotMgr.cpp b/src/Bot/PlayerbotMgr.cpp
+index 848ba215..02b7d9e0 100644
+--- a/src/Bot/PlayerbotMgr.cpp
++++ b/src/Bot/PlayerbotMgr.cpp
+@@ -87,6 +87,9 @@ public:
+ 
+ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId)
+ {
++    if (!sRandomPlayerbotMgr.CanLogInRandomBots())
++        return;
++
+     if (botLoading.find(playerGuid) != botLoading.end())
+         return;
+ 
+@@ -217,6 +220,9 @@ void PlayerbotHolder::UpdatePendingLogins()
+             continue;
+ 
+         WorldSession* session = itr->second.session;
++        if (!sRandomPlayerbotMgr.CanLogInRandomBots())
++            itr->second.failed = true;
++
+         if (!itr->second.failed)
+             session->ProcessQueryCallbacks();  // may complete the login (entry erased) or flag it failed
+ 
+@@ -278,7 +284,13 @@ void PlayerbotHolder::HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder con
+ 
+     sRandomPlayerbotMgr.OnPlayerLogin(bot);
+     auto op = std::make_unique<OnBotLoginOperation>(bot->GetGUID(), masterAccountId);
+-    PlayerbotWorldThreadProcessor::instance().QueueOperation(std::move(op));
++    if (!PlayerbotWorldThreadProcessor::instance().QueueOperation(std::move(op)) &&
++        sPlayerbotAIConfig.naturalProgression)
++    {
++        // Leave cleanup to the outer callback loop, after this session's callback processor returns.
++        AbandonPendingLogin(holder.GetGuid());
++        return;
++    }
+ 
+     PlayerbotHolder::botLoading.erase(holder.GetGuid());
+ }
+@@ -514,6 +526,13 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
+     PlayerbotsMgr::instance().AddPlayerbotData(bot, true);
+     playerBots[bot->GetGUID()] = bot;
+ 
++    // A login operation can outlive the real session while waiting in the world-thread queue.
++    if (!sRandomPlayerbotMgr.CanLogInRandomBots())
++    {
++        LogoutPlayerBot(bot->GetGUID());
++        return;
++    }
++
+     OnBotLoginInternal(bot);
+ 
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 4a8229f7..671fa6dc 100644
+index 4a8229f7..98f1cd5d 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
-@@ -1463,6 +1463,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+@@ -172,6 +172,12 @@ botPIDImpl::~botPIDImpl() {}
+ 
+ uint32 RandomPlayerbotMgr::GetMaxAllowedBotCount() { return GetEventValue(0, "bot_count"); }
+ 
++bool RandomPlayerbotMgr::CanLogInRandomBots() const
++{
++    return !sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.disabledWithoutRealPlayer ||
++           sWorldSessionMgr->GetActiveAndQueuedSessionCount() > 0;
++}
++
+ void RandomPlayerbotMgr::LogPlayerLocation()
+ {
+     activeBots = 0;
+@@ -353,8 +359,10 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
+                 DelayLoginBotsTimer = 0;
+             }
+ 
+-            if (RealPlayerLastTimeSeen != 0 && onlineBotCount > 0 &&
+-                time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.disabledWithoutRealPlayerLogoutDelay)
++            if (onlineBotCount > 0 &&
++                ((sPlayerbotAIConfig.naturalProgression && RealPlayerLastTimeSeen == 0) ||
++                 (RealPlayerLastTimeSeen != 0 &&
++                  time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.disabledWithoutRealPlayerLogoutDelay)))
+             {
+                 LogoutAllBots();
+                 LOG_INFO("playerbots", "Logout all bots due no real player session.");
+@@ -452,7 +460,9 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
+                     break;
+             }
+ 
+-            DelayLoginBotsTimer = 0;
++            // Natural bots wait once per real-player session, rather than once per login batch.
++            if (!sPlayerbotAIConfig.naturalProgression)
++                DelayLoginBotsTimer = 0;
+         }
+     }
+ 
+@@ -1384,6 +1394,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+     if (!player)
+     {
+         AddPlayerBot(botGUID, 0);
++        if (sPlayerbotAIConfig.naturalProgression)
++            return true;
++
+         randomTime = urand(1, 2);
+ 
+         uint32 randomBotUpdateInterval = _isBotInitializing ? 1 : sPlayerbotAIConfig.randomBotUpdateInterval;
+@@ -1407,7 +1420,7 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+         return true;
+     }
+ 
+-    if (!player->IsInWorld())
++    if (sPlayerbotAIConfig.naturalProgression || !player->IsInWorld())
+         return false;
+ 
+     if (player->GetGroup() || player->HasUnitState(UNIT_STATE_IN_FLIGHT))
+@@ -1463,6 +1476,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
  
  bool RandomPlayerbotMgr::ProcessBot(Player* bot)
  {
@@ -904,7 +1572,7 @@ index 4a8229f7..671fa6dc 100644
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
-@@ -1583,6 +1586,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+@@ -1583,6 +1599,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
  
  void RandomPlayerbotMgr::Revive(Player* player)
  {
@@ -914,7 +1582,7 @@ index 4a8229f7..671fa6dc 100644
      uint32 bot = player->GetGUID().GetCounter();
  
      // LOG_INFO("playerbots", "Bot {} revived", player->GetName().c_str());
-@@ -1595,6 +1601,9 @@ void RandomPlayerbotMgr::Revive(Player* player)
+@@ -1595,6 +1614,9 @@ void RandomPlayerbotMgr::Revive(Player* player)
  
  void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
  {
@@ -924,7 +1592,7 @@ index 4a8229f7..671fa6dc 100644
      // ignore when alrdy teleported or not in the world yet.
      if (bot->IsBeingTeleported() || !bot->IsInWorld())
          return;
-@@ -1950,6 +1959,9 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
+@@ -1950,6 +1972,9 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
  
  void RandomPlayerbotMgr::Randomize(Player* bot)
  {
@@ -934,7 +1602,7 @@ index 4a8229f7..671fa6dc 100644
      if (bot->InBattleground())
          return;
  
-@@ -1972,6 +1984,9 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
+@@ -1972,6 +1997,9 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
  
  void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
  {
@@ -944,7 +1612,7 @@ index 4a8229f7..671fa6dc 100644
      uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
      if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
          maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
-@@ -1995,6 +2010,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
+@@ -1995,6 +2023,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
  
  void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
  {
@@ -954,7 +1622,7 @@ index 4a8229f7..671fa6dc 100644
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
          return;
-@@ -2090,6 +2108,9 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+@@ -2090,6 +2121,9 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
  
  void RandomPlayerbotMgr::RandomizeMin(Player* bot)
  {
@@ -964,7 +1632,7 @@ index 4a8229f7..671fa6dc 100644
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
          return;
-@@ -2164,6 +2185,9 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY,
+@@ -2164,6 +2198,9 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY,
  
  void RandomPlayerbotMgr::Refresh(Player* bot)
  {
@@ -974,6 +1642,27 @@ index 4a8229f7..671fa6dc 100644
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
          return;
+diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
+index dd2d5878..cbca8d2c 100644
+--- a/src/Bot/RandomPlayerbotMgr.h
++++ b/src/Bot/RandomPlayerbotMgr.h
+@@ -134,6 +134,7 @@ public:
+     void RandomTeleportGrindForLevel(Player* bot);
+     void RandomTeleportForRpg(Player* bot);
+     uint32 GetMaxAllowedBotCount();
++    bool CanLogInRandomBots() const;
+     bool ProcessBot(Player* player);
+     void Revive(Player* player);
+     void ChangeStrategy(Player* player);
+@@ -234,7 +235,7 @@ private:
+     time_t LfgCheckTimer;
+     time_t PlayersCheckTimer;
+     time_t RealPlayerLastTimeSeen = 0;
+-    time_t DelayLoginBotsTimer;
++    time_t DelayLoginBotsTimer = 0;
+     time_t printStatsTimer;
+     uint32 AddRandomBots();
+     bool ProcessBot(uint32 bot);
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
 index 915bff53..4817e6e2 100644
 --- a/src/PlayerbotAIConfig.cpp

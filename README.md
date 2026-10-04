@@ -1,6 +1,6 @@
 # AzerothCore Playerbots Portable
 
-A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and four additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 online bots**.
+A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and four additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 bots while a real player is connected**.
 
 ## Download and play
 
@@ -41,11 +41,11 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 
 | Module | Default behavior |
 | --- | --- |
-| [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target, level 1 creation and the natural progression patch described below. |
+| [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target with real players connected, level 1 creation and the natural progression patch described below. |
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Enabled; adjusts instance difficulty to the party size, keeps original creature levels and disables extra reward tokens. |
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; every character starts at tier 0 and earns Vanilla progression through tier 7 (Naxxramas). Random bot accounts follow the same gates. |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Players and ordinary bot activity can still use the auction house. |
-| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers, free wipe recovery and other shortcuts are also disabled. |
+| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
 
 The pinned Playerbots version provides the native `ForceRebuffState` API used by Dungeon Clear's raid preparation. Its compatibility patch also supports older Playerbots versions: those use normal buffs for a bounded phase (25 seconds by default, within the 60-second overall muster budget). Module checkout and patch application happen during the build, never during server startup.
 
@@ -59,15 +59,28 @@ The fresh realm uses:
 - Vanilla races and classes. Blood elves, draenei and death knights are disabled using character creation masks.
 - Individual Progression's Vanilla limit, with the usual random-bot account exemption removed. Core `Expansion = 2` is needed for the module's restored Naxxramas map; the module, level cap and creation masks enforce Vanilla access.
 - 278 random-bot accounts with nine permitted classes: a pool of up to 2,502 characters, of which 2,500 are targeted online. They begin with the normal level 1 starter equipment and acquire XP, gold and equipment through gameplay.
+- Gradual bot login begins after a real player session has been connected for 30 seconds. Bots save and log out about 60 seconds after the last real session disconnects. Character selection and queued sessions also count as a connection.
 - Disabled random level jumps, equipment upgrades, character recycling and quest synchronization shortcuts.
 
 The pinned upstream Playerbots code grants equipment, money, supplies and repairs even when several existing cheat settings are disabled. [The natural progression patch](patches/mod-playerbots-natural-progression.patch) adds `AiPlayerbot.NaturalProgression = 1` to disable these factory/refresh grants and additional free recovery, travel and resource shortcuts. Normal core XP, loot, quests, vendors, trainers and character creation remain available. The patch is applied to a generated module copy; both upstream submodules stay at their original revisions.
 
-**Limits:** This does not add a complete human-like farming, crafting or questing AI. Bots may get stuck, lack supplies or fail a quest/profession step; disabling teleport recovery increases that possibility. Some upstream encounter scripts, particularly in later expansions, still contain special movement or combat shortcuts and need further audits before a literal zero-shortcut guarantee. The online population is a target, not a performance guarantee. Keeping 2,500 bots active without nearby players is demanding; CPU, RAM, storage and the first-run creation workload determine whether your machine can sustain it.
+Autonomous bots also seek nearby trainers, vendors and repair NPCs for available spells, earned-loot sales and needed supplies. They walk to the NPC and use normal server interactions, prices, gold, level and learning prerequisites. Their maintenance target is cached for 30 seconds to limit repeated scans. Matching class quests are retained, and hunter pets can only be fed with owned suitable food through the learned Feed Pet spell.
+
+**Limits:** This does not add a complete human-like farming, crafting or questing AI. Bots may get stuck, lack supplies or fail a quest/profession step; disabling teleport recovery increases that possibility. Some upstream encounter scripts, particularly in later expansions, still contain special movement or combat shortcuts and need further audits before a literal zero-shortcut guarantee. The online population is a target, not a performance guarantee. Upstream activity scaling reduces remote bot work when world ticks slow down; combat, instances and bots near or grouped with players remain active. CPU, RAM, storage and the first-run creation workload determine whether your machine can sustain 2,500 loaded characters.
+
+Bot debug logging is disabled by default and log writes run asynchronously. Empty Individual Progression account filters skip repeated database queries and regex construction, while preserving the same progression gates for players and bots.
 
 This is Vanilla content progression on the WotLK core, with its client/class mechanics and some later-added low-level quests and professions. It does not reproduce the original 1.12 client rules exactly.
 
 Existing characters keep their levels, inventory, money and progression. Existing active configs also keep their settings; the new defaults do not silently reset an established realm. Back up databases and configurations before migrating an existing realm.
+
+To apply the recommended settings to an existing installation, stop the server, extract the new ZIP into its folder and run this once from PowerShell:
+
+```powershell
+.\startup.exe --apply-profiles
+```
+
+The command backs up every changed config, updates only the settings managed by the bundled profiles and exits without starting the servers. Database credentials, paths and unrelated custom settings are retained. Start `startup.exe` normally afterwards. This command does not reset characters or databases.
 
 ## Configuration
 
@@ -92,7 +105,7 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 
 The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher, prepares pinned modules, builds Release binaries and checks the portable distribution before uploading a ZIP. A pushed `v*` tag publishes that ZIP as the release asset. Pull requests validate the same build with read-only repository permissions.
 
-For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.5`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
+For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.6`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
 
 For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.19+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
 
