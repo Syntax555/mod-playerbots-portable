@@ -122,19 +122,35 @@ jobs:
       - name: Configure pinned server and all modules
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
           cmake -B build -S . -G 'Visual Studio 17 2022' -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DPACKAGE_VERSION='${{ steps.version.outputs.value }}' `
             -DMYSQL_ROOT_DIR="$env:MYSQL_ROOT_DIR" `
             -DOPENSSL_ROOT_DIR="$env:OPENSSL_ROOT_DIR" `
-            -DBOOST_ROOT_DIR="$env:BOOST_ROOT_DIR"
-          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
+            -DBOOST_ROOT_DIR="$env:BOOST_ROOT_DIR" 2>&1 | Tee-Object -Variable configureLog
+          $configureExitCode = $LASTEXITCODE
+          if ($configureExitCode -ne 0) {
+              $message = ($configureLog | Select-Object -Last 30) -join "`n"
+              if ($message.Length -gt 8000) { $message = $message.Substring($message.Length - 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=CMake configure failed::$message"
+              exit $configureExitCode
+          }
 
       - name: Compile and assemble complete distribution
         shell: pwsh
         run: |
-          cmake --build build --config Release --parallel 4
-          if ($LASTEXITCODE -ne 0) { throw 'Server build failed.' }
+          $PSNativeCommandUseErrorActionPreference = $false
+          cmake --build build --config Release --parallel 4 2>&1 | Tee-Object -Variable buildLog
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) {
+              $message = ($buildLog | Select-Object -Last 30) -join "`n"
+              if ($message.Length -gt 8000) { $message = $message.Substring($message.Length - 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=CMake build failed::$message"
+              exit $buildExitCode
+          }
 
       - name: Bundle Visual C++ runtime
         shell: pwsh

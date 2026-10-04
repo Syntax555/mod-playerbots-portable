@@ -104,7 +104,12 @@ foreach(_index RANGE 0 ${_last_module})
             string(REPLACE "\r\n" "\n" _patch_contents "${_patch_contents}")
             file(MAKE_DIRECTORY "${PORTABLE_SOURCE_DIR}/.module-cache/patches")
             set(_prepared_patch "${PORTABLE_SOURCE_DIR}/.module-cache/patches/${_name}-${_patch_index}.patch")
-            file(WRITE "${_prepared_patch}" "${_patch_contents}")
+            # file(WRITE) uses Windows text mode and would restore CRLF here.
+            # Expand the contents once to preserve any literal @VAR@/${VAR}.
+            # CONFIGURE adds a final LF, so remove one from the input first.
+            string(REGEX REPLACE "\n$" "" _patch_contents "${_patch_contents}")
+            file(CONFIGURE OUTPUT "${_prepared_patch}"
+                CONTENT "@_patch_contents@" @ONLY NEWLINE_STYLE LF)
             list(APPEND _patches "${_prepared_patch}")
         endforeach()
     endif()
