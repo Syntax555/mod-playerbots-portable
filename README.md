@@ -47,7 +47,7 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Players and ordinary bot activity can still use the auction house. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers, free wipe recovery and other shortcuts are also disabled. |
 
-Dungeon Clear has a compatibility patch for the pinned Playerbots version, which lacks the newer `ForceRebuffState` API. If you enable the module, its pre-raid buff phase uses the normal buff strategy and waits for the configured rebuff budget (25 seconds by default), within the overall muster budget (60 seconds by default). It cannot detect native forced-rebuff completion on this version. Module checkout and patch application happen during the build, never during server startup.
+The pinned Playerbots version provides the native `ForceRebuffState` API used by Dungeon Clear's raid preparation. Its compatibility patch also supports older Playerbots versions: those use normal buffs for a bounded phase (25 seconds by default, within the 60-second overall muster budget). Module checkout and patch application happen during the build, never during server startup.
 
 ## Vanilla and earned bot progression
 
@@ -92,7 +92,7 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 
 The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher, prepares pinned modules, builds Release binaries and checks the portable distribution before uploading a ZIP. A pushed `v*` tag publishes that ZIP as the release asset. Pull requests validate the same build with read-only repository permissions.
 
-For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.3`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
+For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.4`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
 
 For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.19+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
 

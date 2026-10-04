@@ -73,6 +73,15 @@ set(ACORE_CMAKE_ARGS
     "-DBoost_USE_STATIC_LIBS=ON"
 )
 
+if(WIN32)
+    # This distribution supports Windows 10/11. Initialize flags without
+    # replacing CMake's MSVC defaults, and give Boost an explicit Windows API target.
+    list(APPEND ACORE_CMAKE_ARGS
+        "-DCMAKE_C_FLAGS_INIT=/D_WIN32_WINNT=0x0A00 /DWINVER=0x0A00"
+        "-DCMAKE_CXX_FLAGS_INIT=/D_WIN32_WINNT=0x0A00 /DWINVER=0x0A00"
+    )
+endif()
+
 if(CMAKE_BUILD_TYPE)
     list(APPEND ACORE_CMAKE_ARGS "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 endif()
