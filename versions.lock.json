@@ -3,14 +3,14 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-    "revision": "efe123fab543c5faf3c477674ec17a18fd59f09f",
+    "revision": "f19a18799a35f7c24bdcdc9ea399c601f166259b",
     "source": "azerothcore-wotlk"
   },
   "modules": [
     {
       "name": "mod-playerbots",
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
-      "revision": "8d9f6aa6bc6d45f9ae0ee0675b9b1f8aa6937312",
+      "revision": "037c01418b5d01506917a3db9b44fd56ac5f965c",
       "source": "mod-playerbots",
       "patches": ["patches/mod-playerbots-natural-progression.patch"]
     },
