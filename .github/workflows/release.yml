@@ -196,6 +196,9 @@ jobs:
           } finally {
               Pop-Location
           }
+          # The assembler usage check intentionally returns 1. GitHub's pwsh
+          # wrapper otherwise forwards that last native exit code after success.
+          exit 0
 
       - name: Create portable ZIP
         shell: pwsh
