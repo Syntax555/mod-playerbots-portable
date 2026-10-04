@@ -830,7 +830,7 @@ index 42b8d88e..cfd45bcd 100644
          return;
  
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4bfafe7..b5a3bbd9 100644
+index d4bfafe7..d046a784 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -5,12 +5,19 @@
@@ -853,7 +853,14 @@ index d4bfafe7..b5a3bbd9 100644
  #include "MotionMaster.h"
  #include "MoveSpline.h"
  #include "NewRpgInfo.h"
-@@ -30,9 +37,74 @@
+@@ -24,15 +31,81 @@
+ #include "Player.h"
+ #include "PlayerbotAI.h"
+ #include "PlayerbotTextMgr.h"
++#include "Playerbots.h"
+ #include "QuestDef.h"
+ #include "Random.h"
+ #include "SharedDefines.h"
  #include "Timer.h"
  #include "TravelMgr.h"
  #include "WaypointMovementGenerator.h"
