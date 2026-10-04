@@ -1,0 +1,967 @@
+diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
+index 7c4846b6..f5b26288 100644
+--- a/conf/playerbots.conf.dist
++++ b/conf/playerbots.conf.dist
+@@ -85,6 +85,12 @@ AiPlayerbot.Enabled = 1
+ # Enable randombot system
+ AiPlayerbot.RandomBotAutologin = 1
+ 
++# Preserve normal character creation and earned progress. Disable random factory
++# gear/gold/spell/quest grants, free maintenance and bot cheat masks.
++# Disables periodic revive/teleport and teleport recovery; pathfinding can stall.
++# Does not provide missing quest, crafting, profession or raid AI.
++AiPlayerbot.NaturalProgression = 0
++
+ # Randombot count
+ AiPlayerbot.MinRandomBots = 500
+ AiPlayerbot.MaxRandomBots = 500
+diff --git a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
+index 7588abd8..2cec28cb 100644
+--- a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
++++ b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
+@@ -43,7 +43,7 @@ void AutoMaintenanceOnLevelupAction::AutoPickTalents()
+         return;
+ 
+     PlayerbotFactory factory(bot, bot->GetLevel());
+-    factory.InitTalentsTree(true, true, true);
++    factory.InitTalentsTree(true, true, !sPlayerbotAIConfig.naturalProgression);
+     factory.InitPetTalents();
+ }
+ 
+@@ -77,6 +77,10 @@ void AutoMaintenanceOnLevelupAction::LearnSpells(std::ostringstream* out)
+ 
+ void AutoMaintenanceOnLevelupAction::LearnTrainerSpells(std::ostringstream* /*out*/)
+ {
++    // Do not grant consumables, skills, spells or equipment on level-up.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     PlayerbotFactory factory(bot, bot->GetLevel());
+     factory.InitSkills();
+     factory.InitClassSpells();
+@@ -86,6 +90,10 @@ void AutoMaintenanceOnLevelupAction::LearnTrainerSpells(std::ostringstream* /*ou
+ 
+ void AutoMaintenanceOnLevelupAction::LearnQuestSpells(std::ostringstream* out)
+ {
++    // Do not grant consumables, skills, spells or equipment on level-up.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     ObjectMgr::QuestMap const& questTemplates = sObjectMgr->GetQuestTemplates();
+     for (ObjectMgr::QuestMap::const_iterator i = questTemplates.begin(); i != questTemplates.end(); ++i)
+     {
+@@ -160,6 +168,10 @@ std::string const AutoMaintenanceOnLevelupAction::FormatSpell(SpellInfo const* s
+ 
+ void AutoMaintenanceOnLevelupAction::AutoUpgradeEquip()
+ {
++    // Do not grant consumables, skills, spells or equipment on level-up.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(bot))
+         return;
+ 
+diff --git a/src/Ai/Base/Actions/ChangeTalentsAction.cpp b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
+index 02c7170d..1c567b6f 100644
+--- a/src/Ai/Base/Actions/ChangeTalentsAction.cpp
++++ b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
+@@ -16,6 +16,9 @@
+ 
+ bool ChangeTalentsAction::Execute(Event event)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     auto* flag = botAI->GetAiObjectContext()->GetValue<bool>("custom_glyphs"); // Added for custom Glyphs
+ 
+     if (flag->Get()) // Added for custom Glyphs
+@@ -43,7 +46,8 @@ bool ChangeTalentsAction::Execute(Event event)
+             }
+             else if (param.find("switch 2") != std::string::npos)
+             {
+-                if (bot->GetSpecsCount() == 1 && bot->GetLevel() >= sWorld->getIntConfig(CONFIG_MIN_DUALSPEC_LEVEL))
++                if (!sPlayerbotAIConfig.naturalProgression && bot->GetSpecsCount() == 1 &&
++                    bot->GetLevel() >= sWorld->getIntConfig(CONFIG_MIN_DUALSPEC_LEVEL))
+                 {
+                     bot->CastSpell(bot, 63680, true, nullptr, nullptr, bot->GetGUID());
+                     bot->CastSpell(bot, 63624, true, nullptr, nullptr, bot->GetGUID());
+diff --git a/src/Ai/Base/Actions/EquipGlyphsAction.cpp b/src/Ai/Base/Actions/EquipGlyphsAction.cpp
+index 761d1af8..2c116d9b 100644
+--- a/src/Ai/Base/Actions/EquipGlyphsAction.cpp
++++ b/src/Ai/Base/Actions/EquipGlyphsAction.cpp
+@@ -97,6 +97,10 @@ bool EquipGlyphsAction::CollectGlyphs(std::vector<uint32> const& itemIds,
+ /// -----------------------------------------------------------------
+ bool EquipGlyphsAction::Execute(Event event)
+ {
++    // This helper applies glyph IDs without possessing and consuming the glyph item.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     // 1) parse IDs
+     std::vector<uint32> itemIds;
+     std::istringstream iss(event.getParam());
+diff --git a/src/Ai/Base/Actions/FishingAction.cpp b/src/Ai/Base/Actions/FishingAction.cpp
+index c01e6474..e2f3394b 100644
+--- a/src/Ai/Base/Actions/FishingAction.cpp
++++ b/src/Ai/Base/Actions/FishingAction.cpp
+@@ -383,7 +383,7 @@ bool EquipFishingPoleAction::isUseful()
+         }
+     }
+ 
+-    if (sRandomPlayerbotMgr.IsRandomBot(bot))
++    if (!sPlayerbotAIConfig.naturalProgression && sRandomPlayerbotMgr.IsRandomBot(bot))
+     {
+         bot->StoreNewItemInBestSlots(FISHING_POLE, 1);  // Try to get a fishing pole
+         return true;
+diff --git a/src/Ai/Base/Actions/GuildCreateActions.cpp b/src/Ai/Base/Actions/GuildCreateActions.cpp
+index a09a8fb4..1b0514d0 100644
+--- a/src/Ai/Base/Actions/GuildCreateActions.cpp
++++ b/src/Ai/Base/Actions/GuildCreateActions.cpp
+@@ -239,7 +239,7 @@ bool PetitionTurnInAction::Execute(Event /*event*/)
+             // (EMBLEM_PRICE = 10 * GOLD in core)
+             static constexpr uint32 REQUIRED = 10 * GOLD;
+             uint32 have = bot->GetMoney();               // actual money earned by bot in copper
+-            if (have < REQUIRED)
++            if (!sPlayerbotAIConfig.naturalProgression && have < REQUIRED)
+             {
+                 bot->ModifyMoney(int32(REQUIRED - have)); // add only the missing amount to bot to reach 10g
+             }
+diff --git a/src/Ai/Base/Actions/HireAction.cpp b/src/Ai/Base/Actions/HireAction.cpp
+index 3f9c791b..41e421dc 100644
+--- a/src/Ai/Base/Actions/HireAction.cpp
++++ b/src/Ai/Base/Actions/HireAction.cpp
+@@ -54,7 +54,8 @@ bool HireAction::Execute(Event /*event*/)
+ 
+     botAI->TellMaster("I will join you at your next relogin");
+ 
+-    bot->SetMoney(moneyReq);
++    if (!sPlayerbotAIConfig.naturalProgression)
++        bot->SetMoney(moneyReq);
+     RandomPlayerbotMgr::instance().Remove(bot);
+     CharacterDatabase.Execute("UPDATE characters SET account = {} WHERE guid = {}", account,
+                               bot->GetGUID().GetCounter());
+diff --git a/src/Ai/Base/Actions/QuestAction.cpp b/src/Ai/Base/Actions/QuestAction.cpp
+index a74252ee..19c4077a 100644
+--- a/src/Ai/Base/Actions/QuestAction.cpp
++++ b/src/Ai/Base/Actions/QuestAction.cpp
+@@ -74,6 +74,10 @@ bool QuestAction::Execute(Event event)
+ 
+ bool QuestAction::CompleteQuest(Player* player, uint32 entry)
+ {
++    // This helper fabricates quest objectives for synchronization; normal turn-in is separate.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     Quest const* pQuest = sObjectMgr->GetQuestTemplate(entry);
+ 
+     // If player doesn't have the quest
+diff --git a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
+index 01b31665..45d70bce 100644
+--- a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
++++ b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
+@@ -46,7 +46,8 @@ bool ReleaseSpiritAction::Execute(Event event)
+     botAI->TellMasterNoFacing(message);
+ 
+     IncrementDeathCount();
+-    bot->DurabilityRepairAll(false, 1.0f, false);
++    if (!sPlayerbotAIConfig.naturalProgression)
++        bot->DurabilityRepairAll(false, 1.0f, false);
+     LogRelease("released");
+ 
+     WorldPacket releasePacket(CMSG_REPOP_REQUEST);
+@@ -83,7 +84,8 @@ void ReleaseSpiritAction::LogRelease(const std::string& releaseMsg) const
+ bool AutoReleaseSpiritAction::Execute(Event /*event*/)
+ {
+     IncrementDeathCount();
+-    bot->DurabilityRepairAll(false, 1.0f, false);
++    if (!sPlayerbotAIConfig.naturalProgression)
++        bot->DurabilityRepairAll(false, 1.0f, false);
+     LogRelease("auto released");
+ 
+     WorldPacket packet(CMSG_REPOP_REQUEST);
+@@ -145,6 +147,9 @@ bool AutoReleaseSpiritAction::HandleBattlegroundSpiritHealer()
+ 
+     if (bot->GetDistance(spiritHealer) >= INTERACTION_DISTANCE)
+     {
++        if (sPlayerbotAIConfig.naturalProgression)
++            return false;
++
+         // Bot needs to actually click spirit-healer in BG to get res timer going
+         // and in IOC it's not within clicking range when they res in own base
+ 
+@@ -218,6 +223,10 @@ bool AutoReleaseSpiritAction::ShouldDelayBattlegroundRelease() const
+ 
+ bool RepopAction::Execute(Event /*event*/)
+ {
++    // Normal release/corpse recovery is allowed; this command teleports the ghost.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     const GraveyardStruct* graveyard = GetGrave(
+         AI_VALUE(uint32, "death count") > 10 ||
+         CalculateDeadTime() > 30 * MINUTE
+diff --git a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
+index 3a0c4ac5..fe0eff35 100644
+--- a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
++++ b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
+@@ -91,7 +91,7 @@ bool FindCorpseAction::Execute(Event /*event*/)
+ 
+     uint32 dCount = AI_VALUE(uint32, "death count");
+ 
+-    if (!botAI->HasGameClientMaster())
++    if (!sPlayerbotAIConfig.naturalProgression && !botAI->HasGameClientMaster())
+     {
+         if (dCount >= 5)
+         {
+@@ -158,7 +158,7 @@ bool FindCorpseAction::Execute(Event /*event*/)
+     // Actual mobing part.
+     bool moved = false;
+ 
+-    if (!botAI->AllowActivity(ALL_ACTIVITY))
++    if (!sPlayerbotAIConfig.naturalProgression && !botAI->AllowActivity(ALL_ACTIVITY))
+     {
+         uint32 delay = ServerFacade::instance().GetDistance2d(bot, corpse) /
+                        bot->GetSpeed(MOVE_RUN);        // Time a bot would take to travel to it's corpse.
+@@ -306,7 +306,7 @@ bool SpiritHealerAction::Execute(Event /*event*/)
+     GraveyardStruct const* ClosestGrave =
+         GetGrave(dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10);
+ 
+-    if (bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.sightDistance)
++    if (ClosestGrave && bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.sightDistance)
+     {
+         GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+         for (GuidVector::iterator i = npcs.begin(); i != npcs.end(); i++)
+@@ -317,8 +317,23 @@ bool SpiritHealerAction::Execute(Event /*event*/)
+                 LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at spirit healer", bot->GetGUID().ToString().c_str(),
+                           bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
+                 PlayerbotChatHandler ch(bot);
+-                bot->ResurrectPlayer(0.5f);
+-                bot->SpawnCorpseBones();
++                if (sPlayerbotAIConfig.naturalProgression)
++                {
++                    if (bot->GetDistance(unit) > INTERACTION_DISTANCE)
++                        return MoveNear(unit);
++
++                    // Core applies the usual sickness, durability loss and NPC interaction checks.
++                    WorldPacket packet(CMSG_SPIRIT_HEALER_ACTIVATE, 8);
++                    packet << unit->GetGUID();
++                    bot->GetSession()->HandleSpiritHealerActivateOpcode(packet);
++                    if (!bot->IsAlive())
++                        return false;
++                }
++                else
++                {
++                    bot->ResurrectPlayer(0.5f);
++                    bot->SpawnCorpseBones();
++                }
+                 context->GetValue<Unit*>("current target")->Set(nullptr);
+                 bot->SetTarget();
+                 botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
+@@ -346,6 +361,9 @@ bool SpiritHealerAction::Execute(Event /*event*/)
+     if (moved)
+         return true;
+ 
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     // if (!IsRealPlayer(botAI->GetMaster()))
+     // {
+     context->GetValue<uint32>("death count")->Set(dCount + 1);
+diff --git a/src/Ai/Base/Actions/TameAction.cpp b/src/Ai/Base/Actions/TameAction.cpp
+index c1aea313..a35fe5b7 100644
+--- a/src/Ai/Base/Actions/TameAction.cpp
++++ b/src/Ai/Base/Actions/TameAction.cpp
+@@ -34,6 +34,10 @@ bool HasBeastMastery(Player* bot)
+ 
+ bool TameAction::Execute(Event event)
+ {
++    // This command creates a pet from a creature template instead of taming a wild beast.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     // Parse the user's input command into mode and value (e.g. "name wolf", "id 1234", etc.)
+     std::string param = event.getParam();
+     std::istringstream iss(param);
+diff --git a/src/Ai/Base/Actions/TeleportAction.cpp b/src/Ai/Base/Actions/TeleportAction.cpp
+index c1efb7f1..cb2c4e13 100644
+--- a/src/Ai/Base/Actions/TeleportAction.cpp
++++ b/src/Ai/Base/Actions/TeleportAction.cpp
+@@ -85,8 +85,18 @@ bool TeleportAction::Execute(Event /*event*/)
+         out << "Teleporting using " << goInfo->name;
+         botAI->TellMasterNoFacing(out.str());
+ 
+-        botAI->ChangeStrategy("-follow,+stay", BOT_STATE_NON_COMBAT);
++        if (sPlayerbotAIConfig.naturalProgression)
++        {
++            if (!bot->IsWithinDistInMap(go, INTERACTION_DISTANCE))
++                continue;
++            botAI->ChangeStrategy("-follow,+stay", BOT_STATE_NON_COMBAT);
++            WorldPacket packet(CMSG_GAMEOBJ_USE);
++            packet << go->GetGUID();
++            bot->GetSession()->HandleGameObjectUseOpcode(packet);
++            return true;
++        }
+ 
++        botAI->ChangeStrategy("-follow,+stay", BOT_STATE_NON_COMBAT);
+         Spell* spell = new Spell(bot, spellInfo, TRIGGERED_NONE);
+         SpellCastTargets targets;
+         targets.SetUnitTarget(bot);
+diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
+index a89a2200..09621f60 100644
+--- a/src/Ai/Base/Actions/TrainerAction.cpp
++++ b/src/Ai/Base/Actions/TrainerAction.cpp
+@@ -174,7 +174,7 @@ void TrainerAction::TellFooter(uint32 totalCost)
+ 
+ bool MaintenanceAction::Execute(Event /*event*/)
+ {
+-    if (!sPlayerbotAIConfig.maintenanceCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.maintenanceCommand)
+     {
+         botAI->TellError("maintenance command is not allowed, please check the configuration.");
+         return false;
+@@ -275,7 +275,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
+ 
+ bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
+ {
+-    if (!sPlayerbotAIConfig.autoGearCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.autoGearCommand)
+     {
+         botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
+             "bis_autogear_unavailable_error",
+@@ -298,7 +298,7 @@ bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
+ 
+ bool BisGearAction::Execute(Event event)
+ {
+-    if (!sPlayerbotAIConfig.autoGearBisCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.autoGearBisCommand)
+     {
+         botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
+             "bis_command_unavailable_error",
+@@ -555,7 +555,7 @@ static uint32 GetWornItemLevelAverage(Player* player)
+ 
+ bool AutoGearAction::Execute(Event event)
+ {
+-    if (!sPlayerbotAIConfig.autoGearCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.autoGearCommand)
+     {
+         botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
+             "autogear_command_disabled_error", "autogear command is not allowed, please check the configuration.", {}));
+diff --git a/src/Ai/Base/Actions/UseMeetingStoneAction.cpp b/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
+index 4745c95c..f8821e07 100644
+--- a/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
++++ b/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
+@@ -163,6 +163,10 @@ bool SummonAction::SummonUsingNpcs(Player* summoner, Player* player, bool preser
+ 
+ bool SummonAction::Teleport(Player* summoner, Player* player, bool preserveAuras)
+ {
++    // Bot chat summoning bypasses spell, reagent and meeting-stone requirements.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     // Player* master = GetMaster();
+     if (!summoner || summoner == player)
+         return false;
+diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
+index 0c9a679f..abd207c0 100644
+--- a/src/Ai/Base/Actions/WorldBuffAction.cpp
++++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
+@@ -11,6 +11,10 @@
+ 
+ bool WorldBuffAction::Execute(Event event)
+ {
++    // Buffs must come from actual spells, items or world events.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     std::string const text = event.getParam();
+ 
+     std::vector<uint32> buffs = NeedWorldBuffs(bot);  // Get matching buffs
+diff --git a/src/Ai/Class/Hunter/HunterActions.cpp b/src/Ai/Class/Hunter/HunterActions.cpp
+index 88243d22..a9b02473 100644
+--- a/src/Ai/Class/Hunter/HunterActions.cpp
++++ b/src/Ai/Class/Hunter/HunterActions.cpp
+@@ -50,6 +50,10 @@ Value<Unit*>* CastFreezingTrap::GetTargetValue()
+ 
+ bool FeedPetAction::Execute(Event /*event*/)
+ {
++    // This shortcut fills happiness without consuming food; use actual pet feeding.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     if (Pet* pet = bot->GetPet(); pet && pet->getPetType() == HUNTER_PET &&
+         pet->GetHappinessState() != HAPPY)
+     {
+diff --git a/src/Ai/Class/Warlock/WarlockActions.cpp b/src/Ai/Class/Warlock/WarlockActions.cpp
+index 2587c028..71f3ad3f 100644
+--- a/src/Ai/Class/Warlock/WarlockActions.cpp
++++ b/src/Ai/Class/Warlock/WarlockActions.cpp
+@@ -117,6 +117,9 @@ bool CastSoulshatterAction::isUseful()
+ // Checks if the bot has enough bag space to create a soul shard, then does so
+ bool CreateSoulShardAction::Execute(Event /*event*/)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     Player* bot = botAI->GetBot();
+     if (!bot)
+         return false;
+@@ -137,6 +140,9 @@ bool CreateSoulShardAction::Execute(Event /*event*/)
+ // Checks if the bot has less than 6 soul shards, allowing the creation of a new one
+ bool CreateSoulShardAction::isUseful()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     Player* bot = botAI->GetBot();
+     if (!bot)
+         return false;
+diff --git a/src/Ai/Dungeon/OC/OCActions.cpp b/src/Ai/Dungeon/OC/OCActions.cpp
+index f2845649..17320a82 100644
+--- a/src/Ai/Dungeon/OC/OCActions.cpp
++++ b/src/Ai/Dungeon/OC/OCActions.cpp
+@@ -42,6 +42,15 @@ bool AvoidUnstableSphereAction::Execute(Event /*event*/)
+ bool MountDrakeAction::isPossible() { return bot->GetMapId() == OCULUS_MAP_ID; }
+ bool MountDrakeAction::Execute(Event /*event*/)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++    {
++        // Use only a drake essence already obtained from the actual NPC.
++        for (int64_t itemId : DRAKE_ITEMS)
++            if (Item* item = bot->GetItemByEntry(itemId))
++                return UseItemAuto(item);
++        return false;
++    }
++
+     std::map<int32, int32> drakeAssignments;
+     // Composition can be adjusted - both 3/1/1 and 2/2/1 are good default comps
+     // {Amber, Emerald, Ruby}
+diff --git a/src/Ai/Raid/BWL/BWLActions.cpp b/src/Ai/Raid/BWL/BWLActions.cpp
+index 3ab71907..71baf823 100644
+--- a/src/Ai/Raid/BWL/BWLActions.cpp
++++ b/src/Ai/Raid/BWL/BWLActions.cpp
+@@ -30,6 +30,10 @@ static constexpr float VAELASTRASZ_RANGED_BIAS_BOSS_WEIGHT = 1.0f - VAELASTRASZ_
+ 
+ bool BwlOnyxiaScaleCloakAuraCheckAction::Execute(Event /*event*/)
+ {
++    // Require the real equipped cloak; do not grant its protection aura.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+     bot->AddAura(static_cast<uint32>(BlackwingLairSpells::SPELL_ONYXIA_SCALE_CLOAK), bot);
+     return true;
+ }
+@@ -47,6 +51,8 @@ bool BwlTurnOffSuppressionDeviceAction::Execute(Event /*event*/)
+         GameObject* go = botAI->GetGameObject(*i);
+         if (IsActiveSuppressionDeviceInRange(go, bot))
+         {
++            if (sPlayerbotAIConfig.naturalProgression)
++                return bot->HasSpell(1842) && bot->CastSpell(go, 1842, false) == SPELL_CAST_OK;
+             go->SetGoState(GO_STATE_ACTIVE);
+         }
+     }
+diff --git a/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp b/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
+index fa096d30..b8016691 100644
+--- a/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
++++ b/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
+@@ -490,7 +490,7 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
+     }
+ 
+     uint32 const itemId = phase3 ? ITEM_BLUE_SMOKE_FLARE : ITEM_RED_SMOKE_FLARE;
+-    if (bot->GetItemCount(itemId, false) == 0)
++    if (!sPlayerbotAIConfig.naturalProgression && bot->GetItemCount(itemId, false) == 0)
+         bot->StoreNewItemInBestSlots(itemId, 10);
+ 
+     Item* flare = bot->GetItemByEntry(itemId);
+diff --git a/src/Ai/Raid/SSC/SSCActions.cpp b/src/Ai/Raid/SSC/SSCActions.cpp
+index 7f852f5c..ce956a81 100644
+--- a/src/Ai/Raid/SSC/SSCActions.cpp
++++ b/src/Ai/Raid/SSC/SSCActions.cpp
+@@ -2554,6 +2554,10 @@ bool LadyVashjPassTheTaintedCoreAction::IsFourthCorePasserInPosition(Player* fou
+ void LadyVashjPassTheTaintedCoreAction::ScheduleTransferCoreAfterImbue(
+     PlayerbotAI* botAI, Player* giver, Player* receiver)
+ {
++    // Use the real item spell transfer instead of fabricating a replacement core.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!receiver || !giver)
+         return;
+ 
+diff --git a/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp b/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
+index d213d0bb..8de0efad 100644
+--- a/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
++++ b/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
+@@ -101,6 +101,9 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
+         // its RPG objective instead of oscillating indefinitely.
+         botAI->rpgInfo.stuckTs = getMSTime();
+         botAI->rpgInfo.stuckAttempts = 0;
++        if (sPlayerbotAIConfig.naturalProgression)
++            return false;
++
+         const AreaTableEntry* entry = sAreaTableStore.LookupEntry(bot->GetZoneId());
+         std::string zone_name = PlayerbotAI::GetLocalizedAreaName(entry);
+         LOG_DEBUG(
+diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
+index e914db17..cc1dcf21 100644
+--- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
++++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
+@@ -177,7 +177,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
+ 
+     uint32 path = nodes[urand(0, nodes.size() - 1)];
+     uint32 money = bot->GetMoney();
+-    bot->SetMoney(money + 100000);
++    if (!sPlayerbotAIConfig.naturalProgression)
++        bot->SetMoney(money + 100000);
+ 
+     TaxiPathEntry const* entry = sTaxiPathStore.LookupEntry(path);
+     if (!entry)
+@@ -203,7 +204,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
+     LOG_INFO("playerbots", "Bot {} <{}> is flying from {} to {} ({} location available)",
+              bot->GetGUID().ToString().c_str(), bot->GetName(), nodeFrom->name[0], nodeTo->name[0], nodes.size());
+ 
+-    bot->SetMoney(money);
++    if (!sPlayerbotAIConfig.naturalProgression)
++        bot->SetMoney(money);
+ 
+     rpg->AfterExecute();
+ 
+diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
+index 26aa2528..eb042ed1 100644
+--- a/src/Bot/Factory/PlayerbotFactory.cpp
++++ b/src/Bot/Factory/PlayerbotFactory.cpp
+@@ -610,6 +610,10 @@ void PlayerbotFactory::Prepare()
+ 
+ void PlayerbotFactory::Randomize(bool incremental)
+ {
++    // Natural bots retain their starter kit, earned items, money, skills and quests.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     // if (sPlayerbotAIConfig.disableRandomLevels)
+     //     return;
+ 
+@@ -875,6 +879,10 @@ void PlayerbotFactory::Randomize(bool incremental)
+ 
+ void PlayerbotFactory::Refresh()
+ {
++    // Natural bots retain their starter kit, earned items, money, skills and quests.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     // Prepare();
+     // if (!sPlayerbotAIConfig.equipAndSpecPersistence ||
+     //     bot->GetLevel() < sPlayerbotAIConfig.equipAndSpecPersistenceLevel)
+@@ -915,6 +923,9 @@ void PlayerbotFactory::Refresh()
+ 
+ void PlayerbotFactory::InitConsumables()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint8 specTab = AiFactory::GetPlayerSpecTab(bot);
+     std::vector<std::pair<uint32, uint32>> items;
+ 
+@@ -1281,6 +1292,9 @@ void PlayerbotFactory::InitPetTalents()
+ 
+ void PlayerbotFactory::InitPet()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     Pet* pet = bot->GetPet();
+ 
+     if (!pet && bot->GetPetStable() && bot->GetPetStable()->CurrentPet)
+@@ -2102,6 +2116,9 @@ void Shuffle(std::vector<uint32>& items)
+ 
+ void PlayerbotFactory::InitEquipment(bool incremental, bool second_chance)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (level < 5)
+     {
+         // original items
+@@ -2620,6 +2637,9 @@ inline Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint3
+ 
+ void PlayerbotFactory::InitBags(bool destroyOld)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
+     {
+         uint32 newItemId = 51809;
+@@ -3039,6 +3059,9 @@ void PlayerbotFactory::UpdateTradeSkills()
+ 
+ void PlayerbotFactory::InitSkills()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     //uint32 maxValue = level * 5; //not used, line marked for removal.
+     bot->UpdateSkillsForLevel();
+ 
+@@ -3209,6 +3232,9 @@ void PlayerbotFactory::SetRandomSkill(uint16 id)
+ 
+ void PlayerbotFactory::InitAvailableSpells()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (trainerIdCache[bot->getClass()].empty())
+     {
+         CreatureTemplateContainer const* creatureTemplateContainer = sObjectMgr->GetCreatureTemplates();
+@@ -3256,6 +3282,9 @@ void PlayerbotFactory::InitAvailableSpells()
+ 
+ void PlayerbotFactory::InitClassSpells()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     int32_t level = bot->GetLevel();
+     switch (bot->getClass())
+     {
+@@ -3353,6 +3382,9 @@ void PlayerbotFactory::InitClassSpells()
+ 
+ void PlayerbotFactory::InitSpecialSpells()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     for (std::vector<uint32>::iterator i = sPlayerbotAIConfig.randomBotSpellIds.begin();
+          i != sPlayerbotAIConfig.randomBotSpellIds.end(); ++i)
+     {
+@@ -3602,6 +3634,9 @@ void PlayerbotFactory::InitQuests(std::list<uint32>& questMap, bool withRewardIt
+ 
+ void PlayerbotFactory::InitInstanceQuests()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     // Yunfan: use configuration instead of hard code
+     uint32 currentXP = bot->GetUInt32Value(PLAYER_XP);
+     // LOG_INFO("playerbots", "Initializing quests...");
+@@ -3629,6 +3664,9 @@ void PlayerbotFactory::ClearAllItems()
+ 
+ void PlayerbotFactory::InitAmmo()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint8 const botClass = bot->getClass();
+     if (botClass != CLASS_HUNTER && botClass != CLASS_ROGUE && botClass != CLASS_WARRIOR)
+         return;
+@@ -3705,6 +3743,9 @@ void PlayerbotFactory::AutoGear(Player* bot, uint32 itemQuality, uint32 ilvl, bo
+ 
+ void PlayerbotFactory::InitMounts()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint32 firstmount = sPlayerbotAIConfig.useGroundMountAtMinLevel;
+     uint32 secondmount = sPlayerbotAIConfig.useFastGroundMountAtMinLevel;
+     uint32 thirdmount = sPlayerbotAIConfig.useFlyMountAtMinLevel;
+@@ -3845,6 +3886,9 @@ void PlayerbotFactory::UnbindInstance()
+ 
+ void PlayerbotFactory::InitPotions()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint32 effects[] = {SPELL_EFFECT_HEAL, SPELL_EFFECT_ENERGIZE};
+     for (uint8 i = 0; i < 2; ++i)
+     {
+@@ -3925,6 +3969,9 @@ std::vector<uint32> PlayerbotFactory::GetCurrentGemsCount()
+ 
+ void PlayerbotFactory::InitFood()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (botAI && botAI->HasCheat(BotCheatMask::food))
+     {
+         return;
+@@ -3989,6 +4036,9 @@ void PlayerbotFactory::InitFood()
+ 
+ void PlayerbotFactory::InitReagents()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     std::vector<std::pair<uint32, uint32>> items;
+     switch (bot->getClass())
+     {
+@@ -4174,6 +4224,9 @@ void PlayerbotFactory::CleanupConsumables() // remove old consumables as part of
+ 
+ void PlayerbotFactory::InitGlyphs(bool increment)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     bot->InitGlyphsForLevel();
+     if (!increment && botAI &&
+         botAI->GetAiObjectContext()->GetValue<bool>("custom_glyphs")->Get())
+@@ -5352,6 +5405,9 @@ void PlayerbotFactory::IterateItemsInBank(IterateItemsVisitor* visitor)
+ 
+ void PlayerbotFactory::InitKeyring()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!bot)
+         return;
+ 
+@@ -5402,6 +5458,9 @@ void PlayerbotFactory::InitKeyring()
+ }
+ void PlayerbotFactory::InitReputation()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!bot)
+         return;
+ 
+@@ -5447,6 +5506,9 @@ void PlayerbotFactory::InitReputation()
+ 
+ void PlayerbotFactory::InitAttunementQuests()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint32 level = bot->GetLevel();
+     if (level < 55)
+         return; // Only apply for level 55+ bots
+diff --git a/src/Bot/Factory/RandomPlayerbotFactory.cpp b/src/Bot/Factory/RandomPlayerbotFactory.cpp
+index 5362a5b8..a4506355 100644
+--- a/src/Bot/Factory/RandomPlayerbotFactory.cpp
++++ b/src/Bot/Factory/RandomPlayerbotFactory.cpp
+@@ -15,6 +15,7 @@
+ #include "SharedDefines.h"
+ #include "SocialMgr.h"
+ #include "Timer.h"
++#include <set>
+ 
+ constexpr RandomPlayerbotFactory::NameRaceAndGender RandomPlayerbotFactory::CombineRaceAndGender(uint8 race,
+                                                                                                 uint8 gender)
+@@ -47,7 +48,8 @@ bool RandomPlayerbotFactory::IsValidRaceClassCombination(uint8 race, uint8 cls,
+         return false;
+ 
+     // skip expansion classes if not playing with expansion
+-    if (expansion < EXPANSION_WRATH_OF_THE_LICH_KING && cls == CLASS_DEATH_KNIGHT)
++    if ((sPlayerbotAIConfig.naturalProgression || expansion < EXPANSION_WRATH_OF_THE_LICH_KING) &&
++        cls == CLASS_DEATH_KNIGHT)
+         return false;
+ 
+     PlayerInfo const* info = sObjectMgr->GetPlayerInfo(race, cls);
+@@ -69,11 +71,9 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
+ 
+         // Try to get 50/50 faction distribution for random bot population balance.
+         // Without this check, races from the faction with more class options would dominate.
+-        if (alliance == IsAlliance(race))
+-        {
+-            if (IsValidRaceClassCombination(race, cls, sWorld->getIntConfig(CONFIG_EXPANSION)))
+-                raceOptions.push_back(race);
+-        }
++        if ((sPlayerbotAIConfig.naturalProgression || alliance == IsAlliance(race)) &&
++            IsValidRaceClassCombination(race, cls, sWorld->getIntConfig(CONFIG_EXPANSION)))
++            raceOptions.push_back(race);
+     }
+ 
+     if (raceOptions.empty())
+@@ -82,6 +82,18 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
+         return nullptr;
+     }
+ 
++    if (sPlayerbotAIConfig.naturalProgression)
++    {
++        // Vanilla paladins/shamans only have races in one faction. Fall back to
++        // available races rather than randomly failing half their creations.
++        std::vector<uint8> preferredFaction;
++        for (uint8 race : raceOptions)
++            if (alliance == IsAlliance(race))
++                preferredFaction.push_back(race);
++        if (!preferredFaction.empty())
++            raceOptions.swap(preferredFaction);
++    }
++
+     const uint8 race = raceOptions[urand(0, raceOptions.size() - 1)];
+     const uint8 gender = urand(0, 1) ? GENDER_MALE : GENDER_FEMALE;
+     const auto raceAndGender = CombineRaceAndGender(race, gender);
+@@ -424,7 +436,8 @@ uint32 RandomPlayerbotFactory::CalculateTotalAccountCount()
+ uint32 RandomPlayerbotFactory::CalculateAvailableCharsPerAccount()
+ {
+     // Death Knight availability according to their login eligibility, and if WotLK is enabled at all.
+-    bool noDK = sPlayerbotAIConfig.disableDeathKnightLogin || sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
++    bool noDK = sPlayerbotAIConfig.naturalProgression || sPlayerbotAIConfig.disableDeathKnightLogin ||
++        sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
+ 
+     uint32 availableChars = noDK ? 9 : 10;
+ 
+@@ -661,7 +674,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
+         sPlayerbotAIConfig.randomBotAccounts.push_back(accountId);
+ 
+         uint32 count = AccountMgr::GetCharactersCount(accountId);
+-        if (count >= 10)
++        if (count >= (sPlayerbotAIConfig.naturalProgression ? 9u : 10u))
+         {
+             continue;
+         }
+@@ -702,8 +715,19 @@ void RandomPlayerbotFactory::CreateRandomBots()
+                                                 time_t(0), LOCALE_enUS, 0, false, false, 0, true);
+         sessionBots.push_back(session);
+ 
+-        for (uint8 cls = CLASS_WARRIOR; cls < MAX_CLASSES - count; ++cls)
++        std::set<uint8> existingClasses;
++        if (sPlayerbotAIConfig.naturalProgression)
+         {
++            if (QueryResult characters = CharacterDatabase.Query("SELECT class FROM characters WHERE account = {}", accountId))
++                do { existingClasses.insert(characters->Fetch()[0].Get<uint8>()); } while (characters->NextRow());
++        }
++
++        for (uint8 cls = CLASS_WARRIOR; cls < MAX_CLASSES - (sPlayerbotAIConfig.naturalProgression ? 0u : count); ++cls)
++        {
++            if (sPlayerbotAIConfig.naturalProgression &&
++                (cls == CLASS_DEATH_KNIGHT || existingClasses.count(cls)))
++                continue;
++
+             // skip nonexistent classes
+             if (!((1 << (cls - 1)) & CLASSMASK_ALL_PLAYABLE) || !sChrClassesStore.LookupEntry(cls))
+                 continue;
+diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
+index 22e633d2..28d7aef0 100644
+--- a/src/Bot/PlayerbotAI.cpp
++++ b/src/Bot/PlayerbotAI.cpp
+@@ -134,7 +134,9 @@ PlayerbotAI::PlayerbotAI(Player* bot)
+       chatFilter(this),
+       security(bot)  // reorder args - whipowill
+ {
+-    if (!bot->isTaxiCheater() && HasCheat((BotCheatMask::taxi)))
++    if (sPlayerbotAIConfig.naturalProgression)
++        bot->SetTaxiCheater(false);
++    else if (!bot->isTaxiCheater() && HasCheat((BotCheatMask::taxi)))
+         bot->SetTaxiCheater(true);
+ 
+     for (uint8 i = 0; i < MAX_ACTIVITY_TYPE; i++)
+diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
+index f4388b8b..7d519999 100644
+--- a/src/Bot/PlayerbotAI.h
++++ b/src/Bot/PlayerbotAI.h
+@@ -562,6 +562,9 @@ public:
+ 
+     bool HasCheat(BotCheatMask mask)
+     {
++        if (sPlayerbotAIConfig.naturalProgression)
++            return false;
++
+         return ((uint32)mask & (uint32)cheatMask) != 0 ||
+                ((uint32)mask & (uint32)sPlayerbotAIConfig.botCheatMask) != 0;
+     }
+diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
+index 10629c2f..ed903532 100644
+--- a/src/Bot/RandomPlayerbotMgr.cpp
++++ b/src/Bot/RandomPlayerbotMgr.cpp
+@@ -1442,6 +1442,10 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+ 
+ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+ {
++    // The ordinary AI handles travel and deaths; no periodic rerolls or free recovery.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
++
+ 
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+@@ -1562,6 +1566,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+ 
+ void RandomPlayerbotMgr::Revive(Player* player)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint32 bot = player->GetGUID().GetCounter();
+ 
+     // LOG_INFO("playerbots", "Bot {} revived", player->GetName().c_str());
+@@ -1574,6 +1581,9 @@ void RandomPlayerbotMgr::Revive(Player* player)
+ 
+ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     // ignore when alrdy teleported or not in the world yet.
+     if (bot->IsBeingTeleported() || !bot->IsInWorld())
+         return;
+@@ -1837,6 +1847,9 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
+ 
+ void RandomPlayerbotMgr::Randomize(Player* bot)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (bot->InBattleground())
+         return;
+ 
+@@ -1859,6 +1872,9 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
+ 
+ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
+     if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
+         maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
+@@ -1882,6 +1898,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
+ 
+ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+         return;
+@@ -1977,6 +1996,9 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+ 
+ void RandomPlayerbotMgr::RandomizeMin(Player* bot)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+         return;
+@@ -2051,6 +2073,9 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY,
+ 
+ void RandomPlayerbotMgr::Refresh(Player* bot)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+     if (!botAI)
+         return;
+diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
+index 23f6fa7f..82b53d91 100644
+--- a/src/PlayerbotAIConfig.cpp
++++ b/src/PlayerbotAIConfig.cpp
+@@ -81,6 +81,7 @@ bool PlayerbotAIConfig::Initialize()
+     LOG_INFO("server.loading", "Initializing mod-playerbots, based on AI Playerbots by ike3 and the original Playerbots by blueboy");
+ 
+     enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", true);
++    naturalProgression = sConfigMgr->GetOption<bool>("AiPlayerbot.NaturalProgression", false);
+     if (!enabled)
+     {
+         LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
+diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
+index 2a1c3201..9487ec33 100644
+--- a/src/PlayerbotAIConfig.h
++++ b/src/PlayerbotAIConfig.h
+@@ -103,6 +103,7 @@ public:
+     bool IsInPvpProhibitedArea(uint32 id);
+ 
+     bool enabled;
++    bool naturalProgression = false;
+     bool disabledWithoutRealPlayer;
+     bool EnableICCBuffs;
+     bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
