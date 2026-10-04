@@ -1,0 +1,29 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "portable-msvc-errors",
+      "pattern": [
+        {
+          "regexp": "^\\s*(?:[0-9]+>)?(.+?)\\(([0-9]+)(?:,([0-9]+))?\\)\\s*:\\s*(?:fatal )?(error) ([A-Za-z]+[0-9]+): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
+      ]
+    },
+    {
+      "owner": "portable-linker-errors",
+      "pattern": [
+        {
+          "regexp": "^\\s*(?:[0-9]+>)?(?:.+?\\s*:\\s*)?(?:fatal )?(error) (LNK[0-9]+): (.*)$",
+          "severity": 1,
+          "code": 2,
+          "message": 3
+        }
+      ]
+    }
+  ]
+}
