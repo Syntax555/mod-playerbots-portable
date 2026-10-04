@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// These profiles describe fresh installations. Existing .conf files are never
-// passed to this function by ensureConfigFiles, so upgrades preserve user choices.
+// Missing configs receive these profiles automatically. Applying them to an
+// existing config requires the explicit --apply-profiles migration command.
 //
 //go:embed profiles/*.conf
 var configProfiles embed.FS
@@ -83,7 +83,7 @@ func mergeConfigProfile(content, profile string) (string, error) {
 		if !strings.HasSuffix(result, newline) {
 			result += newline
 		}
-		result += newline + "# Portable server defaults for this fresh installation." + newline
+		result += newline + "# Portable server recommended settings." + newline
 		result += strings.Join(missing, newline) + newline
 	}
 	return result, nil

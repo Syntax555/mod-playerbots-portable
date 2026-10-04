@@ -174,27 +174,46 @@ jobs:
       - name: Bundle Visual C++ runtime
         shell: pwsh
         run: |
-          ./scripts/CopyWindowsRuntime.ps1 -DistDir dist
+          $ErrorActionPreference = 'Stop'
+          try {
+              ./scripts/CopyWindowsRuntime.ps1 -DistDir dist
+          } catch {
+              $message = $_.Exception.Message
+              if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Bundle Visual C++ runtime::$message"
+              exit 1
+          }
 
       - name: Smoke test bundled server and database executables
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Restrict search to the Windows system and bundled application DLLs.
-          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          Push-Location dist
+          $PSNativeCommandUseErrorActionPreference = $false
           try {
-              foreach ($exe in @('authserver.exe', 'worldserver.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqld.exe', 'mysql/bin/mysqladmin.exe')) {
-                  & "./$exe" --version
-                  if ($LASTEXITCODE -ne 0) { throw "Bundled runtime smoke test failed: $exe" }
+              # Restrict search to the Windows system and bundled application DLLs.
+              $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+              Push-Location dist
+              try {
+                  foreach ($exe in @('authserver.exe', 'worldserver.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqld.exe', 'mysql/bin/mysqladmin.exe')) {
+                      & "./$exe" --version
+                      if ($LASTEXITCODE -ne 0) { throw "Bundled runtime smoke test failed: $exe (exit code $LASTEXITCODE)." }
+                  }
+                  & './dbimport.exe' --help
+                  if ($LASTEXITCODE -ne 0) { throw "Bundled database import tool failed to load (exit code $LASTEXITCODE)." }
+                  $usage = & './vmap4_assembler.exe' unused unused unused
+                  if ($LASTEXITCODE -ne 1 -or ($usage -join "`n") -notmatch 'usage:') {
+                      throw "Bundled map assembler failed to load (exit code $LASTEXITCODE; expected usage output and exit code 1)."
+                  }
+              } finally {
+                  Pop-Location
               }
-              & './dbimport.exe' --help
-              if ($LASTEXITCODE -ne 0) { throw 'Bundled database import tool failed to load.' }
-              $PSNativeCommandUseErrorActionPreference = $false
-              $usage = & './vmap4_assembler.exe' unused unused unused
-              if ($LASTEXITCODE -ne 1 -or ($usage -join "`n") -notmatch 'usage:') { throw 'Bundled map assembler failed to load.' }
-          } finally {
-              Pop-Location
+          } catch {
+              $message = $_.Exception.Message
+              if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Smoke test bundled server and database executables::$message"
+              exit 1
           }
           # The assembler usage check intentionally returns 1. GitHub's pwsh
           # wrapper otherwise forwards that last native exit code after success.
@@ -203,15 +222,38 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          cmake --build build --target package_zip --config Release
-          if ($LASTEXITCODE -ne 0) { throw 'ZIP packaging failed.' }
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          try {
+              cmake --build build --target package_zip --config Release 2>&1 | Tee-Object -Variable packageLog
+              $packageExitCode = $LASTEXITCODE
+              if ($packageExitCode -ne 0) {
+                  $details = ($packageLog | Select-Object -Last 30) -join "`n"
+                  throw "ZIP packaging failed (exit code $packageExitCode).`n$details"
+              }
+          } catch {
+              $message = $_.Exception.Message
+              if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Create portable ZIP::$message"
+              exit 1
+          }
 
       - name: Verify complete ZIP contents
         shell: pwsh
         run: |
-          ./cmake/VerifyPortableZip.ps1 -ZipPath 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip'
-          $hash = (Get-FileHash 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip' -Algorithm SHA256).Hash.ToLower()
-          Write-Host "SHA-256: $hash"
+          $ErrorActionPreference = 'Stop'
+          try {
+              ./cmake/VerifyPortableZip.ps1 -ZipPath 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip'
+              $hash = (Get-FileHash 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip' -Algorithm SHA256).Hash.ToLower()
+              Write-Host "SHA-256: $hash"
+          } catch {
+              $message = $_.Exception.Message
+              if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Verify complete ZIP contents::$message"
+              exit 1
+          }
 
       - name: Generate release notes with locked versions
         shell: pwsh
@@ -223,7 +265,9 @@ jobs:
           $lines.Add('')
           $lines.Add('Download and extract mod-playerbots-portable-' + $version + '.zip, then run startup.exe. Required client data and databases are downloaded/initialized on first launch. No compiler is required.')
           $lines.Add('')
-          $lines.Add('Fresh installations use Vanilla progression and 2,500 level-1 bots with natural farming defaults. See README.md and defaults/ in the ZIP for details.')
+          $lines.Add('Fresh installations use Vanilla progression, a level-60 cap and a target of 2,500 level-1 bots. Gradual bot login begins 30 seconds after a real player connects; bots log out about 60 seconds after the last real session disconnects. Natural maintenance uses normal NPC prices and prerequisites. See README.md and defaults/ in the ZIP for behavior and AI limits.')
+          $lines.Add('')
+          $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
           $lines.Add('')
           $lines.Add('### Locked upstream versions')
           $lines.Add('')

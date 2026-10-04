@@ -22,7 +22,15 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 		"AiPlayerbot.RandomBotXPRate = 1.0\r\n",
 		"AiPlayerbot.AutoEquipUpgradeLoot = 1\r\n",
 		"AiPlayerbot.AllowLearnTrainerSpells = 1\r\n",
-		"AiPlayerbot.DisabledWithoutRealPlayer = 0\r\n",
+		"AiPlayerbot.DisabledWithoutRealPlayer = 1\r\n",
+		"AiPlayerbot.DisabledWithoutRealPlayerLoginDelay = 30\r\n",
+		"AiPlayerbot.DisabledWithoutRealPlayerLogoutDelay = 60\r\n",
+		"AiPlayerbot.BotActiveAlone = 100\r\n",
+		"AiPlayerbot.botActiveAloneSmartScale = 1\r\n",
+		"AiPlayerbot.botActiveAloneSmartScaleDiffLimitfloor = 50\r\n",
+		"AiPlayerbot.botActiveAloneSmartScaleDiffLimitCeiling = 200\r\n",
+		"AiPlayerbot.botActiveAloneSmartScaleWhenMinLevel = 1\r\n",
+		"AiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = 60\r\n",
 		"Custom.Value = \"keep=me\"\r\n",
 	}
 	for _, setting := range required {
