@@ -67,10 +67,26 @@ try {
         'configs/modules/mod_dungeon_clear.conf.dist',
         'defaults/playerbots.conf', 'defaults/worldserver.conf', 'defaults/individualProgression.conf',
         'defaults/AutoBalance.conf', 'defaults/mod_ahbot.conf', 'defaults/mod_dungeon_clear.conf',
-        'versions.lock.json', 'README.md', 'LICENSE', 'licenses/azerothcore-wotlk.txt'
+        'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'LICENSE', 'licenses/azerothcore-wotlk.txt'
     )
     foreach ($name in $required) {
         if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+    }
+    $textSources = [ordered]@{
+        'README.md' = 'README.md'
+        'docs/vanilla-config-audit.md' = 'docs/vanilla-config-audit.md'
+        'defaults/playerbots.conf' = 'cmd/startup/profiles/playerbots.conf'
+        'defaults/worldserver.conf' = 'cmd/startup/profiles/worldserver.conf'
+        'defaults/individualProgression.conf' = 'cmd/startup/profiles/individualProgression.conf'
+        'defaults/AutoBalance.conf' = 'cmd/startup/profiles/AutoBalance.conf'
+        'defaults/mod_ahbot.conf' = 'cmd/startup/profiles/mod_ahbot.conf'
+        'defaults/mod_dungeon_clear.conf' = 'cmd/startup/profiles/mod_dungeon_clear.conf'
+    }
+    foreach ($name in $textSources.Keys) {
+        $reader = [System.IO.StreamReader]::new($entries[$name].Open())
+        try { $packagedText = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        $sourceText = Get-Content (Join-Path $RepositoryRoot $textSources[$name]) -Raw
+        if ($packagedText -cne $sourceText) { throw "Packaged documentation/profile differs from build sources: $name" }
     }
     if (-not ($files | Where-Object { $_ -like 'src/data/sql/base/*/*.sql' })) {
         throw 'Portable ZIP is missing AzerothCore base database SQL.'
