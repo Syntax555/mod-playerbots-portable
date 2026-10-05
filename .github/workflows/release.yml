@@ -3,6 +3,7 @@ name: Build portable ZIP
 on:
   push:
     branches:
+      - main
       - 'codex/**'
     tags:
       - 'v*'
@@ -20,7 +21,7 @@ permissions:
 
 concurrency:
   group: portable-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/')) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) }}
 
 jobs:
   launcher:
