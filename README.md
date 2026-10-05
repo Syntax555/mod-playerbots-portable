@@ -162,8 +162,9 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher,
 prepares pinned modules, builds Release binaries and verifies both the portable
 server ZIP and separate player addon ZIP before uploading them. A pushed `v*`
-tag publishes both assets. Pull requests and pushes to `codex/**` review branches
-create downloadable build artifacts with read-only repository permissions.
+tag publishes both assets. Pull requests and pushes to `main` or `codex/**`
+review branches create downloadable build artifacts with read-only repository
+permissions. New pushes cancel an unfinished build on the same branch.
 The workflow checks the portable launcher logic on Linux before starting the
 Windows server build, then runs the launcher tests again on Windows.
 
