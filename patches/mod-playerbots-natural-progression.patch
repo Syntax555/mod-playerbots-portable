@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 8c20d269..8ddce5fd 100644
+index 8c20d269..8d1292e0 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -85,6 +85,12 @@ AiPlayerbot.Enabled = 1
@@ -15,6 +15,36 @@ index 8c20d269..8ddce5fd 100644
  # Randombot count
  AiPlayerbot.MinRandomBots = 500
  AiPlayerbot.MaxRandomBots = 500
+@@ -1624,6 +1630,11 @@ AiPlayerbot.AutoTeleportForLevel = 1
+ # Enable battlegrounds/arenas for randombots
+ AiPlayerbot.RandomBotJoinBG = 1
+ 
++# Restrict bot queues and new invitations to Warsong Gulch, Arathi Basin and
++# Alterac Valley. Blocks arenas and expansion/random battleground queues.
++# Existing matches may finish. Disable when opening later-expansion PvP.
++AiPlayerbot.VanillaBattlegroundsOnly = 0
++
+ # Enable auto-joining of battlegrounds - have bots start battlegrounds and arenas on their own
+ AiPlayerbot.RandomBotAutoJoinBG = 0
+ 
+@@ -2579,11 +2590,14 @@ AiPlayerbot.RandomBotTalk = 1
+ AiPlayerbot.RandomBotEmote = 0
+ # Enable randombots suggesting dungeons in chat
+ AiPlayerbot.RandomBotSuggestDungeons = 1
+-# Bots greet players when invited
++# Bots greet nearby players once while they remain in the bot's seen-player list.
+ AiPlayerbot.EnableGreet = 0
+-# Chance to reply to toxic links with toxic links (0-100)
++# Limit nearby greetings to real player sessions; excludes bot-to-bot greetings.
++# Requires EnableGreet. Default 0 preserves the unrestricted greeting behavior.
++AiPlayerbot.GreetRealPlayersOnly = 0
++# Chance to reply to toxic links with toxic links (0-100; 0 disables replies)
+ AiPlayerbot.ToxicLinksRepliesChance = 30
+-# Chance to reply to Thunderfury with Thunderfury (0-100)
++# Chance to reply to Thunderfury with Thunderfury (0-100; 0 disables replies)
+ AiPlayerbot.ThunderfuryRepliesChance = 40
+ # Enable bots chatting in guild about certain events
+ AIPlayerbot.GuildFeedback = 1
 diff --git a/src/Ai/Base/ActionContext.h b/src/Ai/Base/ActionContext.h
 index 6e41eb06..60856f37 100644
 --- a/src/Ai/Base/ActionContext.h
@@ -81,6 +111,123 @@ index 7588abd8..2cec28cb 100644
      if (!sRandomPlayerbotMgr.IsRandomBot(bot))
          return;
  
+diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
+index eece1396..e6bcae0d 100644
+--- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
++++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
+@@ -8,6 +8,7 @@
+ #include "ArenaTeam.h"
+ #include "ArenaTeamMgr.h"
+ #include "BattlegroundMgr.h"
++#include "BattlegroundQueuePolicy.h"
+ #include "Event.h"
+ #include "GroupMgr.h"
+ #include "PlayerbotAI.h"
+@@ -23,6 +24,9 @@ bool BGJoinAction::Execute(Event /*event*/)
+             return false;
+ 
+         BattlegroundQueueTypeId queueTypeId = (BattlegroundQueueTypeId)bgList[urand(0, bgList.size() - 1)];
++        if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++            return false;
++
+         BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+         bool isRated = false;
+ 
+@@ -58,6 +62,9 @@ bool BGJoinAction::Execute(Event /*event*/)
+ 
+ bool BGJoinAction::gatherArenaTeam(ArenaType type)
+ {
++    if (sPlayerbotAIConfig.vanillaBattlegroundsOnly)
++        return false;
++
+     ArenaTeam* arenateam = sArenaTeamMgr->GetArenaTeamByCaptain(bot->GetGUID(), type);
+ 
+     if (!arenateam)
+@@ -194,6 +201,9 @@ bool BGJoinAction::gatherArenaTeam(ArenaType type)
+ 
+ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
+ {
++    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++        return false;
++
+     // check if bot can join this bracket for the specific Battleground/Arena type
+     BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+ 
+@@ -207,6 +217,9 @@ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBr
+ 
+     // check if the bracket exists for the bot's level for the specific Battleground/Arena type
+     Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
++    if (!bg)
++        return false;
++
+     uint32 mapId = bg->GetMapId();
+     PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, bot->GetLevel());
+     if (!pvpDiff)
+@@ -222,6 +235,9 @@ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBr
+ 
+ bool BGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
+ {
++    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++        return false;
++
+     BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+     Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
+     if (!bg)
+@@ -388,6 +404,13 @@ bool BGJoinAction::JoinQueue(uint32 type)
+ 
+     // get BG TypeId
+     BattlegroundQueueTypeId queueTypeId = BattlegroundQueueTypeId(type);
++    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++    {
++        botAI->GetAiObjectContext()->GetValue<uint32>("bg type")->Set(0);
++        botAI->GetAiObjectContext()->GetValue<uint32>("arena type")->Set(0);
++        return false;
++    }
++
+     BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+     BattlegroundBracketId bracketId;
+ 
+@@ -552,6 +575,9 @@ bool BGJoinAction::JoinQueue(uint32 type)
+ // Not sure if this has ever worked, but it should be similar to BGJoinAction::shouldJoinBg
+ bool FreeBGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
+ {
++    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++        return false;
++
+     BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+     Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
+     if (!bg)
+@@ -792,12 +818,30 @@ bool BGStatusAction::Execute(Event event)
+     }
+ 
+     bool IsRandomBot = sRandomPlayerbotMgr.IsRandomBot(bot);
++    if (QueueSlot >= PLAYER_MAX_BATTLEGROUND_QUEUES)
++        return false;
++
+     BattlegroundQueueTypeId queueTypeId = bot->GetBattlegroundQueueTypeId(QueueSlot);
+     BattlegroundTypeId _bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+     if (!queueTypeId)
+         return false;
+ 
++    if ((statusid == STATUS_WAIT_QUEUE || statusid == STATUS_WAIT_JOIN) &&
++        !IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++    {
++        WorldPacket packet(CMSG_BATTLEFIELD_PORT, 20);
++        packet << uint8(BattlegroundMgr::BGArenaType(queueTypeId)) << uint8(0) << uint32(_bgTypeId) << uint16(0x1F90)
++               << uint8(0);
++        bot->GetSession()->QueuePacket(new WorldPacket(packet));
++        context->GetValue<uint32>("bg type")->Set(0);
++        context->GetValue<uint32>("arena type")->Set(0);
++        return true;
++    }
++
+     Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(_bgTypeId);
++    if (!bg)
++        return false;
++
+     mapId = bg->GetMapId();
+     PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, bot->GetLevel());
+     if (!pvpDiff)
 diff --git a/src/Ai/Base/Actions/BuyAction.cpp b/src/Ai/Base/Actions/BuyAction.cpp
 index 0da759b7..49fc7737 100644
 --- a/src/Ai/Base/Actions/BuyAction.cpp
@@ -148,6 +295,139 @@ index 63fcdbb8..406e2ab2 100644
      {
          bot->StoreNewItemInBestSlots(FISHING_POLE, 1);  // Try to get a fishing pole
          return true;
+diff --git a/src/Ai/Base/Actions/GreetAction.cpp b/src/Ai/Base/Actions/GreetAction.cpp
+index 2941f118..41b00377 100644
+--- a/src/Ai/Base/Actions/GreetAction.cpp
++++ b/src/Ai/Base/Actions/GreetAction.cpp
+@@ -5,13 +5,60 @@
+  */
+ 
+ #include "GreetAction.h"
++
++#include <mutex>
++#include <unordered_map>
++
++#include "EmoteAction.h"
+ #include "Event.h"
++#include "NewPlayerNearbyValue.h"
+ #include "Playerbots.h"
+ 
++namespace
++{
++constexpr time_t GREETING_COOLDOWN = 60;
++
++bool ReserveGreeting(ObjectGuid guid)
++{
++    static std::mutex greetingMutex;
++    static std::unordered_map<ObjectGuid, time_t> greetingExpirations;
++    static time_t nextCleanup = 0;
++    time_t now = time(nullptr);
++
++    std::lock_guard<std::mutex> lock(greetingMutex);
++    if (now >= nextCleanup)
++    {
++        for (auto itr = greetingExpirations.begin(); itr != greetingExpirations.end();)
++        {
++            if (itr->second <= now)
++                itr = greetingExpirations.erase(itr);
++            else
++                ++itr;
++        }
++        nextCleanup = now + GREETING_COOLDOWN;
++    }
++
++    auto const itr = greetingExpirations.find(guid);
++    if (itr != greetingExpirations.end() && itr->second > now)
++        return false;
++
++    greetingExpirations[guid] = now + GREETING_COOLDOWN;
++    return true;
++}
++}  // namespace
++
+ GreetAction::GreetAction(PlayerbotAI* botAI) : Action(botAI, "greet") {}
+ 
++bool GreetAction::isUseful()
++{
++    return !sPlayerbotAIConfig.greetRealPlayersOnly || NewPlayerNearbyValue::CanGreet(botAI);
++}
++
+ bool GreetAction::Execute(Event /*event*/)
+ {
++    if (!isUseful())
++        return false;
++
+     ObjectGuid guid = AI_VALUE(ObjectGuid, "new player nearby");
+     if (!guid || !guid.IsPlayer())
+         return false;
+@@ -20,21 +67,49 @@ bool GreetAction::Execute(Event /*event*/)
+     if (!player)
+         return false;
+ 
++    if (sPlayerbotAIConfig.greetRealPlayersOnly && !NewPlayerNearbyValue::IsEligiblePlayer(botAI, player))
++        return false;
++
++    GuidSet& alreadySeenPlayers = botAI->GetAiObjectContext()->GetValue<GuidSet&>("already seen players")->Get();
++    if (sPlayerbotAIConfig.greetRealPlayersOnly && !ReserveGreeting(guid))
++    {
++        alreadySeenPlayers.insert(guid);
++        return false;
++    }
++
+     if (!bot->HasInArc(CAST_ANGLE_IN_FRONT, player, sPlayerbotAIConfig.sightDistance))
+         bot->SetFacingToObject(player);
+ 
+-    ObjectGuid oldSel = bot->GetTarget();
+-    bot->SetTarget(guid);
+-    // bot->HandleEmote(EMOTE_ONESHOT_WAVE);
+-    botAI->PlayEmote(TEXT_EMOTE_HELLO);
+-    bot->SetTarget(oldSel);
++    if (sPlayerbotAIConfig.greetRealPlayersOnly)
++    {
++        WorldPacket data(SMSG_TEXT_EMOTE);
++        data << uint32(TEXT_EMOTE_HELLO);
++        data << EmoteAction::GetNumberOfEmoteVariants(TEXT_EMOTE_HELLO, bot->getRace(), bot->getGender());
++        data << guid;
++        bot->GetSession()->HandleTextEmoteOpcode(data);
++
++        botAI->GetAiObjectContext()->GetValue<time_t>("last said", "greet")->Set(time(nullptr) + GREETING_COOLDOWN);
++    }
++    else
++    {
++        ObjectGuid oldSel = bot->GetTarget();
++        bot->SetTarget(guid);
++        botAI->PlayEmote(TEXT_EMOTE_HELLO);
++        bot->SetTarget(oldSel);
++    }
+ 
+-    GuidSet& alreadySeenPlayers = botAI->GetAiObjectContext()->GetValue<GuidSet&>("already seen players")->Get();
+     alreadySeenPlayers.insert(guid);
+ 
+     GuidVector nearestPlayers = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest friendly players")->Get();
+     for (ObjectGuid const guid : nearestPlayers)
+     {
++        if (sPlayerbotAIConfig.greetRealPlayersOnly)
++        {
++            Unit* unit = botAI->GetUnit(guid);
++            if (!NewPlayerNearbyValue::IsEligiblePlayer(botAI, unit ? unit->ToPlayer() : nullptr))
++                continue;
++        }
++
+         alreadySeenPlayers.insert(guid);
+     }
+ 
+diff --git a/src/Ai/Base/Actions/GreetAction.h b/src/Ai/Base/Actions/GreetAction.h
+index bd00e2f2..cd962f96 100644
+--- a/src/Ai/Base/Actions/GreetAction.h
++++ b/src/Ai/Base/Actions/GreetAction.h
+@@ -17,6 +17,7 @@ public:
+     GreetAction(PlayerbotAI* botAI);
+ 
+     bool Execute(Event event) override;
++    bool isUseful() override;
+ };
+ 
+ #endif
 diff --git a/src/Ai/Base/Actions/GuildCreateActions.cpp b/src/Ai/Base/Actions/GuildCreateActions.cpp
 index d8903c99..43a2bc61 100644
 --- a/src/Ai/Base/Actions/GuildCreateActions.cpp
@@ -191,10 +471,42 @@ index 5c06c795..80854fc2 100644
  
      // If player doesn't have the quest
 diff --git a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
-index ff40229c..5a7c88bb 100644
+index ff40229c..e985c1bb 100644
 --- a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
 +++ b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
-@@ -47,7 +47,8 @@ bool ReleaseSpiritAction::Execute(Event event)
+@@ -9,6 +9,7 @@
+ #include "Event.h"
+ #include "GameGraveyard.h"
+ #include "Log.h"
++#include "MovementActions.h"
+ #include "NearestNpcsValue.h"
+ #include "ObjectDefines.h"
+ #include "ObjectGuid.h"
+@@ -16,6 +17,23 @@
+ #include "Playerbots.h"
+ #include "ServerFacade.h"
+ 
++namespace
++{
++class BattlegroundSpiritGuideApproach final : public MovementAction
++{
++public:
++    explicit BattlegroundSpiritGuideApproach(PlayerbotAI* botAI) : MovementAction(botAI, "auto release") {}
++
++    bool Approach(Unit* spiritGuide)
++    {
++        if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL))
++            return true;
++
++        return MoveNear(spiritGuide, CONTACT_DISTANCE);
++    }
++};
++}  // namespace
++
+ // ReleaseSpiritAction implementation
+ bool ReleaseSpiritAction::Execute(Event event)
+ {
+@@ -47,7 +65,8 @@ bool ReleaseSpiritAction::Execute(Event event)
      botAI->TellMasterNoFacing(message);
  
      IncrementDeathCount();
@@ -204,9 +516,20 @@ index ff40229c..5a7c88bb 100644
      LogRelease("released");
  
      WorldPacket releasePacket(CMSG_REPOP_REQUEST);
-@@ -88,7 +89,8 @@ void ReleaseSpiritAction::LogRelease(std::string const& releaseMsg) const
+@@ -87,8 +106,19 @@ void ReleaseSpiritAction::LogRelease(std::string const& releaseMsg) const
+ // AutoReleaseSpiritAction implementation
  bool AutoReleaseSpiritAction::Execute(Event /*event*/)
  {
++    if (sPlayerbotAIConfig.naturalProgression && bot->InBattleground())
++    {
++        if (bot->HasPlayerFlag(PLAYER_FLAGS_GHOST))
++            return HandleBattlegroundSpiritHealer();
++
++        _bgSpiritGuideGuid.Clear();
++        _bgSpiritGuideRejectedGuid.Clear();
++        _bgSpiritGuideSearchTime = 0;
++    }
++
      IncrementDeathCount();
 -    bot->DurabilityRepairAll(false, 1.0f, false);
 +    if (!sPlayerbotAIConfig.naturalProgression)
@@ -214,17 +537,117 @@ index ff40229c..5a7c88bb 100644
      LogRelease("auto released");
  
      WorldPacket packet(CMSG_REPOP_REQUEST);
-@@ -150,6 +152,9 @@ bool AutoReleaseSpiritAction::HandleBattlegroundSpiritHealer()
+@@ -112,7 +142,12 @@ bool AutoReleaseSpiritAction::isUseful()
+         return false;
  
-     if (bot->GetDistance(spiritHealer) >= INTERACTION_DISTANCE)
-     {
-+        if (sPlayerbotAIConfig.naturalProgression)
+     if (bot->InBattleground())
++    {
++        if (sPlayerbotAIConfig.naturalProgression && bot->HasAura(SPELL_WAITING_FOR_RESURRECT))
 +            return false;
 +
-         // Bot needs to actually click spirit-healer in BG to get res timer going
-         // and in IOC it's not within clicking range when they res in own base
+         return ShouldDelayBattlegroundRelease();
++    }
  
-@@ -223,6 +228,10 @@ bool AutoReleaseSpiritAction::ShouldDelayBattlegroundRelease() const
+     if (bot->HasPlayerFlag(PLAYER_FLAGS_GHOST))
+         return false;
+@@ -122,6 +157,9 @@ bool AutoReleaseSpiritAction::isUseful()
+ 
+ bool AutoReleaseSpiritAction::HandleBattlegroundSpiritHealer()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return HandleNaturalBattlegroundSpiritHealer();
++
+     constexpr uint32_t RESURRECT_DELAY = 15;
+     const time_t now = time(nullptr);
+ 
+@@ -170,6 +208,86 @@ bool AutoReleaseSpiritAction::HandleBattlegroundSpiritHealer()
+     return true;
+ }
+ 
++bool AutoReleaseSpiritAction::HandleNaturalBattlegroundSpiritHealer()
++{
++    if (!bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) || bot->HasAura(SPELL_WAITING_FOR_RESURRECT) || IsSelfBot(bot))
++        return false;
++
++    if (_bgSpiritGuideInstanceId != bot->GetBattlegroundId())
++    {
++        _bgSpiritGuideGuid.Clear();
++        _bgSpiritGuideRejectedGuid.Clear();
++        _bgSpiritGuideSearchTime = 0;
++        _bgSpiritGuideInstanceId = bot->GetBattlegroundId();
++    }
++
++    Unit* spiritGuide = FindBattlegroundSpiritGuide(time(nullptr));
++    if (!spiritGuide)
++        return false;
++
++    if (!bot->GetNPCIfCanInteractWith(spiritGuide->GetGUID(), UNIT_NPC_FLAG_SPIRITGUIDE))
++    {
++        if (!botAI->CanMove())
++            return false;
++
++        BattlegroundSpiritGuideApproach movement(botAI);
++        if (movement.Approach(spiritGuide))
++            return true;
++
++        _bgSpiritGuideRejectedGuid = spiritGuide->GetGUID();
++        _bgSpiritGuideGuid.Clear();
++        return false;
++    }
++
++    WorldPacket packet(CMSG_GOSSIP_HELLO);
++    packet << spiritGuide->GetGUID();
++    bot->GetSession()->HandleGossipHelloOpcode(packet);
++    return bot->HasAura(SPELL_WAITING_FOR_RESURRECT);
++}
++
++Unit* AutoReleaseSpiritAction::FindBattlegroundSpiritGuide(time_t now)
++{
++    constexpr time_t SPIRIT_GUIDE_SEARCH_INTERVAL = 10;
++    constexpr float SPIRIT_GUIDE_SEARCH_RANGE = 2000.0f;
++
++    Unit* spiritGuide = botAI->GetUnit(_bgSpiritGuideGuid);
++    if (!spiritGuide || !spiritGuide->IsInWorld() || !spiritGuide->IsFriendlyTo(bot) || !spiritGuide->IsSpiritGuide())
++    {
++        spiritGuide = nullptr;
++        _bgSpiritGuideGuid.Clear();
++    }
++
++    if (_bgSpiritGuideSearchTime && now >= _bgSpiritGuideSearchTime &&
++        now - _bgSpiritGuideSearchTime < SPIRIT_GUIDE_SEARCH_INTERVAL)
++        return spiritGuide;
++
++    _bgSpiritGuideSearchTime = now;
++    _bgSpiritGuideGuid.Clear();
++    spiritGuide = nullptr;
++    float nearestDistance = SPIRIT_GUIDE_SEARCH_RANGE;
++    GuidVector npcs = NearestNpcsValue(botAI, SPIRIT_GUIDE_SEARCH_RANGE);
++    for (ObjectGuid const& guid : npcs)
++    {
++        if (guid == _bgSpiritGuideRejectedGuid)
++            continue;
++
++        Unit* unit = botAI->GetUnit(guid);
++        if (!unit || !unit->IsInWorld() || !unit->IsFriendlyTo(bot) || !unit->IsSpiritGuide())
++            continue;
++
++        float distance = bot->GetDistance(unit);
++        if (distance < nearestDistance)
++        {
++            nearestDistance = distance;
++            spiritGuide = unit;
++            _bgSpiritGuideGuid = guid;
++        }
++    }
++
++    _bgSpiritGuideRejectedGuid.Clear();
++    return spiritGuide;
++}
++
+ bool AutoReleaseSpiritAction::ShouldAutoRelease() const
+ {
+     if (!bot->GetGroup())
+@@ -223,6 +341,10 @@ bool AutoReleaseSpiritAction::ShouldDelayBattlegroundRelease() const
  
  bool RepopAction::Execute(Event /*event*/)
  {
@@ -235,6 +658,27 @@ index ff40229c..5a7c88bb 100644
      GraveyardStruct const* graveyard = GetGrave(
          AI_VALUE(uint32, "death count") > 10 ||
          CalculateDeadTime() > 30 * MINUTE
+diff --git a/src/Ai/Base/Actions/ReleaseSpiritAction.h b/src/Ai/Base/Actions/ReleaseSpiritAction.h
+index 17fd5632..35de6fc2 100644
+--- a/src/Ai/Base/Actions/ReleaseSpiritAction.h
++++ b/src/Ai/Base/Actions/ReleaseSpiritAction.h
+@@ -36,10 +36,16 @@ public:
+ 
+ private:
+     bool HandleBattlegroundSpiritHealer();
++    bool HandleNaturalBattlegroundSpiritHealer();
++    Unit* FindBattlegroundSpiritGuide(time_t now);
+     bool ShouldAutoRelease() const;
+     bool ShouldDelayBattlegroundRelease() const;
+ 
+     time_t m_bgGossipTime = 0;
++    ObjectGuid _bgSpiritGuideGuid;
++    ObjectGuid _bgSpiritGuideRejectedGuid;
++    time_t _bgSpiritGuideSearchTime = 0;
++    uint32 _bgSpiritGuideInstanceId = 0;
+ };
+ 
+ class RepopAction : public SpiritHealerAction
 diff --git a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
 index 41d73978..5f33cb50 100644
 --- a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
@@ -302,6 +746,32 @@ index 41d73978..5f33cb50 100644
      // if (!IsRealPlayer(botAI->GetMaster()))
      // {
      context->GetValue<uint32>("death count")->Set(dCount + 1);
+diff --git a/src/Ai/Base/Actions/SayAction.cpp b/src/Ai/Base/Actions/SayAction.cpp
+index a7d18f06..97527fe7 100644
+--- a/src/Ai/Base/Actions/SayAction.cpp
++++ b/src/Ai/Base/Actions/SayAction.cpp
+@@ -221,6 +221,9 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32& type, uint32& guid1, std:
+ 
+ bool ChatReplyAction::HandleThunderfuryReply(Player* bot, ChatChannelSource chatChannelSource)
+ {
++    if (!sPlayerbotAIConfig.thunderfuryRepliesChance)
++        return false;
++
+     std::map<std::string, std::string> placeholders;
+     const auto thunderfury = sObjectMgr->GetItemTemplate(19019);
+     placeholders["%thunderfury_link"] = GET_PLAYERBOT_AI(bot)->GetChatHelper()->FormatItem(thunderfury);
+@@ -249,7 +252,10 @@ bool ChatReplyAction::HandleThunderfuryReply(Player* bot, ChatChannelSource chat
+ 
+ bool ChatReplyAction::HandleToxicLinksReply(Player* bot, ChatChannelSource chatChannelSource)
+ {
+-    //quests
++    if (!sPlayerbotAIConfig.toxicLinksRepliesChance)
++        return false;
++
++    // quests
+     std::vector<uint32> incompleteQuests;
+     for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+     {
 diff --git a/src/Ai/Base/Actions/TameAction.cpp b/src/Ai/Base/Actions/TameAction.cpp
 index a202d686..38142b82 100644
 --- a/src/Ai/Base/Actions/TameAction.cpp
@@ -683,6 +1153,87 @@ index 80db8373..323fa083 100644
  class CanMoveAroundValue : public BoolCalculatedValue
  {
  public:
+diff --git a/src/Ai/Base/Value/NewPlayerNearbyValue.cpp b/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
+index 014a7167..a417e3fc 100644
+--- a/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
++++ b/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
+@@ -5,16 +5,45 @@
+  */
+ 
+ #include "NewPlayerNearbyValue.h"
++
+ #include "Playerbots.h"
+ 
++bool NewPlayerNearbyValue::CanGreet(PlayerbotAI* botAI)
++{
++    Player* bot = botAI->GetBot();
++    return bot->IsInWorld() && bot->IsAlive() && !bot->IsInCombat() &&
++           botAI->GetAiObjectContext()->GetValue<time_t>("last said", "greet")->Get() <= time(nullptr);
++}
++
++bool NewPlayerNearbyValue::IsEligiblePlayer(PlayerbotAI* botAI, Player* player)
++{
++    constexpr float GREETING_DISTANCE = 20.0f;
++    Player* bot = botAI->GetBot();
++    return IsRealPlayer(player) && player->IsInWorld() && player->IsAlive() && !player->IsInCombat() &&
++           bot->IsFriendlyTo(player) && bot->IsWithinDistInMap(player, GREETING_DISTANCE) &&
++           bot->CanSeeOrDetect(player) && bot->IsWithinLOSInMap(player);
++}
++
+ ObjectGuid NewPlayerNearbyValue::Calculate()
+ {
++    if (sPlayerbotAIConfig.greetRealPlayersOnly && !CanGreet(botAI))
++        return ObjectGuid::Empty;
++
+     GuidVector players = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest friendly players")->Get();
+     GuidSet& alreadySeenPlayers = botAI->GetAiObjectContext()->GetValue<GuidSet&>("already seen players")->Get();
+     for (ObjectGuid const guid : players)
+     {
+-        if (alreadySeenPlayers.find(guid) == alreadySeenPlayers.end())
+-            return guid;
++        if (alreadySeenPlayers.find(guid) != alreadySeenPlayers.end())
++            continue;
++
++        if (sPlayerbotAIConfig.greetRealPlayersOnly)
++        {
++            Unit* unit = botAI->GetUnit(guid);
++            if (!IsEligiblePlayer(botAI, unit ? unit->ToPlayer() : nullptr))
++                continue;
++        }
++
++        return guid;
+     }
+ 
+     return ObjectGuid::Empty;
+diff --git a/src/Ai/Base/Value/NewPlayerNearbyValue.h b/src/Ai/Base/Value/NewPlayerNearbyValue.h
+index 6a866727..a3d77826 100644
+--- a/src/Ai/Base/Value/NewPlayerNearbyValue.h
++++ b/src/Ai/Base/Value/NewPlayerNearbyValue.h
+@@ -8,16 +8,23 @@
+ #define PLAYERBOTS_NEWPLAYERNEARBYVALUE_H
+ 
+ #include "ObjectGuid.h"
++#include "PlayerbotAIConfig.h"
+ #include "Value.h"
+ 
++class Player;
+ class PlayerbotAI;
+ 
+ class NewPlayerNearbyValue : public CalculatedValue<ObjectGuid>
+ {
+ public:
+-    NewPlayerNearbyValue(PlayerbotAI* botAI) : CalculatedValue<ObjectGuid>(botAI, "new player nearby") {}
++    NewPlayerNearbyValue(PlayerbotAI* botAI)
++        : CalculatedValue<ObjectGuid>(botAI, "new player nearby", sPlayerbotAIConfig.greetRealPlayersOnly ? 10 : 1)
++    {
++    }
+ 
+     ObjectGuid Calculate() override;
++    static bool CanGreet(PlayerbotAI* botAI);
++    static bool IsEligiblePlayer(PlayerbotAI* botAI, Player* player);
+ };
+ 
+ class AlreadySeenPlayersValue : public ManualSetValue<GuidSet&>
 diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
 index 269c87aa..6556dfbb 100644
 --- a/src/Ai/Base/ValueContext.h
@@ -1091,6 +1642,30 @@ index 9449a3cb..d524e20d 100644
 +};
 +
  #endif
+diff --git a/src/Bot/BattlegroundQueuePolicy.h b/src/Bot/BattlegroundQueuePolicy.h
+new file mode 100644
+index 00000000..4f4b3f2b
+--- /dev/null
++++ b/src/Bot/BattlegroundQueuePolicy.h
+@@ -0,0 +1,18 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_BATTLEGROUNDQUEUEPOLICY_H
++#define PLAYERBOTS_BATTLEGROUNDQUEUEPOLICY_H
++
++#include "SharedDefines.h"
++
++constexpr bool IsPlayerbotBattlegroundQueueAllowed(bool vanillaOnly, BattlegroundQueueTypeId queueTypeId)
++{
++    return !vanillaOnly || queueTypeId == BATTLEGROUND_QUEUE_AV || queueTypeId == BATTLEGROUND_QUEUE_WS ||
++           queueTypeId == BATTLEGROUND_QUEUE_AB;
++}
++
++#endif
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
 index 23300d02..a564fa8a 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
@@ -1428,7 +2003,7 @@ index bee5aa24..42312146 100644
              if (!((1 << (cls - 1)) & CLASSMASK_ALL_PLAYABLE) || !sChrClassesStore.LookupEntry(cls))
                  continue;
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index 67cf77ca..946bdcc4 100644
+index 67cf77ca..163e2363 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -143,7 +143,9 @@ PlayerbotAI::PlayerbotAI(Player* bot)
@@ -1442,6 +2017,28 @@ index 67cf77ca..946bdcc4 100644
          bot->SetTaxiCheater(true);
  
      for (uint8 i = 0; i < MAX_ACTIVITY_TYPE; i++)
+@@ -1251,15 +1253,16 @@ void PlayerbotAI::HandleBotOutgoingPacket(WorldPacket const& packet)
+ 
+                     auto itemIds = GetChatHelper()->ExtractAllItemIds(message);
+                     if (message.starts_with(sPlayerbotAIConfig.toxicLinksPrefix) &&
+-                        (itemIds.size() > 0 || GetChatHelper()->ExtractAllQuestIds(message).size() > 0) &&
+-                        sPlayerbotAIConfig.toxicLinksRepliesChance)
++                        (itemIds.size() > 0 || GetChatHelper()->ExtractAllQuestIds(message).size() > 0))
+                     {
+-                        if (urand(0, 50) > 0 || urand(1, 100) > sPlayerbotAIConfig.toxicLinksRepliesChance)
++                        if (!sPlayerbotAIConfig.toxicLinksRepliesChance || urand(0, 50) > 0 ||
++                            urand(1, 100) > sPlayerbotAIConfig.toxicLinksRepliesChance)
+                             return;
+                     }
+-                    else if (itemIds.count(19019) && sPlayerbotAIConfig.thunderfuryRepliesChance)
++                    else if (itemIds.count(19019))
+                     {
+-                        if (urand(0, 60) > 0 || urand(1, 100) > sPlayerbotAIConfig.thunderfuryRepliesChance)
++                        if (!sPlayerbotAIConfig.thunderfuryRepliesChance || urand(0, 60) > 0 ||
++                            urand(1, 100) > sPlayerbotAIConfig.thunderfuryRepliesChance)
+                             return;
+                     }
+                     else
 diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
 index 9c87cdb3..b7e5262f 100644
 --- a/src/Bot/PlayerbotAI.h
@@ -1510,10 +2107,18 @@ index 848ba215..02b7d9e0 100644
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 4a8229f7..98f1cd5d 100644
+index 4a8229f7..36220f6d 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
-@@ -172,6 +172,12 @@ botPIDImpl::~botPIDImpl() {}
+@@ -9,6 +9,7 @@
+ #include "AiFactory.h"
+ #include "Battleground.h"
+ #include "BattlegroundMgr.h"
++#include "BattlegroundQueuePolicy.h"
+ #include "Cell.h"
+ #include "CellImpl.h"
+ #include "ChannelMgr.h"
+@@ -172,6 +173,12 @@ botPIDImpl::~botPIDImpl() {}
  
  uint32 RandomPlayerbotMgr::GetMaxAllowedBotCount() { return GetEventValue(0, "bot_count"); }
  
@@ -1526,7 +2131,7 @@ index 4a8229f7..98f1cd5d 100644
  void RandomPlayerbotMgr::LogPlayerLocation()
  {
      activeBots = 0;
-@@ -353,8 +359,10 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
+@@ -353,8 +360,10 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
                  DelayLoginBotsTimer = 0;
              }
  
@@ -1539,7 +2144,7 @@ index 4a8229f7..98f1cd5d 100644
              {
                  LogoutAllBots();
                  LOG_INFO("playerbots", "Logout all bots due no real player session.");
-@@ -452,7 +460,9 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
+@@ -452,7 +461,9 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
                      break;
              }
  
@@ -1550,7 +2155,64 @@ index 4a8229f7..98f1cd5d 100644
          }
      }
  
-@@ -1384,6 +1394,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+@@ -958,9 +969,16 @@ void RandomPlayerbotMgr::CheckBgQueue()
+             if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
+                 continue;
+ 
++            if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++                continue;
++
+             // Check if real player is able to create/join this queue
+             BattlegroundTypeId bgTypeId = sBattlegroundMgr->BGTemplateId(queueTypeId);
+-            uint32 mapId = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId)->GetMapId();
++            Battleground* templateBg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
++            if (!templateBg)
++                continue;
++
++            uint32 mapId = templateBg->GetMapId();
+             PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, player->GetLevel());
+             if (!pvpDiff)
+                 continue;
+@@ -1049,8 +1067,15 @@ void RandomPlayerbotMgr::CheckBgQueue()
+             if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
+                 continue;
+ 
++            if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++                continue;
++
+             BattlegroundTypeId bgTypeId = sBattlegroundMgr->BGTemplateId(queueTypeId);
+-            uint32 mapId = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId)->GetMapId();
++            Battleground* templateBg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
++            if (!templateBg)
++                continue;
++
++            uint32 mapId = templateBg->GetMapId();
+             PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, bot->GetLevel());
+             if (!pvpDiff)
+                 continue;
+@@ -1156,6 +1181,10 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         // to help counter against potentional inconsistencies
+         auto updateRatedArenaInstanceCount = [&](uint32 queueType, uint32 bracket, uint32 minCount)
+         {
++            if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                     BattlegroundQueueTypeId(queueType)))
++                return;
++
+             if (BattlegroundData[queueType][bracket].activeRatedArenaQueue == 0 &&
+                 BattlegroundData[queueType][bracket].ratedArenaInstanceCount < minCount &&
+                 BattlegroundData[queueType][bracket].ratedArenaInstances.size() < minCount)
+@@ -1164,6 +1193,10 @@ void RandomPlayerbotMgr::CheckBgQueue()
+ 
+         auto updateBGInstanceCount = [&](uint32 queueType, std::vector<uint32> brackets, uint32 minCount)
+         {
++            if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                     BattlegroundQueueTypeId(queueType)))
++                return;
++
+             for (uint32 bracket : brackets)
+             {
+                 if (BattlegroundData[queueType][bracket].activeBgQueue == 0 &&
+@@ -1384,6 +1417,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
      if (!player)
      {
          AddPlayerBot(botGUID, 0);
@@ -1560,7 +2222,7 @@ index 4a8229f7..98f1cd5d 100644
          randomTime = urand(1, 2);
  
          uint32 randomBotUpdateInterval = _isBotInitializing ? 1 : sPlayerbotAIConfig.randomBotUpdateInterval;
-@@ -1407,7 +1420,7 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+@@ -1407,7 +1443,7 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
          return true;
      }
  
@@ -1569,7 +2231,7 @@ index 4a8229f7..98f1cd5d 100644
          return false;
  
      if (player->GetGroup() || player->HasUnitState(UNIT_STATE_IN_FLIGHT))
-@@ -1463,6 +1476,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
+@@ -1463,6 +1499,9 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
  
  bool RandomPlayerbotMgr::ProcessBot(Player* bot)
  {
@@ -1579,7 +2241,7 @@ index 4a8229f7..98f1cd5d 100644
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
-@@ -1583,6 +1599,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
+@@ -1583,6 +1622,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
  
  void RandomPlayerbotMgr::Revive(Player* player)
  {
@@ -1589,7 +2251,7 @@ index 4a8229f7..98f1cd5d 100644
      uint32 bot = player->GetGUID().GetCounter();
  
      // LOG_INFO("playerbots", "Bot {} revived", player->GetName().c_str());
-@@ -1595,6 +1614,9 @@ void RandomPlayerbotMgr::Revive(Player* player)
+@@ -1595,6 +1637,9 @@ void RandomPlayerbotMgr::Revive(Player* player)
  
  void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
  {
@@ -1599,7 +2261,7 @@ index 4a8229f7..98f1cd5d 100644
      // ignore when alrdy teleported or not in the world yet.
      if (bot->IsBeingTeleported() || !bot->IsInWorld())
          return;
-@@ -1950,6 +1972,9 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
+@@ -1950,6 +1995,9 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
  
  void RandomPlayerbotMgr::Randomize(Player* bot)
  {
@@ -1609,7 +2271,7 @@ index 4a8229f7..98f1cd5d 100644
      if (bot->InBattleground())
          return;
  
-@@ -1972,6 +1997,9 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
+@@ -1972,6 +2020,9 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
  
  void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
  {
@@ -1619,7 +2281,7 @@ index 4a8229f7..98f1cd5d 100644
      uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
      if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
          maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
-@@ -1995,6 +2023,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
+@@ -1995,6 +2046,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
  
  void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
  {
@@ -1629,7 +2291,7 @@ index 4a8229f7..98f1cd5d 100644
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
          return;
-@@ -2090,6 +2121,9 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
+@@ -2090,6 +2144,9 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
  
  void RandomPlayerbotMgr::RandomizeMin(Player* bot)
  {
@@ -1639,7 +2301,7 @@ index 4a8229f7..98f1cd5d 100644
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
      if (!botAI)
          return;
-@@ -2164,6 +2198,9 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY,
+@@ -2164,6 +2221,9 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY,
  
  void RandomPlayerbotMgr::Refresh(Player* bot)
  {
@@ -1671,26 +2333,44 @@ index dd2d5878..cbca8d2c 100644
      uint32 AddRandomBots();
      bool ProcessBot(uint32 bot);
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 915bff53..4817e6e2 100644
+index 915bff53..0f74702f 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
-@@ -81,6 +81,7 @@ bool PlayerbotAIConfig::Initialize()
+@@ -81,6 +81,8 @@ bool PlayerbotAIConfig::Initialize()
      LOG_INFO("server.loading", "Initializing mod-playerbots, based on AI Playerbots by ike3 and the original Playerbots by blueboy");
  
      enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", true);
 +    naturalProgression = sConfigMgr->GetOption<bool>("AiPlayerbot.NaturalProgression", false);
++    vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.VanillaBattlegroundsOnly", false);
      if (!enabled)
      {
          LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
+@@ -624,6 +626,7 @@ bool PlayerbotAIConfig::Initialize()
+ 
+     // SPP switches
+     enableGreet = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableGreet", true);
++    greetRealPlayersOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.GreetRealPlayersOnly", false);
+     summonWhenGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.SummonWhenGroup", true);
+     randomBotFixedLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotFixedLevel", false);
+     disableRandomLevels = sConfigMgr->GetOption<bool>("AiPlayerbot.DisableRandomLevels", false);
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 781d4d27..de0e289e 100644
+index 781d4d27..e2c6f7ff 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -103,6 +103,7 @@ public:
+@@ -103,6 +103,8 @@ public:
      bool IsInPvpProhibitedArea(uint32 id);
  
      bool enabled;
 +    bool naturalProgression = false;
++    bool vanillaBattlegroundsOnly = false;
      bool disabledWithoutRealPlayer;
      bool EnableICCBuffs;
      bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
+@@ -186,6 +188,7 @@ public:
+     bool randomBotSuggestDungeons;
+     bool enableBroadcasts;
+     bool enableGreet;
++    bool greetRealPlayersOnly = false;
+     bool randomBotSayWithoutMaster;
+     bool AnnounceConsumableUse;
+ 
