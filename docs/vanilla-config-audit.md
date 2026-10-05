@@ -97,10 +97,10 @@ Outdoor elites and world bosses remain at ordinary world difficulty. Suitable ea
 
 Raid AI has concrete compatibility boundaries. For example, the specialized Onyxia whelp action recognizes entry `11262`, whereas IP's restored whelps use `301001`. Generic combat may still attack them, but that is not complete encounter support. AQ40 and restored Naxx40 coverage is also incomplete/unverified. AutoBalance cannot supply missing positioning or mechanic tactics. Optional Naxx mechanic simplifications, early no-cooldown Quintessence, removed Garr adds and fortyfold AQ reputation/drop boosts remain unapplied.
 
-## Applying these source changes
+## Applying the audited profiles
 
 The published **v1.0.8 ZIP remains unchanged**. `startup.exe` embeds its profiles at compile time; the v1.0.8 `--apply-profiles` command still applies its earlier defaults and does not read replacement source profiles from `defaults/`.
 
-This audit intentionally does not create a new build or release. For an existing v1.0.8 installation, the follow-up values can be applied manually to the corresponding active configuration files after stopping the servers and backing up those files. Add/update individual settings; these short profiles are overlays, not complete replacement configurations. Preserve database connection strings, ports, paths and unrelated custom values. No existing character, inventory, spellbook or progression state is reset.
+The reviewed profiles are in the v1.0.9 sources. After downloading that version's compiled ZIP, stop the servers, extract it into the existing installation and run `startup.exe --apply-profiles` once. The new launcher applies its embedded profiles, creates config backups and exits without starting the services. No existing character, inventory, spellbook or progression state is reset.
 
-A later requested build can embed these reviewed profiles. Exact 1.12 talents, broader class restoration, an earned auction AI and targeted raid compatibility fixes remain separate implementation choices.
+Alternatively, individual values can be applied manually to the corresponding active configuration files after stopping the servers and backing up those files. These short profiles are overlays, not complete replacement configurations. Preserve database connection strings, ports, paths and unrelated custom values. Exact 1.12 talents, broader class restoration, an earned auction AI and targeted raid compatibility fixes remain separate implementation choices.

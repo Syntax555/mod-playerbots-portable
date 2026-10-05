@@ -15,7 +15,7 @@ A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and four addit
 
 The world/auth/database services bind locally by default. A Vanilla content progression server still requires the 3.3.5a client. Do not grant your playing account GM privileges if you want ordinary gameplay.
 
-The [follow-up configuration audit](docs/vanilla-config-audit.md) prepared additional profile changes after v1.0.8. They are in source only; no new build or release has been made. The published v1.0.8 launcher still embeds the earlier profiles.
+The [configuration audit](docs/vanilla-config-audit.md) describes the profiles prepared for v1.0.9: normal talent/skill rules, riding at 40/60, disabled shortcut bot mail and quiet event broadcasts. Use the new version's launcher to apply them to an existing installation; v1.0.8 embeds the earlier profiles.
 
 ## MultiBot client addon
 
@@ -96,7 +96,7 @@ This is Vanilla content progression on the WotLK core, with its client/class mec
 
 AutoBalance counts the non-GM players actually present, including bots. A human plus four bots receives normal five-player dungeon stats; smaller parties use the upstream scaling curve and scaled XP/money, with original creature levels. Outdoor elites and world bosses retain their ordinary difficulty and need suitable companions. Instance scaling does not solve every encounter tactic; full AQ40/Naxx40 bot support is not established. A source/configuration audit cannot establish exact historical class balance or completion of every raid.
 
-See [the configuration audit](docs/vanilla-config-audit.md) for the effective settings, module coverage and remaining Vanilla fidelity choices. It also distinguishes follow-up source profiles from the published v1.0.8 ZIP.
+See [the configuration audit](docs/vanilla-config-audit.md), included in the ZIP, for the effective settings, module coverage, remaining Vanilla fidelity choices and migration from v1.0.8.
 
 Existing characters keep their levels, inventory, money and progression. Existing active configs also keep their settings; the new defaults do not silently reset an established realm. Back up databases and configurations before migrating an existing realm.
 
@@ -133,7 +133,7 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 
 The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher, prepares pinned modules, builds Release binaries and checks the portable distribution before uploading a ZIP. A pushed `v*` tag publishes that ZIP as the release asset. Pull requests validate the same build with read-only repository permissions.
 
-For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.8`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
+For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.9`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
 
 For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.19+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
 
