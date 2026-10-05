@@ -10,6 +10,13 @@ if(NOT IS_DIRECTORY "${core}/data/sql")
 endif()
 file(MAKE_DIRECTORY "${PORTABLE_DIST_DIR}/src/data" "${PORTABLE_DIST_DIR}/configs/modules"
     "${PORTABLE_DIST_DIR}/licenses" "${PORTABLE_DIST_DIR}/patches")
+# These are generated source exports, not the live MySQL data or configuration.
+# Replace them so deleted migrations and SQL from removed modules cannot survive.
+file(REMOVE_RECURSE "${PORTABLE_DIST_DIR}/src/data/sql")
+file(GLOB old_module_sql "${PORTABLE_DIST_DIR}/src/modules/*/data/sql")
+foreach(sql_dir IN LISTS old_module_sql)
+    file(REMOVE_RECURSE "${sql_dir}")
+endforeach()
 file(COPY "${core}/data/sql" DESTINATION "${PORTABLE_DIST_DIR}/src/data")
 file(COPY "${core}/LICENSE" DESTINATION "${PORTABLE_DIST_DIR}/licenses")
 file(RENAME "${PORTABLE_DIST_DIR}/licenses/LICENSE" "${PORTABLE_DIST_DIR}/licenses/azerothcore-wotlk.txt")

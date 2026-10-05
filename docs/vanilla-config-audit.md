@@ -76,7 +76,7 @@ IP documents approximate damage `0.5–0.6` and healing `0.5` adjustments as tun
 
 ## Solo play and module coverage
 
-All seven core/module/addon pins still matched their stable/default upstream heads in fresh checks on 5 October 2026. They cover the necessary systems for one human with companions:
+At the original audit, the existing core/module/addon pins matched their stable/default upstream heads in fresh checks on 5 October 2026. The later Chatless replacement and added modules are recorded in the addendum below and in [module-versions.md](module-versions.md). They cover the necessary systems for one human with companions:
 
 | Component | Policy |
 | --- | --- |
@@ -85,7 +85,7 @@ All seven core/module/addon pins still matched their stable/default upstream hea
 | AutoBalance | Enabled for instances, original creature levels, normal full-party stats, smaller-party scaling with matching XP/money scaling. |
 | AH Bot Plus | Included but seller/buyer off: they generate supply and synthetic demand. |
 | Dungeon Clear | Included but off: scripted navigation teleports and filler/recovery shortcuts conflict with the current policy. |
-| MultiBot | Included client control UI; it does not replace AI or restore Vanilla class rules. |
+| MultiBot (original audit) | Client control UI, subsequently replaced by MultiBot Chatless and its server bridge. |
 
 Do not add SoloCraft alongside AutoBalance: it buffs player stats/spellpower, restores health/mana and modifies XP while AutoBalance already reduces instance enemies. Solo Dungeon Finder adds no value when RDF is disabled. NPC buffers and generated bot/gear services conflict with earned play; extra AQ/PvP reward modules duplicate IP systems.
 
@@ -116,3 +116,77 @@ The source marks only normal-quality entries passing through the core's quest-lo
 Playerbots use the ordinary player/corpse loot path, so the feature applies to eligible bots as well as humans. Quest synchronization remains disabled. No automatic bag delivery, forced drop chance or general personal equipment loot from broader forks is included. The module's SQL only installs its scoped login-message translations; it does not alter character state or loot tables. Its SQL and upstream AGPL license are included in the ZIP and handled by the existing packaging/database updater.
 
 For an existing installation, stop the servers, extract the v1.0.10 ZIP into the installation and run its new `startup.exe --apply-profiles` once. Missing module configurations are created from the new template; an existing configuration is updated with a backup. Characters, inventory and progression are preserved.
+
+## Chatless and token turn-in addendum
+
+The current sources replace `Macx-Lio/MultiBot` with the matching
+`Wishmaster117/MultiBot-Chatless` addon and `Wishmaster117/mod-multibot-bridge`
+server module, and add `Zerathane/mod-token-turnin`. Their exact upstream heads,
+checked on 5 October 2026, are pinned in `versions.lock.json` and summarized in
+[module-versions.md](module-versions.md). Existing server module revisions were
+already current and remain unchanged.
+
+Players can download `MultiBot-Chatless-<version>.zip` separately from the server
+ZIP. Both contain the same pinned addon, installed as `Interface/AddOns/MultiBot/`.
+Replace the old client folder completely. This project remains mostly chatless:
+some upstream UI controls still use scoped legacy Playerbots commands.
+
+The bridge's new `mod-multibot-bridge-natural-progression.patch` follows
+`AiPlayerbot.NaturalProgression` on the server. It applies these restrictions:
+
+- Custom talent application and preset specialization writes are rejected,
+  because upstream rebuilds talent templates without an ordinary paid trainer
+  reset. Existing earned talents and automatic talent selection are retained.
+- Bridge trainer purchases require authorization and the bot's normal NPC
+  interaction range. Purchases run through the core trainer handler, including
+  costs, prerequisites and progression hooks. Remote manual spell grants are
+  unavailable in strict mode.
+- Personal bank transfers, including exact deposits, require the bot to be
+  within ordinary banker interaction range and use the core's validated item
+  storage APIs. The bridge corrects quest-item accounting when depositing items
+  and withdrawing into an existing stack; capacity failures retain their reason
+  and partial transfers report the amount actually moved. Guild-bank actions retain their
+  existing core interaction and membership/withdrawal checks.
+- SelfBot autogear and maintenance shortcuts are rejected even if their
+  individual command settings are later enabled.
+
+Rejected shortcuts return `NATURAL_PROGRESSION` to the addon. Roster/inventory
+inspection and normal resource-consuming actions remain available. Existing
+Playerbots restrictions still block free summoning, quest synchronization,
+generated gear/gold and cheat masks. This is a targeted integration audit, not
+a guarantee that every upstream action or encounter is free of shortcuts; the
+earlier AI and Vanilla class-system limitations still apply.
+
+`MultiBotBridge.conf` disables console logs. `mod_token_turnin.conf` enables the
+module with `IncludeSelf = 0` and `IncludeRealPlayers = 0`, so token checks target
+grouped bots rather than altering a human teammate's possessions.
+
+Upstream Token Turn-in directly awards gear and destroys tokens, intentionally
+waiving normal AQ/Naxx reputation and extra materials. Its
+`mod-token-turnin-natural-progression.patch` therefore blocks `.tokenturnin redeem`
+before any character is processed while natural progression is enabled, with a
+second guard in the conversion function. `.tokenturnin check` remains a read-only
+inventory/spec mapping preview and explicitly states that it does not verify
+normal exchange eligibility. Bots still have to farm every required item, earn
+reputation and complete the original quest/NPC exchange.
+
+The release build prepares both modules with the other pinned sources, includes
+their configuration templates, token SQL, provenance/licenses and local patches,
+and embeds the two new profiles into the launcher. Its separate addon asset is
+verified against every prepared file, including textures, the 3.3.5a TOC, license
+and source revision. Preparation re-exports the addon from its immutable cached
+Git revision, and packaging independently compares every asset against that
+revision before creating the player ZIP. The server ZIP verifier also checks
+every addon byte and rejects obsolete SQL migrations. Assembly replaces only
+generated SQL exports, preserving live databases and active configs.
+Existing configurations require the new launcher's
+`--apply-profiles` command to apply the recommended settings with backups;
+characters and databases are preserved.
+
+Local verification includes forward/reverse patch checks, C++20 syntax compilation
+of all four new module source files against the pinned core and patched Playerbots
+headers, Windows launcher/test cross-compilation and vet, native launcher tests
+with race detection, standalone addon verification and 45 positive/negative
+assembly/ZIP regression checks. The workflow runs the launcher and packaging
+checks before compiling, smoke-testing and packaging the Windows server.
+Live in-game verification remains unperformed in this Linux workspace.
