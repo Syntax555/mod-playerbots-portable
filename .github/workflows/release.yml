@@ -267,6 +267,8 @@ jobs:
           $lines.Add('')
           $lines.Add('Fresh installations use Vanilla progression, a level-60 cap and a target of 2,500 level-1 bots. Gradual bot login begins 30 seconds after a real player connects; bots log out about 60 seconds after the last real session disconnects. Natural maintenance uses normal NPC prices and prerequisites. See README.md and defaults/ in the ZIP for behavior and AI limits.')
           $lines.Add('')
+          $lines.Add('Bots fill real players'' Warsong Gulch (levels 10–60), Arathi Basin (20–60) and Alterac Valley (51–60) queues with their earned levels and equipment. Autonomous all-bot matches, random/later battlegrounds and arenas stay disabled. Ghosts use normal spirit-guide resurrection waves. Nearby greetings target real players only; random emotes and toxic-link/Thunderfury meme replies stay off.')
+          $lines.Add('')
           $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
           $lines.Add('')
           $lines.Add('### Locked upstream versions')
