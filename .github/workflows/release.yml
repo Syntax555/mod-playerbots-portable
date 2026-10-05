@@ -261,7 +261,7 @@ jobs:
           $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
           $version = '${{ steps.version.outputs.value }}'
           $lines = [System.Collections.Generic.List[string]]::new()
-          $lines.Add('Prebuilt Windows x64 AzerothCore server with playerbots, AutoBalance, individual progression, AH bot plus and dungeon clear.')
+          $lines.Add('Prebuilt Windows x64 AzerothCore server with playerbots, AutoBalance, individual progression, AH bot plus, dungeon clear and Quest Loot Party.')
           $lines.Add('')
           $lines.Add('Download and extract mod-playerbots-portable-' + $version + '.zip, then run startup.exe. Required client data and databases are downloaded/initialized on first launch. No compiler is required.')
           $lines.Add('')
@@ -271,7 +271,9 @@ jobs:
           $lines.Add('')
           $lines.Add('Audited profiles keep normal earned talent/skill rates, paid trainer respecs, two primary professions and riding at levels 40/60. New dual-spec purchases are unavailable below level 80. Shortcut bot mail and unsolicited event broadcasts are disabled. AutoBalance counts actual party members, including bots, with explicit dungeon/raid minimums and no player-count offset.')
           $lines.Add('')
-          $lines.Add('This remains Vanilla content progression on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. No additional modules or spellbook resets are introduced.')
+          $lines.Add('Quest Loot Party is now included and enabled. Eligible party members can individually loot their own copy of naturally dropped normal-quality quest items from the corpse; drop chances and ordinary equipment loot rules stay unchanged. Login announcements are off. Forced drops, automatic item delivery and broad personal-loot features are not included.')
+          $lines.Add('')
+          $lines.Add('This remains Vanilla content progression on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
           $lines.Add('')
           $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
           $lines.Add('')
