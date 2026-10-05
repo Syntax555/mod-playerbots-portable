@@ -1,6 +1,6 @@
 # AzerothCore Playerbots Portable
 
-A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and four additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 bots while a real player is connected**.
+A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and five additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 bots while a real player is connected**.
 
 ## Download and play
 
@@ -15,7 +15,7 @@ A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and four addit
 
 The world/auth/database services bind locally by default. A Vanilla content progression server still requires the 3.3.5a client. Do not grant your playing account GM privileges if you want ordinary gameplay.
 
-The [configuration audit](docs/vanilla-config-audit.md) describes the profiles prepared for v1.0.9: normal talent/skill rules, riding at 40/60, disabled shortcut bot mail and quiet event broadcasts. Use the new version's launcher to apply them to an existing installation; v1.0.8 embeds the earlier profiles.
+The [configuration audit](docs/vanilla-config-audit.md) describes the profiles released in v1.0.9: normal talent/skill rules, riding at 40/60, disabled shortcut bot mail and quiet event broadcasts. Its v1.0.10 addendum covers Quest Loot Party. Use the new version's launcher to apply them to an existing installation; v1.0.8 embeds the earlier profiles.
 
 ## MultiBot client addon
 
@@ -48,8 +48,11 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; every character starts at tier 0 and earns Vanilla progression through tier 7 (Naxxramas). Random bot accounts follow the same gates. |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Humans can use the AH, but this Playerbots revision has no active autonomous auction trading. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
+| [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Enabled; eligible party members can each loot a copy of naturally dropped normal-quality quest items. Each member still opens the corpse; login announcements are disabled. |
 
 The pinned Playerbots version provides the native `ForceRebuffState` API used by Dungeon Clear's raid preparation. Its compatibility patch also supports older Playerbots versions: those use normal buffs for a bounded phase (25 seconds by default, within the 60-second overall muster budget). Module checkout and patch application happen during the build, never during server startup.
+
+Quest Loot Party uses the original author's narrow quest-loot module. It keeps normal drop chances, quest eligibility and inventory checks, and leaves ordinary equipment loot rules unchanged. It does not auto-complete quests or send items directly to party members. Shared quest drops are an intentional convenience change from ordinary Vanilla party loot; forced drops and broad personal-loot features from other forks are not included.
 
 ## Vanilla and earned bot progression
 
@@ -121,6 +124,7 @@ After first launch:
 | `configs/modules/AutoBalance.conf` | Instance difficulty and reward scaling. |
 | `configs/modules/mod_ahbot.conf` | Optional generated auction-house supply and automated buying. |
 | `configs/modules/mod_dungeon_clear.conf` | Optional dungeon navigation and queue filling. |
+| `configs/modules/mod-quest-loot-party.conf` | Shared normal-quality quest loot and the module's login message. |
 | `mysql/my.cnf` | MySQL/InnoDB tuning generated for the host's RAM. |
 
 To open later expansions, raise `MaxPlayerLevel` and `AiPlayerbot.RandomBotMaxLevel` to 80, clear both `CharacterCreating.Disabled` race/class masks and set `IndividualProgression.ProgressionLimit = 0` (unlimited) and `IndividualProgression.BotAccountsMaxLevel = 80`. `Expansion` stays 2. Characters must still earn their progression tiers: 8 starts TBC, 13 starts Wrath, and 18 completes Wrath. Natural progression keeps random death knights excluded to preserve level 1 creation; player death knights ordinarily start at 55.
@@ -133,7 +137,7 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 
 The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher, prepares pinned modules, builds Release binaries and checks the portable distribution before uploading a ZIP. A pushed `v*` tag publishes that ZIP as the release asset. Pull requests validate the same build with read-only repository permissions.
 
-For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.9`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
+For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.10`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
 
 For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.19+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
 

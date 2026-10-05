@@ -65,8 +65,10 @@ try {
         'configs/modules/playerbots.conf.dist', 'configs/modules/AutoBalance.conf.dist',
         'configs/modules/individualProgression.conf.dist', 'configs/modules/mod_ahbot.conf.dist',
         'configs/modules/mod_dungeon_clear.conf.dist',
+        'configs/modules/mod-quest-loot-party.conf.dist',
         'defaults/playerbots.conf', 'defaults/worldserver.conf', 'defaults/individualProgression.conf',
         'defaults/AutoBalance.conf', 'defaults/mod_ahbot.conf', 'defaults/mod_dungeon_clear.conf',
+        'defaults/mod-quest-loot-party.conf',
         'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'LICENSE', 'licenses/azerothcore-wotlk.txt'
     )
     foreach ($name in $required) {
@@ -81,6 +83,7 @@ try {
         'defaults/AutoBalance.conf' = 'cmd/startup/profiles/AutoBalance.conf'
         'defaults/mod_ahbot.conf' = 'cmd/startup/profiles/mod_ahbot.conf'
         'defaults/mod_dungeon_clear.conf' = 'cmd/startup/profiles/mod_dungeon_clear.conf'
+        'defaults/mod-quest-loot-party.conf' = 'cmd/startup/profiles/mod-quest-loot-party.conf'
     }
     foreach ($name in $textSources.Keys) {
         $reader = [System.IO.StreamReader]::new($entries[$name].Open())
