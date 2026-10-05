@@ -2,6 +2,8 @@ name: Build portable ZIP
 
 on:
   push:
+    branches:
+      - 'codex/**'
     tags:
       - 'v*'
   pull_request:
@@ -18,11 +20,37 @@ permissions:
 
 concurrency:
   group: portable-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/')) }}
 
 jobs:
+  launcher:
+    name: Check launcher before server build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test portable launcher logic and Windows compilation
+        run: |
+          if [[ -f cmd/startup/platform_windows.go ]]; then
+            go test ./...
+            go vet ./...
+          fi
+          GOOS=windows GOARCH=amd64 go test -c -o "$RUNNER_TEMP/startup.test.exe" ./cmd/startup
+          GOOS=windows GOARCH=amd64 go vet ./...
+
+      - name: Test distribution assembly and ZIP validation
+        if: hashFiles('cmake/tests/TestPortableZip.ps1') != ''
+        shell: pwsh
+        run: ./cmake/tests/TestPortableZip.ps1
+
   build:
     name: Build and verify Windows ZIP
+    needs: launcher
     runs-on: windows-2022
     timeout-minutes: 360
     outputs:
@@ -59,6 +87,21 @@ jobs:
         with:
           ref: ${{ steps.version.outputs.checkout_ref }}
           submodules: recursive
+
+      - name: Check packaging capabilities of selected source
+        id: package_features
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($path in @('versions.lock.json', 'CMakeLists.txt', 'cmake/VerifyPortableZip.ps1')) {
+              if (-not (Test-Path $path -PathType Leaf)) { throw "Selected source cannot build a portable ZIP: missing $path" }
+          }
+          $hasPackager = Test-Path 'cmake/PackageClientAddons.cmake' -PathType Leaf
+          $hasVerifier = Test-Path 'cmake/VerifyClientAddonZip.ps1' -PathType Leaf
+          if ($hasPackager -ne $hasVerifier) { throw 'Selected source has an incomplete standalone addon packaging implementation.' }
+          $hasArchiveTarget = Select-String -Path 'CMakeLists.txt' -Pattern 'add_custom_target\(package_zip_archive' -Quiet
+          "standalone_addons=$($hasPackager.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "archive_only=$($hasArchiveTarget.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -225,7 +268,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $false
           try {
-              cmake --build build --target package_zip --config Release 2>&1 | Tee-Object -Variable packageLog
+              $zipTarget = if ('${{ steps.package_features.outputs.archive_only }}' -eq 'true') { 'package_zip_archive' } else { 'package_zip' }
+              cmake --build build --target $zipTarget --config Release 2>&1 | Tee-Object -Variable packageLog
               $packageExitCode = $LASTEXITCODE
               if ($packageExitCode -ne 0) {
                   $details = ($packageLog | Select-Object -Last 30) -join "`n"
@@ -239,7 +283,28 @@ jobs:
               exit 1
           }
 
-      - name: Verify complete ZIP contents
+      - name: Create standalone client addon ZIPs
+        if: steps.package_features.outputs.standalone_addons == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          try {
+              cmake "-DPACKAGE_VERSION=$env:PACKAGE_VERSION" -P cmake/PackageClientAddons.cmake 2>&1 | Tee-Object -Variable addonPackageLog
+              $packageExitCode = $LASTEXITCODE
+              if ($packageExitCode -ne 0) {
+                  $details = ($addonPackageLog | Select-Object -Last 30) -join "`n"
+                  throw "Client addon ZIP packaging failed (exit code $packageExitCode).`n$details"
+              }
+          } catch {
+              $message = $_.Exception.Message
+              if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Create standalone client addon ZIPs::$message"
+              exit 1
+          }
+
+      - name: Verify server ZIP contents
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -251,7 +316,29 @@ jobs:
               $message = $_.Exception.Message
               if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
               $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-              Write-Output "::error title=Verify complete ZIP contents::$message"
+              Write-Output "::error title=Verify server ZIP contents::$message"
+              exit 1
+          }
+
+      - name: Verify standalone client addon ZIP contents
+        if: steps.package_features.outputs.standalone_addons == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          try {
+              $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
+              foreach ($addon in @($lock.clientAddons)) {
+                  $archiveName = if ($null -ne $addon.archiveName) { $addon.archiveName } else { $addon.name }
+                  $zipPath = "output/$archiveName-$env:PACKAGE_VERSION.zip"
+                  ./cmake/VerifyClientAddonZip.ps1 -ZipPath $zipPath -AddonName $addon.name
+                  $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
+                  Write-Host "SHA-256 ($zipPath): $hash"
+              }
+          } catch {
+              $message = $_.Exception.Message
+              if ($message.Length -gt 8000) { $message = $message.Substring(0, 8000) }
+              $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Verify standalone client addon ZIP contents::$message"
               exit 1
           }
 
@@ -261,7 +348,7 @@ jobs:
           $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
           $version = '${{ steps.version.outputs.value }}'
           $lines = [System.Collections.Generic.List[string]]::new()
-          $lines.Add('Prebuilt Windows x64 AzerothCore server with playerbots, AutoBalance, individual progression, AH bot plus, dungeon clear and Quest Loot Party.')
+          $lines.Add('Prebuilt Windows x64 AzerothCore server with the pinned modules and client addons listed below.')
           $lines.Add('')
           $lines.Add('Download and extract mod-playerbots-portable-' + $version + '.zip, then run startup.exe. Required client data and databases are downloaded/initialized on first launch. No compiler is required.')
           $lines.Add('')
@@ -273,6 +360,10 @@ jobs:
           $lines.Add('')
           $lines.Add('Quest Loot Party is now included and enabled. Eligible party members can individually loot their own copy of naturally dropped normal-quality quest items from the corpse; drop chances and ordinary equipment loot rules stay unchanged. Login announcements are off. Forced drops, automatic item delivery and broad personal-loot features are not included.')
           $lines.Add('')
+          if ($lock.modules | Where-Object { $_.name -eq 'mod-token-turnin' }) {
+              $lines.Add('Token Turn-in permits only read-only token inventory/mapping checks (.check). The .redeem command is blocked because it bypasses AQ/Naxx scarab, reputation and material requirements.')
+              $lines.Add('')
+          }
           $lines.Add('This remains Vanilla content progression on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
           $lines.Add('')
           $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
@@ -288,7 +379,16 @@ jobs:
           $lines.Add('')
           foreach ($addon in @($lock.clientAddons)) {
               $repo = $addon.url -replace '\.git$', ''
-              $lines.Add('- **' + $addon.name + '**: [' + $addon.revision.Substring(0, 12) + '](' + $repo + '/commit/' + $addon.revision + ') for WoW 3.3.5a. Copy addons/' + $addon.name + ' into your client Interface/AddOns/ folder.')
+              $archiveName = if ($null -ne $addon.archiveName) { $addon.archiveName } else { $addon.name }
+              $install = 'Copy addons/' + $addon.name + ' from the server ZIP into your client Interface/AddOns/ folder.'
+              if ('${{ steps.package_features.outputs.standalone_addons }}' -eq 'true') {
+                  $install = 'Download the standalone ' + $archiveName + '-' + $version + '.zip and copy its ' + $addon.name + '/ folder into your client Interface/AddOns/ folder, or use addons/' + $addon.name + ' from the server ZIP.'
+              }
+              $lines.Add('- **' + $archiveName + '**: [' + $addon.revision.Substring(0, 12) + '](' + $repo + '/commit/' + $addon.revision + ') for WoW 3.3.5a. ' + $install + ' The installed folder must be named ' + $addon.name + '.')
+          }
+          $lines.Add('')
+          if ($lock.clientAddons | Where-Object { $_.url -like '*/MultiBot-Chatless.git' }) {
+              $lines.Add('Remove the old MultiBot folder from Interface/AddOns/ before replacing it with MultiBot-Chatless. Install the replacement as Interface/AddOns/MultiBot/ so MultiBot.toc loads correctly.')
           }
           $lines.Add('')
           $patchNotes = [System.Collections.Generic.List[string]]::new()

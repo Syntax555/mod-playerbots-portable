@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.21)
 
 project(PlayerbotsWorkspace NONE)
 
@@ -222,7 +222,7 @@ if(WIN32)
     if(SEVEN_ZIP_EXECUTABLE)
         message(STATUS "  7-Zip          : ${SEVEN_ZIP_EXECUTABLE} (Maximum Ultra Compression -mx=9)")
 
-        add_custom_target(package_zip
+        add_custom_target(package_zip_archive
             COMMAND ${CMAKE_COMMAND}
                 "-DPORTABLE_DIST_DIR=${CMAKE_INSTALL_PREFIX_CLEAN}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrunePortableDistribution.cmake"
@@ -235,7 +235,7 @@ if(WIN32)
     else()
         message(STATUS "  7-Zip          : NOT FOUND (falling back to cmake -E tar)")
 
-        add_custom_target(package_zip
+        add_custom_target(package_zip_archive
             COMMAND ${CMAKE_COMMAND}
                 "-DPORTABLE_DIST_DIR=${CMAKE_INSTALL_PREFIX_CLEAN}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrunePortableDistribution.cmake"
@@ -247,7 +247,14 @@ if(WIN32)
         )
     endif()
 
-    add_dependencies(package_zip azerothcore)
+    # CI archives the assembled, smoke-tested distribution without running
+    # BUILD_ALWAYS again. The public packaging target still builds first.
+    add_custom_target(package_zip
+        COMMAND ${CMAKE_COMMAND} --build "${CMAKE_CURRENT_BINARY_DIR}"
+            --config "$<CONFIG>" --target package_zip_archive
+        DEPENDS azerothcore
+        COMMENT "Building and packaging the portable distribution"
+    )
 
     add_custom_target(package_portable
         DEPENDS package_zip
