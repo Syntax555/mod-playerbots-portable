@@ -40,13 +40,26 @@
       "name": "mod-quest-loot-party",
       "url": "https://github.com/pangolp/mod-quest-loot-party.git",
       "revision": "6f073c1bef1bba1aa73787d1e30db7429f2b1c7b"
+    },
+    {
+      "name": "mod-multibot-bridge",
+      "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
+      "revision": "1da05982e478cb00e0b6c87314afe7e0e9653ffb",
+      "patches": ["patches/mod-multibot-bridge-natural-progression.patch"]
+    },
+    {
+      "name": "mod-token-turnin",
+      "url": "https://github.com/Zerathane/mod-token-turnin.git",
+      "revision": "73e447c499751559549e129a39c58c42fe661e73",
+      "patches": ["patches/mod-token-turnin-natural-progression.patch"]
     }
   ],
   "clientAddons": [
     {
       "name": "MultiBot",
-      "url": "https://github.com/Macx-Lio/MultiBot.git",
-      "revision": "ecee413dacfa93ee705ede83f308f3a0396e6ece",
+      "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
+      "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f",
+      "archiveName": "MultiBot-Chatless",
       "interface": 30300,
       "toc": "MultiBot.toc",
       "license": "LICENSE"

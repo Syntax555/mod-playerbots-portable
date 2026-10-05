@@ -1,0 +1,57 @@
+diff --git a/src/mod_token_turnin_commandscript.cpp b/src/mod_token_turnin_commandscript.cpp
+index 4a8c019..baf7b82 100644
+--- a/src/mod_token_turnin_commandscript.cpp
++++ b/src/mod_token_turnin_commandscript.cpp
+@@ -69,6 +69,12 @@ namespace
+         configIncludeRealPlayers = sConfigMgr->GetOption<bool>("TokenTurnIn.IncludeRealPlayers", false);
+     }
+ 
++    bool IsNaturalProgressionEnabled()
++    {
++        return sConfigMgr->GetOption<bool>(
++            "AiPlayerbot.NaturalProgression", false);
++    }
++
+     // Packs (token_entry, class_id, talent_tab) into one key for the lookup
+     // cache below. token_entry uses bits 16+ (up to 32 bits), class_id bits
+     // 8-15, talent_tab bits 0-7 - no overlap since class_id/talent_tab are
+@@ -435,6 +441,10 @@ namespace
+     // doConvert = false -> report only, no destroy/award.
+     std::vector<TokenConversionResult> ScanAndResolve(Player* target, bool doConvert)
+     {
++        // Direct callers must also preserve strict earned progression.
++        if (doConvert && IsNaturalProgressionEnabled())
++            return {};
++
+         std::vector<TokenConversionResult> results;
+ 
+         // 1. Resolve current spec. -1 means no points invested anywhere
+@@ -711,6 +721,15 @@ namespace
+             return;
+         }
+ 
++        if (doConvert && IsNaturalProgressionEnabled())
++        {
++            handler->PSendSysMessage(
++                "[TokenTurnIn] Redemption is disabled during natural "
++                "progression. Use the original NPC quests, which require "
++                "reputation, all required materials, prerequisites and costs.");
++            return;
++        }
++
+         Player* invoker = handler->GetPlayer();
+         if (!invoker)
+             return;
+@@ -729,6 +748,12 @@ namespace
+             return;
+         }
+ 
++        if (!doConvert)
++            handler->PSendSysMessage(
++                "[TokenTurnIn] Mapping preview only; this does not verify "
++                "eligibility for the original NPC quests or their reputation, "
++                "materials, prerequisites and costs.");
++
+         handler->PSendSysMessage(
+             "[TokenTurnIn] === {} ({} character{}) ===",
+             doConvert ? "Redeem" : "Check", scope.size(), scope.size() == 1 ? "" : "s");

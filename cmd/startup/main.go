@@ -18,7 +18,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 const defaultClientDataURL = "https://github.com/wowgaming/client-data/releases/download/v20.0/Data.zip"
@@ -554,32 +553,29 @@ func extractZip(ctx context.Context, zipPath string, destDir string) error {
 	}
 	defer r.Close()
 
-	cleanDestDir := filepath.Clean(destDir)
+	cleanDestDir, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve destination directory %s: %w", destDir, err)
+	}
 	if err := os.MkdirAll(cleanDestDir, 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory %s: %w", cleanDestDir, err)
 	}
 
-	// Detect if all files share a common root prefix like "Data/" or "data/"
-	hasCommonRoot := false
-	var commonRoot string
-	if len(r.File) > 0 {
-		first := filepath.ToSlash(r.File[0].Name)
-		if idx := strings.Index(first, "/"); idx != -1 {
-			rootCandidate := strings.ToLower(first[:idx])
-			if rootCandidate == "data" {
-				allMatch := true
-				for _, f := range r.File {
-					normalized := filepath.ToSlash(f.Name)
-					if !strings.HasPrefix(strings.ToLower(normalized), "data/") && strings.ToLower(normalized) != "data" {
-						allMatch = false
-						break
-					}
-				}
-				if allMatch {
-					hasCommonRoot = true
-					commonRoot = first[:idx+1]
-				}
-			}
+	// Normalize Windows archive separators on every host and detect the Data root
+	// with the same case-insensitive comparison used when removing it.
+	entryNames := make([]string, len(r.File))
+	hasCommonRoot := len(r.File) > 0
+	for i, f := range r.File {
+		name := strings.ReplaceAll(f.Name, `\`, "/")
+		// IsLocal rejects absolute and escaping paths. Reject colons explicitly
+		// so Windows drive paths and alternate streams are also rejected on Unix.
+		if !filepath.IsLocal(filepath.FromSlash(name)) || strings.Contains(name, ":") {
+			return fmt.Errorf("illegal file path in zip archive: %s", f.Name)
+		}
+		entryNames[i] = name
+		root, _, hasSeparator := strings.Cut(name, "/")
+		if !strings.EqualFold(root, "data") || (!hasSeparator && !f.FileInfo().IsDir()) {
+			hasCommonRoot = false
 		}
 	}
 
@@ -593,21 +589,23 @@ func extractZip(ctx context.Context, zipPath string, destDir string) error {
 		default:
 		}
 
-		relName := f.Name
-		if hasCommonRoot && strings.HasPrefix(relName, commonRoot) {
-			relName = strings.TrimPrefix(relName, commonRoot)
+		relName := entryNames[i]
+		if hasCommonRoot {
+			_, relName, _ = strings.Cut(relName, "/")
 		}
 		if relName == "" || relName == "." {
 			continue
 		}
 
-		targetPath := filepath.Join(cleanDestDir, relName)
-		cleanTarget := filepath.Clean(targetPath)
-		if !strings.HasPrefix(cleanTarget, cleanDestDir+string(filepath.Separator)) && cleanTarget != cleanDestDir {
+		// Removing Data/ can expose traversal or an absolute path that was
+		// contained in the original name, such as Data/../file or Data//file.
+		localName := filepath.FromSlash(relName)
+		if !filepath.IsLocal(localName) {
 			return fmt.Errorf("illegal file path in zip archive: %s", f.Name)
 		}
+		targetPath := filepath.Join(cleanDestDir, localName)
 
-		if f.FileInfo().IsDir() {
+		if f.FileInfo().IsDir() || strings.HasSuffix(relName, "/") {
 			if err := os.MkdirAll(targetPath, 0755); err != nil {
 				return err
 			}
@@ -764,9 +762,7 @@ func initializeMySQL(binaries *mysqlBinaries, dataDir string, configFile string)
 	cmd := exec.Command(binaries.mysqld, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-	}
+	configureConsoleProcess(cmd)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("mysqld --initialize-insecure failed: %w", err)
@@ -803,58 +799,13 @@ func startMySQLServer(binaries *mysqlBinaries, dataDir string, port int, configF
 	cmd := exec.Command(binaries.mysqld, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-	}
+	configureConsoleProcess(cmd)
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start mysqld: %w", err)
 	}
 
 	return cmd, nil
-}
-
-func isProcessAlive(pid int) (bool, uint32) {
-	if pid <= 0 {
-		return false, 0
-	}
-	if runtime.GOOS != "windows" {
-		p, err := os.FindProcess(pid)
-		if err != nil {
-			return false, 0
-		}
-		err = p.Signal(syscall.Signal(0))
-		return err == nil, 0
-	}
-
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	openProcess := kernel32.NewProc("OpenProcess")
-	getExitCodeProcess := kernel32.NewProc("GetExitCodeProcess")
-	waitForSingleObject := kernel32.NewProc("WaitForSingleObject")
-	closeHandle := kernel32.NewProc("CloseHandle")
-
-	const SYNCHRONIZE = 0x00100000
-	const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-	const WAIT_TIMEOUT = 258 // 0x102
-	const STILL_ACTIVE = 259
-
-	hProcess, _, _ := openProcess.Call(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION, 0, uintptr(pid))
-	if hProcess == 0 {
-		return false, 0
-	}
-	defer closeHandle.Call(hProcess)
-
-	waitRet, _, _ := waitForSingleObject.Call(hProcess, 0)
-	if waitRet == WAIT_TIMEOUT {
-		return true, STILL_ACTIVE
-	}
-
-	var exitCode uint32
-	ret, _, _ := getExitCodeProcess.Call(hProcess, uintptr(unsafe.Pointer(&exitCode)))
-	if ret == 0 {
-		return false, 0
-	}
-	return false, exitCode
 }
 
 func waitForMySQLReady(ctx context.Context, cmd *exec.Cmd, binaries *mysqlBinaries, port int, timeout time.Duration) error {
@@ -1090,33 +1041,6 @@ func findBaseDir() string {
 	return "."
 }
 
-type memoryStatusEx struct {
-	cbSize                  uint32
-	dwMemoryLoad            uint32
-	ullTotalPhys            uint64
-	ullAvailPhys            uint64
-	ullTotalPageFile        uint64
-	ullAvailPageFile        uint64
-	ullTotalVirtual         uint64
-	ullAvailVirtual         uint64
-	ullAvailExtendedVirtual uint64
-}
-
-func getTotalRAMBytes() uint64 {
-	if runtime.GOOS != "windows" {
-		return 0
-	}
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	globalMemoryStatusEx := kernel32.NewProc("GlobalMemoryStatusEx")
-	var mem memoryStatusEx
-	mem.cbSize = uint32(unsafe.Sizeof(mem))
-	ret, _, _ := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&mem)))
-	if ret == 0 {
-		return 0
-	}
-	return mem.ullTotalPhys
-}
-
 func calculateMySQLBufferPoolSettings() (sizeStr string, instances int, totalRAMGB int) {
 	return mysqlBufferPoolSettings(getTotalRAMBytes())
 }
@@ -1220,29 +1144,6 @@ default-character-set = utf8mb4
 [mysql]
 default-character-set = utf8mb4
 `, ramComment, poolSize, poolInstances, redoLogCapacity)
-}
-
-var (
-	kernel32                      = syscall.NewLazyDLL("kernel32.dll")
-	procGetCurrentPackageFullName = kernel32.NewProc("GetCurrentPackageFullName")
-)
-
-const appModelErrorNoPackage = 15700
-
-// isPackagedApp returns true if the process is running inside an MSIX/AppX package.
-func isPackagedApp() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	if err := procGetCurrentPackageFullName.Find(); err != nil {
-		return false
-	}
-	var length uint32
-	r1, _, _ := procGetCurrentPackageFullName.Call(
-		uintptr(unsafe.Pointer(&length)),
-		uintptr(0),
-	)
-	return r1 != uintptr(appModelErrorNoPackage)
 }
 
 // isDirWritable checks whether a directory exists and files can be created in it.

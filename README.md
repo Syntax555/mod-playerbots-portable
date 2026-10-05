@@ -1,6 +1,6 @@
 # AzerothCore Playerbots Portable
 
-A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and five additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 bots while a real player is connected**.
+A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and seven additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 bots while a real player is connected**.
 
 ## Download and play
 
@@ -17,25 +17,35 @@ The world/auth/database services bind locally by default. A Vanilla content prog
 
 The [configuration audit](docs/vanilla-config-audit.md) describes the profiles released in v1.0.9: normal talent/skill rules, riding at 40/60, disabled shortcut bot mail and quiet event broadcasts. Its v1.0.10 addendum covers Quest Loot Party. Use the new version's launcher to apply them to an existing installation; v1.0.8 embeds the earlier profiles.
 
-## MultiBot client addon
+## MultiBot Chatless client addon
 
-The release ZIP includes the pinned **MultiBot** addon under `addons/MultiBot/`.
-Copy that entire folder into your WoW 3.3.5a client's `Interface/AddOns/` folder,
-so the final path is `Interface/AddOns/MultiBot/MultiBot.toc`. Restart the client
-and enable MultiBot in the character selection screen's AddOns menu.
+The original MultiBot distribution has been replaced with
+[MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) and its
+matching server module, [mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge).
 
-Open its interface in-game with `/multibot`, `/mbot` or `/mb`.
+Players can download **`MultiBot-Chatless-<version>.zip`** independently from
+[GitHub Releases](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+Extract its `MultiBot` folder into the WoW 3.3.5a client's `Interface/AddOns/`
+folder. The server ZIP also provides the same copy under `addons/MultiBot/`.
+When replacing an old installation, remove the old client `MultiBot` folder
+before copying the replacement, so legacy Lua files cannot remain mixed in.
+The final path must be `Interface/AddOns/MultiBot/MultiBot.toc`, even though the
+download is named Chatless. Restart the client and enable MultiBot in the AddOns
+menu; open the interface with `/multibot`, `/mbot` or `/mb`.
 
-MultiBot provides an in-game interface for controlling your bots. It does not
-change the server's level cap, progression gates or natural progression rules;
-server-disabled boost and shortcut commands stay disabled. The server cannot
-install the addon into a separate client directory automatically.
+For a direct upstream download matching this server, use the
+[pinned Chatless source ZIP](https://github.com/Wishmaster117/MultiBot-Chatless/archive/80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f.zip)
+and rename the extracted addon folder to `MultiBot`. Prefer the matching portable
+release addon when upgrading; arbitrary newer addons may expect newer bridge
+capabilities. Players install the addon themselves; the server cannot install
+it into a separate client directory.
 
-The strict profile disables the class-based bot creator, free summoning and
-quest synchronization; those addon shortcuts remain unavailable. Its optional
-manual quest reward panel for your account's alternate characters requires
-`AiPlayerbot.AutoPickReward = no`; autonomous random bots can still select their
-own rewards. Keep quest synchronization disabled to preserve earned completion.
+Chatless moves many reads and actions to structured addon messages; upstream
+still describes it as mostly chatless because some legacy commands remain.
+The server's level cap, earned progression and disabled shortcut commands also
+apply to addon requests. The bridge's natural-progression patch blocks write
+paths that bypass ordinary interaction rules; see the
+[current integration audit](docs/vanilla-config-audit.md#chatless-and-token-turn-in-addendum).
 
 ## Included modules and defaults
 
@@ -49,6 +59,18 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Humans can use the AH, but this Playerbots revision has no active autonomous auction trading. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Enabled; eligible party members can each loot a copy of naturally dropped normal-quality quest items. Each member still opens the corpse; login announcements are disabled. |
+| [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Included for the Chatless addon, with quiet logging and additional natural-progression restrictions on shortcut actions. |
+| [Token Turn-in](https://github.com/Zerathane/mod-token-turnin) | Enabled for `.tokenturnin check` on grouped bots. Shortcut `.tokenturnin redeem` is blocked during natural progression because upstream skips normal NPC, reputation and material requirements. |
+
+All locked sources were compared with their upstream branch heads on **5 October
+2026**. Existing server pins were already current; the Chatless addon and both
+new modules use the current upstream heads. [Module versions](docs/module-versions.md)
+records the exact revisions, source choices and verification limits.
+
+Token Turn-in's check only previews token-to-item mappings for the bot's class
+and spec. It does not establish quest eligibility or grant equipment. Bots must
+farm the tokens and all additional materials, earn the required reputation and
+complete the original NPC exchange. Other real group members are excluded.
 
 The pinned Playerbots version provides the native `ForceRebuffState` API used by Dungeon Clear's raid preparation. Its compatibility patch also supports older Playerbots versions: those use normal buffs for a bounded phase (25 seconds by default, within the 60-second overall muster budget). Module checkout and patch application happen during the build, never during server startup.
 
@@ -125,6 +147,8 @@ After first launch:
 | `configs/modules/mod_ahbot.conf` | Optional generated auction-house supply and automated buying. |
 | `configs/modules/mod_dungeon_clear.conf` | Optional dungeon navigation and queue filling. |
 | `configs/modules/mod-quest-loot-party.conf` | Shared normal-quality quest loot and the module's login message. |
+| `configs/modules/MultiBotBridge.conf` | Structured addon bridge logging; natural-progression restrictions follow the Playerbots setting. |
+| `configs/modules/mod_token_turnin.conf` | Token inventory checks and which group members are included; natural progression blocks shortcut redemption. |
 | `mysql/my.cnf` | MySQL/InnoDB tuning generated for the host's RAM. |
 
 To open later expansions, raise `MaxPlayerLevel` and `AiPlayerbot.RandomBotMaxLevel` to 80, clear both `CharacterCreating.Disabled` race/class masks and set `IndividualProgression.ProgressionLimit = 0` (unlimited) and `IndividualProgression.BotAccountsMaxLevel = 80`. `Expansion` stays 2. Characters must still earn their progression tiers: 8 starts TBC, 13 starts Wrath, and 18 completes Wrath. Natural progression keeps random death knights excluded to preserve level 1 creation; player death knights ordinarily start at 55.
@@ -135,11 +159,17 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 
 ## Build and release
 
-The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher, prepares pinned modules, builds Release binaries and checks the portable distribution before uploading a ZIP. A pushed `v*` tag publishes that ZIP as the release asset. Pull requests validate the same build with read-only repository permissions.
+The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher,
+prepares pinned modules, builds Release binaries and verifies both the portable
+server ZIP and separate player addon ZIP before uploading them. A pushed `v*`
+tag publishes both assets. Pull requests and pushes to `codex/**` review branches
+create downloadable build artifacts with read-only repository permissions.
+The workflow checks the portable launcher logic on Linux before starting the
+Windows server build, then runs the launcher tests again on Windows.
 
 For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.10`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
 
-For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.19+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
+For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.21+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
 
 ```powershell
 git clone --recurse-submodules https://github.com/Syntax555/mod-playerbots-portable.git
@@ -154,10 +184,20 @@ cmake --build build --config Release --parallel
 # Bundle the Visual C++ runtime required by the core and portable MySQL.
 pwsh -File scripts/CopyWindowsRuntime.ps1 -DistDir dist
 cmake --build build --config Release --target package_zip
+cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
 ```
 
-This generates `output/mod-playerbots-portable-dev.zip`. Subsequent configuration reuses the pinned module cache. Changing a revision or patch rebuilds the managed module copy; unmarked module directories are never overwritten. `cmake -P cmake/PrepareModules.cmake` can also prepare the modules independently.
+This generates `output/mod-playerbots-portable-dev.zip` and the separate
+`output/MultiBot-Chatless-dev.zip`. Subsequent configuration reuses the pinned
+module cache. Changing a revision or patch rebuilds the managed module copy;
+unmarked module directories are never overwritten. `cmake -P cmake/PrepareModules.cmake`
+can also prepare the modules independently.
 
 ## Licenses
 
-The portable launcher and build tooling use the [MIT License](LICENSE). AzerothCore and the modules retain their upstream licenses, included under `licenses/` in the ZIP. The ZIP also includes the source revision manifest and applied patches so its server sources can be reproduced. Client data comes from the [wowgaming community](https://github.com/wowgaming/client-data).
+The portable launcher and build tooling use the [MIT License](LICENSE).
+AzerothCore and modules retain their upstream licenses or source notices under
+`licenses/` in the ZIP. The bridge's upstream revision has no explicit license
+declaration; its NOTICE records provenance without assigning one. The ZIP also
+includes the source revision manifest and applied patches so its server sources
+can be reproduced. Client data comes from the [wowgaming community](https://github.com/wowgaming/client-data).

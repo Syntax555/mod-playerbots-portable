@@ -1,0 +1,13 @@
+Upstream: https://github.com/Wishmaster117/mod-multibot-bridge
+Maintainer: Wishmaster117 (TheWarlock)
+Revision: 1da05982e478cb00e0b6c87314afe7e0e9653ffb
+
+Upstream credits AzerothCore, mod-playerbots and selectively adapted historical
+Jellypowered bridge contributions. Attribution and commit references are
+preserved in the bundled MultiBot addon docs/ROADMAP.md. Upstream documentation:
+https://github.com/Wishmaster117/mod-multibot-bridge/blob/1da05982e478cb00e0b6c87314afe7e0e9653ffb/README.md
+
+This upstream revision contains no LICENSE/COPYING file or explicit source
+license declaration. This notice records provenance; it does not assign or
+infer an upstream license. The portable integration patch is included under
+patches/mod-multibot-bridge-natural-progression.patch.
