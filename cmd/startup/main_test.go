@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,6 +36,27 @@ func TestSQLContent(t *testing.T) {
 		if !strings.Contains(createMySQLSQL, sub) {
 			t.Errorf("createMySQLSQL missing expected string: %s", sub)
 		}
+	}
+}
+
+func TestMainRejectsNonWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("launcher is supported on Windows")
+	}
+	if os.Getenv("GO_WANT_STARTUP_MAIN") == "1" {
+		main()
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMainRejectsNonWindows$")
+	cmd.Env = append(os.Environ(), "GO_WANT_STARTUP_MAIN=1")
+	output, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("launcher exit = %v, output = %s; want exit code 1", err, output)
+	}
+	if !strings.Contains(string(output), "only supported on Windows (detected OS: "+runtime.GOOS+")") {
+		t.Fatalf("missing unsupported OS diagnostic: %s", output)
 	}
 }
 
@@ -1038,6 +1060,135 @@ func TestExtractZipWithDataPrefix(t *testing.T) {
 		if !fileExists(fullPath) {
 			t.Errorf("expected file %s does not exist after extracting archive with Data/ prefix", fullPath)
 		}
+	}
+}
+
+func TestExtractZipNormalizesArchivePaths(t *testing.T) {
+	wantFiles := map[string]string{
+		"dbc/AreaTable.dbc": "areatable_data",
+		"maps/0004331.map":  "map_data",
+		"vmaps/000.vmtree":  "vmtree_data",
+		"mmaps/000.mmap":    "mmap_data",
+	}
+	for _, test := range []struct {
+		name  string
+		files map[string]string
+	}{
+		{
+			name: "mixed case Data roots",
+			files: map[string]string{
+				"Data/":                  "",
+				"Data/dbc/AreaTable.dbc": "areatable_data",
+				"DATA/maps/0004331.map":  "map_data",
+				"dAtA/vmaps/000.vmtree":  "vmtree_data",
+				"data/mmaps/000.mmap":    "mmap_data",
+			},
+		},
+		{
+			name: "backslashes with mixed case Data roots",
+			files: map[string]string{
+				`dAtA\`:                  "",
+				`DATA\dbc\AreaTable.dbc`: "areatable_data",
+				`Data\maps\0004331.map`:  "map_data",
+				"data/vmaps/000.vmtree":  "vmtree_data",
+				`data\mmaps/000.mmap`:    "mmap_data",
+			},
+		},
+		{
+			name: "backslashes without a Data root",
+			files: map[string]string{
+				`dbc\AreaTable.dbc`: "areatable_data",
+				`maps\0004331.map`:  "map_data",
+				`vmaps\000.vmtree`:  "vmtree_data",
+				`mmaps\000.mmap`:    "mmap_data",
+				`empty\`:            "",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			zipPath := filepath.Join(directory, "data.zip")
+			destDir := filepath.Join(directory, "extracted")
+			createTestZip(t, zipPath, test.files)
+
+			if err := extractZip(context.Background(), zipPath, destDir); err != nil {
+				t.Fatalf("extract client data: %v", err)
+			}
+			if !isClientDataPresent(destDir) {
+				t.Error("extracted archive is not a usable client dataset")
+			}
+			for name, want := range wantFiles {
+				content, err := os.ReadFile(filepath.Join(destDir, name))
+				if err != nil || string(content) != want {
+					t.Errorf("extracted %s = %q, %v; want %q", name, content, err, want)
+				}
+			}
+			if _, ok := test.files[`empty\`]; ok && !dirExists(filepath.Join(destDir, "empty")) {
+				t.Error("backslash directory entry was not extracted as a directory")
+			}
+		})
+	}
+}
+
+func TestExtractZipRelativeDestination(t *testing.T) {
+	for _, destDir := range []string{".", filepath.Join("relative", "data")} {
+		t.Run(destDir, func(t *testing.T) {
+			directory := t.TempDir()
+			zipPath := filepath.Join(directory, "data.zip")
+			createTestZip(t, zipPath, map[string]string{
+				"Data/dbc/AreaTable.dbc": "client data",
+			})
+			t.Chdir(directory)
+
+			if err := extractZip(context.Background(), zipPath, destDir); err != nil {
+				t.Fatalf("extract into %s: %v", destDir, err)
+			}
+			content, err := os.ReadFile(filepath.Join(destDir, "dbc", "AreaTable.dbc"))
+			if err != nil || string(content) != "client data" {
+				t.Fatalf("extracted content = %q, %v; want client data", content, err)
+			}
+		})
+	}
+}
+
+func TestExtractZipRejectsUnsafePaths(t *testing.T) {
+	for _, name := range []string{
+		"../escape.dbc", `..\escape.dbc`,
+		"dbc/../../escape.dbc", "../extracted-sibling/escape.dbc",
+		"Data/../escape.dbc", `dAtA\..\escape.dbc`, "Data/../../escape.dbc",
+		"/escape.dbc", `\escape.dbc`, "Data//escape.dbc",
+		"C:/escape.dbc", `C:\escape.dbc`, "C:escape.dbc",
+		"Data/C:/escape.dbc", `Data\C:escape.dbc`, "dbc/C:/escape.dbc",
+		"//server/share/escape.dbc", `\\server\share\escape.dbc`, `\\?\C:\escape.dbc`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := t.TempDir()
+			zipPath := filepath.Join(directory, "unsafe.zip")
+			destDir := filepath.Join(directory, "extracted")
+			outsidePath := filepath.Join(directory, "escape.dbc")
+			if err := os.WriteFile(outsidePath, []byte("keep existing data"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			createTestZip(t, zipPath, map[string]string{name: "overwrite"})
+
+			if err := extractZip(context.Background(), zipPath, destDir); err == nil {
+				t.Errorf("accepted unsafe archive entry %q", name)
+			}
+			content, err := os.ReadFile(outsidePath)
+			if err != nil || string(content) != "keep existing data" {
+				t.Errorf("file outside destination = %q, %v; want unchanged content", content, err)
+			}
+			entries, err := os.ReadDir(destDir)
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Errorf("unsafe archive created files in destination: %v", entries)
+			}
+			if dirExists(filepath.Join(directory, "extracted-sibling")) {
+				t.Error("archive escaped into a sibling directory")
+			}
+		})
 	}
 }
 
