@@ -15,6 +15,8 @@ A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and four addit
 
 The world/auth/database services bind locally by default. A Vanilla content progression server still requires the 3.3.5a client. Do not grant your playing account GM privileges if you want ordinary gameplay.
 
+The [follow-up configuration audit](docs/vanilla-config-audit.md) prepared additional profile changes after v1.0.8. They are in source only; no new build or release has been made. The published v1.0.8 launcher still embeds the earlier profiles.
+
 ## MultiBot client addon
 
 The release ZIP includes the pinned **MultiBot** addon under `addons/MultiBot/`.
@@ -44,7 +46,7 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 | [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target with real players connected, level 1 creation and the natural progression patch described below. |
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Enabled; adjusts instance difficulty to the party size, keeps original creature levels and disables extra reward tokens. |
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; every character starts at tier 0 and earns Vanilla progression through tier 7 (Naxxramas). Random bot accounts follow the same gates. |
-| [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Players and ordinary bot activity can still use the auction house. |
+| [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Humans can use the AH, but this Playerbots revision has no active autonomous auction trading. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
 
 The pinned Playerbots version provides the native `ForceRebuffState` API used by Dungeon Clear's raid preparation. Its compatibility patch also supports older Playerbots versions: those use normal buffs for a bounded phase (25 seconds by default, within the 60-second overall muster budget). Module checkout and patch application happen during the build, never during server startup.
@@ -80,7 +82,9 @@ Bots can fill a real player's named Vanilla battleground queue using their earne
 
 Battleground participation uses normal core queue invitations and transport. Dead bots release normally, walk to a friendly spirit guide when necessary and wait for the ordinary resurrection wave. The natural progression patch supplies no free equipment, levels or forced resurrection for PvP. Automatic instance strategies and AoE avoidance remain enabled.
 
-Nearby greetings are enabled for real players only, with at most one automated greeting per real player per minute across the bot population. Global random emotes, bot-to-bot greetings and toxic-link/Thunderfury meme replies stay disabled, so the population does not turn routine encounters into ambient chat spam. This uses existing Playerbots behavior; no additional NPC, reward or random-battleground module is required.
+Nearby greetings are enabled for real players only, with at most one automated greeting per real player per minute across the bot population. Global random emotes, bot-to-bot greetings, unsolicited channel announcements and toxic-link/Thunderfury meme replies stay disabled. Direct command replies remain available. This uses existing Playerbots behavior; no additional NPC, reward or random-battleground module is required.
+
+Bot mail commands are disabled because the upstream implementation bypasses mailbox proximity and normal postage. Ordinary player mail and direct trading remain available. With AH Bot Plus disabled, a single-human realm has no verified autonomous auction supply or demand; earned bot auctions would require a separate AI implementation.
 
 ## AI limits and existing installations
 
@@ -88,7 +92,11 @@ Nearby greetings are enabled for real players only, with at most one automated g
 
 Bot debug logging is disabled by default and log writes run asynchronously. Empty Individual Progression account filters skip repeated database queries and regex construction, while preserving the same progression gates for players and bots.
 
-This is Vanilla content progression on the WotLK core, with its client/class mechanics and some later-added low-level quests and professions. It does not reproduce the original 1.12 client rules exactly.
+This is Vanilla content progression on the WotLK core, with its client/class mechanics and some later-added low-level quests and professions. **The talent trees remain Wrath trees.** Normal talent rates give 51 earned points at level 60; `LimitTalentsExpansion` only approximates Vanilla depth for bot templates and does not replace talent identities or restrict human trees. Human glyphs, pet talent trees and some later low-level class spells also remain. Automatic bot talent templates can still reset internally without normal trainer respec costs. New dual specialization purchases are unavailable below level 80. True 1.12 talents require coordinated client, server and bot changes; the optional Individual Progression DBC files do not contain replacement talent tables.
+
+AutoBalance counts the non-GM players actually present, including bots. A human plus four bots receives normal five-player dungeon stats; smaller parties use the upstream scaling curve and scaled XP/money, with original creature levels. Outdoor elites and world bosses retain their ordinary difficulty and need suitable companions. Instance scaling does not solve every encounter tactic; full AQ40/Naxx40 bot support is not established. A source/configuration audit cannot establish exact historical class balance or completion of every raid.
+
+See [the configuration audit](docs/vanilla-config-audit.md) for the effective settings, module coverage and remaining Vanilla fidelity choices. It also distinguishes follow-up source profiles from the published v1.0.8 ZIP.
 
 Existing characters keep their levels, inventory, money and progression. Existing active configs also keep their settings; the new defaults do not silently reset an established realm. Back up databases and configurations before migrating an existing realm.
 
