@@ -53,10 +53,10 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 
 | Module | Default behavior |
 | --- | --- |
-| [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target with real players connected, level 1 creation and the natural progression patch described below. |
+| [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target with real players connected, level 1 creation, natural progression and earned-inventory auction trading described below. |
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Enabled; adjusts instance difficulty to the party size, keeps original creature levels and disables extra reward tokens. |
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; characters start at tier 0 and earn Vanilla, TBC and Wrath tiers. Random bots follow the same gates; expansion race creation also requires their own account's unlock. |
-| [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Humans can use the AH, but this Playerbots revision has no active autonomous auction trading. |
+| [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. Earned auctions use Playerbots' own inventory and gold instead of this module's generated supply and artificial demand. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Enabled; eligible party members can each loot a copy of naturally dropped normal-quality quest items. Each member still opens the corpse; login announcements are disabled. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Included for the Chatless addon, with quiet logging and additional natural-progression restrictions on shortcut actions. |
@@ -93,6 +93,33 @@ The pinned upstream Playerbots code grants equipment, money, supplies and repair
 
 Autonomous bots also seek nearby trainers, vendors and repair NPCs for available spells, earned-loot sales and needed supplies. They walk to the NPC and use normal server interactions, prices, gold, level and learning prerequisites. Their maintenance target is cached for 30 seconds to limit repeated scans. Matching class quests are retained, and hunter pets can only be fed with owned suitable food through the learned Feed Pet spell.
 
+## Earned auction-house economy
+
+Autonomous random bots can now visit auctioneers to list surplus items from their
+own bags and buy useful equipment or supplies with their own gold. They retain
+quest items and needed equipment, profession materials and supplies. Listings use
+normal auction deposits and sale cuts; purchases use the core's ordinary
+buyout handling. Auction items and proceeds arrive through normal mail, which
+bots collect at a mailbox when delivery and bag space permit. No items or gold
+are generated to seed the market.
+
+The default enables `AiPlayerbot.EarnedAuctions = 1` with a five-minute base visit
+interval and a per-bot scheduling stagger. Trading requires natural progression
+and an autonomous random bot without a player master. Busy bots and bots unable
+to reach the NPC must wait.
+AH Bot Plus and outgoing shortcut bot mail remain disabled. See
+[earned auctions](docs/earned-auctions.md) for settings, migration and limits.
+
+A fresh realm's market takes time to develop: bots need to earn tradable loot,
+afford deposits or purchases and reach trading towns. The loop looks for nearby
+auctioneers and mailboxes; eligible solo bots from level 10 can also walk to a
+compatible auctioneer on the same map within 5,000 yards. Trips have a ten-minute
+budget and a fifteen-minute cooldown, and ordinary pathfinding can still fail.
+Existing items and gold
+are preserved, so updating an older realm cannot prove that every existing
+possession was earned. This adds a bounded trading loop; complete farming,
+crafting, questing and live-market reliability still require in-game checks.
+
 ## Vanilla battlegrounds and social behavior
 
 Bots can fill a real player's named Vanilla battleground queue using their earned levels, equipment and faction. Autonomous all-bot match creation stays disabled. Fresh level 1 bots must level normally before they are eligible; an eligible population may take time to develop.
@@ -111,7 +138,11 @@ Battleground participation uses normal core queue invitations and transport. Dea
 
 Nearby greetings are enabled for real players only, with at most one automated greeting per real player per minute across the bot population. Global random emotes, bot-to-bot greetings, unsolicited channel announcements and toxic-link/Thunderfury meme replies stay disabled. Direct command replies remain available. This uses existing Playerbots behavior; no additional NPC, reward or random-battleground module is required.
 
-Bot mail commands are disabled because the upstream implementation bypasses mailbox proximity and normal postage. Ordinary player mail and direct trading remain available. With AH Bot Plus disabled, a single-human realm has no verified autonomous auction supply or demand; earned bot auctions would require a separate AI implementation.
+Outgoing bot mail commands are disabled because the upstream implementation
+bypasses mailbox proximity and normal postage. The earned-auction loop collects
+delivered auction mail at a mailbox through normal core handlers. Ordinary
+player mail and direct trading remain available. Natural mode also blocks legacy
+bot mail-management shortcuts in source, including when old settings are re-enabled.
 
 ## AI limits and existing installations
 
@@ -143,10 +174,10 @@ After first launch:
 | --- | --- |
 | `configs/worldserver.conf` | Level cap, creation masks, normal rates, data/database paths. |
 | `configs/authserver.conf` | Authentication and database connection. |
-| `configs/modules/playerbots.conf` | Population, activity, natural progression and bot AI. |
+| `configs/modules/playerbots.conf` | Population, activity, natural progression, earned auctions and bot AI. |
 | `configs/modules/individualProgression.conf` | Starting tier, content limit and account exemptions. |
 | `configs/modules/AutoBalance.conf` | Instance difficulty and reward scaling. |
-| `configs/modules/mod_ahbot.conf` | Optional generated auction-house supply and automated buying. |
+| `configs/modules/mod_ahbot.conf` | Generated auction-house supply and automated buying; both disabled for earned auctions. |
 | `configs/modules/mod_dungeon_clear.conf` | Optional dungeon navigation and queue filling. |
 | `configs/modules/mod-quest-loot-party.conf` | Shared normal-quality quest loot and the module's login message. |
 | `configs/modules/MultiBotBridge.conf` | Structured addon bridge logging; natural-progression restrictions follow the Playerbots setting. |

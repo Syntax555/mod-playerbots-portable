@@ -12,7 +12,10 @@
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
       "revision": "037c01418b5d01506917a3db9b44fd56ac5f965c",
       "source": "mod-playerbots",
-      "patches": ["patches/mod-playerbots-natural-progression.patch"]
+      "patches": [
+        "patches/mod-playerbots-natural-progression.patch",
+        "patches/mod-playerbots-earned-auctions.patch"
+      ]
     },
     {
       "name": "mod-autobalance",

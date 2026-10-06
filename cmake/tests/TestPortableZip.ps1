@@ -97,7 +97,8 @@ try {
     }
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
     foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
-        'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'patches/fixture.patch')) {
+        'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
+        'patches/fixture.patch')) {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
