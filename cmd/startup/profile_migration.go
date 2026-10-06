@@ -52,11 +52,16 @@ type profileUpdate struct {
 	updated  []byte
 	mode     os.FileMode
 	backup   string
+	create   bool
 }
 
 // applyRecommendedProfiles is explicitly requested through --apply-profiles.
 // All merges are validated before writing; every changed config gets a backup.
 func applyRecommendedProfiles(workDir string) ([]string, error) {
+	phase, err := loadRealmPhase(workDir)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := configProfiles.ReadDir("profiles")
 	if err != nil {
 		return nil, fmt.Errorf("read recommended profiles: %w", err)
@@ -84,7 +89,7 @@ func applyRecommendedProfiles(workDir string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("inspect config %s: %w", path, err)
 		}
-		updated, err := applyConfigProfile(entry.Name(), string(original))
+		updated, err := applyConfigProfileForPhase(entry.Name(), string(original), phase)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +107,9 @@ func applyRecommendedProfiles(workDir string) ([]string, error) {
 func applyProfileUpdates(updates []profileUpdate) ([]string, error) {
 	var backups []string
 	for _, update := range updates {
+		if update.create {
+			continue
+		}
 		if err := writeConfigBackup(update.backup, update.original, update.mode); err != nil {
 			return backups, err
 		}
@@ -111,6 +119,12 @@ func applyProfileUpdates(updates []profileUpdate) ([]string, error) {
 		if err := writeConfigAtomically(update.path, update.updated, update.mode); err != nil {
 			var rollbackErrors []string
 			for _, previous := range updates[:i] {
+				if previous.create {
+					if restoreErr := os.Remove(previous.path); restoreErr != nil {
+						rollbackErrors = append(rollbackErrors, previous.path+": "+restoreErr.Error())
+					}
+					continue
+				}
 				if restoreErr := writeConfigAtomically(previous.path, previous.original, previous.mode); restoreErr != nil {
 					rollbackErrors = append(rollbackErrors, previous.path+": "+restoreErr.Error())
 				}
