@@ -93,7 +93,7 @@ AutoBalance counts the actual non-GM players in an instance, including bots. One
 
 Outdoor elites and world bosses remain at ordinary world difficulty. Suitable earned companions are the intended solution; a second outdoor/solo scaler would change that policy.
 
-**No autonomous earned-item auction economy is implemented in this Playerbots revision.** Its auction-listing function is commented out; `ITEM_USAGE_AH` is an inventory valuation category that vendor selling also consumes. Humans can use the ordinary AH, but with one human and synthetic AH operations off there is no verified bot supply/demand. A real earned auction AI would require separate source work using existing inventory, normal deposits/cuts and available gold. Earlier wording that ordinary bot activity supplies the AH has been corrected.
+**At the original audit, no autonomous earned-item auction economy was implemented.** The upstream auction-listing function is commented out; `ITEM_USAGE_AH` is an inventory valuation category that vendor selling also consumes. The earned-auctions addendum below records the later source implementation using existing inventory, normal deposits/cuts and available gold. It supersedes the earlier auction limitation without enabling synthetic AH operations.
 
 Raid AI has concrete compatibility boundaries. For example, the specialized Onyxia whelp action recognizes entry `11262`, whereas IP's restored whelps use `301001`. Generic combat may still attack them, but that is not complete encounter support. AQ40 and restored Naxx40 coverage is also incomplete/unverified. AutoBalance cannot supply missing positioning or mechanic tactics. Optional Naxx mechanic simplifications, early no-cooldown Quintessence, removed Garr adds and fortyfold AQ reputation/drop boosts remain unapplied.
 
@@ -103,7 +103,7 @@ The published **v1.0.8 ZIP remains unchanged**. `startup.exe` embeds its profile
 
 The reviewed profiles are in the v1.0.9 sources. After downloading that version's compiled ZIP, stop the servers, extract it into the existing installation and run `startup.exe --apply-profiles` once. The new launcher applies its embedded profiles, creates config backups and exits without starting the services. No existing character, inventory, spellbook or progression state is reset.
 
-Alternatively, individual values can be applied manually to the corresponding active configuration files after stopping the servers and backing up those files. These short profiles are overlays, not complete replacement configurations. Preserve database connection strings, ports, paths and unrelated custom values. Exact 1.12 talents, broader class restoration, an earned auction AI and targeted raid compatibility fixes remain separate implementation choices.
+Alternatively, individual values can be applied manually to the corresponding active configuration files after stopping the servers and backing up those files. These short profiles are overlays, not complete replacement configurations. Preserve database connection strings, ports, paths and unrelated custom values. Exact 1.12 talents, broader class restoration and targeted raid compatibility fixes remain separate implementation choices. Earned auction AI was subsequently added as documented below.
 
 ## v1.0.10 addendum: Quest Loot Party
 
@@ -278,3 +278,56 @@ configuration, stable approximate distribution, oversized/rested XP, existing
 higher-level characters, excluded humans, cap release, queue rejection and
 legacy reset/XP modifier guards. These checks preserve the previously documented
 Wrath mechanics and encounter AI limitations; they do not prove every live raid.
+
+## Earned-auctions addendum
+
+`mod-playerbots-earned-auctions.patch` adds a bounded market loop on top of the
+same pinned Playerbots source and natural-progression patch. Autonomous random
+bots without a player master can list eligible surplus from their actual bags
+and buy useful equipment or supplies with their own money. They retain quest
+items and needed equipment, profession materials and supplies. Bots walk to a real
+auctioneer; the core's normal auction handlers charge deposits, transfer items,
+validate buyouts and apply sale cuts. No market-seeding items or gold are granted.
+
+The default profile sets `AiPlayerbot.EarnedAuctions = 1` and
+`AiPlayerbot.EarnedAuctionInterval = 300` seconds, clamped to 60–3,600.
+Natural progression is required. Trading is limited to at most 20 active
+listings per bot and at most two new listings plus one buyout per visit.
+Busy bots do not abandon their activity to trade. AH Bot Plus seller/buyer and
+the upstream outgoing-mail shortcut remain disabled.
+
+Scheduling alternates nearby auctioneer and mailbox visits with a stable
+per-bot stagger of up to 119 additional seconds. Local searches cover 150 yards.
+Eligible solo bots from level 10 can also walk to the closest compatible or
+neutral auctioneer on the same map and phase within 5,000 yards, when they own
+tradable surplus or at least one silver in available purchase funds. Trips use
+ordinary walking with a ten-minute total budget and fifteen-minute cooldown;
+failed paths or unavailable NPCs back off and ordinary AI resumes. Trading
+still requires normal NPC interaction range. Vendor fallback remains available
+for nearly full bags or unaffordable listing fees.
+
+Automatic vendor sales separately protect completed-quest turn-in items,
+learned-spell reagents and the last pet-food supply in natural mode, including
+when earned auctions are disabled or listing fees cannot be afforded.
+Legacy bot mail-send and mail-management shortcuts are also blocked in source
+whenever natural progression is enabled. Re-enabling the old mail setting does
+not bypass these guards.
+
+Auction purchases, sale proceeds and expired items use normal mail. Bots walk
+to a mailbox and collect delivered auction mail through the core handlers.
+Delivery delays and inventory checks remain; full bags leave attachments in mail for a
+later attempt. See [earned-auctions.md](earned-auctions.md) for configuration
+and migration.
+
+This supersedes the original audit's absent auction-AI finding. Install the
+complete updated server binaries and run their launcher's `--apply-profiles`
+after stopping the servers; configuration changes alone cannot add the loop.
+Existing characters, items and gold are retained. No historical provenance
+ledger proves that possessions already present on an older realm were earned.
+
+A fresh market needs bots to acquire tradable surplus, earn money and reach
+the NPCs. It is not immediately filled or subsidized, and the change does not
+establish complete autonomous farming, crafting, questing or live-market
+reliability. The earlier class-system, pathfinding and encounter AI limitations
+still apply. Source and regression checks cannot replace live observation of
+the realm's auction stock, prices, bot activity and performance.

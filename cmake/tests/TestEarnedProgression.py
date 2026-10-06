@@ -239,3 +239,4 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
     subprocess.run([str(executable)], check=True)
 
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedBotBrackets.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedAuctions.py'))], check=True)

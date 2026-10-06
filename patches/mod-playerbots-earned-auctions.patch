@@ -1,0 +1,1477 @@
+diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
+index 5be123e..56f7933 100644
+--- a/conf/playerbots.conf.dist
++++ b/conf/playerbots.conf.dist
+@@ -91,6 +91,13 @@ AiPlayerbot.RandomBotAutologin = 1
+ # Does not provide missing quest, crafting, profession or raid AI.
+ AiPlayerbot.NaturalProgression = 0
+ 
++# Optional natural-mode trading by autonomous random bots using owned surplus,
++# earned gold, normal auction fees and physical auctioneer/mailbox visits.
++# The portable earned-play profile enables this; upstream-style defaults opt out.
++AiPlayerbot.EarnedAuctions = 0
++# Base seconds between visits, plus per-bot staggering; clamped to 60..3600.
++AiPlayerbot.EarnedAuctionInterval = 300
++
+ # Optional earned caps in natural mode: level:percentage pairs, unique levels 1-80,
+ # positive percentages totaling at most 100. Example: 19:5,29:5,39:5,49:5,59:5.
+ # Unassigned bots progress normally. Bots earn every level; no level/gear grants,
+diff --git a/src/Ai/Base/Actions/CheckMailAction.cpp b/src/Ai/Base/Actions/CheckMailAction.cpp
+index 800e0d6..5609cf1 100644
+--- a/src/Ai/Base/Actions/CheckMailAction.cpp
++++ b/src/Ai/Base/Actions/CheckMailAction.cpp
+@@ -12,6 +12,9 @@
+ 
+ bool CheckMailAction::Execute(Event /*event*/)
+ {
++    // The legacy guild-task mailbox path skips normal delivery/range/COD rules.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
+     WorldPacket p;
+     bot->GetSession()->HandleQueryNextMailTime(p);
+ 
+@@ -59,6 +62,8 @@ bool CheckMailAction::Execute(Event /*event*/)
+ 
+ bool CheckMailAction::isUseful()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
+     if (botAI->GetMaster() || !bot->GetMailSize() || bot->InBattleground())
+         return false;
+ 
+diff --git a/src/Ai/Base/Actions/MailAction.cpp b/src/Ai/Base/Actions/MailAction.cpp
+index d47202e..4a9dbb1 100644
+--- a/src/Ai/Base/Actions/MailAction.cpp
++++ b/src/Ai/Base/Actions/MailAction.cpp
+@@ -253,6 +253,10 @@ std::map<uint32, Mail*> filterList(std::vector<Mail*> src, std::string const fil
+ 
+ bool MailAction::Execute(Event event)
+ {
++    // Legacy processors can delete attachments after a failed take. Earned auction
++    // receipts use normal world-thread handlers and only remove confirmed-empty mail.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
+     Player* master = GetMaster();
+     if (!master)
+         return false;
+diff --git a/src/Ai/Base/Actions/SellAction.cpp b/src/Ai/Base/Actions/SellAction.cpp
+index e395227..72c2706 100644
+--- a/src/Ai/Base/Actions/SellAction.cpp
++++ b/src/Ai/Base/Actions/SellAction.cpp
+@@ -5,7 +5,9 @@
+  */
+ 
+ #include "SellAction.h"
++
+ #include "ChatHelper.h"
++#include "EarnedAuction.h"
+ #include "Event.h"
+ #include "ItemPackets.h"
+ #include "ItemUsageValue.h"
+@@ -74,15 +76,23 @@ private:
+ class SellVendorItemsVisitor : public SellItemsVisitor
+ {
+ public:
+-    SellVendorItemsVisitor(SellAction* action, AiObjectContext* con) : SellItemsVisitor(action) { context = con; }
++    SellVendorItemsVisitor(SellAction* action, AiObjectContext* con, PlayerbotAI* ai)
++        : SellItemsVisitor(action), context(con), botAI(ai)
++    {
++    }
+ 
+     AiObjectContext* context;
++    PlayerbotAI* botAI;
+ 
+     bool Visit(Item* item) override
+     {
+-        ItemUsage usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
++        std::string qualifier =
++            std::to_string(item->GetEntry()) + "," + std::to_string(item->GetItemRandomPropertyId());
++        ItemUsage usage = context->GetValue<ItemUsage>("item usage", qualifier)->Get();
+         if (usage != ITEM_USAGE_VENDOR && usage != ITEM_USAGE_AH)
+             return true;
++        if (EarnedAuction::ShouldReserveForAuction(botAI, item, usage))
++            return true;
+ 
+         return SellItemsVisitor::Visit(item);
+     }
+@@ -100,7 +110,7 @@ bool SellAction::Execute(Event event)
+ 
+     if (text == "vendor")
+     {
+-        SellVendorItemsVisitor visitor(this, context);
++        SellVendorItemsVisitor visitor(this, context, botAI);
+         IterateItems(&visitor);
+         return true;
+     }
+diff --git a/src/Ai/Base/Actions/SendMailAction.cpp b/src/Ai/Base/Actions/SendMailAction.cpp
+index 58fd57e..74b0a56 100644
+--- a/src/Ai/Base/Actions/SendMailAction.cpp
++++ b/src/Ai/Base/Actions/SendMailAction.cpp
+@@ -14,6 +14,9 @@
+ 
+ bool SendMailAction::Execute(Event event)
+ {
++    // Re-enabling the old mail setting must not bypass mailbox proximity/postage.
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
+     uint32 account = bot->GetSession()->GetAccountId();
+     bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
+ 
+diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
+index 32e34d2..a3edce0 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.cpp
++++ b/src/Ai/Base/Value/MaintenanceValues.cpp
+@@ -9,6 +9,8 @@
+ #include <unordered_map>
+ 
+ #include "BudgetValues.h"
++#include "EarnedAuction.h"
++#include "EarnedAuctionTravel.h"
+ #include "ItemUsageValue.h"
+ #include "PlayerbotFactory.h"
+ #include "Playerbots.h"
+@@ -18,9 +20,43 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+ {
+     if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
+         botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
++    {
++        EarnedAuctionTravel::AbortTrip(botAI);
+         return {};
++    }
+ 
+     bool const canSell = AI_VALUE(bool, "can sell");
++    if (EarnedAuction::IsEnabled(botAI))
++    {
++        auto& info = botAI->rpgInfo;
++        if (!info.earnedAuctionClockStarted)
++        {
++            info.earnedAuctionClockStarted = true;
++            info.earnedAuctionLastVisit = getMSTime();
++            info.earnedAuctionVisitDelay = (bot->GetGUID().GetCounter() % 120) * IN_MILLISECONDS;
++        }
++        if (GetMSTimeDiffToNow(info.earnedAuctionLastVisit) >= info.earnedAuctionVisitDelay)
++        {
++            // Alternate browsing and collecting receipts. Do not inspect world-thread mail or AH state here.
++            if (info.earnedAuctionVisitMailbox)
++                for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))
++                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};
++
++            for (ObjectGuid guid : AI_VALUE(GuidVector, "possible new rpg targets"))
++            {
++                Creature* npc = botAI->GetCreature(guid);
++                if (EarnedAuctionTravel::CompatibleAuctioneer(botAI, npc))
++                    return {guid, NaturalMaintenanceType::AUCTION};
++            }
++
++            // Collect old receipts even after a restart when no auctioneer is nearby.
++            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))
++                return {guid, NaturalMaintenanceType::AUCTION_MAIL};
++
++            if (WorldPosition destination = EarnedAuctionTravel::PlanTrip(botAI))
++                return {{}, NaturalMaintenanceType::AUCTION_TRAVEL, 0, 0, destination};
++        }
++    }
+     bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
+     uint32 const spellBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells));
+     uint32 const consumableBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::consumables));
+@@ -168,6 +204,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
+ 
+ bool CanSellValue::Calculate()
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return EarnedAuction::HasVendorSurplus(botAI);
++
+     return (AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_VENDOR)) +
+             AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_AH))) > 1;
+ }
+diff --git a/src/Ai/Base/Value/MaintenanceValues.h b/src/Ai/Base/Value/MaintenanceValues.h
+index 323fa08..a01d1bb 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.h
++++ b/src/Ai/Base/Value/MaintenanceValues.h
+@@ -7,6 +7,7 @@
+ #ifndef PLAYERBOTS_MAINTENANCEVALUES_H
+ #define PLAYERBOTS_MAINTENANCEVALUES_H
+ 
++#include "TravelMgr.h"
+ #include "Value.h"
+ 
+ class PlayerbotAI;
+@@ -17,7 +18,10 @@ enum class NaturalMaintenanceType : uint8
+     SELL,
+     REPAIR,
+     TRAIN,
+-    BUY
++    BUY,
++    AUCTION,
++    AUCTION_MAIL,
++    AUCTION_TRAVEL
+ };
+ 
+ struct NaturalMaintenanceTask
+@@ -26,6 +30,7 @@ struct NaturalMaintenanceTask
+     NaturalMaintenanceType type = NaturalMaintenanceType::NONE;
+     uint32 itemId = 0;
+     uint32 budgetType = 0;
++    WorldPosition destination;
+ };
+ 
+ class NaturalMaintenanceValue : public CalculatedValue<NaturalMaintenanceTask>
+diff --git a/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp b/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
+index 52a9b8c..4bd88a9 100644
+--- a/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
++++ b/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
+@@ -215,3 +215,20 @@ GuidVector PossibleNewRpgGameObjectsValue::Calculate()
+     }
+     return results;
+ }
++
++GuidVector NaturalMailboxTargetsValue::Calculate()
++{
++    if (!sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.earnedAuctions)
++        return {};
++    std::list<GameObject*> objects;
++    AnyGameObjectInObjectRangeCheck check(bot, 150.0f);
++    Acore::GameObjectListSearcher<AnyGameObjectInObjectRangeCheck> searcher(bot, objects, check);
++    Cell::VisitObjects(bot, searcher, 150.0f);
++    objects.remove_if([](GameObject* object) { return object->GetGoType() != GAMEOBJECT_TYPE_MAILBOX; });
++    objects.sort([this](GameObject* left, GameObject* right)
++                 { return bot->GetExactDist(left) < bot->GetExactDist(right); });
++    GuidVector result;
++    for (GameObject* object : objects)
++        result.push_back(object->GetGUID());
++    return result;
++}
+diff --git a/src/Ai/Base/Value/PossibleRpgTargetsValue.h b/src/Ai/Base/Value/PossibleRpgTargetsValue.h
+index ce688b7..d983362 100644
+--- a/src/Ai/Base/Value/PossibleRpgTargetsValue.h
++++ b/src/Ai/Base/Value/PossibleRpgTargetsValue.h
+@@ -56,4 +56,14 @@ private:
+     bool ignoreLos;
+ };
+ 
++class NaturalMailboxTargetsValue : public ObjectGuidListCalculatedValue
++{
++public:
++    NaturalMailboxTargetsValue(PlayerbotAI* ai)
++        : ObjectGuidListCalculatedValue(ai, "natural mailboxes", 30 * IN_MILLISECONDS)
++    {
++    }
++    GuidVector Calculate() override;
++};
++
+ #endif
+diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
+index 6556dfb..9ddfd5d 100644
+--- a/src/Ai/Base/ValueContext.h
++++ b/src/Ai/Base/ValueContext.h
+@@ -283,6 +283,7 @@ public:
+         creators["should home bind"] = &ValueContext::should_home_bind;
+         creators["should repair"] = &ValueContext::should_repair;
+         creators["natural maintenance"] = &ValueContext::natural_maintenance;
++        creators["natural mailboxes"] = &ValueContext::natural_mailboxes;
+         creators["can repair"] = &ValueContext::can_repair;
+         creators["should sell"] = &ValueContext::should_sell;
+         creators["can sell"] = &ValueContext::can_sell;
+@@ -438,6 +439,7 @@ private:
+     static UntypedValue* possible_rpg_targets(PlayerbotAI* botAI) { return new PossibleRpgTargetsValue(botAI); }
+     static UntypedValue* possible_new_rpg_targets(PlayerbotAI* botAI) { return new PossibleNewRpgTargetsValue(botAI); }
+     static UntypedValue* possible_new_rpg_game_objects(PlayerbotAI* botAI) { return new PossibleNewRpgGameObjectsValue(botAI); }
++    static UntypedValue* natural_mailboxes(PlayerbotAI* botAI) { return new NaturalMailboxTargetsValue(botAI); }
+     static UntypedValue* possible_targets(PlayerbotAI* botAI) { return new PossibleTargetsValue(botAI); }
+     static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
+     static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
+diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
+index d046a78..b7739f4 100644
+--- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
++++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
+@@ -14,6 +14,8 @@
+ #include "BudgetValues.h"
+ #include "ChatHelper.h"
+ #include "DBCStores.h"
++#include "EarnedAuction.h"
++#include "EarnedAuctionTravel.h"
+ #include "G3D/Vector2.h"
+ #include "GossipDef.h"
+ #include "IVMapMgr.h"
+@@ -45,11 +47,84 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+     if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
+         botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
+     {
++        EarnedAuctionTravel::AbortTrip(botAI);
+         value->Set({});
+         return false;
+     }
+ 
+     NaturalMaintenanceTask const task = value->Get();
++    if (task.type == NaturalMaintenanceType::AUCTION_TRAVEL)
++    {
++        if (!EarnedAuctionTravel::ContinueTrip(botAI))
++        {
++            value->Set({});
++            return false;
++        }
++        float const distance = bot->GetExactDist(task.destination);
++        if (distance <= 150.0f)
++        {
++            Value<GuidVector>* targets = context->GetValue<GuidVector>("possible new rpg targets");
++            if (distance <= INTERACTION_DISTANCE)
++                targets->Reset();
++            for (ObjectGuid guid : targets->Get())
++            {
++                if (EarnedAuctionTravel::CompatibleAuctioneer(botAI, botAI->GetCreature(guid)))
++                {
++                    value->Set({guid, NaturalMaintenanceType::AUCTION});
++                    return true;
++                }
++            }
++            if (distance <= INTERACTION_DISTANCE)
++            {
++                EarnedAuctionTravel::AbortTrip(botAI);
++                value->Set({});
++                return false;
++            }
++        }
++        if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL) || MoveFarTo(task.destination))
++            return true;
++        EarnedAuctionTravel::AbortTrip(botAI);
++        value->Set({});
++        return false;
++    }
++    if (task.type == NaturalMaintenanceType::AUCTION || task.type == NaturalMaintenanceType::AUCTION_MAIL)
++    {
++        if (botAI->rpgInfo.earnedAuctionTravelActive && !EarnedAuctionTravel::ContinueTrip(botAI))
++        {
++            value->Set({});
++            return false;
++        }
++        WorldObject* target = botAI->GetWorldObject(task.target);
++        if (!EarnedAuction::IsEnabled(botAI) || !target)
++        {
++            EarnedAuctionTravel::AbortTrip(botAI);
++            value->Set({});
++            return false;
++        }
++        if (!bot->IsWithinDistInMap(target, INTERACTION_DISTANCE))
++        {
++            if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL) || MoveWorldObjectTo(task.target))
++                return true;
++            EarnedAuctionTravel::AbortTrip(botAI);
++            value->Set({});
++            return false;
++        }
++        value->Set({});
++        bool const mailbox = task.type == NaturalMaintenanceType::AUCTION_MAIL;
++        bool const queued = EarnedAuction::QueueVisit(botAI, task.target, mailbox);
++        if (queued)
++        {
++            EarnedAuctionTravel::FinishTrip(botAI);
++            auto& info = botAI->rpgInfo;
++            info.earnedAuctionLastVisit = getMSTime();
++            info.earnedAuctionVisitDelay =
++                (sPlayerbotAIConfig.earnedAuctionInterval + bot->GetGUID().GetCounter() % 120) * IN_MILLISECONDS;
++            info.earnedAuctionVisitMailbox = !mailbox;
++        }
++        else
++            EarnedAuctionTravel::AbortTrip(botAI);
++        return queued;
++    }
+     Creature* npc = botAI->GetCreature(task.target);
+     if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
+     {
+@@ -101,6 +176,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+             }
+             break;
+         case NaturalMaintenanceType::NONE:
++        case NaturalMaintenanceType::AUCTION:
++        case NaturalMaintenanceType::AUCTION_MAIL:
++        case NaturalMaintenanceType::AUCTION_TRAVEL:
+             break;
+     }
+     bot->SetSelection(oldSelection);
+diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
+index 84feab5..5ccfd6d 100644
+--- a/src/Ai/World/Rpg/NewRpgInfo.h
++++ b/src/Ai/World/Rpg/NewRpgInfo.h
+@@ -76,6 +76,17 @@ struct NewRpgInfo
+ 
+     uint32 startT{0};  // start timestamp of the current status
+ 
++    // Map-thread visit scheduling; auction/mail operations themselves run on the world thread.
++    bool earnedAuctionClockStarted{false};
++    bool earnedAuctionVisitMailbox{true};
++    uint32 earnedAuctionLastVisit{0};
++    uint32 earnedAuctionVisitDelay{0};
++    bool earnedAuctionTravelActive{false};
++    bool earnedAuctionTravelClockStarted{false};
++    uint32 earnedAuctionTravelStarted{0};
++    uint32 earnedAuctionTravelLastAttempt{0};
++    WorldPosition earnedAuctionTravelDestination;
++
+     // MOVE_FAR
+     float nearestMoveFarDis{FLT_MAX};
+     uint32 stuckTs{0};
+diff --git a/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp b/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
+index 326c879..185643b 100644
+--- a/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
++++ b/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
+@@ -13,6 +13,8 @@ bool NewRpgStatusTrigger::IsActive() { return status == botAI->rpgInfo.GetStatus
+ 
+ bool NewRpgNaturalMaintenanceTrigger::IsActive()
+ {
+-    return sPlayerbotAIConfig.naturalProgression &&
+-           !AI_VALUE(NaturalMaintenanceTask, "natural maintenance").target.IsEmpty();
++    if (!sPlayerbotAIConfig.naturalProgression)
++        return false;
++    NaturalMaintenanceTask const task = AI_VALUE(NaturalMaintenanceTask, "natural maintenance");
++    return !task.target.IsEmpty() || task.type == NaturalMaintenanceType::AUCTION_TRAVEL;
+ }
+diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
+new file mode 100644
+index 0000000..2accc07
+--- /dev/null
++++ b/src/Bot/EarnedAuction.cpp
+@@ -0,0 +1,542 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++#include "EarnedAuction.h"
++
++#include <algorithm>
++#include <array>
++#include <cmath>
++#include <map>
++#include <memory>
++#include <string>
++#include <unordered_set>
++#include <vector>
++
++#include "AuctionHouseMgr.h"
++#include "Bag.h"
++#include "BudgetValues.h"
++#include "CharacterCache.h"
++#include "EarnedAuctionPolicy.h"
++#include "GameObject.h"
++#include "GameTime.h"
++#include "Item.h"
++#include "Mail.h"
++#include "ObjectAccessor.h"
++#include "Opcodes.h"
++#include "PlayerbotOperation.h"
++#include "PlayerbotWorldThreadProcessor.h"
++#include "Playerbots.h"
++#include "QuestDef.h"
++#include "World.h"
++#include "WorldPacket.h"
++#include "WorldSession.h"
++
++namespace EarnedAuction
++{
++namespace
++{
++// The inventory helpers inspect the bot's own map-owned state. Auction and mail
++// collections are inspected only by EarnedAuctionVisit::Execute on the world thread.
++std::vector<ObjectGuid> BagItems(Player* bot)
++{
++    std::vector<ObjectGuid> items;
++    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
++        if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
++            items.push_back(item->GetGUID());
++    for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
++        if (Bag* bag = dynamic_cast<Bag*>(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot)))
++            for (uint32 position = 0; position < bag->GetBagSize(); ++position)
++                if (Item* item = bag->GetItemByPos(position))
++                    items.push_back(item->GetGUID());
++    return items;
++}
++
++ItemUsage Usage(PlayerbotAI* ai, Item* item)
++{
++    // Random suffixes/properties are part of the item actually offered, not a
++    // newly rolled template. Refresh between transactions to reflect changed inventory.
++    std::string const qualifier =
++        std::to_string(item->GetEntry()) + "," + std::to_string(item->GetItemRandomPropertyId());
++    Value<ItemUsage>* value = ai->GetAiObjectContext()->GetValue<ItemUsage>("item usage", qualifier);
++    value->Reset();
++    return value->Get();
++}
++
++bool NeededForProgression(PlayerbotAI* ai, Item* item)
++{
++    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
++    if (!proto)
++        return false;
++    if (proto->Class == ITEM_CLASS_QUEST || proto->Class == ITEM_CLASS_KEY || proto->Bonding == BIND_QUEST_ITEM)
++        return true;
++    Player* bot = ai->GetBot();
++    // The upstream usage predicate asks whether more quest loot is needed;
++    // after collecting enough it can classify the completed objective as AH
++    // surplus. Keep active objectives and their source items until turn-in.
++    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
++    {
++        Quest const* quest = sObjectMgr->GetQuestTemplate(bot->GetQuestSlotQuestId(slot));
++        if (!quest)
++            continue;
++        if (quest->GetSrcItemId() == item->GetEntry())
++            return true;
++        for (uint32 required : quest->RequiredItemId)
++            if (required == item->GetEntry())
++                return true;
++        for (uint32 source : quest->ItemDrop)
++            if (source == item->GetEntry())
++                return true;
++        for (auto const& spell : proto->Spells)
++        {
++            SpellInfo const* info = spell.SpellId > 0 ? sSpellMgr->GetSpellInfo(spell.SpellId) : nullptr;
++            if (!info)
++                continue;
++            for (auto const& effect : info->Effects)
++                if (effect.Effect == SPELL_EFFECT_CREATE_ITEM)
++                    for (uint32 required : quest->RequiredItemId)
++                        if (required && required == effect.ItemType)
++                            return true;
++        }
++    }
++    // Keep the last pet-food supply, even when the generic usage classifier
++    // regards it as a food the hunter no longer needs for themself.
++    if (Pet* pet = bot->GetPet())
++        if (pet->HaveInDiet(proto) &&
++            std::uint64_t(bot->GetItemCount(item->GetEntry(), false)) < std::uint64_t(item->GetCount()) + 20)
++            return true;
++
++    // Never list reagents required by a currently learned spell. Skill/quest,
++    // equipment and personal consumable reserves are excluded by ITEM_USAGE_AH.
++    for (auto const& [spellId, spell] : bot->GetSpellMap())
++    {
++        if (spell->State == PLAYERSPELL_REMOVED || !spell->Active)
++            continue;
++        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
++        if (!info || info->IsPassive())
++            continue;
++        for (uint8 reagent = 0; reagent < MAX_SPELL_REAGENTS; ++reagent)
++            if (info->Reagent[reagent] > 0 && uint32(info->Reagent[reagent]) == item->GetEntry())
++                return true;
++    }
++    return false;
++}
++
++bool TradableSurplus(PlayerbotAI* ai, Item* item, ItemUsage usage, bool checkProgression = true)
++{
++    if (!item || usage != ITEM_USAGE_AH || item->IsEquipped() || item->IsInTrade() || !item->CanBeTraded() ||
++        item->IsNotEmptyBag() || item->IsSoulBound() || item->GetOwnerGUID() != ai->GetBot()->GetGUID() ||
++        !item->GetCount() || item->GetUInt32Value(ITEM_FIELD_DURATION))
++        return false;
++    ItemTemplate const* proto = item->GetTemplate();
++    if (!proto || !proto->SellPrice || proto->Quality < ITEM_QUALITY_NORMAL || proto->Class == ITEM_CLASS_QUEST ||
++        proto->Class == ITEM_CLASS_KEY || proto->HasFlag(ITEM_FLAG_CONJURED) || proto->Bonding == BIND_QUEST_ITEM)
++        return false;
++
++    return !checkProgression || !NeededForProgression(ai, item);
++}
++
++uint32 FreeBudget(PlayerbotAI* ai, NeedMoneyFor category)
++{
++    Player* bot = ai->GetBot();
++    Value<uint32>* value = ai->GetAiObjectContext()->GetValue<uint32>("free money for", uint32(category));
++    value->Reset();
++    return std::min(bot->GetMoney(), value->Get());
++}
++
++uint32 PurchaseBudget(PlayerbotAI* ai, ItemUsage usage)
++{
++    NeedMoneyFor category = NeedMoneyFor::gear;
++    if (usage == ITEM_USAGE_AMMO)
++        category = NeedMoneyFor::ammo;
++    else if (usage == ITEM_USAGE_USE)
++        category = NeedMoneyFor::consumables;
++    else if (usage == ITEM_USAGE_SKILL)
++        category = NeedMoneyFor::tradeskill;
++    uint32 const free = FreeBudget(ai, category);
++    uint32 const supplies =
++        ai->GetAiObjectContext()->GetValue<uint32>("money needed for", uint32(NeedMoneyFor::consumables))->Get();
++    uint32 const available = category == NeedMoneyFor::consumables ? free : (free > supplies ? free - supplies : 0);
++    // A single purchase must not consume most of a bot's earned savings.
++    return std::min(available, ai->GetBot()->GetMoney() / 4);
++}
++
++bool Ready(PlayerbotAI* ai)
++{
++    if (!IsEnabled(ai))
++        return false;
++    Player* bot = ai->GetBot();
++    return bot->IsInWorld() && bot->IsAlive() && !bot->IsInCombat() && !bot->IsInFlight() &&
++           !bot->IsBeingTeleported() && !bot->InBattleground() && !bot->GetTradeData() &&
++           ai->GetAiObjectContext()->GetValue<bool>("can move around")->Get();
++}
++
++bool AuctionReceipt(Mail const* mail, time_t now)
++{
++    return mail && ReceiptReady(mail->messageType == MAIL_AUCTION, mail->state == MAIL_STATE_DELETED, mail->COD,
++                                mail->deliver_time, mail->expire_time, now);
++}
++
++bool CollectReceipts(Player* bot, ObjectGuid mailbox)
++{
++    WorldPacket inbox(CMSG_GET_MAIL_LIST);
++    inbox << mailbox;
++    bot->GetSession()->HandleGetMailList(inbox);
++    time_t const now = GameTime::GetGameTime().count();
++    std::vector<uint32> mailIds;
++    for (Mail const* mail : bot->GetMails())
++        if (AuctionReceipt(mail, now))
++        {
++            mailIds.push_back(mail->messageID);
++            if (mailIds.size() >= MaxMailPerVisit)
++                break;
++        }
++
++    bool collected = false;
++    for (uint32 id : mailIds)
++    {
++        Mail* mail = bot->GetMail(id);
++        if (!AuctionReceipt(mail, now))
++            continue;
++        if (mail->money)
++        {
++            uint32 const before = mail->money;
++            WorldPacket packet(CMSG_MAIL_TAKE_MONEY);
++            packet << mailbox << id;
++            bot->GetSession()->HandleMailTakeMoney(packet);
++            mail = bot->GetMail(id);
++            if (!mail)
++                continue;
++            collected = collected || mail->money < before;
++        }
++        std::vector<uint32> itemGuids;
++        for (MailItemInfo const& item : mail->items)
++            itemGuids.push_back(item.item_guid);
++        for (uint32 itemGuid : itemGuids)
++        {
++            Item* item = bot->GetMItem(itemGuid);
++            ItemPosCountVec destination;
++            if (!item || bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
++                continue;
++            WorldPacket packet(CMSG_MAIL_TAKE_ITEM);
++            packet << mailbox << id << itemGuid;
++            bot->GetSession()->HandleMailTakeItem(packet);
++            // The core may merge/delete the attachment; never reuse its pointer.
++            collected = collected || !bot->GetMItem(itemGuid);
++        }
++        mail = bot->GetMail(id);
++        // HandleMailDelete does not protect attachments. Only delete after
++        // observing successful core retrieval of every attachment and all money.
++        if (AuctionReceipt(mail, now) && !mail->money && mail->items.empty())
++        {
++            WorldPacket packet(CMSG_MAIL_DELETE);
++            packet << mailbox << id << uint32(0);
++            bot->GetSession()->HandleMailDelete(packet);
++        }
++    }
++    return collected;
++}
++
++struct MarketState
++{
++    uint32 listings = 0;
++    bool pendingPurchase = false;
++};
++
++MarketState OwnMarketState(Player* bot)
++{
++    MarketState state;
++    std::unordered_set<AuctionHouseObject*> visited;
++    for (AuctionHouseId houseId : {AuctionHouseId::Alliance, AuctionHouseId::Horde, AuctionHouseId::Neutral})
++    {
++        AuctionHouseObject* house = sAuctionMgr->GetAuctionsMapByHouseId(houseId);
++        if (!house || !visited.insert(house).second)
++            continue;
++        // Ownership census is deliberately exact, including auctions from an
++        // earlier server session. No item valuation occurs in this inexpensive pass.
++        for (auto const& [id, auction] : house->GetAuctions())
++        {
++            if (auction->owner == bot->GetGUID())
++                ++state.listings;
++            if (auction->bidder == bot->GetGUID())
++                state.pendingPurchase = true;
++            if (state.listings >= MaxListings && state.pendingPurchase)
++                return state;
++        }
++    }
++    time_t const now = GameTime::GetGameTime().count();
++    for (Mail const* mail : bot->GetMails())
++        if (mail && mail->messageType == MAIL_AUCTION && mail->state != MAIL_STATE_DELETED && mail->expire_time > now &&
++            !mail->items.empty())
++            state.pendingPurchase = true;
++    return state;
++}
++
++std::vector<uint32> SampleMarket(AuctionHouseObject* house, ObjectGuid botGuid)
++{
++    std::vector<uint32> ids;
++    auto const& auctions = house->GetAuctions();
++    if (auctions.empty())
++        return ids;
++    // Different bots examine different rotating slices, rather than all
++    // competing for the first item in a large auction house.
++    std::uint64_t const seed =
++        std::uint64_t(GameTime::GetGameTime().count() / 60) + std::uint64_t(botGuid.GetCounter()) * 2654435761u;
++    std::uint64_t const low = auctions.begin()->first;
++    std::uint64_t const span = std::uint64_t(auctions.rbegin()->first) - low + 1;
++    uint32 const slice = uint32(low + seed % span);
++    auto it = auctions.lower_bound(slice);
++    if (it == auctions.end())
++        it = auctions.begin();
++    auto const first = it;
++    do
++    {
++        ids.push_back(it->first);
++        if (ids.size() >= MaxMarketScan)
++            break;
++        if (++it == auctions.end())
++            it = auctions.begin();
++    } while (it != first);
++    return ids;
++}
++
++uint32 MarketPrice(AuctionHouseObject* house, std::vector<uint32> const& sample, Item* item)
++{
++    uint32 best = 0;
++    time_t const now = GameTime::GetGameTime().count();
++    for (uint32 id : sample)
++    {
++        AuctionEntry* auction = house->GetAuction(id);
++        if (!auction || auction->expire_time <= now || auction->item_template != item->GetEntry() || !auction->buyout ||
++            !auction->itemCount)
++            continue;
++        Item* offer = sAuctionMgr->GetAItem(auction->item_guid);
++        if (!offer || offer->GetItemRandomPropertyId() != item->GetItemRandomPropertyId())
++            continue;
++        uint32 const unit = auction->buyout / auction->itemCount;
++        if (unit && (!best || unit < best))
++            best = unit;
++    }
++    return best;
++}
++
++bool SellSurplus(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house, std::vector<uint32> const& sample,
++                 uint32 listings)
++{
++    bool sold = false;
++    uint32 listed = 0;
++    AuctionHouseEntry const* entry = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(auctioneer->GetFaction());
++    if (!entry)
++        return false;
++    for (ObjectGuid guid : BagItems(ai->GetBot()))
++    {
++        if (listed >= MaxSalesPerVisit || listings >= MaxListings)
++            break;
++        Player* bot = ai->GetBot();
++        Item* item = bot->GetItemByGuid(guid);
++        if (!item || !TradableSurplus(ai, item, Usage(ai, item)))
++            continue;
++        uint32 const count = item->GetCount();
++        ItemTemplate const* proto = item->GetTemplate();
++        ListingPrices const prices =
++            PriceListing(proto->BuyPrice, proto->SellPrice, count, MarketPrice(house, sample, item));
++        uint32 const deposit = sAuctionMgr->GetAuctionDeposit(entry, MIN_AUCTION_TIME, item, count);
++        uint32 const budget = FreeBudget(ai, NeedMoneyFor::anything);
++        if (!prices.buyout || deposit > budget || !bot->HasEnoughMoney(deposit))
++            continue;
++        WorldPacket packet(CMSG_AUCTION_SELL_ITEM);
++        packet << auctioneer->GetGUID() << uint32(1) << guid << count;
++        packet << prices.bid << prices.buyout << uint32(MIN_AUCTION_TIME / MINUTE);
++        bot->GetSession()->HandleAuctionSellItem(packet);
++        // A whole-stack listing removes the owned bag item. Failed listings
++        // retain it, and must not be counted or have their gold restored.
++        if (!bot->GetItemByGuid(guid))
++        {
++            sold = true;
++            ++listed;
++            ++listings;
++        }
++    }
++    return sold;
++}
++
++bool BuyUseful(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house, std::vector<uint32> const& sample)
++{
++    Player* bot = ai->GetBot();
++    time_t const now = GameTime::GetGameTime().count();
++    uint32 bestId = 0;
++    uint32 bestPrice = 0;
++    for (uint32 id : sample)
++    {
++        AuctionEntry* auction = house->GetAuction(id);
++        if (!auction || !auction->buyout || auction->buyout <= auction->bid || auction->expire_time <= now ||
++            auction->owner == bot->GetGUID() || auction->bidder == bot->GetGUID())
++            continue;
++        uint32 const ownerAccount = sCharacterCache->GetCharacterAccountIdByGuid(auction->owner);
++        if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId())
++            continue;
++        Item* item = sAuctionMgr->GetAItem(auction->item_guid);
++        if (!item || item->GetCount() != auction->itemCount || !auction->itemCount)
++            continue;
++        ItemTemplate const* proto = item->GetTemplate();
++        if (!proto || proto->HasFlag(ITEM_FLAG_CONJURED) || proto->Class == ITEM_CLASS_QUEST ||
++            proto->Class == ITEM_CLASS_KEY || bot->CanUseItem(proto) != EQUIP_ERR_OK)
++            continue;
++        ItemUsage const usage = Usage(ai, item);
++        bool const useful = usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_AMMO ||
++                            usage == ITEM_USAGE_SKILL ||
++                            (usage == ITEM_USAGE_USE && proto->Class == ITEM_CLASS_CONSUMABLE);
++        uint32 const budget = PurchaseBudget(ai, usage);
++        if (!useful || !Affordable(auction->buyout, budget, bot->GetMoney()) ||
++            !WithinPriceCeiling(auction->buyout, auction->itemCount,
++                                UnitPriceCeiling(proto->BuyPrice, proto->SellPrice)))
++            continue;
++        ItemPosCountVec destination;
++        if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
++            continue;
++        if (!bestId || auction->buyout < bestPrice)
++        {
++            bestId = id;
++            bestPrice = auction->buyout;
++        }
++    }
++    if (!bestId)
++        return false;
++    // No intervening world operation can change the offer in this world-thread
++    // invocation. The core checks current ownership/balance/bid and script hooks again.
++    uint32 const before = bot->GetMoney();
++    WorldPacket packet(CMSG_AUCTION_PLACE_BID);
++    packet << auctioneer->GetGUID() << bestId << bestPrice;
++    bot->GetSession()->HandleAuctionPlaceBid(packet);
++    // A successful buyout deletes the auction; never dereference its old pointer.
++    return bot->GetMoney() < before && !house->GetAuction(bestId);
++}
++
++class EarnedAuctionVisit final : public PlayerbotOperation
++{
++public:
++    EarnedAuctionVisit(ObjectGuid bot, ObjectGuid target, bool mailbox)
++        : botGuid(bot), targetGuid(target), isMailbox(mailbox)
++    {
++    }
++    ObjectGuid GetBotGuid() const override { return botGuid; }
++    std::string GetName() const override { return "Earned auction visit"; }
++    bool Execute() override
++    {
++        Player* bot = ObjectAccessor::FindConnectedPlayer(botGuid);
++        PlayerbotAI* ai = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
++        if (!Ready(ai))
++            return false;
++        WorldObject* target = nullptr;
++        Creature* auctioneer = nullptr;
++        if (isMailbox)
++        {
++            if (targetGuid.IsGameObject())
++                target = bot->GetGameObjectIfCanInteractWith(targetGuid, GAMEOBJECT_TYPE_MAILBOX);
++            else if (targetGuid.IsAnyTypeCreature())
++                target = bot->GetNPCIfCanInteractWith(targetGuid, UNIT_NPC_FLAG_MAILBOX);
++        }
++        else
++        {
++            auctioneer = bot->GetNPCIfCanInteractWith(targetGuid, UNIT_NPC_FLAG_AUCTIONEER);
++            target = auctioneer;
++        }
++        if (!target || !bot->IsWithinDistInMap(target, INTERACTION_DISTANCE))
++            return false;
++        // This map is touched exclusively by the world thread. Separate auction
++        // and mailbox clocks allow collecting delivered goods after a purchase.
++        static std::map<std::pair<ObjectGuid, bool>, time_t> lastVisits;
++        time_t const now = GameTime::GetGameTime().count();
++        auto const key = std::make_pair(botGuid, isMailbox);
++        auto it = lastVisits.find(key);
++        uint32 const interval = std::clamp<uint32>(sPlayerbotAIConfig.earnedAuctionInterval, 60, 3600);
++        if (it != lastVisits.end() && now - it->second < interval)
++            return false;
++        lastVisits[key] = now;
++        if (isMailbox)
++            return CollectReceipts(bot, targetGuid);
++        AuctionHouseObject* house = sAuctionMgr->GetAuctionsMap(auctioneer->GetFaction());
++        if (!house)
++            return false;
++        MarketState const state = OwnMarketState(bot);
++        std::vector<uint32> const sample = SampleMarket(house, botGuid);
++        bool const sold = SellSurplus(ai, auctioneer, house, sample, state.listings);
++        bool const bought = !state.pendingPurchase && BuyUseful(ai, auctioneer, house, sample);
++        return sold || bought;
++    }
++
++private:
++    ObjectGuid botGuid;
++    ObjectGuid targetGuid;
++    bool isMailbox;
++};
++}  // namespace
++
++bool IsEnabled(PlayerbotAI* ai)
++{
++    return ai && sPlayerbotAIConfig.naturalProgression && sPlayerbotAIConfig.earnedAuctions && ai->GetBot() &&
++           sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();
++}
++
++bool HasSurplus(PlayerbotAI* ai)
++{
++    if (!IsEnabled(ai))
++        return false;
++    for (ObjectGuid guid : BagItems(ai->GetBot()))
++        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
++            if (TradableSurplus(ai, item, Usage(ai, item)))
++                return true;
++    return false;
++}
++
++bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage)
++{
++    if (!ai || !ai->GetBot() || !sPlayerbotAIConfig.naturalProgression || !item)
++        return false;
++    // These are progression supplies rather than market surplus. Keep them
++    // even when earned trading is disabled or emergency vendoring is needed.
++    if (NeededForProgression(ai, item))
++        return true;
++    if (!IsEnabled(ai) || !TradableSurplus(ai, item, usage, false))
++        return false;
++    // Broke bots and full bags may vendor surplus rather than stalling ordinary
++    // leveling. There is no gold grant to pay auction deposits.
++    if (ai->GetAiObjectContext()->GetValue<uint8>("bag space")->Get() >= 80)
++        return false;
++    float const rate = sWorld->getRate(RATE_AUCTION_DEPOSIT);
++    if (!std::isfinite(rate) || rate < 0)
++        return false;
++    // Neutral houses charge the largest default deposit. Estimate without
++    // consulting mutable global auction collections from an AI map thread.
++    long double const deposit =
++        std::ceil(std::max<long double>(
++                      100, static_cast<long double>(item->GetTemplate()->SellPrice) * item->GetCount() * 3 / 4) *
++                  rate);
++    if (deposit > MaxCopper)
++        return false;
++    return FreeBudget(ai, NeedMoneyFor::anything) >= static_cast<uint32>(deposit);
++}
++
++bool HasVendorSurplus(PlayerbotAI* ai)
++{
++    if (!ai || !ai->GetBot())
++        return false;
++    for (ObjectGuid guid : BagItems(ai->GetBot()))
++        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
++        {
++            ItemUsage const usage = Usage(ai, item);
++            if ((usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH) && !ShouldReserveForAuction(ai, item, usage))
++                return true;
++        }
++    return false;
++}
++
++bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox)
++{
++    if (!Ready(ai) || !target)
++        return false;
++    return PlayerbotWorldThreadProcessor::instance().QueueOperation(
++        std::make_unique<EarnedAuctionVisit>(ai->GetBot()->GetGUID(), target, mailbox));
++}
++}  // namespace EarnedAuction
+diff --git a/src/Bot/EarnedAuction.h b/src/Bot/EarnedAuction.h
+new file mode 100644
+index 0000000..a32c6fd
+--- /dev/null
++++ b/src/Bot/EarnedAuction.h
+@@ -0,0 +1,23 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++#ifndef PLAYERBOTS_EARNEDAUCTION_H
++#define PLAYERBOTS_EARNEDAUCTION_H
++
++#include "ItemUsageValue.h"
++#include "ObjectGuid.h"
++
++class Item;
++class PlayerbotAI;
++
++namespace EarnedAuction
++{
++bool IsEnabled(PlayerbotAI* ai);
++bool HasSurplus(PlayerbotAI* ai);
++bool HasVendorSurplus(PlayerbotAI* ai);
++bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage);
++bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox);
++}  // namespace EarnedAuction
++#endif
+diff --git a/src/Bot/EarnedAuctionPolicy.h b/src/Bot/EarnedAuctionPolicy.h
+new file mode 100644
+index 0000000..f0c80c5
+--- /dev/null
++++ b/src/Bot/EarnedAuctionPolicy.h
+@@ -0,0 +1,70 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++#ifndef PLAYERBOTS_EARNEDAUCTIONPOLICY_H
++#define PLAYERBOTS_EARNEDAUCTIONPOLICY_H
++
++#include <algorithm>
++#include <cstdint>
++#include <limits>
++
++namespace EarnedAuction
++{
++constexpr std::uint32_t MaxListings = 20;
++constexpr std::uint32_t MaxSalesPerVisit = 2;
++constexpr std::uint32_t MaxMarketScan = 512;
++constexpr std::uint32_t MaxMailPerVisit = 20;
++constexpr std::uint32_t MaxCopper = 0x7fffffff;
++
++inline std::uint32_t UnitPriceCeiling(std::uint32_t vendorBuy, std::uint32_t vendorSell)
++{
++    // A bounded valuation keeps ordinary buyers from subsidising arbitrary asking prices.
++    std::uint64_t value = std::max<std::uint64_t>(vendorBuy, std::uint64_t(vendorSell) * 6);
++    return static_cast<std::uint32_t>(std::min<std::uint64_t>(value, MaxCopper));
++}
++
++struct ListingPrices
++{
++    std::uint32_t bid = 0;
++    std::uint32_t buyout = 0;
++};
++
++inline ListingPrices PriceListing(std::uint32_t vendorBuy, std::uint32_t vendorSell, std::uint32_t count,
++                                  std::uint32_t marketUnitPrice)
++{
++    std::uint32_t const ceiling = UnitPriceCeiling(vendorBuy, vendorSell);
++    if (!ceiling || !vendorSell || !count)
++        return {};
++    std::uint64_t const floor = std::uint64_t(vendorSell) * 2;
++    if (floor > ceiling)
++        return {};
++    std::uint64_t unit = std::min<std::uint64_t>(std::uint64_t(vendorSell) * 3, ceiling);
++    if (marketUnitPrice)
++        unit = std::clamp<std::uint64_t>(marketUnitPrice > 1 ? marketUnitPrice - 1 : 1, floor, ceiling);
++    std::uint64_t const buyout = unit * count;
++    std::uint64_t const bid = std::max<std::uint64_t>(std::uint64_t(vendorSell) * count + 1, buyout * 4 / 5);
++    if (!buyout || buyout > MaxCopper || bid > buyout)
++        return {};
++    return {static_cast<std::uint32_t>(bid), static_cast<std::uint32_t>(buyout)};
++}
++
++inline bool Affordable(std::uint32_t price, std::uint32_t budget, std::uint32_t money)
++{
++    return price && price <= MaxCopper && price <= budget && price <= money;
++}
++
++inline bool WithinPriceCeiling(std::uint32_t price, std::uint32_t count, std::uint32_t unitCeiling)
++{
++    return price && count && unitCeiling && price <= MaxCopper &&
++           std::uint64_t(price) <= std::uint64_t(count) * unitCeiling;
++}
++
++inline bool ReceiptReady(bool auctionMail, bool deleted, std::uint32_t cod, std::int64_t delivered,
++                         std::int64_t expires, std::int64_t now)
++{
++    return auctionMail && !deleted && !cod && delivered <= now && expires > now;
++}
++}  // namespace EarnedAuction
++#endif
+diff --git a/src/Bot/EarnedAuctionTravel.cpp b/src/Bot/EarnedAuctionTravel.cpp
+new file mode 100644
+index 0000000..11db0a6
+--- /dev/null
++++ b/src/Bot/EarnedAuctionTravel.cpp
+@@ -0,0 +1,169 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#include "EarnedAuctionTravel.h"
++
++#include <algorithm>
++#include <atomic>
++#include <memory>
++#include <unordered_map>
++#include <vector>
++
++#include "AiObjectContext.h"
++#include "AuctionHouseMgr.h"
++#include "BudgetValues.h"
++#include "Creature.h"
++#include "DBCStores.h"
++#include "EarnedAuction.h"
++#include "EarnedAuctionTravelPolicy.h"
++#include "Map.h"
++#include "ObjectMgr.h"
++#include "Player.h"
++#include "PlayerbotAI.h"
++#include "Timer.h"
++
++namespace EarnedAuctionTravel
++{
++namespace
++{
++using MarketCache = std::unordered_map<uint32, std::vector<MarketSite>>;
++std::atomic<std::shared_ptr<MarketCache const>> marketCache;
++
++uint32 PurchaseSavings(PlayerbotAI* ai)
++{
++    AiObjectContext* context = ai->GetAiObjectContext();
++    uint32 const gear = context->GetValue<uint32>("free money for", uint32(NeedMoneyFor::gear))->Get();
++    uint32 const supplies = context->GetValue<uint32>("money needed for", uint32(NeedMoneyFor::consumables))->Get();
++    uint32 const consumables = context->GetValue<uint32>("free money for", uint32(NeedMoneyFor::consumables))->Get();
++    return std::min(std::max(gear > supplies ? gear - supplies : 0, consumables), ai->GetBot()->GetMoney() / 4);
++}
++
++bool FriendlyMarket(Player* bot, MarketSite const& market)
++{
++    FactionTemplateEntry const* faction = sFactionTemplateStore.LookupEntry(market.factionTemplateId);
++    return faction && bot->GetFactionReactionTo(faction, bot) >= REP_NEUTRAL;
++}
++}  // namespace
++
++void LoadMarkets()
++{
++    auto cache = std::make_shared<MarketCache>();
++    for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
++    {
++        CreatureTemplate const* creature = sObjectMgr->GetCreatureTemplate(data.id);
++        MapEntry const* map = sMapStore.LookupEntry(data.mapid);
++        if (!creature || !map || map->IsDungeon() || !data.spawnMask)
++            continue;
++        uint32 npcFlags = 0;
++        uint32 unitFlags = 0;
++        uint32 dynamicFlags = 0;
++        ObjectMgr::ChooseCreatureFlags(creature, npcFlags, unitFlags, dynamicFlags, &data);
++        if (!(npcFlags & UNIT_NPC_FLAG_AUCTIONEER))
++            continue;
++        AuctionHouseEntry const* house = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(creature->faction);
++        if (!house)
++            continue;
++        (*cache)[data.mapid].push_back({data.mapid, data.phaseMask, house->houseId, creature->faction, data.posX,
++                                        data.posY, data.posZ, data.orientation});
++    }
++    // Publish immutable spawn metadata; never inspect the world's spawn store from a bot map thread.
++    marketCache.store(std::move(cache), std::memory_order_release);
++}
++
++bool Ready(PlayerbotAI* ai)
++{
++    if (!EarnedAuction::IsEnabled(ai))
++        return false;
++    Player* bot = ai->GetBot();
++    return bot->GetLevel() >= MinimumLevel && bot->IsInWorld() && bot->IsAlive() && !bot->GetGroup() &&
++           !bot->IsInCombat() && !bot->IsInFlight() && !bot->IsBeingTeleported() && !bot->InBattleground() &&
++           !bot->GetTradeData() && bot->GetMap() && !bot->GetMap()->IsDungeon() && ai->CanMove() &&
++           ai->GetAiObjectContext()->GetValue<bool>("can move around")->Get();
++}
++
++bool CompatibleAuctioneer(PlayerbotAI* ai, Creature* auctioneer)
++{
++    if (!ai || !ai->GetBot() || !auctioneer || !auctioneer->IsAlive() ||
++        !auctioneer->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER) || auctioneer->IsHostileTo(ai->GetBot()))
++        return false;
++    AuctionHouseEntry const* botHouse =
++        AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(ai->GetBot()->GetFaction());
++    AuctionHouseEntry const* marketHouse =
++        AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(auctioneer->GetFaction());
++    return botHouse && marketHouse && CompatibleHouse(botHouse->houseId, marketHouse->houseId);
++}
++
++void FinishTrip(PlayerbotAI* ai)
++{
++    if (!ai || !ai->rpgInfo.earnedAuctionTravelActive)
++        return;
++    auto& info = ai->rpgInfo;
++    info.earnedAuctionTravelActive = false;
++    info.earnedAuctionTravelLastAttempt = getMSTime();
++    info.earnedAuctionTravelClockStarted = true;
++    info.earnedAuctionTravelDestination = {};
++}
++
++bool ContinueTrip(PlayerbotAI* ai)
++{
++    if (!ai || !ai->rpgInfo.earnedAuctionTravelActive)
++        return false;
++    auto& info = ai->rpgInfo;
++    if (!Ready(ai) || info.earnedAuctionTravelDestination.GetMapId() != ai->GetBot()->GetMapId() ||
++        TravelDeadlineReached(GetMSTimeDiffToNow(info.earnedAuctionTravelStarted)))
++    {
++        AbortTrip(ai);
++        return false;
++    }
++    return true;
++}
++
++void AbortTrip(PlayerbotAI* ai)
++{
++    if (!ai || !ai->rpgInfo.earnedAuctionTravelActive)
++        return;
++    FinishTrip(ai);
++    ai->rpgInfo.earnedAuctionLastVisit = getMSTime();
++    ai->rpgInfo.earnedAuctionVisitDelay = TravelBackoffMs;
++}
++
++WorldPosition PlanTrip(PlayerbotAI* ai)
++{
++    if (ContinueTrip(ai))
++        return ai->rpgInfo.earnedAuctionTravelDestination;
++    if (!Ready(ai))
++        return {};
++    auto& info = ai->rpgInfo;
++    if (info.earnedAuctionTravelClockStarted &&
++        !TravelBackoffElapsed(GetMSTimeDiffToNow(info.earnedAuctionTravelLastAttempt)))
++        return {};
++    info.earnedAuctionTravelClockStarted = true;
++    info.earnedAuctionTravelLastAttempt = getMSTime();
++    Player* bot = ai->GetBot();
++    if (!CanStartTravel(bot->GetLevel(), EarnedAuction::HasSurplus(ai), PurchaseSavings(ai)))
++        return {};
++    auto const cache = marketCache.load(std::memory_order_acquire);
++    if (!cache)
++        return {};
++    auto const markets = cache->find(bot->GetMapId());
++    if (markets == cache->end())
++        return {};
++    AuctionHouseEntry const* botHouse = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(bot->GetFaction());
++    if (!botHouse)
++        return {};
++    MarketOrigin const origin{bot->GetMapId(),     bot->GetPhaseMask(), botHouse->houseId,
++                              bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ()};
++    auto const nearest = NearestMarketIndex(markets->second, origin,
++                                            [bot](MarketSite const& site) { return FriendlyMarket(bot, site); });
++    if (!nearest)
++        return {};
++    MarketSite const& market = markets->second[*nearest];
++    info.earnedAuctionTravelDestination = WorldPosition(market.mapId, market.x, market.y, market.z, market.orientation);
++    info.earnedAuctionTravelStarted = getMSTime();
++    info.earnedAuctionTravelActive = true;
++    return info.earnedAuctionTravelDestination;
++}
++}  // namespace EarnedAuctionTravel
+diff --git a/src/Bot/EarnedAuctionTravel.h b/src/Bot/EarnedAuctionTravel.h
+new file mode 100644
+index 0000000..a2e8b61
+--- /dev/null
++++ b/src/Bot/EarnedAuctionTravel.h
+@@ -0,0 +1,24 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++#ifndef PLAYERBOTS_EARNEDAUCTIONTRAVEL_H
++#define PLAYERBOTS_EARNEDAUCTIONTRAVEL_H
++
++#include "TravelMgr.h"
++
++class Creature;
++class PlayerbotAI;
++
++namespace EarnedAuctionTravel
++{
++void LoadMarkets();
++bool Ready(PlayerbotAI* ai);
++bool CompatibleAuctioneer(PlayerbotAI* ai, Creature* auctioneer);
++WorldPosition PlanTrip(PlayerbotAI* ai);
++bool ContinueTrip(PlayerbotAI* ai);
++void FinishTrip(PlayerbotAI* ai);
++void AbortTrip(PlayerbotAI* ai);
++}  // namespace EarnedAuctionTravel
++#endif
+diff --git a/src/Bot/EarnedAuctionTravelPolicy.h b/src/Bot/EarnedAuctionTravelPolicy.h
+new file mode 100644
+index 0000000..8b6bec2
+--- /dev/null
++++ b/src/Bot/EarnedAuctionTravelPolicy.h
+@@ -0,0 +1,97 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++#ifndef PLAYERBOTS_EARNEDAUCTIONTRAVELPOLICY_H
++#define PLAYERBOTS_EARNEDAUCTIONTRAVELPOLICY_H
++
++#include <cmath>
++#include <cstddef>
++#include <cstdint>
++#include <optional>
++#include <span>
++
++namespace EarnedAuctionTravel
++{
++constexpr std::uint32_t MinimumLevel = 10;
++constexpr std::uint32_t MinimumPurchaseCopper = 100;
++constexpr std::uint32_t MaximumTravelTimeMs = 10 * 60 * 1000;
++constexpr std::uint32_t TravelBackoffMs = 15 * 60 * 1000;
++constexpr float MaximumTravelDistance = 5000.0f;
++constexpr std::uint32_t NeutralHouseId = 7;
++
++struct MarketSite
++{
++    std::uint32_t mapId = 0;
++    std::uint32_t phaseMask = 0;
++    std::uint32_t houseId = 0;
++    std::uint32_t factionTemplateId = 0;
++    float x = 0.0f;
++    float y = 0.0f;
++    float z = 0.0f;
++    float orientation = 0.0f;
++};
++
++struct MarketOrigin
++{
++    std::uint32_t mapId = 0;
++    std::uint32_t phaseMask = 0;
++    std::uint32_t houseId = 0;
++    float x = 0.0f;
++    float y = 0.0f;
++    float z = 0.0f;
++};
++
++inline bool CanStartTravel(std::uint32_t level, bool hasSurplus, std::uint32_t spendableCopper)
++{
++    return level >= MinimumLevel && (hasSurplus || spendableCopper >= MinimumPurchaseCopper);
++}
++
++inline bool CompatibleHouse(std::uint32_t botHouseId, std::uint32_t marketHouseId)
++{
++    return botHouseId && marketHouseId && (marketHouseId == botHouseId || marketHouseId == NeutralHouseId);
++}
++
++inline float DistanceSquared(MarketOrigin const& bot, MarketSite const& market)
++{
++    float const dx = bot.x - market.x;
++    float const dy = bot.y - market.y;
++    float const dz = bot.z - market.z;
++    return dx * dx + dy * dy + dz * dz;
++}
++
++inline bool EligibleMarket(MarketOrigin const& bot, MarketSite const& market)
++{
++    float const distance = DistanceSquared(bot, market);
++    return market.mapId == bot.mapId && (market.phaseMask & bot.phaseMask) &&
++           CompatibleHouse(bot.houseId, market.houseId) && std::isfinite(distance) &&
++           distance <= MaximumTravelDistance * MaximumTravelDistance;
++}
++
++template <typename FriendlyPredicate>
++std::optional<std::size_t> NearestMarketIndex(std::span<MarketSite const> markets, MarketOrigin const& bot,
++                                              FriendlyPredicate friendly)
++{
++    std::optional<std::size_t> nearest;
++    float nearestDistance = MaximumTravelDistance * MaximumTravelDistance;
++    for (std::size_t i = 0; i < markets.size(); ++i)
++    {
++        MarketSite const& market = markets[i];
++        if (!EligibleMarket(bot, market) || !friendly(market))
++            continue;
++        float const distance = DistanceSquared(bot, market);
++        if (!nearest || distance < nearestDistance)
++        {
++            nearest = i;
++            nearestDistance = distance;
++        }
++    }
++    return nearest;
++}
++
++inline bool TravelDeadlineReached(std::uint32_t elapsedMs) { return elapsedMs >= MaximumTravelTimeMs; }
++
++inline bool TravelBackoffElapsed(std::uint32_t elapsedMs) { return elapsedMs >= TravelBackoffMs; }
++}  // namespace EarnedAuctionTravel
++#endif
+diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
+index 911b961..51af4fe 100644
+--- a/src/PlayerbotAIConfig.cpp
++++ b/src/PlayerbotAIConfig.cpp
+@@ -82,6 +82,9 @@ bool PlayerbotAIConfig::Initialize()
+ 
+     enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", true);
+     naturalProgression = sConfigMgr->GetOption<bool>("AiPlayerbot.NaturalProgression", false);
++    earnedAuctions = sConfigMgr->GetOption<bool>("AiPlayerbot.EarnedAuctions", false);
++    earnedAuctionInterval =
++        std::clamp(sConfigMgr->GetOption<uint32>("AiPlayerbot.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
+     vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.VanillaBattlegroundsOnly", false);
+     if (!enabled)
+     {
+diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
+index 2676563..f0a162c 100644
+--- a/src/PlayerbotAIConfig.h
++++ b/src/PlayerbotAIConfig.h
+@@ -107,6 +107,8 @@ public:
+ 
+     bool enabled;
+     bool naturalProgression = false;
++    bool earnedAuctions = false;
++    uint32 earnedAuctionInterval = 300;
+     std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets{
+         std::make_shared<EarnedLevelBracketPolicy>()};
+     bool vanillaBattlegroundsOnly = false;
+diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
+index f0619c6..7967326 100644
+--- a/src/Script/Playerbots.cpp
++++ b/src/Script/Playerbots.cpp
+@@ -5,17 +5,19 @@
+  */
+ 
+ #include "Playerbots.h"
++
++#include <mysqld_error.h>
++
++#include "AllMapScript.h"
+ #include "BattleGroundTactics.h"
+ #include "BattlefieldScript.h"
++#include "BuiltInConfig.h"
+ #include "Channel.h"
+ #include "CheckMountStateAction.h"
+ #include "Config.h"
+-#include "BuiltInConfig.h"
+ #include "DBUpdater.h"
+ #include "DatabaseEnv.h"
+-#include "PlayerbotsDatabase.h"
+-#include <mysqld_error.h>
+-#include "AllMapScript.h"
++#include "EarnedAuctionTravel.h"
+ #include "GlobalScript.h"
+ #include "GuildTaskMgr.h"
+ #include "PlayerScript.h"
+@@ -24,6 +26,7 @@
+ #include "PlayerbotGuildMgr.h"
+ #include "PlayerbotSpellRepository.h"
+ #include "PlayerbotWorldThreadProcessor.h"
++#include "PlayerbotsDatabase.h"
+ #include "RandomPlayerbotMgr.h"
+ #include "ScriptMgr.h"
+ #include "ServerScript.h"
+@@ -495,11 +498,11 @@ public:
+ class PlayerbotsWorldScript : public WorldScript
+ {
+ public:
+-    PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
+-        WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED,
+-        WORLDHOOK_ON_UPDATE,
+-        WORLDHOOK_ON_SHUTDOWN
+-    }) {}
++    PlayerbotsWorldScript()
++        : WorldScript("PlayerbotsWorldScript", {WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED, WORLDHOOK_ON_STARTUP,
++                                                WORLDHOOK_ON_UPDATE, WORLDHOOK_ON_SHUTDOWN})
++    {
++    }
+ 
+     void OnBeforeWorldInitialized() override
+     {
+@@ -534,6 +537,8 @@ public:
+         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
+     }
+ 
++    void OnStartup() override { EarnedAuctionTravel::LoadMarkets(); }
++
+     void OnUpdate(uint32 diff) override
+     {
+         PlayerbotHolder::UpdatePendingLogins();  // Headless sessions whose login holder is in flight

@@ -7,7 +7,7 @@ patches are recorded alongside each affected module.
 | Component | Repository / branch | Locked revision | Result |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | `mod-playerbots/azerothcore-wotlk`, `Playerbot` | `f19a18799a35` | Already current. |
-| Playerbots | `mod-playerbots/mod-playerbots`, `master` | `037c01418b5d` | Already current; retain natural-progression patch. |
+| Playerbots | `mod-playerbots/mod-playerbots`, `master` | `037c01418b5d` | Already current; natural-progression and earned-auctions patches maintain earned inventory/gold trading. |
 | AutoBalance | `azerothcore/mod-autobalance`, default branch | `73d4ad3c379f` | Already current; retain actual-party scaling and no bonus tokens. |
 | Individual Progression | `ZhengPeiRu21/mod-individual-progression`, default branch | `60336b349cce` | Already current; retain Vanilla gates for bots and humans. |
 | AH Bot Plus | `NathanHandley/mod-ah-bot-plus`, default branch | `f685832994c8` | Already current; synthetic supply and automatic buying remain disabled. |
@@ -33,6 +33,8 @@ The bridge revision has no explicit upstream license declaration; its packaged
 without inventing a license. Other dependencies retain their upstream licenses
 or existing source license notices.
 
-Validation and gameplay limitations are recorded in the Chatless/token addendum
-of `vanilla-config-audit.md`. Future updates should re-check patch applicability,
+Validation and gameplay limitations are recorded in the addenda of
+`vanilla-config-audit.md` and [earned-auctions.md](earned-auctions.md). The earned
+auction patch adds trading to the same pinned Playerbots revision; AH Bot Plus
+remains disabled. Future updates should re-check patch applicability,
 core/module API compatibility and shortcut behavior before changing these pins.
