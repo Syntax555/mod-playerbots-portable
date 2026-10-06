@@ -7,6 +7,7 @@ still checks integration with the real core. No realm or database is started.
 
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2] / 'azerothcore-wotlk/modules'
@@ -236,3 +237,5 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
     subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                     '-fsanitize=address,undefined', str(target), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
+
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedBotBrackets.py'))], check=True)

@@ -1,8 +1,8 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 8c20d269..8d1292e0 100644
+index 8c20d269..5be123e0 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
-@@ -85,6 +85,12 @@ AiPlayerbot.Enabled = 1
+@@ -85,6 +85,20 @@ AiPlayerbot.Enabled = 1
  # Enable randombot system
  AiPlayerbot.RandomBotAutologin = 1
  
@@ -12,10 +12,18 @@ index 8c20d269..8d1292e0 100644
 +# Does not provide missing quest, crafting, profession or raid AI.
 +AiPlayerbot.NaturalProgression = 0
 +
++# Optional earned caps in natural mode: level:percentage pairs, unique levels 1-80,
++# positive percentages totaling at most 100. Example: 19:5,29:5,39:5,49:5,59:5.
++# Unassigned bots progress normally. Bots earn every level; no level/gear grants,
++# resets or XP-off matchmaking flags. GUID assignment survives relogs/restarts.
++# Existing bots above their assigned cap are left alone. Empty disables caps.
++# Invalid input logs an error and disables caps. Reload config or restart to apply.
++AiPlayerbot.EarnedLevelBrackets = ""
++
  # Randombot count
  AiPlayerbot.MinRandomBots = 500
  AiPlayerbot.MaxRandomBots = 500
-@@ -1624,6 +1630,11 @@ AiPlayerbot.AutoTeleportForLevel = 1
+@@ -1624,6 +1638,11 @@ AiPlayerbot.AutoTeleportForLevel = 1
  # Enable battlegrounds/arenas for randombots
  AiPlayerbot.RandomBotJoinBG = 1
  
@@ -27,7 +35,7 @@ index 8c20d269..8d1292e0 100644
  # Enable auto-joining of battlegrounds - have bots start battlegrounds and arenas on their own
  AiPlayerbot.RandomBotAutoJoinBG = 0
  
-@@ -2579,11 +2590,14 @@ AiPlayerbot.RandomBotTalk = 1
+@@ -2579,11 +2598,14 @@ AiPlayerbot.RandomBotTalk = 1
  AiPlayerbot.RandomBotEmote = 0
  # Enable randombots suggesting dungeons in chat
  AiPlayerbot.RandomBotSuggestDungeons = 1
@@ -2437,7 +2445,7 @@ index dd2d5878..cbca8d2c 100644
      uint32 AddRandomBots();
      bool ProcessBot(uint32 bot);
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 915bff53..0f74702f 100644
+index 915bff53..911b9617 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -81,6 +81,8 @@ bool PlayerbotAIConfig::Initialize()
@@ -2457,20 +2465,49 @@ index 915bff53..0f74702f 100644
      summonWhenGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.SummonWhenGroup", true);
      randomBotFixedLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotFixedLevel", false);
      disableRandomLevels = sConfigMgr->GetOption<bool>("AiPlayerbot.DisableRandomLevels", false);
+@@ -801,6 +804,13 @@ bool PlayerbotAIConfig::Initialize()
+ // percentages at runtime.
+ void PlayerbotAIConfig::LoadRandomBotLevelConfig()
+ {
++    auto earnedPolicy = std::make_shared<EarnedLevelBracketPolicy>();
++    if (!earnedPolicy->Load(sConfigMgr->GetOption<std::string>("AiPlayerbot.EarnedLevelBrackets", "")))
++        LOG_ERROR("playerbots",
++                  "Invalid AiPlayerbot.EarnedLevelBrackets; earned caps disabled. "
++                  "Use unique level:percentage pairs, levels 1-80 and positive percentages totaling at most 100.");
++    earnedLevelBrackets.store(std::move(earnedPolicy));
++
+     // ---- Level brackets ----
+     levelBracketsEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.LevelBrackets.Enabled", false);
+     levelBracketsIgnoreGuildWithRealPlayers =
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 781d4d27..e2c6f7ff 100644
+index 781d4d27..26765636 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -103,6 +103,8 @@ public:
+@@ -8,9 +8,12 @@
+ #define PLAYERBOTS_PLAYERBOTAICONFIG_H
+ 
+ #include "DBCEnums.h"
++#include "EarnedLevelBracketPolicy.h"
+ #include "SharedDefines.h"
+ #include <algorithm>
++#include <atomic>
+ #include <map>
++#include <memory>
+ #include <mutex>
+ #include <set>
+ #include <string>
+@@ -103,6 +106,10 @@ public:
      bool IsInPvpProhibitedArea(uint32 id);
  
      bool enabled;
 +    bool naturalProgression = false;
++    std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets{
++        std::make_shared<EarnedLevelBracketPolicy>()};
 +    bool vanillaBattlegroundsOnly = false;
      bool disabledWithoutRealPlayer;
      bool EnableICCBuffs;
      bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
-@@ -186,6 +188,7 @@ public:
+@@ -186,6 +193,7 @@ public:
      bool randomBotSuggestDungeons;
      bool enableBroadcasts;
      bool enableGreet;
@@ -2478,3 +2515,220 @@ index 781d4d27..e2c6f7ff 100644
      bool randomBotSayWithoutMaster;
      bool AnnounceConsumableUse;
  
+diff --git a/src/Ai/Base/Actions/XpGainAction.cpp b/src/Ai/Base/Actions/XpGainAction.cpp
+index 86934c5f..94a16438 100644
+--- a/src/Ai/Base/Actions/XpGainAction.cpp
++++ b/src/Ai/Base/Actions/XpGainAction.cpp
+@@ -55,6 +55,9 @@ bool XpGainAction::Execute(Event event)
+ 
+ void XpGainAction::GiveXP(uint32 xp, Unit* victim)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (xp < 1)
+     {
+         return;
+diff --git a/src/Bot/EarnedLevelBracketPolicy.h b/src/Bot/EarnedLevelBracketPolicy.h
+new file mode 100644
+index 00000000..2582f6e1
+--- /dev/null
++++ b/src/Bot/EarnedLevelBracketPolicy.h
+@@ -0,0 +1,84 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_EARNEDLEVELBRACKETPOLICY_H
++#define PLAYERBOTS_EARNEDLEVELBRACKETPOLICY_H
++
++#include <array>
++#include <charconv>
++#include <cstdint>
++#include <string_view>
++
++// Stable GUID buckets reserve bots for earned caps without changing character state.
++class EarnedLevelBracketPolicy
++{
++    static constexpr unsigned BucketCount = 100;
++    static constexpr unsigned MaxLevel = 80;
++    static constexpr std::uint32_t GuidHashMultiplier = 2654435761;
++
++public:
++    bool Load(std::string_view config)
++    {
++        _caps = {};
++        std::array<std::uint8_t, BucketCount> caps{};
++        std::array<bool, MaxLevel + 1> used{};
++        unsigned total = 0;
++        config = Trim(config);
++        while (!config.empty())
++        {
++            auto const comma = config.find(',');
++            auto const entry = config.substr(0, comma);
++            auto const colon = entry.find(':');
++            unsigned level = 0;
++            unsigned percentage = 0;
++            if (colon == std::string_view::npos || !Number(entry.substr(0, colon), level) ||
++                !Number(entry.substr(colon + 1), percentage) || level < 1 || level > MaxLevel || percentage < 1 ||
++                percentage > BucketCount || total + percentage > BucketCount || used[level])
++                return false;
++
++            used[level] = true;
++            for (unsigned end = total + percentage; total < end; ++total)
++                caps[total] = static_cast<std::uint8_t>(level);
++
++            if (comma == std::string_view::npos)
++                break;
++            config = Trim(config.substr(comma + 1));
++            if (config.empty())
++                return false;
++        }
++        _caps = caps;
++        return true;
++    }
++
++    std::uint8_t GetCap(std::uint32_t guid, std::uint8_t currentLevel) const
++    {
++        // Unsigned wraparound is deliberate and stable across platforms/restarts.
++        auto const cap = _caps[(guid * GuidHashMultiplier) % _caps.size()];
++        return currentLevel <= cap ? cap : 0;  // Never downgrade an existing higher-level bot.
++    }
++
++private:
++    static std::string_view Trim(std::string_view value)
++    {
++        auto const first = value.find_first_not_of(" \t\r\n");
++        if (first == std::string_view::npos)
++            return {};
++        return value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
++    }
++
++    static bool Number(std::string_view value, unsigned& number)
++    {
++        value = Trim(value);
++        if (value.empty())
++            return false;
++        auto const result = std::from_chars(value.data(), value.data() + value.size(), number);
++        return result.ec == std::errc{} && result.ptr == value.data() + value.size();
++    }
++
++    std::array<std::uint8_t, BucketCount> _caps{};
++};
++
++#endif
+diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
+index 8bcebe3b..4f7fd91e 100644
+--- a/src/Bot/RandomBotLevelMgr.cpp
++++ b/src/Bot/RandomBotLevelMgr.cpp
+@@ -293,6 +293,9 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
+ // be resized on a config reload.
+ void RandomBotLevelMgr::AdjustBotToRange(Player* bot, int targetRangeIndex, TeamId team)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!bot || !bot->IsInWorld() || !bot->GetSession() || bot->GetSession()->IsLoggingOut() ||
+         bot->IsDuringRemoveFromWorld())
+         return;
+@@ -828,6 +831,9 @@ uint8 RandomBotLevelMgr::ComputeResetChance(uint8 level) const
+ // whichever is higher) via a full PlayerbotFactory randomize.
+ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint8 levelToResetTo = sPlayerbotAIConfig.resetBotLevelResetTo;
+ 
+     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
+@@ -851,6 +857,9 @@ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
+ // level, whichever is higher) via a full PlayerbotFactory randomize.
+ void RandomBotLevelMgr::SkipBotLevel(Player* player, uint8 currentLevel)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint8 levelToSkipTo = sPlayerbotAIConfig.resetBotLevelSkipTo;
+ 
+     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
+@@ -928,6 +937,9 @@ void RandomBotLevelMgr::RunResetPlayedTimeCheck()
+ 
+ void RandomBotLevelMgr::Update(uint32 diff)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (sPlayerbotAIConfig.levelBracketsEnabled)
+     {
+         _bracketsTimer += diff;
+@@ -960,6 +972,9 @@ void RandomBotLevelMgr::Update(uint32 diff)
+ 
+ void RandomBotLevelMgr::OnBotLogin(Player* player)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(player))
+         return;
+ 
+@@ -1013,6 +1028,9 @@ void RandomBotLevelMgr::OnBotLogin(Player* player)
+ 
+ void RandomBotLevelMgr::OnBotLevelChanged(Player* player, uint8 oldLevel)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(player))
+         return;
+ 
+@@ -1134,11 +1152,34 @@ public:
+ // =============================================================================
+ class RandomBotLevelPlayerScript : public PlayerScript
+ {
++    static uint8 GetEarnedLevelCap(Player* player)
++    {
++        if (!sPlayerbotAIConfig.naturalProgression || !player || !sRandomPlayerbotMgr.IsRandomBot(player))
++            return 0;
++
++        auto const policy = sPlayerbotAIConfig.earnedLevelBrackets.load();
++        return policy->GetCap(player->GetGUID().GetCounter(), player->GetLevel());
++    }
++
+ public:
+     RandomBotLevelPlayerScript()
+         : PlayerScript("RandomBotLevelPlayerScript",
+-              { PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT })
++                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_GIVE_EXP,
++                        PLAYERHOOK_ON_CAN_GIVE_LEVEL})
++    {
++    }
++
++    void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
++    {
++        uint8 const cap = GetEarnedLevelCap(player);
++        if (cap && player->GetLevel() >= cap)
++            amount = 0;
++    }
++
++    bool OnPlayerCanGiveLevel(Player* player, uint8 newLevel) override
+     {
++        uint8 const cap = GetEarnedLevelCap(player);
++        return !cap || newLevel <= cap;
+     }
+ 
+     void OnPlayerLogin(Player* player) override
+diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
+index 669eefb1..f0619c68 100644
+--- a/src/Script/Playerbots.cpp
++++ b/src/Script/Playerbots.cpp
+@@ -358,7 +358,7 @@ public:
+     void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
+     {
+         // early return
+-        if (sPlayerbotAIConfig.randomBotXPRate == 1.0 || !player)
++        if (sPlayerbotAIConfig.naturalProgression || sPlayerbotAIConfig.randomBotXPRate == 1.0 || !player)
+             return;
+ 
+         // no XP multiplier, when player is no bot.

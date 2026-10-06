@@ -370,6 +370,10 @@ jobs:
           $lines.Add('')
           $lines.Add('Bots fill real players'' Warsong Gulch (levels 10–60), Arathi Basin (20–60) and Alterac Valley (51–60) queues with their earned levels and equipment. Autonomous all-bot matches, random/later battlegrounds and arenas stay disabled. Ghosts use normal spirit-guide resurrection waves. Nearby greetings target real players only; random emotes and toxic-link/Thunderfury meme replies stay off.')
           $lines.Add('')
+          if (Test-Path 'docs/earned-bot-brackets.md' -PathType Leaf) {
+              $lines.Add('Roughly 25% of random bots earn and stay at levels 19, 29, 39, 49 or 59 (5% each); the rest continue individual progression. Every bot starts at 1 and retains its earned equipment. Activity entry grants no catch-up levels, gear or money. Battlegrounds require enough eligible queued characters on both factions at the normal minimums. Legacy level rerolls and bot XP multipliers are blocked in natural mode. Customize or release caps in configs/modules/playerbots.conf; see docs/earned-bot-brackets.md. Install the full server ZIP and apply profiles once before customizing an older installation.')
+              $lines.Add('')
+          }
           $lines.Add('Audited profiles keep normal earned talent/skill rates, paid trainer respecs, two primary professions and riding at levels 40/60. New dual-spec purchases are unavailable below level 80. Shortcut bot mail and unsolicited event broadcasts are disabled. AutoBalance counts actual party members, including bots, with explicit dungeon/raid minimums and no player-count offset.')
           $lines.Add('')
           $lines.Add('Quest Loot Party is now included and enabled. Eligible party members can individually loot their own copy of naturally dropped normal-quality quest items from the corpse; drop chances and ordinary equipment loot rules stay unchanged. Login announcements are off. Forced drops, automatic item delivery and broad personal-loot features are not included.')
