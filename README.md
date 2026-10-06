@@ -97,6 +97,8 @@ Autonomous bots also seek nearby trainers, vendors and repair NPCs for available
 
 Bots can fill a real player's named Vanilla battleground queue using their earned levels, equipment and faction. Autonomous all-bot match creation stays disabled. Fresh level 1 bots must level normally before they are eligible; an eligible population may take time to develop.
 
+About 25% of random bots are assigned earned caps at 19, 29, 39, 49 or 59 (5% each); the rest continue individual progression. They start at 1, earn every level and retain their own equipment. Capped bots can still farm and participate in activities. Joining a party or activity supplies no catch-up levels, equipment or gold. Battlegrounds wait for enough eligible queued characters on both factions. See [earned bot brackets](docs/earned-bot-brackets.md) to customize or release caps; no additional bracket module is needed.
+
 | Battleground | Eligible levels | Individual Progression brackets |
 | --- | --- | --- |
 | Warsong Gulch | 10–60 | 10–19, 20–29, 30–39, 40–49, 50–59, 60 only |

@@ -248,3 +248,33 @@ selection/login, earned XP caps, Into the Breach prerequisites, talent reset
 guards and fallback talent depth. The workflow runs it before the full Windows
 server build, which checks integration with the actual core headers and modules.
 These checks do not start a live realm or prove every encounter's behavior.
+
+## v1.0.14 addendum: earned bracket residents
+
+The default assigns approximately 5% of random bots to each earned cap at
+19/29/39/49/59; the remaining 75% continue normal individual progression. A
+character GUID determines its assignment across restarts. Each bot must earn
+its assigned level from 1, keeps its earned inventory and can continue farming
+and participating at the cap. Existing higher-level bots are never downgraded.
+See [earned-bot-brackets.md](earned-bot-brackets.md) for configuration and updates.
+
+XP awards stop at the cap, and the core level-change hook also prevents large
+or rested XP awards from overshooting it. Caps do not set the Wrath XP-off flag
+or split matchmaking. Humans/account alts receive no automatic assignment.
+Policies are parsed once and published atomically; XP hooks perform no database
+queries or population scans. Natural mode also ignores the legacy bracket/reset
+manager and bot XP multiplier, even if those older settings are enabled.
+
+Dungeon, raid and battleground entry changes tactics without generating a new
+level, gear set, money or supplies. Natural factory/refresh and resource guards
+remain active. Battleground eligibility uses the actual bot level and faction;
+normal core queue minimums are retained (WS 5, AB 8, AV 20 per faction), with no
+new minimum overrides or testing mode. Insufficient eligible queues must wait.
+
+`TestEarnedBotBrackets.py`, invoked by the progression preflight, compiles the
+production policy, XP/level hooks, core XP level loop and battleground eligibility
+function with isolated fixtures under ASan/UBSan. It checks valid/invalid
+configuration, stable approximate distribution, oversized/rested XP, existing
+higher-level characters, excluded humans, cap release, queue rejection and
+legacy reset/XP modifier guards. These checks preserve the previously documented
+Wrath mechanics and encounter AI limitations; they do not prove every live raid.

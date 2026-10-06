@@ -96,7 +96,8 @@ try {
         clientAddons = @(@{ name = 'MultiBot'; revision = $revision; toc = 'MultiBot.toc'; license = 'LICENSE'; interface = 30300 })
     }
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
-    foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md', 'docs/changing-expansions.md', 'patches/fixture.patch')) {
+    foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
+        'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'patches/fixture.patch')) {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
