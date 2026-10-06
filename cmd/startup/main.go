@@ -294,7 +294,7 @@ func parseArgs(args []string) (startupOptions, error) {
 	fs.StringVar(&opts.dataURL, "data-url", defaultClientDataURL, "Custom URL to download client data Data.zip from.")
 	fs.BoolVar(&opts.downloadDataOnly, "download-data-only", false, "Download and extract client data, then exit.")
 	fs.BoolVar(&opts.applyProfiles, "apply-profiles", false, "Apply recommended server/module settings with config backups, then exit without starting servers.")
-	fs.StringVar(&opts.setExpansion, "set-expansion", "", "Set the realm phase (vanilla, tbc or wotlk) with config backups, then exit. Stop the realm first.")
+	fs.StringVar(&opts.setExpansion, "set-expansion", "", "Set progression mode (individual, vanilla, tbc or wotlk) with config backups, then exit. Stop the realm first.")
 	fs.BoolVar(&opts.showExpansion, "show-expansion", false, "Show the selected realm expansion and level cap, then exit.")
 
 	fs.Usage = func() {
@@ -1330,6 +1330,12 @@ func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, 
 	}
 	configDstDir := filepath.Join(workDir, "configs")
 	_ = os.MkdirAll(configDstDir, 0755)
+	marker := filepath.Join(configDstDir, realmPhaseFile)
+	if phase.name == "individual" && !fileExists(marker) {
+		if err := writeConfigAtomically(marker, []byte(phase.name+"\n"), 0644); err != nil {
+			return err
+		}
+	}
 
 	mysqlExeForConf := "mysql/bin/mysql.exe"
 	if mysqlExePath != "" {

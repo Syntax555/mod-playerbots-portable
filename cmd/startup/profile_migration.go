@@ -101,6 +101,10 @@ func applyRecommendedProfiles(workDir string) ([]string, error) {
 			mode: info.Mode().Perm(), backup: path + ".backup." + timestamp,
 		})
 	}
+	marker := filepath.Join(workDir, "configs", realmPhaseFile)
+	if phase.name == "individual" && len(updates) != 0 && !fileExists(marker) {
+		updates = append(updates, profileUpdate{path: marker, updated: []byte(phase.name + "\n"), mode: 0644, create: true})
+	}
 	return applyProfileUpdates(updates)
 }
 

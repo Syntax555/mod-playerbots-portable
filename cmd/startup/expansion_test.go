@@ -13,7 +13,8 @@ func newPhaseRealm(t *testing.T) string {
 	t.Helper()
 	directory := t.TempDir()
 	for _, name := range []string{"worldserver.conf", "individualProgression.conf", "playerbots.conf"} {
-		content, err := applyConfigProfile(name, "[worldserver]\r\nCustom.Value = \"retain=me\"\r\nCharacterDatabaseInfo = \"host;3307;user;password;custom_characters\"\r\n")
+		vanilla, _ := parseRealmPhase("vanilla")
+		content, err := applyConfigProfileForPhase(name, "[worldserver]\r\nCustom.Value = \"retain=me\"\r\nCharacterDatabaseInfo = \"host;3307;user;password;custom_characters\"\r\n", vanilla)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,6 +55,7 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 	}{
 		{"tbc", "70", "12", "0,1,530", "0", "32"},
 		{"wotlk", "80", "0", "0,1,530,571", "0", "0"},
+		{"individual", "80", "0", "0,1,530,571", "0", "0"},
 	} {
 		phase, _ := parseRealmPhase(target.name)
 		originals := make(map[string]string)
@@ -75,7 +77,7 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 					}
 				}
 			}
-			if !found {
+			if !found && readPhaseTestFile(t, path) != original {
 				t.Fatalf("missing backup for %s", path)
 			}
 		}
@@ -205,8 +207,77 @@ func TestMissingConfigUsesSavedPhase(t *testing.T) {
 	}
 }
 
+func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
+	directory, base := t.TempDir(), t.TempDir()
+	for _, relative := range []string{"worldserver.conf.dist", "modules/playerbots.conf.dist", "modules/individualProgression.conf.dist"} {
+		writePhaseTestFile(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
+	}
+	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe"); err != nil {
+		t.Fatal(err)
+	}
+	if phase, err := loadRealmPhase(directory); err != nil || phase.name != "individual" {
+		t.Fatalf("fresh mode = %+v (%v)", phase, err)
+	}
+	if _, err := applyRecommendedProfiles(directory); err != nil {
+		t.Fatal(err)
+	}
+	for relative, expected := range map[string]map[string]string{
+		"worldserver.conf":                   {"MaxPlayerLevel": "80", "StartPlayerLevel": "1", "StartPlayerMoney": "0", "MinDualSpecLevel": "80", "CharacterCreating.Disabled.RaceMask": "0"},
+		"modules/individualProgression.conf": {"IndividualProgression.ProgressionLimit": "0", "IndividualProgression.StartingProgression": "0", "IndividualProgression.TbcRacesUnlockProgression": "8", "IndividualProgression.tbcRacesStartingProgression": "0", "IndividualProgression.DeathKnightUnlockProgression": "13", "IndividualProgression.BotAccountsRegex": "\"\"", "IndividualProgression.ExcludedAccountsRegex": "\"\""},
+		"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": "80", "AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1"},
+	} {
+		content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
+		for key, want := range expected {
+			if actual, _ := configValue(content, key); actual != want {
+				t.Errorf("%s: %s = %q; want %q", relative, key, actual, want)
+			}
+		}
+	}
+}
+
+func TestIndividualSelectionRestoresEarnedUnlocksAndRetainsLegacyCeilingUntilSelected(t *testing.T) {
+	directory := newPhaseRealm(t)
+	if _, err := applyRecommendedProfiles(directory); err != nil {
+		t.Fatal(err)
+	}
+	if phase, _ := loadRealmPhase(directory); phase.name != "vanilla" {
+		t.Fatal("profile migration opened an existing Vanilla realm without selection")
+	}
+	for relative, unsafe := range map[string]string{
+		"worldserver.conf":                   "StartPlayerLevel = 60\nStartPlayerMoney = 10000000\n",
+		"modules/playerbots.conf":            "AiPlayerbot.RandombotStartingLevel = 60\nAiPlayerbot.RandomBotFixedLevel = 60\nAiPlayerbot.SyncLevelWithPlayers = 1\nAiPlayerbot.DisableDeathKnightLogin = 0\n",
+		"modules/individualProgression.conf": "IndividualProgression.StartingProgression = 8\nIndividualProgression.tbcRacesStartingProgression = 8\nIndividualProgression.TbcRacesUnlockProgression = 0\nIndividualProgression.BotAccountsRegex = \"RNDBOT.*\"\nIndividualProgression.DisableDefaultProgression = 1\n",
+	} {
+		path := filepath.Join(directory, "configs", filepath.FromSlash(relative))
+		content, err := mergeConfigProfile(readPhaseTestFile(t, path), unsafe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writePhaseTestFile(t, path, content)
+	}
+	individual, _ := parseRealmPhase("individual")
+	if _, err := setRealmPhase(directory, individual); err != nil {
+		t.Fatal(err)
+	}
+	for relative, expected := range map[string]map[string]string{
+		"worldserver.conf":                   {"MaxPlayerLevel": "80", "StartPlayerLevel": "1", "StartPlayerMoney": "0"},
+		"modules/playerbots.conf":            {"AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1"},
+		"modules/individualProgression.conf": {"IndividualProgression.StartingProgression": "0", "IndividualProgression.tbcRacesStartingProgression": "0", "IndividualProgression.TbcRacesUnlockProgression": "8", "IndividualProgression.BotAccountsRegex": "\"\"", "IndividualProgression.DisableDefaultProgression": "0"},
+	} {
+		content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
+		for key, want := range expected {
+			if actual, _ := configValue(content, key); actual != want {
+				t.Errorf("%s = %q; want %q", key, actual, want)
+			}
+		}
+	}
+	if readPhaseTestFile(t, filepath.Join(directory, "mysql", "data", "progress.ibd")) != "earned characters and progression" {
+		t.Fatal("individual selection changed saved progression")
+	}
+}
+
 func TestExpansionCLIValidation(t *testing.T) {
-	for _, name := range []string{"vanilla", "TBC", "wotlk", "wrath"} {
+	for _, name := range []string{"individual", "vanilla", "TBC", "wotlk", "wrath"} {
 		if _, err := parseArgs([]string{"--set-expansion", name}); err != nil {
 			t.Fatal(err)
 		}

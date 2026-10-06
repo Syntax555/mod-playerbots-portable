@@ -22,6 +22,8 @@ type realmPhase struct {
 
 func parseRealmPhase(name string) (realmPhase, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "individual":
+		return realmPhase{"individual", 80, 0, "0,1,530,571"}, nil
 	case "vanilla":
 		return realmPhase{"vanilla", 60, 7, "0,1"}, nil
 	case "tbc":
@@ -29,7 +31,7 @@ func parseRealmPhase(name string) (realmPhase, error) {
 	case "wotlk", "wrath":
 		return realmPhase{"wotlk", 80, 0, "0,1,530,571"}, nil
 	default:
-		return realmPhase{}, fmt.Errorf("unknown expansion %q; choose vanilla, tbc or wotlk", name)
+		return realmPhase{}, fmt.Errorf("unknown expansion %q; choose individual, vanilla, tbc or wotlk", name)
 	}
 }
 
@@ -123,7 +125,7 @@ func detectRealmPhase(workDir string, allowConflictingCaps bool) (realmPhase, er
 		inferred = phase
 	}
 	if inferred.name == "" {
-		inferred, _ = parseRealmPhase("vanilla")
+		inferred, _ = parseRealmPhase("individual")
 	}
 	return inferred, nil
 }
@@ -136,13 +138,16 @@ func (phase realmPhase) profile(filename string) string {
 			raceMask = 0
 		}
 		if phase.level == 80 {
-			classMask, dualSpec = 0, 40
+			classMask = 0
+			if phase.name == "wotlk" {
+				dualSpec = 40
+			}
 		}
-		return fmt.Sprintf("Expansion = 2\nMaxPlayerLevel = %d\nCharacterCreating.Disabled.RaceMask = %d\nCharacterCreating.Disabled.ClassMask = %d\nMinDualSpecLevel = %d\n", phase.level, raceMask, classMask, dualSpec)
+		return fmt.Sprintf("Expansion = 2\nMaxPlayerLevel = %d\nCharacterCreating.Disabled.RaceMask = %d\nCharacterCreating.Disabled.ClassMask = %d\nStartPlayerLevel = 1\nStartPlayerMoney = 0\nMinDualSpecLevel = %d\n", phase.level, raceMask, classMask, dualSpec)
 	case "individualProgression.conf":
-		return fmt.Sprintf("IndividualProgression.Enable = 1\nIndividualProgression.ProgressionLimit = %d\nIndividualProgression.BotAccountsMaxLevel = %d\nIndividualProgression.StartingProgression = 0\nIndividualProgression.BotAccountsRegex = \"\"\nIndividualProgression.ExcludedAccountsRegex = \"\"\n", phase.limit, phase.level)
+		return fmt.Sprintf("IndividualProgression.Enable = 1\nIndividualProgression.ProgressionLimit = %d\nIndividualProgression.BotAccountsMaxLevel = %d\nIndividualProgression.StartingProgression = 0\nIndividualProgression.DisableDefaultProgression = 0\nIndividualProgression.CustomProgression = \"\"\nIndividualProgression.BotAccountsRegex = \"\"\nIndividualProgression.ExcludedAccountsRegex = \"\"\nIndividualProgression.TbcRacesUnlockProgression = 8\nIndividualProgression.tbcRacesStartingProgression = 0\nIndividualProgression.DeathKnightUnlockProgression = 13\nIndividualProgression.DeathKnightStartingProgression = 13\n", phase.limit, phase.level)
 	case "playerbots.conf":
-		return fmt.Sprintf("AiPlayerbot.RandomBotMaxLevel = %d\nAiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = %d\nAiPlayerbot.RandomBotMaps = %s\nAiPlayerbot.NaturalProgression = 1\n", phase.level, phase.level, phase.maps)
+		return fmt.Sprintf("AiPlayerbot.RandomBotMaxLevel = %d\nAiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = %d\nAiPlayerbot.RandomBotMaps = %s\nAiPlayerbot.NaturalProgression = 1\nAiPlayerbot.RandombotStartingLevel = 1\nAiPlayerbot.RandomBotMinLevel = 1\nAiPlayerbot.DisableRandomLevels = 1\nAiPlayerbot.RandomBotFixedLevel = 0\nAiPlayerbot.SyncLevelWithPlayers = 0\nAiPlayerbot.DisableDeathKnightLogin = 1\n", phase.level, phase.level, phase.maps)
 	}
 	return ""
 }

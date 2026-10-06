@@ -30,7 +30,9 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 		"AiPlayerbot.botActiveAloneSmartScaleDiffLimitfloor = 50\r\n",
 		"AiPlayerbot.botActiveAloneSmartScaleDiffLimitCeiling = 200\r\n",
 		"AiPlayerbot.botActiveAloneSmartScaleWhenMinLevel = 1\r\n",
-		"AiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = 60\r\n",
+		"AiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = 80\r\n",
+		"AiPlayerbot.RandomBotMaxLevel = 80\r\n",
+		"AiPlayerbot.RandomBotMaps = 0,1,530,571\r\n",
 		"AiPlayerbot.ApplyInstanceStrategies = 1\r\n",
 		"AiPlayerbot.AutoAvoidAoe = 1\r\n",
 		"AiPlayerbot.VanillaBattlegroundsOnly = 1\r\n",
@@ -74,7 +76,7 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 	}
 }
 
-func TestFreshWorldProfileKeepsVanillaAccessAndRewards(t *testing.T) {
+func TestFreshWorldProfileKeepsEarnedStartsAndRewards(t *testing.T) {
 	merged, err := applyConfigProfile("worldserver.conf.dist", "[worldserver]\nMaxPlayerLevel = 80\nBattleground.Arathi.CapturePoints = 1600\nBattleground.Alterac.Reinforcements = 600\n")
 	if err != nil {
 		t.Fatal(err)
@@ -89,11 +91,11 @@ func TestFreshWorldProfileKeepsVanillaAccessAndRewards(t *testing.T) {
 	}
 	for key, expected := range map[string]string{
 		"Expansion":                                     "2",
-		"MaxPlayerLevel":                                "60",
+		"MaxPlayerLevel":                                "80",
 		"StartPlayerLevel":                              "1",
 		"StartPlayerMoney":                              "0",
-		"CharacterCreating.Disabled.RaceMask":           "1536",
-		"CharacterCreating.Disabled.ClassMask":          "32",
+		"CharacterCreating.Disabled.RaceMask":           "0",
+		"CharacterCreating.Disabled.ClassMask":          "0",
 		"Battleground.Arathi.CapturePoints":             "2000",
 		"Battleground.Alterac.Reinforcements":           "0",
 		"Battleground.Override.LowLevels.MinPlayers":    "0",

@@ -1,6 +1,6 @@
 # AzerothCore Playerbots Portable
 
-A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and seven additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm starts with **Vanilla progression, level 1 characters and a target of 2,500 bots while a real player is connected**.
+A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and seven additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm uses **earned individual progression through Vanilla, TBC and Wrath, level-1 random bots, and a target of 2,500 bots while a real player is connected**.
 
 ## Download and play
 
@@ -55,7 +55,7 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 | --- | --- |
 | [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target with real players connected, level 1 creation and the natural progression patch described below. |
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Enabled; adjusts instance difficulty to the party size, keeps original creature levels and disables extra reward tokens. |
-| [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; every character starts at tier 0 and earns Vanilla progression through tier 7 (Naxxramas). Random bot accounts follow the same gates. |
+| [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; characters start at tier 0 and earn Vanilla, TBC and Wrath tiers. Random bots follow the same gates; expansion race creation also requires their own account's unlock. |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. The seller creates items rather than farming them. Humans can use the AH, but this Playerbots revision has no active autonomous auction trading. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Enabled; eligible party members can each loot a copy of naturally dropped normal-quality quest items. Each member still opens the corpse; login announcements are disabled. |
@@ -82,9 +82,9 @@ The launcher merges the bundled [profiles](cmd/startup/profiles) into complete u
 
 The fresh realm uses:
 
-- A level cap of 60, normal XP/drop/money rates, zero starting gold and no Dungeon Finder.
-- Vanilla races and classes. Blood elves, draenei and death knights are disabled using character creation masks.
-- Individual Progression's Vanilla limit, with the usual random-bot account exemption removed. Core `Expansion = 2` is needed for the module's restored Naxxramas map; the module, level cap and creation masks enforce Vanilla access.
+- A realm ceiling of 80, normal XP/drop/money rates, zero starting gold and no Dungeon Finder. Individual Progression holds each character at 60/70 until it earns TBC/Wrath access.
+- Vanilla races/classes on fresh accounts. Blood elves and draenei require that account to earn tier 8; human-controlled death knights require tier 13. Death knight bots stay disabled because all new random bots must start at level 1.
+- Individual Progression starts every ordinary character at tier 0, with no random-bot account exemption. The patched bot factory and login both enforce account unlocks. Core `Expansion = 2` supports later content and restored Vanilla Naxxramas.
 - 278 random-bot accounts with nine permitted classes: a pool of up to 2,502 characters, of which 2,500 are targeted online. They begin with the normal level 1 starter equipment and acquire XP, gold and equipment through gameplay.
 - Gradual bot login begins after a real player session has been connected for 30 seconds. Bots save and log out about 60 seconds after the last real session disconnects. Character selection and queued sessions also count as a connection.
 - Disabled random level jumps, equipment upgrades, character recycling and quest synchronization shortcuts.
@@ -117,7 +117,7 @@ Bot mail commands are disabled because the upstream implementation bypasses mail
 
 Bot debug logging is disabled by default and log writes run asynchronously. Empty Individual Progression account filters skip repeated database queries and regex construction, while preserving the same progression gates for players and bots.
 
-This is Vanilla content progression on the WotLK core, with its client/class mechanics and some later-added low-level quests and professions. **The talent trees remain Wrath trees.** Normal talent rates give 51 earned points at level 60; `LimitTalentsExpansion` only approximates Vanilla depth for bot templates and does not replace talent identities or restrict human trees. Human glyphs, pet talent trees and some later low-level class spells also remain. Automatic bot talent templates can still reset internally without normal trainer respec costs. New dual specialization purchases are unavailable below level 80. True 1.12 talents require coordinated client, server and bot changes; the optional Individual Progression DBC files do not contain replacement talent tables.
+Progression begins with Vanilla content on the WotLK core, with its client/class mechanics and some later-added low-level quests and professions. **The talent trees remain Wrath trees.** Normal talent rates give 51 earned points at level 60; `LimitTalentsExpansion` approximates Vanilla/TBC depth for bot templates and fallback allocation, without replacing talent identities or restricting human trees. Human glyphs, pet talent trees and some later low-level class spells also remain. Natural bot talent allocation retains existing talents and spends earned points without free resets. Individual mode keeps new dual specialization purchases unavailable below level 80. True 1.12 talents require coordinated client, server and bot changes; the optional Individual Progression DBC files do not contain replacement talent tables.
 
 AutoBalance counts the non-GM players actually present, including bots. A human plus four bots receives normal five-player dungeon stats; smaller parties use the upstream scaling curve and scaled XP/money, with original creature levels. Outdoor elites and world bosses retain their ordinary difficulty and need suitable companions. Instance scaling does not solve every encounter tactic; full AQ40/Naxx40 bot support is not established. A source/configuration audit cannot establish exact historical class balance or completion of every raid.
 
@@ -151,30 +151,25 @@ After first launch:
 | `configs/modules/mod_token_turnin.conf` | Token inventory checks and which group members are included; natural progression blocks shortcut redemption. |
 | `mysql/my.cnf` | MySQL/InnoDB tuning generated for the host's RAM. |
 
-To open TBC or WotLK, stop the launcher and realm servers, then run one of these
-commands from the installation folder with the updated launcher:
+Fresh installations use individual progression automatically. To remove an
+older realm's global Vanilla/TBC ceiling, install the complete v1.0.13 server
+ZIP, stop the launcher and servers, then run:
 
 ```powershell
-.\startup.exe --set-expansion tbc
+.\startup.exe --set-expansion individual
+.\startup.exe --apply-profiles
 ```
 
-Later, when you want to open Wrath:
+Start `startup.exe` normally afterwards. Every character still earns its own
+tiers: TBC at 8 and Wrath at 13. TBC race creation also requires tier 8 on that
+same account. Changed configs are backed up; characters and databases are
+preserved. The mode survives profile updates and missing-config creation.
+`--show-expansion` displays it. Optional `vanilla`/`tbc` modes retain shared realm
+ceilings. See [Changing expansions](docs/changing-expansions.md) for migration
+and remaining gameplay limits. The bot safeguards require the updated server
+binaries, not just a replacement launcher.
 
-```powershell
-.\startup.exe --set-expansion wotlk
-```
-
-Start `startup.exe` normally afterwards. `--show-expansion` displays the selected
-phase. The command backs up changed configs and updates the level caps, map list,
-progression limit and race/class masks together. The saved phase also controls
-newly created configs and `--apply-profiles`, so updates retain the expansion.
-Existing characters, inventory, gold, spellbooks and progression are preserved.
-The switch only opens access; each player and bot still earns the required tiers.
-See [Changing expansions](docs/changing-expansions.md) for the settings, migration
-instructions and limits. These commands require the new phase-aware launcher;
-the original v1.0.11 launcher does not include them.
-
-The Vanilla bot PvP restriction remains active until `AiPlayerbot.VanillaBattlegroundsOnly` is changed to 0. Keep it enabled for this level-60 realm. Arenas require a separate later review of eligibility, team creation and upstream catch-up shortcuts before enabling them.
+The Vanilla bot PvP restriction remains active and excludes bots above level 60. Later bot battlegrounds and arenas require a separate review of eligibility, team creation and upstream catch-up shortcuts before enabling them.
 
 For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands). Enabling AH generation, Dungeon Clear or upstream cheat features changes the strict earned-play behavior above.
 
