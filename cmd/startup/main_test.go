@@ -288,8 +288,8 @@ func TestProcessSupervisorAutoRestart(t *testing.T) {
 	wg.Add(1)
 	go ps.Run(ctx, nil, &wg)
 
-	// Wait until it has restarted at least 3 times
-	deadline := time.Now().Add(2 * time.Second)
+	// Race-instrumented child processes wait before exit, so allow those delays.
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if startCount.Load() >= 3 {
 			break

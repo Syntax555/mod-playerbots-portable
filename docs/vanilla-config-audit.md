@@ -206,3 +206,45 @@ allows tier 8. This resolves a quest completed while TBC was still locked.
 The existing raid-achievement recovery remains, and no unearned levels, loot,
 quest completions or reputation are granted. The original v1.0.11 server does
 not include this added recovery path; use updated server binaries for it.
+
+## v1.0.13 addendum: earned expansion unlocks
+
+Fresh realms now use individual progression with a level-80 realm ceiling and
+no shared tier ceiling. Each character still starts in Vanilla and needs tiers
+8/13 to earn XP beyond 60/70 and access TBC/Wrath. Existing selected Vanilla/TBC
+ceilings survive updates; see [changing-expansions.md](changing-expansions.md)
+for the explicit migration command.
+
+Random bot creation now calls the ordinary account creation hook before choosing
+a race. Login callbacks recheck that hook on the world thread before loading an
+existing bot, without adding database work to map-thread actions. Blood elves
+and draenei require tier 8 on that bot's own account. Their starting progression
+remains 0; account unlocks grant no levels or equipment. Death knight bots remain
+disabled because their class start at 55 conflicts with level-1 bot creation.
+
+Into the Breach can advance progression only after earned Vanilla tier 7.
+Rewarding the quest early cannot fill missing Vanilla tiers. Existing rewarded
+quests can still be recovered after tier 7 is earned and the realm permits TBC.
+Empty account filters also skip account-name queries in the creation hook.
+
+Natural talent helpers no longer perform free resets, including the automatic
+selection action. Existing talents remain and only earned free points are
+allocated. Fallback allocation now obeys the same Vanilla/TBC depth restriction
+as templates. This supersedes the earlier free-template-reset limitation; it
+does not replace Wrath talent identities or add historical human talent trees.
+
+AutoBalance continues to count actual bots/humans and preserve creature levels,
+with normal full-group stats and reduced rewards for reduced-size encounters.
+Vanilla and TBC damage/healing modifiers are explicitly 1.0 for both humans and
+bots. Later encounter AI shortcuts and autonomous quest/raid coverage still need
+their own review; no literal zero-shortcut guarantee is made.
+
+Verification includes launcher configuration/migration tests, race detection,
+Windows cross-compilation, exact forward/reverse patch checks and the 45
+assembly/ZIP regressions. `cmake/tests/TestEarnedProgression.py` compiles patched
+production snippets with isolated core/database fixtures under AddressSanitizer
+and UndefinedBehaviorSanitizer: all account tiers, account isolation, bot race
+selection/login, earned XP caps, Into the Breach prerequisites, talent reset
+guards and fallback talent depth. The workflow runs it before the full Windows
+server build, which checks integration with the actual core headers and modules.
+These checks do not start a live realm or prove every encounter's behavior.

@@ -36,3 +36,41 @@ diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
  
      static const std::vector<std::pair<uint16, ProgressionState>> achievementMap =
      {
+diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
+index d35f8d74..28103d31 100644
+--- a/src/IndividualProgressionPlayer.cpp
++++ b/src/IndividualProgressionPlayer.cpp
+@@ -864,7 +864,8 @@ public:
+                  sIndividualProgression->UpdateProgressionState(player, PROGRESSION_AQ_WAR);
+             break;
+         case INTO_THE_BREACH:
+-            if (!sIndividualProgression->disableDefaultProgression)
++            if (!sIndividualProgression->disableDefaultProgression &&
++                sIndividualProgression->hasPassedProgression(player, PROGRESSION_NAXX40))
+                  sIndividualProgression->UpdateProgressionState(player, PROGRESSION_PRE_TBC);
+             break;
+         case QUEST_MORROWGRAIN:
+@@ -1336,13 +1337,16 @@ public:
+         }
+ 
+         // Check if the account is a bot or excluded from progression
+-        std::string accountName;
+-        bool accountNameFound = AccountMgr::GetName(accountId, accountName);
+-        std::regex botAccountsRegex(sIndividualProgression->botAccountsRegex);
+-        std::regex excludedAccountsRegex(sIndividualProgression->excludedAccountsRegex);
+-  
+-        if (accountNameFound && (std::regex_match(accountName, botAccountsRegex) || std::regex_match(accountName, excludedAccountsRegex)))
+-            return true;
++        if (!sIndividualProgression->botAccountsRegex.empty() || !sIndividualProgression->excludedAccountsRegex.empty())
++        {
++            std::string accountName;
++            if (AccountMgr::GetName(accountId, accountName) &&
++                ((!sIndividualProgression->botAccountsRegex.empty() &&
++                  std::regex_match(accountName, std::regex(sIndividualProgression->botAccountsRegex))) ||
++                 (!sIndividualProgression->excludedAccountsRegex.empty() &&
++                  std::regex_match(accountName, std::regex(sIndividualProgression->excludedAccountsRegex)))))
++                return true;
++        }
+ 
+         uint8 highestProgression = sIndividualProgression->GetAccountProgression(accountId);
+         bool allowed = true;

@@ -49,6 +49,13 @@ jobs:
         shell: pwsh
         run: ./cmake/tests/TestPortableZip.ps1
 
+      - name: Check earned bot progression against pinned sources
+        if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
+        run: |
+          git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
+          cmake -P cmake/PrepareModules.cmake
+          python3 cmake/tests/TestEarnedProgression.py
+
   build:
     name: Build and verify Windows ZIP
     needs: launcher
@@ -348,12 +355,18 @@ jobs:
         run: |
           $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
           $version = '${{ steps.version.outputs.value }}'
+          $individualMode = (Test-Path 'cmd/startup/expansion.go' -PathType Leaf) -and ((Get-Content 'cmd/startup/expansion.go' -Raw) -match 'case "individual":')
           $lines = [System.Collections.Generic.List[string]]::new()
           $lines.Add('Prebuilt Windows x64 AzerothCore server with the pinned modules and client addons listed below.')
           $lines.Add('')
           $lines.Add('Download and extract mod-playerbots-portable-' + $version + '.zip, then run startup.exe. Required client data and databases are downloaded/initialized on first launch. No compiler is required.')
           $lines.Add('')
-          $lines.Add('Fresh installations use Vanilla progression, a level-60 cap and a target of 2,500 level-1 bots. Gradual bot login begins 30 seconds after a real player connects; bots log out about 60 seconds after the last real session disconnects. Natural maintenance uses normal NPC prices and prerequisites. See README.md and defaults/ in the ZIP for behavior and AI limits.')
+          if ($individualMode) {
+              $lines.Add('Fresh installations use earned individual progression through Vanilla, TBC and Wrath with a level-80 realm ceiling. All new random bots start at level 1, tier 0, with normal starter items and zero gold. Each character earns tiers 8/13 before XP beyond 60/70. TBC races require tier 8 on that same account; bot creation and login both enforce it. Death knight bots stay disabled because their normal class start is level 55.')
+          } else {
+              $lines.Add('Fresh installations use Vanilla progression, a level-60 cap and a target of 2,500 level-1 bots.')
+          }
+          $lines.Add('Gradual bot login begins 30 seconds after a real player connects; bots log out about 60 seconds after the last real session disconnects. Natural maintenance uses normal NPC prices and prerequisites. See README.md and defaults/ in the ZIP for behavior and AI limits.')
           $lines.Add('')
           $lines.Add('Bots fill real players'' Warsong Gulch (levels 10–60), Arathi Basin (20–60) and Alterac Valley (51–60) queues with their earned levels and equipment. Autonomous all-bot matches, random/later battlegrounds and arenas stay disabled. Ghosts use normal spirit-guide resurrection waves. Nearby greetings target real players only; random emotes and toxic-link/Thunderfury meme replies stay off.')
           $lines.Add('')
@@ -365,11 +378,15 @@ jobs:
               $lines.Add('Token Turn-in permits only read-only token inventory/mapping checks (.check). The .redeem command is blocked because it bypasses AQ/Naxx scarab, reputation and material requirements.')
               $lines.Add('')
           }
-          $lines.Add('This remains Vanilla content progression on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
+          $lines.Add('Progression begins in Vanilla on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
           $lines.Add('')
           $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
           $lines.Add('')
-          if (Test-Path 'cmd/startup/expansion.go' -PathType Leaf) {
+          if ($individualMode) {
+              $lines.Add('For an existing realm, install this complete server ZIP, stop the servers, run startup.exe --set-expansion individual and startup.exe --apply-profiles, then restart normally. A launcher-only upgrade cannot fix bot account checks. Changed configs are backed up; characters/databases are preserved. Existing selected Vanilla/TBC ceilings remain until explicitly changed. Individual mode needs no later realm switch. See docs/changing-expansions.md.')
+              $lines.Add('Natural talent allocation now spends earned points without free resets, and fallback allocation respects Vanilla/TBC talent depth. Into the Breach cannot skip unearned Vanilla tiers. Balancing counts actual bots and humans, preserves creature levels, and adds no bonus tokens or increased rewards. Some upstream encounter AI still has movement/combat shortcuts; see the included audit for limits.')
+              $lines.Add('')
+          } elseif (Test-Path 'cmd/startup/expansion.go' -PathType Leaf) {
               $lines.Add('To open TBC or WotLK later, stop the realm and run startup.exe --set-expansion tbc or startup.exe --set-expansion wotlk, then restart normally. Linked configs change together with backups; the selected phase survives --apply-profiles. Every character still earns its own progression. See docs/changing-expansions.md.')
               $lines.Add('')
           }
