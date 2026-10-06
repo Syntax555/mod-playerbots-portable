@@ -190,3 +190,19 @@ with race detection, standalone addon verification and 45 positive/negative
 assembly/ZIP regression checks. The workflow runs the launcher and packaging
 checks before compiling, smoke-testing and packaging the Windows server.
 Live in-game verification remains unperformed in this Linux workspace.
+
+## Expansion phase switch addendum
+
+The launcher now supports `--set-expansion vanilla|tbc|wotlk` and
+`--show-expansion`; see [changing-expansions.md](changing-expansions.md).
+Selecting a later phase changes the linked caps, map lists and creation masks
+with config backups. The selected phase survives `--apply-profiles` and
+missing-config creation. No characters or databases are reset; earned tier
+requirements remain active for bots and humans.
+
+The Individual Progression patch also restores an already-rewarded **Into the
+Breach** transition when the character has earned tier 7 and the realm's limit
+allows tier 8. This resolves a quest completed while TBC was still locked.
+The existing raid-achievement recovery remains, and no unearned levels, loot,
+quest completions or reputation are granted. The original v1.0.11 server does
+not include this added recovery path; use updated server binaries for it.

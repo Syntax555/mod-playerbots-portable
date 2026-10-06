@@ -151,7 +151,28 @@ After first launch:
 | `configs/modules/mod_token_turnin.conf` | Token inventory checks and which group members are included; natural progression blocks shortcut redemption. |
 | `mysql/my.cnf` | MySQL/InnoDB tuning generated for the host's RAM. |
 
-To open later expansions, raise `MaxPlayerLevel` and `AiPlayerbot.RandomBotMaxLevel` to 80, clear both `CharacterCreating.Disabled` race/class masks and set `IndividualProgression.ProgressionLimit = 0` (unlimited) and `IndividualProgression.BotAccountsMaxLevel = 80`. `Expansion` stays 2. Characters must still earn their progression tiers: 8 starts TBC, 13 starts Wrath, and 18 completes Wrath. Natural progression keeps random death knights excluded to preserve level 1 creation; player death knights ordinarily start at 55.
+To open TBC or WotLK, stop the launcher and realm servers, then run one of these
+commands from the installation folder with the updated launcher:
+
+```powershell
+.\startup.exe --set-expansion tbc
+```
+
+Later, when you want to open Wrath:
+
+```powershell
+.\startup.exe --set-expansion wotlk
+```
+
+Start `startup.exe` normally afterwards. `--show-expansion` displays the selected
+phase. The command backs up changed configs and updates the level caps, map list,
+progression limit and race/class masks together. The saved phase also controls
+newly created configs and `--apply-profiles`, so updates retain the expansion.
+Existing characters, inventory, gold, spellbooks and progression are preserved.
+The switch only opens access; each player and bot still earns the required tiers.
+See [Changing expansions](docs/changing-expansions.md) for the settings, migration
+instructions and limits. These commands require the new phase-aware launcher;
+the original v1.0.11 launcher does not include them.
 
 The Vanilla bot PvP restriction remains active until `AiPlayerbot.VanillaBattlegroundsOnly` is changed to 0. Keep it enabled for this level-60 realm. Arenas require a separate later review of eligibility, team creation and upstream catch-up shortcuts before enabling them.
 

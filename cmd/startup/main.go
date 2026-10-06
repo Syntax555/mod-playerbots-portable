@@ -49,6 +49,8 @@ type startupOptions struct {
 	dataURL          string
 	downloadDataOnly bool
 	applyProfiles    bool
+	setExpansion     string
+	showExpansion    bool
 }
 
 type mysqlBinaries struct {
@@ -292,6 +294,8 @@ func parseArgs(args []string) (startupOptions, error) {
 	fs.StringVar(&opts.dataURL, "data-url", defaultClientDataURL, "Custom URL to download client data Data.zip from.")
 	fs.BoolVar(&opts.downloadDataOnly, "download-data-only", false, "Download and extract client data, then exit.")
 	fs.BoolVar(&opts.applyProfiles, "apply-profiles", false, "Apply recommended server/module settings with config backups, then exit without starting servers.")
+	fs.StringVar(&opts.setExpansion, "set-expansion", "", "Set the realm phase (vanilla, tbc or wotlk) with config backups, then exit. Stop the realm first.")
+	fs.BoolVar(&opts.showExpansion, "show-expansion", false, "Show the selected realm expansion and level cap, then exit.")
 
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage of mod-playerbots startup tool:\n\n")
@@ -302,6 +306,9 @@ func parseArgs(args []string) (startupOptions, error) {
 	if err := fs.Parse(args); err != nil {
 		return opts, err
 	}
+	if fs.NArg() != 0 {
+		return opts, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
 	if opts.port < 1 || opts.port > 65535 || opts.authPort < 1 || opts.authPort > 65535 {
 		return opts, errors.New("MySQL and authserver ports must be between 1 and 65535")
 	}
@@ -310,6 +317,22 @@ func parseArgs(args []string) (startupOptions, error) {
 	}
 	if opts.applyProfiles && (opts.initOnly || opts.downloadDataOnly) {
 		return opts, errors.New("apply-profiles cannot be combined with init-only or download-data-only")
+	}
+	setExpansionSelected := false
+	fs.Visit(func(option *flag.Flag) {
+		if option.Name == "set-expansion" {
+			setExpansionSelected = true
+		}
+	})
+	if setExpansionSelected {
+		phase, err := parseRealmPhase(opts.setExpansion)
+		if err != nil {
+			return opts, err
+		}
+		opts.setExpansion = phase.name
+	}
+	if (opts.setExpansion != "" || opts.showExpansion) && (opts.applyProfiles || opts.initOnly || opts.downloadDataOnly || (opts.setExpansion != "" && opts.showExpansion)) {
+		return opts, errors.New("expansion commands cannot be combined with other launcher modes")
 	}
 
 	return opts, nil
@@ -1277,6 +1300,10 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, mysqlDir ..
 }
 
 func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, opts startupOptions) error {
+	phase, err := loadRealmPhase(workDir)
+	if err != nil {
+		return err
+	}
 	resolvedMySQLDir := ""
 	if opts.mysqlDir != "" {
 		resolvedMySQLDir = opts.mysqlDir
@@ -1356,7 +1383,7 @@ func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, 
 				content = strings.Replace(content, `MySQLExecutable = ""`, fmt.Sprintf(`MySQLExecutable = "%s"`, mysqlExeForConf), 1)
 				content = strings.Replace(content, `BindIP = "0.0.0.0"`, `BindIP = "127.0.0.1"`, 1)
 
-				content, err = applyConfigProfile(info.Name(), content)
+				content, err = applyConfigProfileForPhase(info.Name(), content, phase)
 				if err != nil {
 					return err
 				}
@@ -1399,18 +1426,38 @@ func main() {
 		os.Exit(1)
 	}
 
-	binaries, err := findMySQLBinaries(opts.mysqlDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
 	baseDir := findBaseDir()
 	workDir := getWorkDir(baseDir)
 	if workDir != baseDir {
 		fmt.Printf("Running in packaged mode. Working directory: %s\n", workDir)
 	} else {
 		fmt.Printf("Working directory: %s\n", workDir)
+	}
+	if opts.setExpansion != "" || opts.showExpansion {
+		phase, err := loadRealmPhase(workDir)
+		if opts.setExpansion != "" {
+			phase, _ = parseRealmPhase(opts.setExpansion)
+			var backups []string
+			backups, err = setRealmPhase(workDir, phase)
+			for _, backup := range backups {
+				fmt.Printf("Previous settings saved to %s\n", backup)
+			}
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error selecting expansion: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Realm expansion: %s; level cap: %d; progression limit: %d (0 = unlimited).\n", phase.name, phase.level, phase.limit)
+		if opts.setExpansion != "" {
+			fmt.Println("Start startup.exe normally to use this phase. Players and bots still earn their progression; existing characters and databases are preserved.")
+		}
+		return
+	}
+
+	binaries, err := findMySQLBinaries(opts.mysqlDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Set up early root context and signal handling so Ctrl+C at any time shuts down child processes

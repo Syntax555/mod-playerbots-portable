@@ -139,7 +139,7 @@ try {
         'defaults/AutoBalance.conf', 'defaults/mod_ahbot.conf', 'defaults/mod_dungeon_clear.conf',
         'defaults/mod-quest-loot-party.conf',
         'defaults/MultiBotBridge.conf', 'defaults/mod_token_turnin.conf',
-        'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md', 'LICENSE', 'licenses/azerothcore-wotlk.txt'
+        'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md', 'docs/changing-expansions.md', 'LICENSE', 'licenses/azerothcore-wotlk.txt'
     )
     foreach ($name in $required) {
         if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
@@ -148,6 +148,7 @@ try {
         'README.md' = 'README.md'
         'docs/vanilla-config-audit.md' = 'docs/vanilla-config-audit.md'
         'docs/module-versions.md' = 'docs/module-versions.md'
+        'docs/changing-expansions.md' = 'docs/changing-expansions.md'
         'defaults/playerbots.conf' = 'cmd/startup/profiles/playerbots.conf'
         'defaults/worldserver.conf' = 'cmd/startup/profiles/worldserver.conf'
         'defaults/individualProgression.conf' = 'cmd/startup/profiles/individualProgression.conf'
