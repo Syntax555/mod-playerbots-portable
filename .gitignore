@@ -6,3 +6,5 @@
 /*.cer
 /*.pfx
 *.exe
+__pycache__/
+*.pyc

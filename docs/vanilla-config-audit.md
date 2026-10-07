@@ -2,6 +2,11 @@
 
 Reviewed on 5 October 2026 against portable v1.0.8 (`2ef9230`), its exact locked sources and the generated patched modules. The follow-up changes described below affect configuration profiles and documentation. No CMake configuration, compilation, server start, SQL import, release tag or release was performed for this audit.
 
+The opening sections retain that historical audit's findings. The later dated
+addenda record source integrations and supersede their corresponding earlier
+limitations; the current strict progression and historical talent behavior is
+described in the final addendum.
+
 ## Scope and effective configuration
 
 The review combines the complete shipped templates with the launcher's managed profiles. Existing user installations retain custom values until deliberately changed; their active files and database were not available for this review.
@@ -331,3 +336,158 @@ establish complete autonomous farming, crafting, questing or live-market
 reliability. The earlier class-system, pathfinding and encounter AI limitations
 still apply. Source and regression checks cannot replace live observation of
 the realm's auction stock, prices, bot activity and performance.
+
+## Strict milestones and historical talents addendum
+
+Added on 7 October 2026. This supersedes the earlier Wrath-only talent limitation,
+looser progression recovery, level-55 human death knight availability and
+five-bracket population description. Existing core/module revisions remain
+pinned; the new historical module and its native client-build dependency are
+listed in [module versions](module-versions.md).
+
+### Strict character progression
+
+The portable profile enables `IndividualProgression.StrictEarnedProgression = 1`
+with default progression enabled and no custom chain. Ordinary humans and bots
+start at tier 0 and advance only when the next prerequisite is earned. Boss
+credit is durable and may be recorded out of order; rewarded Bang a Gong, Chaos
+and Destruction, and Into the Breach transitions remain separate requirements.
+The full chain is documented in [changing expansions](changing-expansions.md).
+Stage 11 is reserved: advancement goes from 10 to 12, and a narrowly targeted
+migration corrects only the module-owned positive conditions that referenced
+the unused marker. No fictitious tier-11 completion is awarded.
+
+Eligible tapped-encounter credit also reaches nearby eligible party members
+with explicit distance, map/phase, life/corpse, damage/loot and reward checks.
+A remote member of the same raid cannot receive progression merely because
+the core permits broad instance kill-credit distance. Group-leader copying,
+account exemptions, ordinary group attunement commands and bot tier
+synchronization cannot supply strict progress. Explicit GM operations remain
+privileged administrative tools.
+
+An early rewarded Into the Breach is recoverable only after the preceding
+Vanilla chain and realm ceiling permit tier 8. Existing highest stored tiers
+are retained, but old broad raid achievements are not imported as new strict
+boss evidence. Missing future credit may require a new eligible kill. Existing
+levels, items and gold are retained without claiming that their old provenance
+has been proved.
+
+Strict mode blocks new death knights on every account because their normal
+level-55 start violates the level-1 policy. Existing death knights retain native
+class behavior. Blood elf/draenei creation requires tier 8 on that same account;
+an unlocked alt still starts at level 1, tier 0. Bot factory creation and login
+use the same account gate. No accounts or characters are recycled to replace the
+race/class mix.
+
+The bracket policy now assigns approximately 5% of random bots to each earned
+cap at 19/29/39/49/59/69/79; 65% continue individual progression. Appending the
+later brackets preserves the previous lower-bracket assignments. Level-69/79
+residents earn TBC/Wrath access before their cap becomes reachable. Levels,
+equipment and money are never generated to populate brackets, and current bot
+battleground selection remains Vanilla-only.
+
+### Historical trees and earned spell sources
+
+The default enables the pinned MIT-licensed
+`lathcf/azerothcore-mod-era-talents` with the portable earned-progression patch.
+Humans and bots select Vanilla below tier 8, TBC at 8–12, and native Wrath at
+13+. Level alone and another account character's progression cannot select an
+era. Vanilla talents reference 1.12.1; TBC talents reference Classic 2.5.4,
+including later balance changes. Selected class spell variants, talent effects
+and core-handled effects are supplied as part of that integration. This does
+not establish an exact original 2.4.3 or complete 1.12 combat simulation.
+
+Bots incrementally spend newly earned points and retain their chosen build.
+Login, level changes and factory refresh do not reset it. Historical trained
+ranks use ordinary paid trainer purchases and prerequisites; talent/class-quest
+sources must be earned. Existing known variants transfer conservatively rather
+than automatically granting every level-eligible rank. Broad upstream
+character-spell cleanup SQL is neutralized.
+
+Ordinary trainer respecs charge the native escalating cost once and update the
+normal persisted reset history and criteria. The historical tree uses the same
+1g/5g/10g/.../50g schedule and monthly decay. A real earned era crossing refunds
+the departing tree's earned points once, outside combat, and validates its
+target again before changing talent state. Routine relogs or stale callbacks do
+not authorize another reset. Faction-leader force-advance gossip is inactive;
+the upstream manual-advance IP patch is not applied.
+
+Before earned Wrath, owned glyph effects/client slots and new glyph use are
+suppressed. Ownership IDs in both specifications are retained and the owned
+active-spec glyphs return in Wrath; the gate does not consume existing glyphs.
+Existing death knights remain native and are exempt from historical-tree/glyph
+conversion.
+
+Character talent and settled-era state is preloaded into a cache. Routine
+polling, bot refresh and rank lookups do not issue synchronous map-thread
+database queries. Ordered immutable persistence batches avoid queued Player
+pointers, retain failed writes for retry and flush on shutdown. This is a
+targeted hot-path correction, not a guarantee that all module diagnostics or
+upstream game actions are database-free.
+
+### Prices and shared economy
+
+A core trainer-cost hook and IP strict policy quote riding lesson prices by the
+actual purchasing character's earned era. Trainer display and purchase use the
+same native path, including normal reputation discounts. Base prices are late
+Vanilla 90g/900g for apprentice/journeyman; original TBC 35g/600g/800g/5,000g;
+and pinned Wrath 4g/50g/250g/5,000g. Unknown lessons retain their configured cost.
+The new hook does not change trainer level/availability rules, refund old
+training, generate gold or change the price of mount items.
+
+IP's existing ground riding levels 40/60 and flying prerequisites at 70 remain.
+Other item/vendor and trainer prices still use shared world SQL, so this is
+not a complete per-character historical price database. The auction house stays
+one market with bots' owned surplus and earned purchase funds; deposits, cuts,
+buyouts and delivered mail remain normal core transactions. Artificial AH Bot
+Plus supply/demand stays disabled.
+
+### Matched client artifacts and migration
+
+Every human player needs the same build's `EraTalents-client-<version>.zip`:
+its EraTalents addon plus merged `Data/patch-V.mpq`, followed by a full client
+restart. Bots need only server files. The addon-only ZIP or server's addon copy
+does not supply the MPQ. [Era Talents](era-talents.md) documents exact paths,
+generation diagnostics, normal respecs and upgrade behavior.
+
+The client packager exports locked source revisions with their ordered local
+patches and builds native StormLib tools from a pinned revision. It starts from
+IP's locked base client archive, merges the generated spell and skill rows,
+verifies the server/client generation marker, and preserves all other base
+entries byte for byte. The output records source, patch and file hashes and
+dependency licenses. No mutable upstream bootstrap or latest-clone script is
+part of the build.
+
+Eight core compatibility/accounting/price patches are applied to a generated
+core checkout; modules and the adapted addon are exported into generated
+directories. The original core and Playerbots submodules stay pristine at their
+locked revisions. Independent packaging re-exports the locked sources and
+patches to compare the prepared addon rather than trusting a stale cached copy.
+
+For an upgrade, back up databases/configs, stop the launcher and servers, install
+the complete updated ZIP and same-build client files, then use the new
+launcher's `--apply-profiles`. Explicitly select `--set-expansion individual`
+only when removing an older shared realm ceiling. The normal server updater
+imports bundled SQL. Profile application backs up managed config changes and
+does not reset the realm; historical activation converts talent/spell state for
+the character's earned era. Disabling the module after custom allocations exist
+requires a separate migration and is not a supported in-place toggle.
+
+### Verification and remaining limits
+
+Local checks cover strict milestone/eligible credit policy, out-of-order and
+stored progress, reserved-stage condition migration, bot bracket stability,
+historical point budgets, era transitions, ordered persistence, incremental bot
+talents, paid training/respecs and preserved glyph handling. Production fixtures
+run with AddressSanitizer and UndefinedBehaviorSanitizer; actual pinned-core
+header/object compilation checks C++ integration. Launcher race tests, Windows
+cross-compilation, portable ZIP regressions, native client packaging regressions
+and repeated deterministic client builds exercise the release tooling.
+
+CI performs the complete Windows server build and verifies the final server and
+addon ZIPs; the Linux client job verifies the matched MPQ package. These source
+checks do not start the user's realm or replace live testing of every class,
+raid mechanic, autonomous quest/profession step, market behavior or 2,500-bot
+performance. The earlier encounter/pathfinding limitations remain. Full
+historical price/world/pet/combat data and a literal audit of every upstream
+shortcut are outside this implemented scope.

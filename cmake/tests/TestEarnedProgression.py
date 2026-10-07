@@ -9,8 +9,9 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from PreparedSources import prepared_core
 
-root = Path(__file__).resolve().parents[2] / 'azerothcore-wotlk/modules'
+root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
 ip = root / 'mod-individual-progression/src'
 pb = root / 'mod-playerbots/src'
 
@@ -91,7 +92,7 @@ struct Player {
 };
 struct Unit {};
 struct IndividualProgression {
-    bool enabled=true, disableDefaultProgression=false;
+    bool enabled=true, disableDefaultProgression=false, strictEarnedProgression=false;
     uint8 tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13, BotAccountsMaxLevel=80;
     std::string botAccountsRegex, excludedAccountsRegex;
     static uint8 GetAccountProgression(uint32);
@@ -240,3 +241,6 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
 
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedBotBrackets.py'))], check=True)
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedAuctions.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestStrictEarnedProgression.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedEraPrices.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEraTalents.py'))], check=True)

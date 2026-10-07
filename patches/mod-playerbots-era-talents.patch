@@ -1,0 +1,961 @@
+diff --git a/src/Ai/Base/Actions/LfgActions.cpp b/src/Ai/Base/Actions/LfgActions.cpp
+index 21e3c5e..c5b36c9 100644
+--- a/src/Ai/Base/Actions/LfgActions.cpp
++++ b/src/Ai/Base/Actions/LfgActions.cpp
+@@ -14,6 +14,10 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ using namespace lfg;
+ 
+ bool LfgJoinAction::Execute(Event /*event*/) { return JoinLFG(); }
+@@ -36,7 +40,7 @@ uint32 LfgJoinAction::GetRoles()
+         case CLASS_DRUID:
+             if (spec == 2)
+                 return PLAYER_ROLE_HEALER;
+-            else if (spec == 1 && bot->HasAura(16931) /* thick hide */)
++            else if (spec == 1 && bot->HasAura(EraKnown(bot, 16931)) /* thick hide (stock or era clone) */)
+                 return PLAYER_ROLE_TANK;
+             else
+                 return PLAYER_ROLE_DAMAGE;
+diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
+index 47186ab..bc29a05 100644
+--- a/src/Ai/Base/Actions/TrainerAction.cpp
++++ b/src/Ai/Base/Actions/TrainerAction.cpp
+@@ -78,7 +78,7 @@ bool TrainerAction::isPossible()
+ 
+         if (sPlayerbotAIConfig.naturalProgression)
+         {
+-            uint32 const price = uint32(floor(trainerSpell->MoneyCost * bot->GetReputationPriceDiscount(target)));
++            uint32 const price = trainer->GetSpellCost(bot, target, trainerSpell);
+             if (price > AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells)) ||
+                 !bot->HasEnoughMoney(price))
+                 continue;
+@@ -123,7 +123,6 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
+     if (!trainer)
+         return;
+ 
+-    float reputationDiscount = bot->GetReputationPriceDiscount(creature);
+     uint32 totalCost = 0;
+ 
+     for (auto& spell : trainer->GetSpells())
+@@ -147,7 +146,7 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
+         if (!spellInfo)
+             continue;
+ 
+-        uint32 cost = static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount));
++        uint32 const cost = trainer->GetSpellCost(bot, creature, trainerSpell);
+         totalCost += cost;
+ 
+         std::ostringstream out;
+diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
+index abd207c..efbdfdf 100644
+--- a/src/Ai/Base/Actions/WorldBuffAction.cpp
++++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
+@@ -5,10 +5,15 @@
+  */
+ 
+ #include "WorldBuffAction.h"
++
+ #include "AiFactory.h"
+ #include "Event.h"
+ #include "Playerbots.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ bool WorldBuffAction::Execute(Event event)
+ {
+     // Buffs must come from actual spells, items or world events.
+@@ -54,7 +59,8 @@ std::vector<uint32> WorldBuffAction::NeedWorldBuffs(Unit* unit)
+     // If this is a druid in the Feral tab, decide Bear vs. Cat
+     if (botClass == CLASS_DRUID && tab == 1)  // 1 = feral
+     {
+-        bool isBear = bot->HasTalent(16931, bot->GetActiveSpec()); // Thick Hide rank 3
++        bool isBear = bot->HasTalent(16931, bot->GetActiveSpec()) ||
++                      bot->HasAura(EraKnown(bot, 16931));  // Thick Hide rank 3 (stock talent or era clone)
+         if (!isBear)
+         {
+             // If not bear, then treat it as "cat" spec = 3
+diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
+index a3edce0..154feac 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.cpp
++++ b/src/Ai/Base/Value/MaintenanceValues.cpp
+@@ -120,7 +120,7 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+             {
+                 for (Trainer::Spell const& spell : trainer->GetSpells())
+                 {
+-                    uint32 const price = uint32(floor(spell.MoneyCost * bot->GetReputationPriceDiscount(npc)));
++                    uint32 const price = trainer->GetSpellCost(bot, npc, &spell);
+                     if (price <= spellBudget && bot->HasEnoughMoney(price) &&
+                         PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) &&
+                         trainer->CanTeachSpell(bot, &spell))
+diff --git a/src/Ai/Base/Value/SpellIdValue.cpp b/src/Ai/Base/Value/SpellIdValue.cpp
+index e632688..ac8c494 100644
+--- a/src/Ai/Base/Value/SpellIdValue.cpp
++++ b/src/Ai/Base/Value/SpellIdValue.cpp
+@@ -42,6 +42,10 @@ uint32 SpellIdValue::Calculate()
+         if (itr->second->State == PLAYERSPELL_REMOVED || !itr->second->Active)
+             continue;
+ 
++        // Ignore inactive talents when resolving a same-name historical spell.
++        if (!itr->second->IsInSpec(bot->GetActiveSpec()))
++            continue;
++
+         SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+         if (!spellInfo || spellInfo->IsPassive())
+             continue;
+diff --git a/src/Ai/Class/Druid/DruidTriggers.h b/src/Ai/Class/Druid/DruidTriggers.h
+index 1328521..901eab7 100644
+--- a/src/Ai/Class/Druid/DruidTriggers.h
++++ b/src/Ai/Class/Druid/DruidTriggers.h
+@@ -19,6 +19,9 @@
+ 
+ constexpr uint32 AURA_OMEN_OF_CLARITY = 16864;
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++
+ class PlayerbotAI;
+ 
+ class MarkOfTheWildOnPartyTrigger : public BuffOnPartyTrigger
+@@ -140,7 +143,7 @@ public:
+             return false;
+ 
+         // Cat with Omen of Clarity: spam to fish for Clearcasting procs
+-        if (bot->HasAura(AURA_OMEN_OF_CLARITY))
++        if (bot->HasAura(EraTalentBots_ResolveSpellId(bot, AURA_OMEN_OF_CLARITY)))
+         {
+             Unit* target = GetTarget();
+             return target && target->IsAlive() && target->IsInWorld();
+diff --git a/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp b/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp
+index acb7d1e..d9923af 100644
+--- a/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp
++++ b/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp
+@@ -7,6 +7,10 @@
+ #include "FeralDruidStrategy.h"
+ #include "Playerbots.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ class FeralDruidStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
+ {
+ public:
+@@ -95,7 +99,7 @@ void FeralChargeDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+ {
+     Player* bot = botAI->GetBot();
+ 
+-    if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE))
++    if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(EraKnown(bot, AURA_THICK_HIDE)))
+         triggers.push_back(new TriggerNode(
+             "enemy out of melee", { NextAction("feral charge - cat", 29.0f) }));
+     else
+diff --git a/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp b/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp
+index 491ac9f..a2a0f16 100644
+--- a/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp
++++ b/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp
+@@ -9,6 +9,10 @@
+ #include "FeralDruidStrategy.h"
+ #include "Playerbots.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ class GenericDruidStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
+ {
+ public:
+@@ -62,7 +66,7 @@ void GenericDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+ 
+     if (tab == DRUID_TAB_FERAL)
+     {
+-        if (!bot->HasAura(16931) /*thick hide — bear spec*/)
++        if (!bot->HasAura(EraKnown(bot, 16931)) /*thick hide (stock or era clone) — bear spec*/)
+         {
+             triggers.push_back(new TriggerNode("predator's swiftness and combat party member dead",
+                                                { NextAction("rebirth", 29.0f) }));
+@@ -125,7 +129,7 @@ void DruidCcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     }
+     if (tab == DRUID_TAB_FERAL)
+     {
+-        if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE))
++        if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(EraKnown(bot, AURA_THICK_HIDE)))
+         {
+             triggers.push_back(new TriggerNode(
+                 "predator's swiftness and cyclone", { NextAction("cyclone on cc", 42.0f) }));
+@@ -181,7 +185,7 @@ void DruidAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+         triggers.push_back(new TriggerNode("moonfire on attacker", { NextAction("moonfire on attacker", 5.1f) }));
+     }
+ 
+-    if (tab == DRUID_TAB_FERAL && bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(AURA_THICK_HIDE))
++    if (tab == DRUID_TAB_FERAL && bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(EraKnown(bot, AURA_THICK_HIDE)))
+     {
+         triggers.push_back(new TriggerNode("clearcasting and medium aoe", { NextAction("swipe (cat)", 25.5f) }));
+         triggers.push_back(new TriggerNode("medium aoe", { NextAction("swipe (cat)", 25.0f) }));
+diff --git a/src/Ai/Class/Paladin/Actions/PaladinActions.cpp b/src/Ai/Class/Paladin/Actions/PaladinActions.cpp
+index 8bf1b45..1a9f824 100644
+--- a/src/Ai/Class/Paladin/Actions/PaladinActions.cpp
++++ b/src/Ai/Class/Paladin/Actions/PaladinActions.cpp
+@@ -13,6 +13,10 @@
+ #include "Playerbots.h"
+ #include "SharedDefines.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ static bool IsBlessingTargetCandidate(Player* bot, Player* player)
+ {
+     if (!player || !player->IsAlive() || player->GetMapId() != bot->GetMapId())
+@@ -197,7 +201,7 @@ inline std::string const GetActualBlessingOfWisdom(Unit* target)
+ 
+ inline std::string const GetActualBlessingOfSanctuary(Unit* target, Player* bot)
+ {
+-    if (!bot->HasSpell(ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
++    if (!EraKnown(bot, ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
+         return "";
+ 
+     Player* targetPlayer = target->ToPlayer();
+@@ -342,7 +346,7 @@ bool CastBlessingOfSanctuaryOnPartyAction::Execute(Event /*event*/)
+     if (IsGreaterBlessingMode(bot))
+         return false;
+ 
+-    if (!bot->HasSpell(ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
++    if (!EraKnown(bot, ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
+         return false;
+ 
+     Unit* target = GetTarget();
+@@ -428,7 +432,7 @@ Unit* CastBlessingOfSanctuaryOnPartyAction::GetTarget()
+     if (IsGreaterBlessingMode(bot))
+         return nullptr;
+ 
+-    if (!bot->HasSpell(ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
++    if (!EraKnown(bot, ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
+         return nullptr;
+ 
+     return FindBlessingTarget(bot, botAI, [&](Player* player)
+@@ -518,7 +522,8 @@ bool CastBlessingOfKingsOnPartyAction::Execute(Event /*event*/)
+         const bool isTank = IsTankRole(targetPlayer);
+         const bool hasSanctFromMe =
+             target->HasAura(ai::paladin::SPELL_BLESSING_OF_SANCTUARY, bot->GetGUID()) ||
+-            target->HasAura(ai::paladin::SPELL_GREATER_BLESSING_OF_SANCTUARY, bot->GetGUID());
++            target->HasAura(ai::paladin::SPELL_GREATER_BLESSING_OF_SANCTUARY, bot->GetGUID()) ||
++            target->HasAura(EraKnown(bot, ai::paladin::SPELL_BLESSING_OF_SANCTUARY), bot->GetGUID());
+         const bool hasSanctAny =
+             botAI->HasAura("blessing of sanctuary", target) ||
+             botAI->HasAura("greater blessing of sanctuary", target);
+diff --git a/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp b/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
+index 632895b..3515388 100644
+--- a/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
++++ b/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
+@@ -5,6 +5,10 @@
+  */
+ 
+ #include "PaladinGreaterBlessingAction.h"
++
++#include <algorithm>
++#include <limits>
++
+ #include "AiFactory.h"
+ #include "AiObjectContext.h"
+ #include "Event.h"
+@@ -14,8 +18,10 @@
+ #include "SharedDefines.h"
+ #include "SpellAuraEffects.h"
+ #include "Value.h"
+-#include <algorithm>
+-#include <limits>
++
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
+ 
+ namespace ai::gbless
+ {
+@@ -71,17 +77,17 @@ namespace
+             return PALADIN_BLESSING_CAPABILITY_NONE;
+ 
+         uint8 capabilities = PALADIN_BLESSING_CAPABILITY_NONE;
+-        if (player->HasAura(SPELL_IMPROVED_MIGHT_R1) ||
+-            player->HasAura(SPELL_IMPROVED_MIGHT_R2))
++        if (player->HasAura(SPELL_IMPROVED_MIGHT_R1) || player->HasAura(SPELL_IMPROVED_MIGHT_R2) ||
++            player->HasAura(EraKnown(player, SPELL_IMPROVED_MIGHT_R1)))
+         {
+             capabilities |= PALADIN_BLESSING_CAPABILITY_IMPROVED_MIGHT;
+         }
+-        if (player->HasAura(SPELL_IMPROVED_WISDOM_R1) ||
+-            player->HasAura(SPELL_IMPROVED_WISDOM_R2))
++        if (player->HasAura(SPELL_IMPROVED_WISDOM_R1) || player->HasAura(SPELL_IMPROVED_WISDOM_R2) ||
++            player->HasAura(EraKnown(player, SPELL_IMPROVED_WISDOM_R1)))
+         {
+             capabilities |= PALADIN_BLESSING_CAPABILITY_IMPROVED_WISDOM;
+         }
+-        if (player->HasSpell(ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
++        if (EraKnown(player, ai::paladin::SPELL_BLESSING_OF_SANCTUARY))
+             capabilities |= PALADIN_BLESSING_CAPABILITY_SANCTUARY;
+ 
+         return capabilities;
+@@ -935,13 +941,14 @@ static int32 GetBlessingCastStrength(Player* caster, BlessingType type, uint32 s
+     switch (category)
+     {
+         case BASE_MIGHT:
+-            if (caster->HasAura(SPELL_IMPROVED_MIGHT_R2))
++            if (caster->HasAura(SPELL_IMPROVED_MIGHT_R2) || caster->HasAura(EraKnown(caster, SPELL_IMPROVED_MIGHT_R2)))
+                 return amount * 125 / 100;
+             if (caster->HasAura(SPELL_IMPROVED_MIGHT_R1))
+                 return amount * 112 / 100;
+             break;
+         case BASE_WISDOM:
+-            if (caster->HasAura(SPELL_IMPROVED_WISDOM_R2))
++            if (caster->HasAura(SPELL_IMPROVED_WISDOM_R2) ||
++                caster->HasAura(EraKnown(caster, SPELL_IMPROVED_WISDOM_R2)))
+                 return amount * 120 / 100;
+             if (caster->HasAura(SPELL_IMPROVED_WISDOM_R1))
+                 return amount * 110 / 100;
+diff --git a/src/Ai/Class/Paladin/Strategy/GenericPaladinStrategyActionNodeFactory.h b/src/Ai/Class/Paladin/Strategy/GenericPaladinStrategyActionNodeFactory.h
+index 7096a14..8074bbb 100644
+--- a/src/Ai/Class/Paladin/Strategy/GenericPaladinStrategyActionNodeFactory.h
++++ b/src/Ai/Class/Paladin/Strategy/GenericPaladinStrategyActionNodeFactory.h
+@@ -28,6 +28,7 @@ public:
+         creators["seal of justice"] = &seal_of_justice;
+         creators["hand of reckoning"] = &hand_of_reckoning;
+         creators["judgement of wisdom"] = &judgement_of_wisdom;
++        creators["judgement of light"] = &judgement_of_light;
+         creators["divine shield"] = &divine_shield;
+         creators["flash of light"] = &flash_of_light;
+         creators["flash of light on party"] = &flash_of_light_on_party;
+@@ -144,6 +145,14 @@ private:
+                               /*A*/ { NextAction("judgement of light") },
+                               /*C*/ {});
+     }
++    // Historical paladins use the single Judgement spell after either Wrath alternative.
++    static ActionNode* judgement_of_light(PlayerbotAI* /* ai */)
++    {
++        return new ActionNode("judgement of light",
++                              /*P*/ {},
++                              /*A*/ {NextAction("judgement")},
++                              /*C*/ {});
++    }
+     static ActionNode* divine_shield(PlayerbotAI* /* ai */)
+     {
+         return new ActionNode("divine shield",
+diff --git a/src/Ai/Class/Priest/PriestActions.h b/src/Ai/Class/Priest/PriestActions.h
+index 6f20a45..1dbc086 100644
+--- a/src/Ai/Class/Priest/PriestActions.h
++++ b/src/Ai/Class/Priest/PriestActions.h
+@@ -13,6 +13,8 @@
+ 
+ class PlayerbotAI;
+ 
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++
+ // disc
+ class CastPowerWordFortitudeAction : public GroupBuffSpellAction
+ {
+@@ -140,7 +142,17 @@ public:
+ 
+ // shadow talents
+ SPELL_ACTION(CastMindFlayAction, "mind flay");
+-BUFF_ACTION(CastVampiricEmbraceAction, "vampiric embrace");
++// Historical Vampiric Embrace is an enemy debuff; Wrath uses a self buff.
++class CastVampiricEmbraceAction : public CastBuffSpellAction
++{
++public:
++    CastVampiricEmbraceAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "vampiric embrace") {}
++    std::string const GetTargetName() override
++    {
++        uint32 const known = EraTalentBots_ResolveSpellId(bot, 15286);
++        return (known && known != 15286) ? "current target" : "self target";
++    }
++};
+ BUFF_ACTION(CastShadowformAction, "shadowform");
+ SPELL_ACTION(CastSilenceAction, "silence");
+ ENEMY_HEALER_ACTION(CastSilenceOnEnemyHealerAction, "silence");
+diff --git a/src/Ai/Class/Priest/PriestTriggers.h b/src/Ai/Class/Priest/PriestTriggers.h
+index ced8228..dc18e1e 100644
+--- a/src/Ai/Class/Priest/PriestTriggers.h
++++ b/src/Ai/Class/Priest/PriestTriggers.h
+@@ -14,12 +14,24 @@
+ 
+ class PlayerbotAI;
+ 
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++
+ DEBUFF_CHECKISOWNER_TRIGGER(HolyFireTrigger, "holy fire");
+ DEBUFF_CHECKISOWNER_TRIGGER(ShadowWordPainTrigger, "shadow word: pain");
+ DEBUFF_ENEMY_TRIGGER(ShadowWordPainOnAttackerTrigger, "shadow word: pain");
+ DEBUFF_CHECKISOWNER_TRIGGER(VampiricTouchTrigger, "vampiric touch");
+ DEBUFF_ENEMY_TRIGGER(VampiricTouchOnAttackerTrigger, "vampiric touch on attacker");
+-BUFF_TRIGGER(VampiricEmbraceTrigger, "vampiric embrace");
++// Historical Vampiric Embrace targets an enemy; Wrath uses a self buff.
++class VampiricEmbraceTrigger : public BuffTrigger
++{
++public:
++    VampiricEmbraceTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "vampiric embrace") {}
++    std::string const GetTargetName() override
++    {
++        uint32 const known = EraTalentBots_ResolveSpellId(bot, 15286);
++        return (known && known != 15286) ? "current target" : "self target";
++    }
++};
+ CURE_TRIGGER(DispelMagicTrigger, "dispel magic", DISPEL_MAGIC);
+ CURE_PARTY_TRIGGER(DispelMagicPartyMemberTrigger, "dispel magic", DISPEL_MAGIC);
+ CURE_TRIGGER(CureDiseaseTrigger, "cure disease", DISPEL_DISEASE);
+diff --git a/src/Ai/Class/Priest/Strategy/ShadowPriestStrategy.cpp b/src/Ai/Class/Priest/Strategy/ShadowPriestStrategy.cpp
+index 57d0550..97f6ad4 100644
+--- a/src/Ai/Class/Priest/Strategy/ShadowPriestStrategy.cpp
++++ b/src/Ai/Class/Priest/Strategy/ShadowPriestStrategy.cpp
+@@ -35,6 +35,8 @@ void ShadowPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+             }
+         )
+     );
++    // Historical Vampiric Embrace targets an enemy during combat.
++    triggers.push_back(new TriggerNode("vampiric embrace", {NextAction("vampiric embrace", 19.0f)}));
+     triggers.push_back(
+         new TriggerNode(
+             "low mana",
+diff --git a/src/Ai/Class/Shaman/ShamanActions.cpp b/src/Ai/Class/Shaman/ShamanActions.cpp
+index 6469c11..ad972ea 100644
+--- a/src/Ai/Class/Shaman/ShamanActions.cpp
++++ b/src/Ai/Class/Shaman/ShamanActions.cpp
+@@ -10,6 +10,10 @@
+ #include "Playerbots.h"
+ #include "TotemsShamanStrategy.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ bool CastTotemAction::isUseful()
+ {
+     return CastBuffSpellAction::isUseful()
+@@ -98,9 +102,9 @@ bool SetTotemAction::Execute(Event /*event*/)
+     uint32 totemSpell = 0;
+     for (size_t i = 0; i < totemSpellIdsCount; ++i)
+     {
+-        if (bot->HasSpell(totemSpellIds[i]))
++        if (uint32 known = EraKnown(bot, totemSpellIds[i]))
+         {
+-            totemSpell = totemSpellIds[i];
++            totemSpell = known;
+             break;
+         }
+     }
+diff --git a/src/Ai/Class/Shaman/ShamanTriggers.cpp b/src/Ai/Class/Shaman/ShamanTriggers.cpp
+index 91c51a5..b477a6c 100644
+--- a/src/Ai/Class/Shaman/ShamanTriggers.cpp
++++ b/src/Ai/Class/Shaman/ShamanTriggers.cpp
+@@ -15,6 +15,22 @@
+ #include "Unit.h"
+ #include <ctime>
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++static bool EraKnownMatchesAny(Player* bot, uint32 currentSpell, uint32 const* arr, size_t n)
++{
++    for (size_t i = 0; i < n; ++i)
++    {
++        if (currentSpell == arr[i])
++            return true;
++        uint32 eraSpell = EraKnown(bot, arr[i]);
++        if (eraSpell && currentSpell == eraSpell)
++            return true;
++    }
++    return false;
++}
++
+ bool MainHandWeaponNoImbueTrigger::IsActive()
+ {
+     Item* const itemForSpell = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+@@ -166,10 +182,10 @@ bool CallOfTheElementsTrigger::IsActive()
+             continue;
+         }
+ 
+-        if ((slot == SUMMON_SLOT_TOTEM_EARTH && bot->HasSpell(SPELL_STONESKIN_TOTEM_RANK_1)) ||
+-            (slot == SUMMON_SLOT_TOTEM_FIRE && bot->HasSpell(SPELL_SEARING_TOTEM_RANK_1)) ||
+-            (slot == SUMMON_SLOT_TOTEM_WATER && bot->HasSpell(SPELL_HEALING_STREAM_TOTEM_RANK_1)) ||
+-            (slot == SUMMON_SLOT_TOTEM_AIR && bot->HasSpell(SPELL_NATURE_RESISTANCE_TOTEM_RANK_1)))
++        if ((slot == SUMMON_SLOT_TOTEM_EARTH && EraKnown(bot, SPELL_STONESKIN_TOTEM_RANK_1)) ||
++            (slot == SUMMON_SLOT_TOTEM_FIRE && EraKnown(bot, SPELL_SEARING_TOTEM_RANK_1)) ||
++            (slot == SUMMON_SLOT_TOTEM_WATER && EraKnown(bot, SPELL_HEALING_STREAM_TOTEM_RANK_1)) ||
++            (slot == SUMMON_SLOT_TOTEM_AIR && EraKnown(bot, SPELL_NATURE_RESISTANCE_TOTEM_RANK_1)))
+         {
+             emptyCount++;
+         }
+@@ -231,11 +247,9 @@ bool TotemicRecallTrigger::IsActive()
+             currentSpell = totem->GetUInt32Value(UNIT_CREATED_BY_SPELL);
+         }
+ 
+-        for (size_t i = 0; i < MANA_TIDE_TOTEM_COUNT; ++i)
+-        {
+-            if (currentSpell == MANA_TIDE_TOTEM[i] && totem && totem->GetDistance(bot) <= 30.0f)
+-                return false;
+-        }
++        if (totem && totem->GetDistance(bot) <= 30.0f &&
++            EraKnownMatchesAny(bot, currentSpell, MANA_TIDE_TOTEM, MANA_TIDE_TOTEM_COUNT))
++            return false;
+     }
+ 
+     guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_FIRE];
+@@ -248,11 +262,9 @@ bool TotemicRecallTrigger::IsActive()
+             currentSpell = totem->GetUInt32Value(UNIT_CREATED_BY_SPELL);
+         }
+ 
+-        for (size_t i = 0; i < FIRE_ELEMENTAL_TOTEM_COUNT; ++i)
+-        {
+-            if (currentSpell == FIRE_ELEMENTAL_TOTEM[i] && totem && totem->GetDistance(bot) <= 30.0f)
+-                return false;
+-        }
++        if (totem && totem->GetDistance(bot) <= 30.0f &&
++            EraKnownMatchesAny(bot, currentSpell, FIRE_ELEMENTAL_TOTEM, FIRE_ELEMENTAL_TOTEM_COUNT))
++            return false;
+     }
+ 
+     return !bot->m_SummonSlot[SUMMON_SLOT_TOTEM_EARTH].IsEmpty() ||
+@@ -273,9 +285,9 @@ static uint32 GetRequiredTotemSpellId(PlayerbotAI* botAI, char const* strategies
+             // Find the highest-rank spell the bot knows
+             for (size_t j = 0; j < spellCounts[i]; ++j)
+             {
+-                if (bot->HasSpell(spellList[i][j]))
++                if (uint32 known = EraKnown(bot, spellList[i][j]))
+                 {
+-                    return spellList[i][j];
++                    return known;
+                 }
+             }
+         }
+@@ -287,7 +299,7 @@ static uint32 GetRequiredTotemSpellId(PlayerbotAI* botAI, char const* strategies
+ bool NoEarthTotemTrigger::IsActive()
+ {
+     // Check if the bot has Stoneskin Totem (required level 4) and prevents the trigger firing if it doesn't
+-    if (!bot->HasSpell(SPELL_STONESKIN_TOTEM_RANK_1))
++    if (!EraKnown(bot, SPELL_STONESKIN_TOTEM_RANK_1))
+         return false;
+ 
+     ObjectGuid guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_EARTH];
+@@ -311,11 +323,9 @@ bool NoEarthTotemTrigger::IsActive()
+     uint32 requiredSpell = GetRequiredTotemSpellId(botAI, names, spells, counts, 4);
+ 
+     // EXCEPTION: If Stoneclaw Totem is out and in range, consider the slot "occupied" (do not fire the trigger)
+-    for (size_t i = 0; i < STONECLAW_TOTEM_COUNT; ++i)
+-    {
+-        if (currentSpell == STONECLAW_TOTEM[i] && totem && totem->GetDistance(bot) <= 30.0f)
+-            return false;
+-    }
++    if (totem && totem->GetDistance(bot) <= 30.0f &&
++        EraKnownMatchesAny(bot, currentSpell, STONECLAW_TOTEM, STONECLAW_TOTEM_COUNT))
++        return false;
+ 
+     // If no relevant strategy, only care if the slot is empty or totem is too far away
+     if (!requiredSpell)
+@@ -328,7 +338,7 @@ bool NoEarthTotemTrigger::IsActive()
+ bool NoFireTotemTrigger::IsActive()
+ {
+     // Check if the bot has Searing Totem (required level 10) and prevents the trigger firing if it doesn't
+-    if (!bot->HasSpell(SPELL_SEARING_TOTEM_RANK_1))
++    if (!EraKnown(bot, SPELL_SEARING_TOTEM_RANK_1))
+         return false;
+ 
+     ObjectGuid guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_FIRE];
+@@ -353,11 +363,9 @@ bool NoFireTotemTrigger::IsActive()
+     uint32 requiredSpell = GetRequiredTotemSpellId(botAI, names, spells, counts, 5);
+ 
+     // EXCEPTION: If Fire Elemental is out and in range, consider the slot "occupied" (do not fire the trigger)
+-    for (size_t i = 0; i < FIRE_ELEMENTAL_TOTEM_COUNT; ++i)
+-    {
+-        if (currentSpell == FIRE_ELEMENTAL_TOTEM[i] && totem && totem->GetDistance(bot) <= 30.0f)
+-            return false;
+-    }
++    if (totem && totem->GetDistance(bot) <= 30.0f &&
++        EraKnownMatchesAny(bot, currentSpell, FIRE_ELEMENTAL_TOTEM, FIRE_ELEMENTAL_TOTEM_COUNT))
++        return false;
+ 
+     // If no relevant strategy, only care if the slot is empty or totem is too far away
+     if (!requiredSpell)
+@@ -370,7 +378,7 @@ bool NoFireTotemTrigger::IsActive()
+ bool NoWaterTotemTrigger::IsActive()
+ {
+     // Check if the bot has Healing Stream Totem (required level 20) and prevents the trigger firing if it doesn't
+-    if (!bot->HasSpell(SPELL_HEALING_STREAM_TOTEM_RANK_1))
++    if (!EraKnown(bot, SPELL_HEALING_STREAM_TOTEM_RANK_1))
+         return false;
+ 
+     ObjectGuid guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_WATER];
+@@ -394,11 +402,9 @@ bool NoWaterTotemTrigger::IsActive()
+     uint32 requiredSpell = GetRequiredTotemSpellId(botAI, names, spells, counts, 4);
+ 
+     // EXCEPTION: If Mana Tide is out and in range, consider the slot "occupied" (do not fire the trigger)
+-    for (size_t i = 0; i < MANA_TIDE_TOTEM_COUNT; ++i)
+-    {
+-        if (currentSpell == MANA_TIDE_TOTEM[i] && totem && totem->GetDistance(bot) <= 30.0f)
+-            return false;
+-    }
++    if (totem && totem->GetDistance(bot) <= 30.0f &&
++        EraKnownMatchesAny(bot, currentSpell, MANA_TIDE_TOTEM, MANA_TIDE_TOTEM_COUNT))
++        return false;
+ 
+     // If no relevant strategy, only care if the slot is empty or totem is too far away
+     if (!requiredSpell)
+@@ -413,7 +419,7 @@ bool NoWaterTotemTrigger::IsActive()
+ bool NoAirTotemTrigger::IsActive()
+ {
+     // Check if the bot has Nature Resistance Totem (required level 30) and prevents the trigger firing if it doesn't
+-    if (!bot->HasSpell(SPELL_NATURE_RESISTANCE_TOTEM_RANK_1))
++    if (!EraKnown(bot, SPELL_NATURE_RESISTANCE_TOTEM_RANK_1))
+         return false;
+ 
+     ObjectGuid guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_AIR];
+@@ -451,10 +457,9 @@ bool SetTotemTrigger::IsActive()
+    uint32 highestKnownSpell = 0;
+    for (size_t i = 0; i < totemSpellIdsCount; ++i)
+    {
+-       const uint32 spellId = totemSpellIds[i];
+-       if (bot->HasSpell(spellId))
++       if (uint32 known = EraKnown(bot, totemSpellIds[i]))
+        {
+-           highestKnownSpell = spellId;
++           highestKnownSpell = known;
+            break;
+        }
+    }
+diff --git a/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp b/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp
+index 8066d57..1a35d20 100644
+--- a/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp
++++ b/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp
+@@ -18,6 +18,10 @@ constexpr uint32 SPELL_GROUNDING_TOTEM = 8177;
+ constexpr uint32 SPELL_WINDFURY_TOTEM = 8512;
+ }
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ // These combat strategies are used to set the corresponding totems on the bar, and cast the totem when it's missing.
+ // There are special cases for Totem of Wrath, Windfury Totem, Wrath of Air totem, and Cleansing totem - these totems
+ // aren't learned at level 30, and have fallbacks in order to prevent the trigger from continuously firing.
+@@ -86,9 +90,9 @@ void TotemOfWrathStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     GenericShamanStrategy::InitTriggers(triggers);
+     // If the bot hasn't learned Totem of Wrath yet, set Flametongue Totem instead.
+     Player* bot = botAI->GetBot();
+-    if (bot->HasSpell(SPELL_TOTEM_OF_WRATH))
++    if (EraKnown(bot, SPELL_TOTEM_OF_WRATH))
+         triggers.push_back(new TriggerNode("set totem of wrath", { NextAction("set totem of wrath", 60.0f) }));
+-    else if (bot->HasSpell(SPELL_FLAMETONGUE_TOTEM))
++    else if (EraKnown(bot, SPELL_FLAMETONGUE_TOTEM))
+         triggers.push_back(new TriggerNode("set flametongue totem", { NextAction("set flametongue totem", 60.0f) }));
+     triggers.push_back(new TriggerNode("no fire totem", { NextAction("totem of wrath", 55.0f) }));
+ }
+@@ -124,9 +128,9 @@ void CleansingTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     GenericShamanStrategy::InitTriggers(triggers);
+     // If the bot hasn't learned Cleansing Totem yet, set Mana Spring Totem instead.
+     Player* bot = botAI->GetBot();
+-    if (bot->HasSpell(SPELL_CLEANSING_TOTEM))
++    if (EraKnown(bot, SPELL_CLEANSING_TOTEM))
+         triggers.push_back(new TriggerNode("set cleansing totem", { NextAction("set cleansing totem", 60.0f) }));
+-    else if (bot->HasSpell(SPELL_MANA_SPRING_TOTEM))
++    else if (EraKnown(bot, SPELL_MANA_SPRING_TOTEM))
+         triggers.push_back(new TriggerNode("set mana spring totem", { NextAction("set mana spring totem", 60.0f) }));
+     triggers.push_back(new TriggerNode("no water totem", { NextAction("cleansing totem", 55.0f) }));
+ }
+@@ -146,9 +150,9 @@ void WrathOfAirTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     GenericShamanStrategy::InitTriggers(triggers);
+     // If the bot hasn't learned Wrath of Air Totem yet, set Grounding Totem instead.
+     Player* bot = botAI->GetBot();
+-    if (bot->HasSpell(SPELL_WRATH_OF_AIR_TOTEM))
++    if (EraKnown(bot, SPELL_WRATH_OF_AIR_TOTEM))
+         triggers.push_back(new TriggerNode("set wrath of air totem", { NextAction("set wrath of air totem", 60.0f) }));
+-    else if (bot->HasSpell(SPELL_GROUNDING_TOTEM))
++    else if (EraKnown(bot, SPELL_GROUNDING_TOTEM))
+         triggers.push_back(new TriggerNode("set grounding totem", { NextAction("set grounding totem", 60.0f) }));
+     triggers.push_back( new TriggerNode("no air totem", { NextAction("wrath of air totem", 55.0f) }));
+ }
+@@ -159,9 +163,9 @@ void WindfuryTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     GenericShamanStrategy::InitTriggers(triggers);
+     // If the bot hasn't learned Windfury Totem yet, set Grounding Totem instead.
+     Player* bot = botAI->GetBot();
+-    if (bot->HasSpell(SPELL_WINDFURY_TOTEM))
++    if (EraKnown(bot, SPELL_WINDFURY_TOTEM))
+         triggers.push_back(new TriggerNode("set windfury totem", { NextAction("set windfury totem", 60.0f) }));
+-    else if (bot->HasSpell(SPELL_GROUNDING_TOTEM))
++    else if (EraKnown(bot, SPELL_GROUNDING_TOTEM))
+         triggers.push_back(new TriggerNode("set grounding totem", { NextAction("set grounding totem", 60.0f) }));
+     triggers.push_back(new TriggerNode("no air totem", { NextAction("windfury totem", 55.0f) }));
+ }
+diff --git a/src/Ai/Class/Warrior/WarriorTriggers.cpp b/src/Ai/Class/Warrior/WarriorTriggers.cpp
+index 7bfd542..c6dca14 100644
+--- a/src/Ai/Class/Warrior/WarriorTriggers.cpp
++++ b/src/Ai/Class/Warrior/WarriorTriggers.cpp
+@@ -7,6 +7,10 @@
+ #include "WarriorTriggers.h"
+ #include "Playerbots.h"
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ namespace
+ {
+ constexpr uint32 SPELL_VIGILANCE = 50720;
+@@ -103,7 +107,9 @@ bool BattleShoutTrigger::IsActive()
+     float cpBonus = 0.0f;
+     for (int rank = 4; rank >= 0; --rank)
+     {
+-        if (bot->HasAura(SPELL_COMMANDING_PRESENCE_RANKS[rank]))
++        // Resolve each RANK id separately (stock or era clone): the bridge's rank compare means
++        // "this rank or better", so walking high->low still lands on the bot's actual rank.
++        if (bot->HasAura(EraKnown(bot, SPELL_COMMANDING_PRESENCE_RANKS[rank])))
+         {
+             cpBonus = commandingPresenceBonus[rank];
+             break;
+diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
+index cc1dcf2..6e21e8f 100644
+--- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
++++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include "RpgSubActions.h"
++
+ #include "BudgetValues.h"
+ #include "ChooseRpgTargetAction.h"
+ #include "EmoteAction.h"
+@@ -13,10 +14,12 @@
+ #include "GuildCreateActions.h"
+ #include "LastMovementValue.h"
+ #include "MovementActions.h"
++#include "PlayerbotFactory.h"
+ #include "PlayerbotTextMgr.h"
+ #include "Playerbots.h"
+ #include "PossibleRpgTargetsValue.h"
+ #include "SocialMgr.h"
++#include "Trainer.h"
+ 
+ void RpgHelper::OnExecute(std::string nextAction)
+ {
+@@ -278,19 +281,17 @@ bool RpgTrainAction::isPossible()
+ {
+     GuidPosition gp = rpg->guidP();
+ 
+-    CreatureTemplate const* cinfo = gp.GetCreatureTemplate();
+-    if (!cinfo)
++    Creature* npc = gp.GetCreature();
++    if (!npc)
+         return false;
+ 
+-    Trainer::Trainer* trainer = sObjectMgr->GetTrainer(cinfo->Entry);
++    Trainer::Trainer* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
+     if (!trainer)
+         return false;
+ 
+     if (!trainer->IsTrainerValidForPlayer(bot))
+         return false;
+ 
+-    FactionTemplateEntry const* factionTemplate = sFactionTemplateStore.LookupEntry(cinfo->faction);
+-    float reputationDiscount = bot->GetReputationPriceDiscount(factionTemplate);
+     uint32 currentGold = AI_VALUE2(uint32, "free money for", (uint32)NeedMoneyFor::spells);
+ 
+     for (auto& spell : trainer->GetSpells())
+@@ -299,10 +300,11 @@ bool RpgTrainAction::isPossible()
+         if (!trainerSpell)
+             continue;
+ 
+-        if (!trainer->CanTeachSpell(bot, trainerSpell))
++        if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, trainerSpell) ||
++            !trainer->CanTeachSpell(bot, trainerSpell))
+             continue;
+ 
+-        if (currentGold < static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount)))
++        if (currentGold < trainer->GetSpellCost(bot, npc, trainerSpell))
+             continue;
+ 
+         // we only check if at least one spell can be learned from the trainer;
+diff --git a/src/Bot/Factory/AiFactory.cpp b/src/Bot/Factory/AiFactory.cpp
+index bb1fa52..d9b1a19 100644
+--- a/src/Bot/Factory/AiFactory.cpp
++++ b/src/Bot/Factory/AiFactory.cpp
+@@ -35,6 +35,11 @@ constexpr uint32 SPELL_CAT_FORM = 768;
+ constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
+ }
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++extern bool EraTalentBots_SpecTabs(Player* bot, uint32* tabs3);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ AiObjectContext* AiFactory::createAiObjectContext(Player* player, PlayerbotAI* botAI)
+ {
+     switch (player->getClass())
+@@ -109,6 +114,17 @@ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
+ std::map<uint8, uint32> AiFactory::GetPlayerSpecTabs(Player* bot)
+ {
+     std::map<uint8, uint32> tabs = {{0, 0}, {0, 0}, {0, 0}};
++
++    // Custom era talents are stored separately from the native talent map.
++    uint32 eraTabs[3] = {0, 0, 0};
++    if (EraTalentBots_SpecTabs(bot, eraTabs))
++    {
++        tabs[0] = eraTabs[0];
++        tabs[1] = eraTabs[1];
++        tabs[2] = eraTabs[2];
++        return tabs;
++    }
++
+     PlayerTalentMap const& talentMap = bot->GetTalentMap();
+     for (PlayerTalentMap::const_iterator i = talentMap.begin(); i != talentMap.end(); ++i)
+     {
+@@ -354,7 +370,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
+                 engine->addStrategiesNoInit("resto", "cure", "dps assist", "tranquility", nullptr);
+             else
+             {
+-                if (player->HasSpell(SPELL_CAT_FORM) && !player->HasAura(SPELL_DRUID_THICK_HIDE))
++                if (player->HasSpell(SPELL_CAT_FORM) && !player->HasAura(EraKnown(player, SPELL_DRUID_THICK_HIDE)))
+                     engine->addStrategiesNoInit("cat", "aoe", "cc", "dps assist", "feral charge", nullptr);
+                 else
+                     engine->addStrategiesNoInit("bear", "tank assist", "pull", "pull back", "feral charge", nullptr);
+@@ -546,7 +562,7 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
+         case CLASS_DRUID:
+             if (tab == DRUID_TAB_FERAL)
+             {
+-                if (player->GetLevel() >= 20 && !player->HasAura(SPELL_DRUID_THICK_HIDE))
++                if (player->GetLevel() >= 20 && !player->HasAura(EraKnown(player, SPELL_DRUID_THICK_HIDE)))
+                     nonCombatEngine->addStrategy("dps assist", false);
+                 else
+                     nonCombatEngine->addStrategiesNoInit("tank assist", "pull", nullptr);
+@@ -561,15 +577,23 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
+                 nonCombatEngine->addStrategy("dps assist", false);
+             break;
+         case CLASS_WARLOCK:
++        {
++            // Historical warlock stones use equipment slots, rather than bag-use actions.
++            uint32 eraTabs[3] = {0, 0, 0};
++            bool eraManaged = EraTalentBots_SpecTabs(player, eraTabs);
+             if (tab == WARLOCK_TAB_AFFLICTION)
+-                nonCombatEngine->addStrategiesNoInit("felhunter", "spellstone", nullptr);
++                eraManaged ? nonCombatEngine->addStrategiesNoInit("felhunter", nullptr)
++                           : nonCombatEngine->addStrategiesNoInit("felhunter", "spellstone", nullptr);
+             else if (tab == WARLOCK_TAB_DEMONOLOGY)
+-                nonCombatEngine->addStrategiesNoInit("felguard", "spellstone", nullptr);
++                eraManaged ? nonCombatEngine->addStrategiesNoInit("felguard", nullptr)
++                           : nonCombatEngine->addStrategiesNoInit("felguard", "spellstone", nullptr);
+             else if (tab == WARLOCK_TAB_DESTRUCTION)
+-                nonCombatEngine->addStrategiesNoInit("imp", "firestone", nullptr);
++                eraManaged ? nonCombatEngine->addStrategiesNoInit("imp", nullptr)
++                           : nonCombatEngine->addStrategiesNoInit("imp", "firestone", nullptr);
+ 
+             nonCombatEngine->addStrategiesNoInit("dps assist", "ss self", nullptr);
+             break;
++        }
+         case CLASS_DEATH_KNIGHT:
+             if (tab == DEATH_KNIGHT_TAB_BLOOD)
+                 nonCombatEngine->addStrategiesNoInit("tank assist", "pull", nullptr);
+diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
+index b705e50..d16facf 100644
+--- a/src/Bot/Factory/PlayerbotFactory.cpp
++++ b/src/Bot/Factory/PlayerbotFactory.cpp
+@@ -46,6 +46,12 @@
+ #include <array>
+ #include <utility>
+ 
++// Resolve only spells this character has earned, including historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++extern bool EraTalentBots_FactoryReconcile(Player* bot, int specTab);
++
++static uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ namespace
+ {
+     // WotLK Eternal Belt Buckle mechanics
+@@ -1736,7 +1742,7 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
+         /// @todo: fix cat druid hardcode
+         if (bot->getClass() == CLASS_DRUID && specTab == DRUID_TAB_FERAL && bot->GetLevel() >= 20)
+         {
+-            bool isCat = !bot->HasAura(SPELL_DRUID_THICK_HIDE);
++            bool isCat = !bot->HasAura(EraKnown(bot, SPELL_DRUID_THICK_HIDE));
+             if (!isCat && bot->GetLevel() == 20)
+             {
+                 uint32 bearP = sPlayerbotAIConfig.randomClassSpecProb[cls][1];
+@@ -1775,6 +1781,17 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
+             LOG_ERROR("playerbots", "Fail to select spec num for bot {}! Set to 0.", bot->GetName());
+         }
+     }
++    // Managed eras allocate only earned, unspent points and preserve the existing build.
++    if (EraTalentBots_FactoryReconcile(bot, int(specTab)))
++    {
++        if (bot->getClass() == CLASS_SHAMAN && bot->HasSpell(SPELL_SHAMAN_DUAL_WIELD))
++        {
++            bot->SetSkill(SKILL_DUAL_WIELD, 0, 1, 1);
++            bot->SetCanDualWield(true);
++        }
++        bot->SendTalentsInfoData(false);
++        return sPlayerbotAIConfig.randomClassSpecIndex[cls][specTab];
++    }
+     if (reset && !sPlayerbotAIConfig.naturalProgression)
+     {
+         bot->resetTalents(true);
+diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
+index 163e236..9d5eb72 100644
+--- a/src/Bot/PlayerbotAI.cpp
++++ b/src/Bot/PlayerbotAI.cpp
+@@ -58,6 +58,8 @@
+ #include <sstream>
+ #include <string>
+ 
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++
+ namespace
+ {
+ constexpr uint32 SPELL_TITAN_GRIP = 49152;
+@@ -2317,11 +2319,10 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
+             }
+             break;
+         case CLASS_DRUID:
+-            if (tab == DRUID_TAB_FERAL && (player->GetShapeshiftForm() == FORM_BEAR ||
+-                                           player->GetShapeshiftForm() == FORM_DIREBEAR || player->HasAura(16931)))
+-            {
++            if (tab == DRUID_TAB_FERAL &&
++                (player->GetShapeshiftForm() == FORM_BEAR || player->GetShapeshiftForm() == FORM_DIREBEAR ||
++                 player->HasAura(EraTalentBots_ResolveSpellId(player, 16931))))
+                 return true;
+-            }
+             break;
+     }
+     return false;
+diff --git a/src/Mgr/Item/StatsWeightCalculator.cpp b/src/Mgr/Item/StatsWeightCalculator.cpp
+index 891b278..5246ca4 100644
+--- a/src/Mgr/Item/StatsWeightCalculator.cpp
++++ b/src/Mgr/Item/StatsWeightCalculator.cpp
+@@ -20,6 +20,10 @@
+ #include "Unit.h"
+ #include <memory>
+ 
++// Resolve only known stock spells or their earned historical variants.
++extern uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
++static inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
++
+ namespace
+ {
+ constexpr uint32 SPELL_MOLTEN_ARMOR_RANKS[] = { 30482, 43045, 43046 };
+@@ -688,12 +692,13 @@ void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)
+             weight_ *= 1.5;
+         }
+ 
+-        if (cls == CLASS_ROGUE && player_->HasAura(SPELL_ROGUE_SWORD_SPECIALIZATION) &&
++        // Keep the native requirement for the highest specialization rank.
++        if (cls == CLASS_ROGUE && player_->HasAura(EraKnown(player_, SPELL_ROGUE_SWORD_SPECIALIZATION)) &&
+             (proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD || proto->SubClass == ITEM_SUBCLASS_WEAPON_AXE))
+         {
+             weight_ *= 1.1;
+         }
+-        if (cls == CLASS_WARRIOR && player_->HasAura(SPELL_POLEAXE_SPECIALIZATION) &&
++        if (cls == CLASS_WARRIOR && player_->HasAura(EraKnown(player_, SPELL_POLEAXE_SPECIALIZATION)) &&
+             (proto->SubClass == ITEM_SUBCLASS_WEAPON_POLEARM || proto->SubClass == ITEM_SUBCLASS_WEAPON_AXE2))
+         {
+             weight_ *= 1.1;

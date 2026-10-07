@@ -112,7 +112,7 @@ endif()
 
 # 4. Superbuild AzerothCore and all pinned modules.
 ExternalProject_Add(azerothcore
-    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/azerothcore-wotlk"
+    SOURCE_DIR "${PORTABLE_CORE_SOURCE_DIR}"
     BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/azerothcore-build"
     CMAKE_ARGS ${ACORE_CMAKE_ARGS}
     BUILD_ALWAYS 1
@@ -123,6 +123,7 @@ ExternalProject_Add(azerothcore
 ExternalProject_Add_Step(azerothcore assemble_distribution
     COMMAND ${CMAKE_COMMAND}
         "-DPORTABLE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DPORTABLE_CORE_SOURCE_DIR=${PORTABLE_CORE_SOURCE_DIR}"
         "-DPORTABLE_DIST_DIR=${CMAKE_INSTALL_PREFIX_CLEAN}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AssembleDistribution.cmake"
     DEPENDEES install
