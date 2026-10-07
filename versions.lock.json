@@ -16,7 +16,8 @@
       "patches/azerothcore-earned-riding-prices.patch",
       "patches/azerothcore-earned-era-battleground-rules.patch",
       "patches/azerothcore-earned-era-arena-matching.patch",
-      "patches/azerothcore-earned-era-pvp-rules.patch"
+      "patches/azerothcore-earned-era-pvp-rules.patch",
+      "patches/azerothcore-windows-resource-includes.patch"
     ]
   },
   "modules": [
