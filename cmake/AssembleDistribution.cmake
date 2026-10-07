@@ -111,8 +111,11 @@ endif()
 file(COPY "${PORTABLE_SOURCE_DIR}/cmd/startup/profiles/" DESTINATION "${PORTABLE_DIST_DIR}/defaults")
 file(COPY "${PORTABLE_SOURCE_DIR}/licenses/" DESTINATION "${PORTABLE_DIST_DIR}/licenses")
 file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs")
-file(COPY "${PORTABLE_SOURCE_DIR}/versions.lock.json" "${PORTABLE_SOURCE_DIR}/README.md"
-    "${PORTABLE_SOURCE_DIR}/LICENSE" DESTINATION "${PORTABLE_DIST_DIR}")
+# Compare manifest contents rather than timestamps when assembling again.
+configure_file("${PORTABLE_SOURCE_DIR}/versions.lock.json"
+    "${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)
+file(COPY "${PORTABLE_SOURCE_DIR}/README.md" "${PORTABLE_SOURCE_DIR}/LICENSE"
+    DESTINATION "${PORTABLE_DIST_DIR}")
 file(GLOB patches "${PORTABLE_SOURCE_DIR}/patches/*.patch")
 if(patches)
     file(COPY ${patches} DESTINATION "${PORTABLE_DIST_DIR}/patches")
