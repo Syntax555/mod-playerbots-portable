@@ -27,6 +27,8 @@ VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 INTERNAL_SPELL = r"DBFilesClient\Spell.dbc"
 INTERNAL_SKILL = r"DBFilesClient\SkillLineAbility.dbc"
 FIXED_TIME = (2000, 1, 1, 0, 0, 0)
+SPELL_LOCALIZED_FIELDS = {"name": 136, "rank": 153, "description": 170, "aura description": 187}
+SPELL_LOCALE_COUNT = 16
 
 
 def sha(data: bytes) -> str:
@@ -120,12 +122,36 @@ def verify_merged_spell(base: bytes, merged: bytes, stamp: str, custom_ids):
             raise ValueError(f"Merged client changed IP spell record {key}")
     if not set(custom_ids).issubset(records):
         raise ValueError("Merged client is missing visible era spell rows")
-    # Name_Lang_enUS is field 136 in the pinned WotLK Spell.dbc layout.
+    def text(record, field):
+        offset = struct.unpack_from("<I", record, field * 4)[0]
+        if offset >= len(strings):
+            raise ValueError("Merged client spell has an invalid localized string offset")
+        end = strings.find(b"\0", offset)
+        if end == -1:
+            raise ValueError("Merged client spell has an unterminated localized string")
+        try:
+            return strings[offset:end].decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("Merged client spell has invalid localized UTF-8 text") from None
+
+    # WoW reads the selected client's locale slot, including deDE (slot 3).
+    # A marker present only in enUS produces MISSING on localized clients.
     record = records[932999]
-    name_offset = struct.unpack_from("<I", record, 136 * 4)[0]
-    name = strings[name_offset:].split(b"\0", 1)[0].decode("utf-8")
-    if name != f"EraTalents Gen {stamp}":
-        raise ValueError("Merged client generation sentinel differs from server SQL")
+    for locale in range(SPELL_LOCALE_COUNT):
+        if text(record, SPELL_LOCALIZED_FIELDS["name"] + locale) != f"EraTalents Gen {stamp}":
+            raise ValueError(f"Merged client generation sentinel differs from server SQL for locale slot {locale}")
+    # Authored helper text is the fallback for each locale. Check custom rows
+    # only: the original IP records and their translations remain untouched.
+    for key in custom_ids:
+        record = records[key]
+        for label, field in SPELL_LOCALIZED_FIELDS.items():
+            english = text(record, field)
+            if label == "name" and not english:
+                raise ValueError(f"Merged client visible era spell has an empty name: {key}")
+            for locale in range(1, SPELL_LOCALE_COUNT):
+                if text(record, field + locale) != english:
+                    raise ValueError(
+                        f"Merged client localized spell {label} differs from enUS: spell {key}, locale slot {locale}")
 
 
 def verify_merged_skill(base: bytes, merged: bytes, custom_spells):
