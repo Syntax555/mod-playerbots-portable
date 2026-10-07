@@ -291,12 +291,19 @@ cmake -B build -S . `
   -DMYSQL_ROOT_DIR="C:/tools/mysql/current" `
   -DOPENSSL_ROOT_DIR="C:/tools/openssl/current/x64" `
   -DBOOST_ROOT_DIR="C:/local/boost_1_84_0"
-cmake --build build --config Release --parallel
+$env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
+cmake --build build --config Release --parallel 2
 # Bundle the Visual C++ runtime required by the core and portable MySQL.
 pwsh -File scripts/CopyWindowsRuntime.ps1 -DistDir dist
 cmake --build build --config Release --target package_zip
 cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
 ```
+
+The native MSVC build defaults to two compiler processes per project. The
+environment variable also limits the nested server build to two parallel
+projects to reduce peak compiler memory use on the Windows release runner.
+For a machine with more memory, change the environment variable and configure
+`-DPORTABLE_MSVC_COMPILE_JOBS=<count>` together.
 
 This generates `output/mod-playerbots-portable-dev.zip` and the separate
 `output/MultiBot-Chatless-dev.zip` and `output/EraTalents-dev.zip` addon archives.
