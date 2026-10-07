@@ -250,3 +250,4 @@ subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedArenaCor
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestBattlegroundEraRules.py'))], check=True)
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedEraPvpRules.py'))], check=True)
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestWindowsResourceIncludes.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestWindowsCompileParallelism.py'))], check=True)

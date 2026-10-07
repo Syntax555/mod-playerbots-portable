@@ -76,9 +76,11 @@ set(ACORE_CMAKE_ARGS
 if(WIN32)
     # This distribution supports Windows 10/11. Initialize flags without
     # replacing CMake's MSVC defaults, and give Boost an explicit Windows API target.
+    set(PORTABLE_MSVC_COMPILE_JOBS "2" CACHE STRING "MSVC compiler processes per native project")
     list(APPEND ACORE_CMAKE_ARGS
         "-DCMAKE_C_FLAGS_INIT=/D_WIN32_WINNT=0x0A00 /DWINVER=0x0A00"
         "-DCMAKE_CXX_FLAGS_INIT=/D_WIN32_WINNT=0x0A00 /DWINVER=0x0A00"
+        "-DACORE_MSVC_COMPILE_JOBS=${PORTABLE_MSVC_COMPILE_JOBS}"
     )
 endif()
 

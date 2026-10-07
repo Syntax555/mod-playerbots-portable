@@ -1,0 +1,25 @@
+diff --git a/src/cmake/compiler/msvc/settings.cmake b/src/cmake/compiler/msvc/settings.cmake
+--- a/src/cmake/compiler/msvc/settings.cmake
++++ b/src/cmake/compiler/msvc/settings.cmake
+@@ -65,9 +65,20 @@ endif()
+ endif()
+ 
+ # multithreaded compiling on VS
++set(ACORE_MSVC_COMPILE_JOBS "" CACHE STRING
++  "Maximum compiler processes per MSVC project; empty uses the native /MP default")
++if(ACORE_MSVC_COMPILE_JOBS STREQUAL "")
++  set(acore_msvc_mp_option /MP)
++else()
++  if(NOT ACORE_MSVC_COMPILE_JOBS MATCHES "^[1-9][0-9]*$")
++    message(FATAL_ERROR "ACORE_MSVC_COMPILE_JOBS must be empty or a positive decimal integer")
++  endif()
++  set(acore_msvc_mp_option "/MP${ACORE_MSVC_COMPILE_JOBS}")
++endif()
+ target_compile_options(acore-compile-option-interface
+   INTERFACE
+-    /MP)
++    "${acore_msvc_mp_option}")
++unset(acore_msvc_mp_option)
+ 
+ # Define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES - eliminates the warning by changing the strcpy call to strcpy_s, which prevents buffer overruns
+ target_compile_definitions(acore-compile-option-interface

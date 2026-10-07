@@ -131,6 +131,9 @@ jobs:
     needs: launcher
     runs-on: windows-2022
     timeout-minutes: 360
+    env:
+      # ExternalProject starts another cmake --build, which needs its own limit.
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     outputs:
       release_tag: ${{ steps.version.outputs.release_tag }}
 
@@ -269,6 +272,15 @@ jobs:
           cmake --build build --target azerothcore-configure --config Release
           if ($LASTEXITCODE -ne 0) { throw 'Native server configuration failed.' }
           $nativeBuild = Join-Path (Get-Location) 'build/azerothcore-build'
+          if (Select-String -Path (Join-Path $nativeBuild 'CMakeCache.txt') -Pattern '^ACORE_MSVC_COMPILE_JOBS:STRING=' -Quiet) {
+              foreach ($relativeProject in @('modules/modules.vcxproj', 'src/server/game/game.vcxproj')) {
+                  [xml]$projectXml = Get-Content (Join-Path $nativeBuild $relativeProject) -Raw
+                  $limits = @($projectXml.SelectNodes('//*[local-name()="ClCompile"]/*[local-name()="ProcessorNumber"]'))
+                  if ($limits.Count -eq 0 -or @($limits | Where-Object { $_.InnerText -ne '2' }).Count -ne 0) {
+                      throw "Native compiler process limit was not applied: $relativeProject"
+                  }
+              }
+          }
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
           $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
           if (-not $msbuild -or -not (Test-Path $msbuild -PathType Leaf)) { throw 'MSBuild was not found.' }
@@ -285,8 +297,15 @@ jobs:
           # A manual run may check out an older tag without this matcher file.
           $hasMatchers = Test-Path '.github/problem-matchers/msvc.json'
           if ($hasMatchers) { Write-Output '::add-matcher::.github/problem-matchers/msvc.json' }
-          cmake --build build --config Release --parallel 4 2>&1 | Tee-Object -Variable buildLog
+          cmake --build build --config Release --parallel 2 2>&1 | Tee-Object -Variable buildLog
           $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0 -and @($buildLog | Where-Object { "$_" -match '\berror C1060\b' }).Count -gt 0) {
+              # Keep successful objects and retry the memory failure with one native project.
+              Write-Output 'Compiler memory exhaustion: retrying with one parallel project.'
+              $env:CMAKE_BUILD_PARALLEL_LEVEL = '1'
+              cmake --build build --config Release --parallel 1 2>&1 | Tee-Object -Variable buildLog
+              $buildExitCode = $LASTEXITCODE
+          }
           if ($hasMatchers) {
               Write-Output '::remove-matcher owner=portable-msvc-errors::'
               Write-Output '::remove-matcher owner=portable-linker-errors::'
