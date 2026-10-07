@@ -128,10 +128,14 @@ def dbc(rows, strings=b"\0", fields=234):
     return struct.pack("<4s4I", b"WDBC", len(rows), fields, fields * 4, len(strings)) + b"".join(rows) + strings
 
 
-def record(spell, name_offset=0):
+def record(spell, name_offset=0, localized_fields=None):
     row = bytearray(234 * 4)
     struct.pack_into("<I", row, 0, spell)
-    struct.pack_into("<I", row, 136 * 4, name_offset)
+    for locale in range(PACKAGE.SPELL_LOCALE_COUNT):
+        struct.pack_into("<I", row, (136 + locale) * 4, name_offset)
+    for field, offsets in (localized_fields or {}).items():
+        for locale, offset in enumerate(offsets):
+            struct.pack_into("<I", row, (field + locale) * 4, offset)
     return bytes(row)
 
 
@@ -142,6 +146,60 @@ class ClientDbcTests(unittest.TestCase):
         PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932999})
         with self.assertRaisesRegex(ValueError, "generation sentinel"):
             PACKAGE.verify_merged_spell(base, merged, "ffffffff", {932999})
+
+    def test_english_only_generation_marker_is_rejected(self):
+        base = dbc([record(10)])
+        sentinel = record(932999, localized_fields={136: [1] + [0] * 15})
+        merged = dbc([record(10), sentinel], b"\0EraTalents Gen 1234abcd\0")
+        with self.assertRaisesRegex(ValueError, "generation sentinel.*locale slot 1"):
+            PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932999})
+
+    def test_missing_or_wrong_german_generation_marker_is_rejected(self):
+        base = dbc([record(10)])
+        strings = b"\0EraTalents Gen 1234abcd\0"
+        wrong_offset = len(strings)
+        strings += b"EraTalents Gen ffffffff\0"
+        for german_offset in (0, wrong_offset):
+            with self.subTest(german_offset=german_offset):
+                offsets = [1] * 16
+                offsets[3] = german_offset
+                sentinel = record(932999, localized_fields={136: offsets})
+                merged = dbc([record(10), sentinel], strings)
+                with self.assertRaisesRegex(ValueError, "generation sentinel.*locale slot 3"):
+                    PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932999})
+
+    def test_custom_spell_text_has_fallbacks_without_changing_ip_translations(self):
+        strings = b"\0"
+        offsets = {}
+        for value in ("IP English", "IP German", "EraTalents Gen 1234abcd", "Era spell", "Rank 1", "Era description", "Era aura"):
+            offsets[value] = len(strings)
+            strings += value.encode() + b"\0"
+        original_names = [offsets["IP English"]] * 16
+        original_names[3] = offsets["IP German"]
+        original = record(10, localized_fields={136: original_names})
+        base = dbc([original], strings)
+        fields = {field: [offsets[value]] * 16 for field, value in zip(
+            PACKAGE.SPELL_LOCALIZED_FIELDS.values(), ("Era spell", "Rank 1", "Era description", "Era aura"))}
+        helper = record(920010, localized_fields=fields)
+        sentinel = record(932999, offsets["EraTalents Gen 1234abcd"])
+        merged = dbc([original, helper, sentinel], strings)
+        PACKAGE.verify_merged_spell(base, merged, "1234abcd", {920010, 932999})
+        self.assertEqual(PACKAGE.dbc_records(base, 234)[0][10], PACKAGE.dbc_records(merged, 234)[0][10])
+        for label, field in PACKAGE.SPELL_LOCALIZED_FIELDS.items():
+            with self.subTest(label=label):
+                mutated = bytearray(helper)
+                struct.pack_into("<I", mutated, (field + 3) * 4, 0)
+                changed = dbc([original, bytes(mutated), sentinel], strings)
+                with self.assertRaisesRegex(ValueError, "localized spell.*locale slot 3"):
+                    PACKAGE.verify_merged_spell(base, changed, "1234abcd", {920010, 932999})
+
+    def test_invalid_locale_string_offset_is_rejected(self):
+        base = dbc([record(10)])
+        sentinel = bytearray(record(932999, 1))
+        struct.pack_into("<I", sentinel, (136 + 3) * 4, 9999)
+        merged = dbc([record(10), bytes(sentinel)], b"\0EraTalents Gen 1234abcd\0")
+        with self.assertRaisesRegex(ValueError, "invalid localized string offset"):
+            PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932999})
 
     def test_corrupted_base_record_rejected(self):
         base = dbc([record(10)])
