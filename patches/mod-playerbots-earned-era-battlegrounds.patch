@@ -1,0 +1,608 @@
+diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
+index 56f7933..aa7199c 100644
+--- a/conf/playerbots.conf.dist
++++ b/conf/playerbots.conf.dist
+@@ -1650,6 +1650,13 @@ AiPlayerbot.RandomBotJoinBG = 1
+ # Existing matches may finish. Disable when opening later-expansion PvP.
+ AiPlayerbot.VanillaBattlegroundsOnly = 0
+ 
++# Use earned Individual Progression tiers and native level brackets for bot PvP.
++# Fills real players' queues within the same era: Vanilla WS/AB/AV, TBC Eye of
++# the Storm and Wrath Isle of Conquest. Requires the portable earned IP patch.
++# Bot arenas, random battlegrounds and unsupported Strand of the Ancients stay
++# disabled. No character levels, progression, gear or gold are granted.
++AiPlayerbot.EarnedEraBattlegrounds = 0
++
+ # Enable auto-joining of battlegrounds - have bots start battlegrounds and arenas on their own
+ AiPlayerbot.RandomBotAutoJoinBG = 0
+ 
+diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
+index e6bcae0..e33adb1 100644
+--- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
++++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
+@@ -24,7 +24,8 @@ bool BGJoinAction::Execute(Event /*event*/)
+             return false;
+ 
+         BattlegroundQueueTypeId queueTypeId = (BattlegroundQueueTypeId)bgList[urand(0, bgList.size() - 1)];
+-        if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++        if (!IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                 sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+             return false;
+ 
+         BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+@@ -62,7 +63,8 @@ bool BGJoinAction::Execute(Event /*event*/)
+ 
+ bool BGJoinAction::gatherArenaTeam(ArenaType type)
+ {
+-    if (sPlayerbotAIConfig.vanillaBattlegroundsOnly)
++    if (sPlayerbotAIConfig.vanillaBattlegroundsOnly || sPlayerbotAIConfig.earnedEraBattlegrounds ||
++        sPlayerbotAIConfig.naturalProgression)
+         return false;
+ 
+     ArenaTeam* arenateam = sArenaTeamMgr->GetArenaTeamByCaptain(bot->GetGUID(), type);
+@@ -201,7 +203,8 @@ bool BGJoinAction::gatherArenaTeam(ArenaType type)
+ 
+ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
+ {
+-    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++    if (!IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                             sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+         return false;
+ 
+     // check if bot can join this bracket for the specific Battleground/Arena type
+@@ -235,7 +238,8 @@ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBr
+ 
+ bool BGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
+ {
+-    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++    if (!IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                             sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+         return false;
+ 
+     BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+@@ -302,6 +306,9 @@ bool BGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, Battlegroun
+         return false;
+     }
+ 
++    if (sPlayerbotAIConfig.earnedEraBattlegrounds)
++        return sRandomPlayerbotMgr.ShouldFillEarnedBattleground(bot, queueTypeId, bracketId, TeamSize);
++
+     // Check if bots should join Battleground
+     uint32 bgAllianceBotCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAllianceBotCount;
+     uint32 bgAlliancePlayerCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAlliancePlayerCount;
+@@ -404,7 +411,8 @@ bool BGJoinAction::JoinQueue(uint32 type)
+ 
+     // get BG TypeId
+     BattlegroundQueueTypeId queueTypeId = BattlegroundQueueTypeId(type);
+-    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++    if (!IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                             sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+     {
+         botAI->GetAiObjectContext()->GetValue<uint32>("bg type")->Set(0);
+         botAI->GetAiObjectContext()->GetValue<uint32>("arena type")->Set(0);
+@@ -467,6 +475,24 @@ bool BGJoinAction::JoinQueue(uint32 type)
+     // sRandomPlayerbotMgr.Refresh(bot);
+ 
+     bool joinAsGroup = bot->GetGroup() && bot->GetGroup()->GetLeaderGUID() == bot->GetGUID();
++    uint32 queuedMembers = joinAsGroup ? bot->GetGroup()->GetMembersCount() : 1;
++
++    if (joinAsGroup && sPlayerbotAIConfig.earnedEraBattlegrounds)
++    {
++        uint8 era = GetPlayerbotBattlegroundEra(bot);
++        for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
++        {
++            Player* member = ref->GetSource();
++            if (!member || GetPlayerbotBattlegroundEra(member) != era ||
++                !IsPlayerbotBattlegroundQueueAllowed(member, sPlayerbotAIConfig.vanillaBattlegroundsOnly, true,
++                                                     queueTypeId))
++                return false;
++
++            PvPDifficultyEntry const* memberBracket = GetBattlegroundBracketByLevel(mapId, member->GetLevel());
++            if (!memberBracket || memberBracket->GetBracketId() != bracketId)
++                return false;
++        }
++    }
+ 
+     // in wotlk only arena requires battlemaster guid
+     // ObjectGuid guid = isArena ? unit->GetGUID() : bot->GetGUID(); //not used, line marked for removal.
+@@ -525,6 +551,14 @@ bool BGJoinAction::JoinQueue(uint32 type)
+         }
+     }
+ 
++    if (sPlayerbotAIConfig.earnedEraBattlegrounds && !botAI->HasGameClientMaster() &&
++        !sRandomPlayerbotMgr.TryReserveEarnedBattleground(bot, queueTypeId, bracketId, queuedMembers,
++                                                          bg->GetMaxPlayersPerTeam()))
++    {
++        botAI->GetAiObjectContext()->GetValue<uint32>("bg type")->Set(0);
++        return false;
++    }
++
+     LOG_INFO("playerbots", "Bot {} {}:{} <{}> queued {} {}", bot->GetGUID().ToString().c_str(),
+              bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName().c_str(), _bgType.c_str(),
+              isRated   ? "Rated Arena"
+@@ -575,7 +609,8 @@ bool BGJoinAction::JoinQueue(uint32 type)
+ // Not sure if this has ever worked, but it should be similar to BGJoinAction::shouldJoinBg
+ bool FreeBGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
+ {
+-    if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++    if (!IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                             sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+         return false;
+ 
+     BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
+@@ -643,6 +678,9 @@ bool FreeBGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, Battleg
+         return false;
+     }
+ 
++    if (sPlayerbotAIConfig.earnedEraBattlegrounds)
++        return sRandomPlayerbotMgr.ShouldFillEarnedBattleground(bot, queueTypeId, bracketId, TeamSize);
++
+     // Check if bots should join Battleground
+     uint32 bgAllianceBotCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAllianceBotCount;
+     uint32 bgAlliancePlayerCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAlliancePlayerCount;
+@@ -827,7 +865,8 @@ bool BGStatusAction::Execute(Event event)
+         return false;
+ 
+     if ((statusid == STATUS_WAIT_QUEUE || statusid == STATUS_WAIT_JOIN) &&
+-        !IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++        !IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                             sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+     {
+         WorldPacket packet(CMSG_BATTLEFIELD_PORT, 20);
+         packet << uint8(BattlegroundMgr::BGArenaType(queueTypeId)) << uint8(0) << uint32(_bgTypeId) << uint16(0x1F90)
+diff --git a/src/Bot/BattlegroundQueuePolicy.cpp b/src/Bot/BattlegroundQueuePolicy.cpp
+new file mode 100644
+index 0000000..bd078a0
+--- /dev/null
++++ b/src/Bot/BattlegroundQueuePolicy.cpp
+@@ -0,0 +1,40 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#include "BattlegroundQueuePolicy.h"
++
++#include "BattlegroundMgr.h"
++
++#if __has_include("IndividualProgressionBattlegrounds.h")
++#include "IndividualProgressionBattlegrounds.h"
++#endif
++
++bool IsPlayerbotBattlegroundQueueAllowed(Player* player, bool vanillaOnly, bool earnedEra,
++                                         BattlegroundQueueTypeId queueTypeId)
++{
++    if (!IsPlayerbotBattlegroundQueueAllowed(vanillaOnly, earnedEra, queueTypeId))
++        return false;
++
++    if (!earnedEra)
++        return true;
++
++#if __has_include("IndividualProgressionBattlegrounds.h")
++    return player && IndividualProgression_CanJoinBattleground(player, BattlegroundMgr::BGTemplateId(queueTypeId));
++#else
++    (void)player;
++    return false;
++#endif
++}
++
++uint8 GetPlayerbotBattlegroundEra(Player* player)
++{
++#if __has_include("IndividualProgressionBattlegrounds.h")
++    return player ? IndividualProgression_BattlegroundEra(player) : uint8(255);
++#else
++    (void)player;
++    return 255;
++#endif
++}
+diff --git a/src/Bot/BattlegroundQueuePolicy.h b/src/Bot/BattlegroundQueuePolicy.h
+index 4f4b3f2..43dddb5 100644
+--- a/src/Bot/BattlegroundQueuePolicy.h
++++ b/src/Bot/BattlegroundQueuePolicy.h
+@@ -9,10 +9,30 @@
+ 
+ #include "SharedDefines.h"
+ 
++class Player;
++
+ constexpr bool IsPlayerbotBattlegroundQueueAllowed(bool vanillaOnly, BattlegroundQueueTypeId queueTypeId)
+ {
+     return !vanillaOnly || queueTypeId == BATTLEGROUND_QUEUE_AV || queueTypeId == BATTLEGROUND_QUEUE_WS ||
+            queueTypeId == BATTLEGROUND_QUEUE_AB;
+ }
+ 
++constexpr bool IsPlayerbotEarnedBattlegroundQueueSupported(BattlegroundQueueTypeId queueTypeId)
++{
++    return queueTypeId == BATTLEGROUND_QUEUE_AV || queueTypeId == BATTLEGROUND_QUEUE_WS ||
++           queueTypeId == BATTLEGROUND_QUEUE_AB || queueTypeId == BATTLEGROUND_QUEUE_EY ||
++           queueTypeId == BATTLEGROUND_QUEUE_IC;
++}
++
++constexpr bool IsPlayerbotBattlegroundQueueAllowed(bool vanillaOnly, bool earnedEra,
++                                                   BattlegroundQueueTypeId queueTypeId)
++{
++    return IsPlayerbotBattlegroundQueueAllowed(vanillaOnly, queueTypeId) &&
++           (!earnedEra || IsPlayerbotEarnedBattlegroundQueueSupported(queueTypeId));
++}
++
++bool IsPlayerbotBattlegroundQueueAllowed(Player* player, bool vanillaOnly, bool earnedEra,
++                                         BattlegroundQueueTypeId queueTypeId);
++uint8 GetPlayerbotBattlegroundEra(Player* player);
++
+ #endif
+diff --git a/src/Bot/EarnedBattlegroundQueueState.h b/src/Bot/EarnedBattlegroundQueueState.h
+new file mode 100644
+index 0000000..fc6e281
+--- /dev/null
++++ b/src/Bot/EarnedBattlegroundQueueState.h
+@@ -0,0 +1,84 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_EARNEDBATTLEGROUNDQUEUESTATE_H
++#define PLAYERBOTS_EARNEDBATTLEGROUNDQUEUESTATE_H
++
++#include <algorithm>
++#include <array>
++#include <atomic>
++#include <vector>
++
++#include "SharedDefines.h"
++
++class EarnedBattlegroundQueueState
++{
++public:
++    static constexpr uint8 ERA_COUNT = 3;
++
++    void Record(uint32 queue, uint32 bracket, uint8 era, TeamId team, bool isBot, bool waiting, uint32 instanceId)
++    {
++        if (!IsValid(queue, bracket, era, team))
++            return;
++
++        auto& entry = _queues[queue][bracket][era];
++        entry.participants[team].fetch_add(1, std::memory_order_relaxed);
++        if (!isBot)
++            ++entry.players;
++        if (waiting)
++            entry.activeQueue = true;
++        if (instanceId &&
++            std::find(entry.instances.begin(), entry.instances.end(), instanceId) == entry.instances.end())
++            entry.instances.push_back(instanceId);
++    }
++
++    bool NeedsPlayer(uint32 queue, uint32 bracket, uint8 era, TeamId team, uint32 teamSize) const
++    {
++        if (!IsValid(queue, bracket, era, team))
++            return false;
++
++        auto const& entry = _queues[queue][bracket][era];
++        uint32 target = teamSize * (uint32(entry.activeQueue) + uint32(entry.instances.size()));
++        return entry.players && entry.participants[team].load(std::memory_order_relaxed) < target;
++    }
++
++    bool TryReserve(uint32 queue, uint32 bracket, uint8 era, TeamId team, uint32 count, uint32 teamSize)
++    {
++        if (!IsValid(queue, bracket, era, team) || !count)
++            return false;
++
++        auto& entry = _queues[queue][bracket][era];
++        uint32 target = teamSize * (uint32(entry.activeQueue) + uint32(entry.instances.size()));
++        if (!entry.players || count > target)
++            return false;
++
++        uint32 current = entry.participants[team].load(std::memory_order_relaxed);
++        while (current <= target - count)
++            if (entry.participants[team].compare_exchange_weak(current, current + count, std::memory_order_relaxed))
++                return true;
++        return false;
++    }
++
++private:
++    struct Entry
++    {
++        std::array<std::atomic<uint32>, 2> participants{};
++        uint32 players = 0;
++        bool activeQueue = false;
++        std::vector<uint32> instances;
++    };
++
++    static bool IsValid(uint32 queue, uint32 bracket, uint8 era, TeamId team)
++    {
++        return queue < MAX_BATTLEGROUND_QUEUE_TYPES && bracket < MAX_BATTLEGROUND_BRACKETS && era < ERA_COUNT &&
++               (team == TEAM_ALLIANCE || team == TEAM_HORDE);
++    }
++
++    std::array<std::array<std::array<Entry, ERA_COUNT>, MAX_BATTLEGROUND_BRACKETS>, MAX_BATTLEGROUND_QUEUE_TYPES>
++        _queues{};
++};
++
++#endif
+diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
+index 36220f6..343181f 100644
+--- a/src/Bot/RandomPlayerbotMgr.cpp
++++ b/src/Bot/RandomPlayerbotMgr.cpp
+@@ -921,6 +921,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
+     return brackets;
+ }
+ 
++static void RecordEarnedBattlegroundQueue(EarnedBattlegroundQueueState& state, Player* player,
++                                          BattlegroundQueueTypeId queue, BattlegroundBracketId bracket)
++{
++    uint32 instanceId = 0;
++    bool waiting = false;
++    Battleground* active = player->GetBattleground();
++    if (active && BattlegroundMgr::BGQueueTypeId(active->GetBgTypeID(), active->GetArenaType()) == queue)
++    {
++        if (active->GetStatus() == STATUS_WAIT_LEAVE)
++            return;
++        instanceId = active->GetInstanceID();
++    }
++    else
++    {
++        GroupQueueInfo info;
++        if (!sBattlegroundMgr->GetBattlegroundQueue(queue).GetPlayerGroupInfoData(player->GetGUID(), &info))
++            return;
++
++        if (info.IsInvitedToBGInstanceGUID)
++        {
++            Battleground* invited =
++                sBattlegroundMgr->GetBattleground(info.IsInvitedToBGInstanceGUID, BattlegroundMgr::BGTemplateId(queue));
++            if (!invited || invited->GetStatus() == STATUS_WAIT_LEAVE)
++                return;
++            instanceId = invited->GetInstanceID();
++        }
++        else
++            waiting = true;
++    }
++    state.Record(queue, bracket, GetPlayerbotBattlegroundEra(player), player->GetTeamId(),
++                 player->GetSession()->IsHeadless(), waiting, instanceId);
++}
++
++bool RandomPlayerbotMgr::ShouldFillEarnedBattleground(Player* bot, BattlegroundQueueTypeId queue,
++                                                      BattlegroundBracketId bracket, uint32 teamSize) const
++{
++    auto state = _earnedBattlegroundQueue.load();
++    return bot && state->NeedsPlayer(queue, bracket, GetPlayerbotBattlegroundEra(bot), bot->GetTeamId(), teamSize);
++}
++
++bool RandomPlayerbotMgr::TryReserveEarnedBattleground(Player* bot, BattlegroundQueueTypeId queue,
++                                                      BattlegroundBracketId bracket, uint32 count, uint32 teamSize)
++{
++    return bot && _earnedBattlegroundQueue.load()->TryReserve(queue, bracket, GetPlayerbotBattlegroundEra(bot),
++                                                              bot->GetTeamId(), count, teamSize);
++}
++
+ void RandomPlayerbotMgr::CheckBgQueue()
+ {
+     if (!BgCheckTimer)
+@@ -939,6 +986,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+ 
+     LOG_DEBUG("playerbots", "Checking BG Queue...");
+ 
++    auto earnedQueue =
++        sPlayerbotAIConfig.earnedEraBattlegrounds ? std::make_shared<EarnedBattlegroundQueueState>() : nullptr;
++
+     // Initialize Battleground Data (do not clear here)
+ 
+     for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+@@ -969,7 +1019,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+             if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
+                 continue;
+ 
+-            if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++            if (!IsPlayerbotBattlegroundQueueAllowed(player, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                     sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+                 continue;
+ 
+             // Check if real player is able to create/join this queue
+@@ -988,6 +1039,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+             BattlegroundData[queueTypeId][bracketId].minLevel = pvpDiff->minLevel;
+             BattlegroundData[queueTypeId][bracketId].maxLevel = pvpDiff->maxLevel;
+ 
++            if (sPlayerbotAIConfig.earnedEraBattlegrounds)
++                RecordEarnedBattlegroundQueue(*earnedQueue, player, queueTypeId, bracketId);
++
+             // Arena logic
+             bool isRated = false;
+             if (BattlegroundMgr::BGArenaType(queueTypeId))
+@@ -1067,7 +1121,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+             if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
+                 continue;
+ 
+-            if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly, queueTypeId))
++            if (!IsPlayerbotBattlegroundQueueAllowed(bot, sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                     sPlayerbotAIConfig.earnedEraBattlegrounds, queueTypeId))
+                 continue;
+ 
+             BattlegroundTypeId bgTypeId = sBattlegroundMgr->BGTemplateId(queueTypeId);
+@@ -1084,6 +1139,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+             BattlegroundData[queueTypeId][bracketId].minLevel = pvpDiff->minLevel;
+             BattlegroundData[queueTypeId][bracketId].maxLevel = pvpDiff->maxLevel;
+ 
++            if (sPlayerbotAIConfig.earnedEraBattlegrounds)
++                RecordEarnedBattlegroundQueue(*earnedQueue, bot, queueTypeId, bracketId);
++
+             if (BattlegroundMgr::BGArenaType(queueTypeId))
+             {
+                 bool isRated = false;
+@@ -1182,6 +1240,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         auto updateRatedArenaInstanceCount = [&](uint32 queueType, uint32 bracket, uint32 minCount)
+         {
+             if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                     sPlayerbotAIConfig.earnedEraBattlegrounds,
+                                                      BattlegroundQueueTypeId(queueType)))
+                 return;
+ 
+@@ -1194,6 +1253,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         auto updateBGInstanceCount = [&](uint32 queueType, std::vector<uint32> brackets, uint32 minCount)
+         {
+             if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
++                                                     sPlayerbotAIConfig.earnedEraBattlegrounds,
+                                                      BattlegroundQueueTypeId(queueType)))
+                 return;
+ 
+@@ -1222,6 +1282,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         updateBGInstanceCount(BATTLEGROUND_QUEUE_WS, wsBrackets, randomBotAutoJoinBGWSCount);
+     }
+ 
++    if (earnedQueue)
++        _earnedBattlegroundQueue.store(std::move(earnedQueue));
+     LogBattlegroundInfo();
+ }
+ 
+diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
+index cbca8d2..a12ab93 100644
+--- a/src/Bot/RandomPlayerbotMgr.h
++++ b/src/Bot/RandomPlayerbotMgr.h
+@@ -7,12 +7,14 @@
+ #ifndef PLAYERBOTS_RANDOMPLAYERBOTMGR_H
+ #define PLAYERBOTS_RANDOMPLAYERBOTMGR_H
+ 
++#include <unordered_set>
++
++#include "EarnedBattlegroundQueueState.h"
+ #include "GameTime.h"
+ #include "NewRpgInfo.h"
+ #include "ObjectGuid.h"
+ #include "PlayerbotCommandServer.h"
+ #include "PlayerbotMgr.h"
+-#include <unordered_set>
+ 
+ struct BattlegroundInfo
+ {
+@@ -154,6 +156,10 @@ public:
+     std::map<uint32, std::map<uint32, std::map<uint32, uint32>>> Supporters;
+     std::map<TeamId, std::vector<uint32>> LfgDungeons;
+     void CheckBgQueue();
++    bool ShouldFillEarnedBattleground(Player* bot, BattlegroundQueueTypeId queue, BattlegroundBracketId bracket,
++                                      uint32 teamSize) const;
++    bool TryReserveEarnedBattleground(Player* bot, BattlegroundQueueTypeId queue, BattlegroundBracketId bracket,
++                                      uint32 count, uint32 teamSize);
+     void CheckLfgQueue();
+     void CheckPlayers();
+     void LogBattlegroundInfo();
+@@ -181,6 +187,9 @@ protected:
+     void OnBotLoginInternal(Player* const bot) override;
+ 
+ private:
++    std::atomic<std::shared_ptr<EarnedBattlegroundQueueState>> _earnedBattlegroundQueue{
++        std::make_shared<EarnedBattlegroundQueueState>()};
++
+     RandomPlayerbotMgr() : PlayerbotHolder()
+     {
+         this->playersLevel = sPlayerbotAIConfig.randombotStartingLevel;
+diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
+index 51af4fe..8d08127 100644
+--- a/src/PlayerbotAIConfig.cpp
++++ b/src/PlayerbotAIConfig.cpp
+@@ -86,6 +86,7 @@ bool PlayerbotAIConfig::Initialize()
+     earnedAuctionInterval =
+         std::clamp(sConfigMgr->GetOption<uint32>("AiPlayerbot.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
+     vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.VanillaBattlegroundsOnly", false);
++    earnedEraBattlegrounds = sConfigMgr->GetOption<bool>("AiPlayerbot.EarnedEraBattlegrounds", false);
+     if (!enabled)
+     {
+         LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
+diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
+index f0a162c..21c41cf 100644
+--- a/src/PlayerbotAIConfig.h
++++ b/src/PlayerbotAIConfig.h
+@@ -112,6 +112,7 @@ public:
+     std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets{
+         std::make_shared<EarnedLevelBracketPolicy>()};
+     bool vanillaBattlegroundsOnly = false;
++    bool earnedEraBattlegrounds = false;
+     bool disabledWithoutRealPlayer;
+     bool EnableICCBuffs;
+     bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
+diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
+index 7967326..7eb58b8 100644
+--- a/src/Script/Playerbots.cpp
++++ b/src/Script/Playerbots.cpp
+@@ -11,6 +11,8 @@
+ #include "AllMapScript.h"
+ #include "BattleGroundTactics.h"
+ #include "BattlefieldScript.h"
++#include "BattlegroundMgr.h"
++#include "BattlegroundQueuePolicy.h"
+ #include "BuiltInConfig.h"
+ #include "Channel.h"
+ #include "CheckMountStateAction.h"
+@@ -129,21 +131,58 @@ public:
+ class PlayerbotsPlayerScript : public PlayerScript
+ {
+ public:
+-    PlayerbotsPlayerScript() : PlayerScript("PlayerbotsPlayerScript", {
+-        PLAYERHOOK_ON_LOGIN,
+-        PLAYERHOOK_ON_BEFORE_LOGOUT,
+-        PLAYERHOOK_ON_AFTER_UPDATE,
+-        PLAYERHOOK_ON_CREATURE_KILL_CREDIT,
+-        PLAYERHOOK_ON_BEFORE_PETITION_SIGN,
+-        PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS,
+-        PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE,
+-        PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT,
+-        PLAYERHOOK_CAN_PLAYER_USE_GROUP_CHAT,
+-        PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
+-        PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
+-        PLAYERHOOK_ON_GIVE_EXP,
+-        PLAYERHOOK_ON_BEFORE_TELEPORT
+-    }) {}
++    PlayerbotsPlayerScript()
++        : PlayerScript("PlayerbotsPlayerScript",
++                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_BEFORE_LOGOUT, PLAYERHOOK_ON_AFTER_UPDATE,
++                        PLAYERHOOK_ON_CREATURE_KILL_CREDIT, PLAYERHOOK_ON_BEFORE_PETITION_SIGN,
++                        PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS, PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE,
++                        PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT, PLAYERHOOK_CAN_PLAYER_USE_GROUP_CHAT,
++                        PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT, PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
++                        PLAYERHOOK_ON_GIVE_EXP, PLAYERHOOK_ON_BEFORE_TELEPORT,
++                        PLAYERHOOK_CAN_JOIN_IN_BATTLEGROUND_QUEUE, PLAYERHOOK_CAN_JOIN_IN_ARENA_QUEUE})
++    {
++    }
++
++    bool CanQueueWithBots(Player* player, uint8 joinAsGroup, BattlegroundQueueTypeId queue,
++                          GroupJoinBattlegroundResult& err)
++    {
++        if (!sPlayerbotAIConfig.earnedEraBattlegrounds)
++            return true;
++
++        auto allowed = [queue](Player* member)
++        {
++            return member &&
++                   (!GET_PLAYERBOT_AI(member) || IsPlayerbotBattlegroundQueueAllowed(
++                                                     member, sPlayerbotAIConfig.vanillaBattlegroundsOnly, true, queue));
++        };
++        if (!allowed(player))
++        {
++            err = ERR_BATTLEGROUND_JOIN_FAILED;
++            return false;
++        }
++
++        if (joinAsGroup && player->GetGroup())
++            for (GroupReference* ref = player->GetGroup()->GetFirstMember(); ref; ref = ref->next())
++                if (!allowed(ref->GetSource()))
++                {
++                    err = ERR_BATTLEGROUND_JOIN_FAILED;
++                    return false;
++                }
++        return true;
++    }
++
++    bool OnPlayerCanJoinInBattlegroundQueue(Player* player, ObjectGuid /*guid*/, BattlegroundTypeId bgType,
++                                            uint8 joinAsGroup, GroupJoinBattlegroundResult& err) override
++    {
++        return CanQueueWithBots(player, joinAsGroup, BattlegroundMgr::BGQueueTypeId(bgType, ARENA_TYPE_NONE), err);
++    }
++
++    bool OnPlayerCanJoinInArenaQueue(Player* player, ObjectGuid /*guid*/, uint8 /*arenaSlot*/,
++                                     BattlegroundTypeId /*bgType*/, uint8 joinAsGroup, uint8 /*rated*/,
++                                     GroupJoinBattlegroundResult& err) override
++    {
++        return CanQueueWithBots(player, joinAsGroup, BATTLEGROUND_QUEUE_2v2, err);
++    }
+ 
+     void OnPlayerLogin(Player* player) override
+     {

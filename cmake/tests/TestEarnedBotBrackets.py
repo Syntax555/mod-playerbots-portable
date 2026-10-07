@@ -61,7 +61,8 @@ struct Player {
     bool GetBGAccessByLevel(int) const { return level >= 10 && level <= 60; }
 };
 struct Config {
-    bool naturalProgression=true, vanillaBattlegroundsOnly=true; float randomBotXPRate=10.0f;
+    bool naturalProgression=true, vanillaBattlegroundsOnly=true, earnedEraBattlegrounds=false;
+    float randomBotXPRate=10.0f;
     std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets;
 } sPlayerbotAIConfig;
 struct RandomMgr { bool IsRandomBot(Player* p) const { return p->random; } } sRandomPlayerbotMgr;
@@ -90,6 +91,10 @@ void BotRate(Player* player, uint32& amount) {
 using BattlegroundQueueTypeId=int; using BattlegroundBracketId=int; using BattlegroundTypeId=int;
 constexpr int BATTLEGROUND_QUEUE_WS=1, BATTLEGROUND_QUEUE_AB=2, BATTLEGROUND_QUEUE_AV=3;
 ''' + queue_policy + r'''
+bool IsPlayerbotBattlegroundQueueAllowed(Player*, bool vanillaOnly, bool earnedEra, BattlegroundQueueTypeId queue) {
+    assert(!earnedEra); // Earned-era policy is exercised in TestPlayerbotEraBattlegrounds.py.
+    return IsPlayerbotBattlegroundQueueAllowed(vanillaOnly, queue);
+}
 struct Battleground { uint32 GetMapId() const { return 489; } } bg;
 struct BattlegroundMgr {
     static int BGTemplateId(int q) { return q; }

@@ -86,9 +86,9 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 			t.Fatal(err)
 		}
 		for relative, expected := range map[string]map[string]string{
-			"worldserver.conf":                   {"Expansion": "2", "MaxPlayerLevel": target.level, "CharacterCreating.Disabled.RaceMask": target.raceMask, "CharacterCreating.Disabled.ClassMask": target.classMask, "Rate.XP.Kill": "1", "StartPlayerLevel": "1"},
+			"worldserver.conf":                   {"Expansion": "2", "MaxPlayerLevel": target.level, "CharacterCreating.Disabled.RaceMask": target.raceMask, "CharacterCreating.Disabled.ClassMask": target.classMask, "Rate.XP.Kill": "1", "StartPlayerLevel": "1", "Battleground.Arathi.CapturePoints": "1600", "Battleground.Alterac.Reinforcements": "600"},
 			"modules/individualProgression.conf": {"IndividualProgression.Enable": "1", "IndividualProgression.ProgressionLimit": target.limit, "IndividualProgression.BotAccountsMaxLevel": target.level, "IndividualProgression.StartingProgression": "0", "IndividualProgression.BotAccountsRegex": "\"\""},
-			"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": target.level, "AiPlayerbot.RandomBotMaps": target.maps, "AiPlayerbot.NaturalProgression": "1", "AiPlayerbot.DisableRandomLevels": "1", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.BotCheats": "\"\""},
+			"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": target.level, "AiPlayerbot.RandomBotMaps": target.maps, "AiPlayerbot.NaturalProgression": "1", "AiPlayerbot.DisableRandomLevels": "1", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.BotCheats": "\"\"", "AiPlayerbot.EarnedEraBattlegrounds": "1", "AiPlayerbot.VanillaBattlegroundsOnly": "0", "AiPlayerbot.LimitTalentsExpansion": "0", "AiPlayerbot.RandomBotAutoJoinBG": "0", "AiPlayerbot.RandomBotAutoJoinBGEYCount": "1", "AiPlayerbot.RandomBotAutoJoinBGICCount": "1", "AiPlayerbot.RandomBotArenaTeam2v2Count": "0"},
 		} {
 			content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
 			for key, want := range expected {
@@ -224,7 +224,7 @@ func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
 	for relative, expected := range map[string]map[string]string{
 		"worldserver.conf":                   {"MaxPlayerLevel": "80", "StartPlayerLevel": "1", "StartPlayerMoney": "0", "MinDualSpecLevel": "80", "CharacterCreating.Disabled.RaceMask": "0"},
 		"modules/individualProgression.conf": {"IndividualProgression.ProgressionLimit": "0", "IndividualProgression.StartingProgression": "0", "IndividualProgression.TbcRacesUnlockProgression": "8", "IndividualProgression.tbcRacesStartingProgression": "0", "IndividualProgression.DeathKnightUnlockProgression": "13", "IndividualProgression.BotAccountsRegex": "\"\"", "IndividualProgression.ExcludedAccountsRegex": "\"\""},
-		"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": "80", "AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1"},
+		"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": "80", "AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.EarnedEraBattlegrounds": "1", "AiPlayerbot.VanillaBattlegroundsOnly": "0", "AiPlayerbot.LimitTalentsExpansion": "0", "AiPlayerbot.RandomBotAutoJoinBG": "0", "AiPlayerbot.RandomBotAutoJoinBGEYCount": "1", "AiPlayerbot.RandomBotAutoJoinBGICCount": "1", "AiPlayerbot.RandomBotArenaTeam2v2Count": "0"},
 	} {
 		content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
 		for key, want := range expected {
@@ -261,7 +261,7 @@ func TestIndividualSelectionRestoresEarnedUnlocksAndRetainsLegacyCeilingUntilSel
 	}
 	for relative, expected := range map[string]map[string]string{
 		"worldserver.conf":                   {"MaxPlayerLevel": "80", "StartPlayerLevel": "1", "StartPlayerMoney": "0"},
-		"modules/playerbots.conf":            {"AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1"},
+		"modules/playerbots.conf":            {"AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.EarnedEraBattlegrounds": "1", "AiPlayerbot.VanillaBattlegroundsOnly": "0", "AiPlayerbot.LimitTalentsExpansion": "0", "AiPlayerbot.RandomBotAutoJoinBG": "0", "AiPlayerbot.RandomBotAutoJoinBGEYCount": "1", "AiPlayerbot.RandomBotAutoJoinBGICCount": "1", "AiPlayerbot.RandomBotArenaTeam2v2Count": "0"},
 		"modules/individualProgression.conf": {"IndividualProgression.StartingProgression": "0", "IndividualProgression.tbcRacesStartingProgression": "0", "IndividualProgression.TbcRacesUnlockProgression": "8", "IndividualProgression.BotAccountsRegex": "\"\"", "IndividualProgression.DisableDefaultProgression": "0"},
 	} {
 		content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))

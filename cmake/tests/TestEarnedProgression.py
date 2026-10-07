@@ -244,3 +244,8 @@ subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedAuctions
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestStrictEarnedProgression.py'))], check=True)
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedEraPrices.py'))], check=True)
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEraTalents.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestPlayerbotEraBattlegrounds.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedEraBattlegrounds.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedArenaCore.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestBattlegroundEraRules.py'))], check=True)
+subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedEraPvpRules.py'))], check=True)

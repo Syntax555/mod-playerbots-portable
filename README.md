@@ -140,19 +140,43 @@ are preserved, so updating an older realm cannot prove that every existing
 possession was earned. This adds a bounded trading loop; complete farming,
 crafting, questing and live-market reliability still require in-game checks.
 
-## Vanilla battlegrounds and social behavior
+## Earned-era battlegrounds and social behavior
 
-Bots can fill a real player's named Vanilla battleground queue using their earned levels, equipment and faction. Autonomous all-bot match creation stays disabled. Fresh level 1 bots must level normally before they are eligible; an eligible population may take time to develop.
+Bots fill real players' named battleground queues using their own earned levels, equipment, faction and expansion progression. Vanilla characters can queue Warsong Gulch, Arathi Basin and Alterac Valley; earning TBC adds Eye of the Storm, and earning Wrath adds Isle of Conquest. Autonomous all-bot match creation remains disabled. Fresh level-1 bots must level and earn expansion access before they qualify.
 
-About 35% of random bots are assigned earned caps at 19, 29, 39, 49, 59, 69 or 79 (5% each); the rest continue individual progression. They start at 1, earn every level and retain their own equipment. Capped bots can still farm and participate in activities. Joining a party or activity supplies no catch-up levels, equipment or gold. Level-69 and level-79 residents must first earn TBC and Wrath access respectively. Battlegrounds wait for enough eligible queued characters on both factions; the current battleground policy still enables only Vanilla activities. See [earned bot brackets](docs/earned-bot-brackets.md) to customize or release caps; no additional bracket module is needed.
+About 35% of random bots are assigned earned caps at 19, 29, 39, 49, 59, 69 or 79 (5% each); the rest continue individual progression. They earn every level and retain their own equipment. Capped bots can still farm and participate in eligible activities. Joining a party or activity supplies no catch-up levels, equipment or gold. Level-69 and level-79 residents first earn TBC and Wrath access respectively. See [earned bot brackets](docs/earned-bot-brackets.md) to customize or release caps.
 
-| Battleground | Eligible levels | Individual Progression brackets |
+| Battleground | Native level requirement | Earned era required for bot filling |
 | --- | --- | --- |
-| Warsong Gulch | 10–60 | 10–19, 20–29, 30–39, 40–49, 50–59, 60 only |
-| Arathi Basin | 20–60 | 20–29, 30–39, 40–49, 50–59, 60 only |
-| Alterac Valley | 51–60 | 51–60 |
+| Warsong Gulch | 10+ | Vanilla or later |
+| Arathi Basin | 20+ | Vanilla or later |
+| Alterac Valley | 51+ | Vanilla or later |
+| Eye of the Storm | 61+ | TBC, tier 8+ |
+| Isle of Conquest | 71+ | Wrath, tier 13+ |
 
-`AiPlayerbot.VanillaBattlegroundsOnly = 1` restricts bot queue selection and execution to these three battlegrounds. Random battlegrounds, later-expansion battlegrounds and arenas are excluded during this phase. Ordinary team-size requirements still apply. Arathi Basin uses a 2,000-point victory limit; Alterac Valley has no reinforcement countdown. These settings restore those victory rules, rather than every historical version of Vanilla AV.
+`AiPlayerbot.EarnedEraBattlegrounds = 1` enables this policy, with the older `VanillaBattlegroundsOnly` restriction disabled. Matchmaking separates earned eras within each native level bracket, including Vanilla/TBC characters at level 60 and TBC/Wrath characters at level 70. Group queues require every member to qualify and share the same earned era. Normal faction, invitation and team-size requirements still apply; a 2,500-bot population cannot guarantee a match in every bracket.
+
+Selected match rules follow the earned era and remain fixed after players enter:
+
+| Rule | Vanilla | TBC | Wrath |
+| --- | --- | --- | --- |
+| Arathi Basin victory points | 2,000 | 2,000 | 1,600 |
+| Eye of the Storm victory points | Unavailable | 2,000 | 1,600 |
+| Alterac Valley starting reinforcements | No countdown | 600 | 600 |
+| Warsong Gulch time limit | None | None | Native 25 minutes |
+| Warsong Focused/Brutal Assault penalties | Disabled | Native penalties | Native penalties |
+
+The TBC/Wrath flag-carry penalties retain the pinned core's values. These changes
+restore selected era rules, without recreating every historical patch version.
+
+Humans unlock Strand of the Ancients and random battleground queues at tier 13,
+and arena skirmishes at tier 8, subject to ordinary level/team requirements.
+Native rated arenas require level 80, so rated participation needs earned Wrath;
+TBC characters capped at 70 can use skirmishes only. TBC matches use Nagrand,
+Blade's Edge and Ruins of Lordaeron; Wrath also adds Dalaran Sewers and Ring of
+Valor. Bots do not fill Strand, random battlegrounds or arenas: the pinned AI
+lacks Strand tactics, and its arena team gathering uses teleport shortcuts.
+These human activities need enough ordinary participants.
 
 Battleground participation uses normal core queue invitations and transport. Dead bots release normally, walk to a friendly spirit guide when necessary and wait for the ordinary resurrection wave. The natural progression patch supplies no free equipment, levels or forced resurrection for PvP. Automatic instance strategies and AoE avoidance remain enabled.
 
@@ -238,7 +262,7 @@ ceilings. See [Changing expansions](docs/changing-expansions.md) for migration
 and remaining gameplay limits. The bot safeguards require the updated server
 binaries, not just a replacement launcher.
 
-The Vanilla bot PvP restriction remains active and excludes bots above level 60. Later bot battlegrounds and arenas require a separate review of eligibility, team creation and upstream catch-up shortcuts before enabling them.
+The updated server and `--apply-profiles` replace the older Vanilla-only bot queue restriction with earned-era filling. Existing custom configs otherwise remain unchanged; copying only the launcher cannot add the server queue and match-rule hooks.
 
 For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands). Enabling AH generation, Dungeon Clear or upstream cheat features changes the strict earned-play behavior above.
 

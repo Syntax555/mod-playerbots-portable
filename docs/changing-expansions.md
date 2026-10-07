@@ -84,6 +84,36 @@ levels from 1, and level-69/79 residents first earn TBC/Wrath access. This maint
 companions at lower levels over time without creating pre-levelled populations.
 See [earned bot brackets](earned-bot-brackets.md) for cap changes and release.
 
+## Battleground access and rules
+
+Battleground access follows the same earned expansion as talents. Humans and bots
+can enter the classic maps with their normal level requirements. Tier 8 adds Eye
+of the Storm and TBC arena skirmishes; tier 13 adds Isle of Conquest, Strand of
+the Ancients, random battleground queues and Wrath arenas. Ordinary native level, faction,
+team and bracket checks still apply. A level alone cannot unlock a later map.
+Preserved older characters above their earned era's level ceiling must first
+earn the needed milestones before queueing; their levels are not reduced.
+Human TBC arena skirmishes use Nagrand, Blade's Edge and Ruins of Lordaeron;
+Wrath also adds Dalaran Sewers and Ring of Valor. Native rated arenas require
+level 80, so rated participation needs earned Wrath; TBC characters capped at
+70 can use skirmishes only.
+
+Matchmaking separates earned Vanilla, TBC and Wrath characters even where their
+level brackets overlap. Group queues and premades require one era and independent
+eligibility for every member. Bots fill real players' named Warsong, Arathi,
+Alterac, Eye and Isle queues in their own era. Bot Strand/random/arena filling
+and autonomous all-bot matches remain disabled.
+
+Arathi Basin uses 2,000 points in Vanilla/TBC and 1,600 in Wrath; Eye of the
+Storm uses 2,000 in TBC and 1,600 in Wrath. Alterac Valley has no reinforcement
+countdown in Vanilla and 600 starting reinforcements in TBC/Wrath. Warsong Gulch
+has no fixed time limit in Vanilla/TBC and the native 25-minute limit in Wrath.
+Vanilla also omits Focused/Brutal Assault flag-carry penalties; TBC/Wrath retain
+the native penalties. These targeted rules do not reproduce every historical
+patch version. Rules remain fixed for a match, including refills. See
+[earned bot levels and PvP brackets](earned-bot-brackets.md#waiting-for-battlegrounds)
+for the eligible level ranges, normal minimums and AI limits.
+
 ## Era talents, training and prices
 
 The default [Era Talents integration](era-talents.md) selects each character's
@@ -168,9 +198,11 @@ ordinary creature stats; smaller parties use instance scaling with reduced
 XP/money. Creature levels remain unchanged, bonus tokens are disabled, and
 Vanilla/TBC damage and healing modifiers remain 1.0 for humans and bots.
 
-Dungeon Finder and later bot battlegrounds/arenas remain disabled. Some upstream
-encounter AI has special movement or combat shortcuts, and autonomous completion
-of every raid or class/profession quest is unverified. Historical talents do not
+Dungeon Finder and bot arena teams remain disabled. Supported battlegrounds
+follow each character's earned era; see
+[the battleground guide](earned-bot-brackets.md#waiting-for-battlegrounds). Some
+upstream encounter AI has special movement or combat shortcuts, and autonomous
+completion of every raid or class/profession quest is unverified. Historical talents do not
 replace every Wrath combat, profession, pet or world-data rule. See
 [the configuration audit](vanilla-config-audit.md) for the scope of source checks
 and live-gameplay limits.
