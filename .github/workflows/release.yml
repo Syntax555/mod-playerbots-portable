@@ -5,16 +5,8 @@ on:
     branches:
       - main
       - 'codex/**'
-    tags:
-      - 'v*'
   pull_request:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Existing v* tag to build and publish; leave empty for a build artifact only'
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
@@ -30,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -48,6 +40,13 @@ jobs:
         if: hashFiles('cmake/tests/TestPortableZip.ps1') != ''
         shell: pwsh
         run: ./cmake/tests/TestPortableZip.ps1
+
+      - name: Test rolling release publication
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Test dependency license packaging
+        shell: pwsh
+        run: ./cmake/tests/TestDependencyLicenses.ps1
 
       - name: Test historical client packaging
         if: hashFiles('cmake/tests/TestEraClientPackaging.py') != ''
@@ -70,33 +69,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Check selected source client packaging capabilities
         id: features
-        env:
-          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag || '' }}
         run: |
-          python3 - <<'PY'
-          import json, os, pathlib, re
+          python3 - <<'PYTHON'
+          import json, os, pathlib
           paths = [pathlib.Path(p) for p in ('cmake/PackageEraClient.cmake', 'cmake/PackageEraClient.py', 'cmake/era-client-tools/CMakeLists.txt')]
           if any(p.is_file() for p in paths) and not all(p.is_file() for p in paths):
-              raise SystemExit('Selected source has an incomplete historical client packager')
+              raise SystemExit('Incomplete historical client packaging tools')
           lock = json.loads(pathlib.Path('versions.lock.json').read_text())
           enabled = all(p.is_file() for p in paths) and bool(lock.get('clientPatch'))
-          tag = ''
-          if os.environ['GITHUB_EVENT_NAME'] == 'push' and os.environ['GITHUB_REF'].startswith('refs/tags/v'):
-              tag = os.environ['GITHUB_REF_NAME']
-          elif os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch':
-              tag = os.environ['REQUESTED_RELEASE_TAG']
-          if tag and not re.fullmatch(r'v[0-9A-Za-z][0-9A-Za-z._-]*', tag):
-              raise SystemExit('Invalid release tag. Select an existing v* tag.')
-          version = tag[1:] if tag else 'dev-' + os.environ['GITHUB_RUN_NUMBER']
+          publish = os.environ['GITHUB_REF'] == 'refs/heads/main' and os.environ['GITHUB_EVENT_NAME'] in ('push', 'workflow_dispatch')
+          version = 'latest' if publish else 'dev-' + os.environ['GITHUB_RUN_NUMBER']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write('enabled=' + str(enabled).lower() + '\n')
           with open(os.environ['GITHUB_ENV'], 'a') as out:
               out.write('PACKAGE_VERSION=' + version + '\n')
-          PY
+          PYTHON
 
       - name: Install native client patch tools
         if: steps.features.outputs.enabled == 'true'
@@ -134,39 +125,21 @@ jobs:
     env:
       # ExternalProject starts another cmake --build, which needs its own limit.
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
-    outputs:
-      release_tag: ${{ steps.version.outputs.release_tag }}
 
     steps:
-      - name: Determine package version and source tag
+      - name: Determine package name
         id: version
         shell: pwsh
-        env:
-          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag || '' }}
         run: |
-          $releaseTag = ''
-          $checkoutRef = ''
-          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -like 'refs/tags/v*') {
-              $releaseTag = $env:GITHUB_REF_NAME
-          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
-              $releaseTag = $env:REQUESTED_RELEASE_TAG
-          }
-          if ($releaseTag) {
-              if ($releaseTag -cnotmatch '^v[0-9A-Za-z][0-9A-Za-z._-]*\z') { throw 'Invalid release tag. Select an existing v* tag.' }
-              $version = $releaseTag.Substring(1)
-              $checkoutRef = "refs/tags/$releaseTag"
-          } else {
-              $version = "dev-$env:GITHUB_RUN_NUMBER"
-          }
+          $publish = $env:GITHUB_REF -eq 'refs/heads/main' -and $env:GITHUB_EVENT_NAME -in @('push', 'workflow_dispatch')
+          $version = if ($publish) { 'latest' } else { "dev-$env:GITHUB_RUN_NUMBER" }
           "value=$version" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "release_tag=$releaseTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "checkout_ref=$checkoutRef" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "PACKAGE_VERSION=$version" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Checkout pinned submodules
         uses: actions/checkout@v7
         with:
-          ref: ${{ steps.version.outputs.checkout_ref }}
+          ref: ${{ github.sha }}
           submodules: recursive
 
       - name: Check packaging capabilities of selected source
@@ -263,6 +236,10 @@ jobs:
               Write-Output "::error title=CMake configure failed::$message"
               exit $configureExitCode
           }
+
+      - name: Preserve dependency licenses
+        shell: pwsh
+        run: ./scripts/CopyDependencyLicenses.ps1 -DistDir dist
 
       - name: Check Windows resources before C++ compilation
         if: steps.package_features.outputs.resource_preflight == 'true'
@@ -458,101 +435,6 @@ jobs:
               exit 1
           }
 
-      - name: Generate release notes with locked versions
-        shell: pwsh
-        run: |
-          $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
-          $version = '${{ steps.version.outputs.value }}'
-          $individualMode = (Test-Path 'cmd/startup/expansion.go' -PathType Leaf) -and ((Get-Content 'cmd/startup/expansion.go' -Raw) -match 'case "individual":')
-          $lines = [System.Collections.Generic.List[string]]::new()
-          $lines.Add('Prebuilt Windows x64 AzerothCore server with the pinned modules and client addons listed below.')
-          $lines.Add('')
-          $lines.Add('Download and extract mod-playerbots-portable-' + $version + '.zip, then run startup.exe. Required client data and databases are downloaded/initialized on first launch. No compiler is required.')
-          $lines.Add('')
-          if ($individualMode) {
-              $lines.Add('Fresh installations use earned individual progression through Vanilla, TBC and Wrath with a level-80 realm ceiling. All new random bots start at level 1, tier 0, with normal starter items and zero gold. Each character earns tiers 8/13 before XP beyond 60/70. TBC races require tier 8 on that same account; bot creation and login both enforce it. Death knight bots stay disabled because their normal class start is level 55.')
-          } else {
-              $lines.Add('Fresh installations use Vanilla progression, a level-60 cap and a target of 2,500 level-1 bots.')
-          }
-          $lines.Add('Gradual bot login begins 30 seconds after a real player connects; bots log out about 60 seconds after the last real session disconnects. Natural maintenance uses normal NPC prices and prerequisites. See README.md and defaults/ in the ZIP for behavior and AI limits.')
-          $lines.Add('')
-          if (Test-Path 'cmake/tests/TestEarnedEraBattlegrounds.py' -PathType Leaf) {
-              $lines.Add('Battlegrounds now follow each character''s earned era and native level brackets. Bots fill real players'' Warsong, Arathi and Alterac queues, plus Eye of the Storm after tier 8 and Isle of Conquest after tier 13. Vanilla, TBC and Wrath queues match separately; every party member and invitation is checked. Arathi uses 2,000 points in Vanilla/TBC and 1,600 in Wrath; Eye uses 2,000 in TBC and 1,600 in Wrath. Alterac has no reinforcement countdown in Vanilla and starts at 600 in TBC/Wrath. Warsong has no time limit in Vanilla/TBC, retains the native 25-minute limit in Wrath, and omits later flag-stalemate penalties in Vanilla. Wrath bots can spend their earned points in the deeper Wrath talent rows.')
-              $lines.Add('Humans unlock Strand of the Ancients and random battlegrounds with earned Wrath. TBC arena skirmishes use Nagrand, Blade''s Edge and Ruins of Lordaeron; Wrath adds Dalaran Sewers and Ring of Valor. Native rated arenas still require level 80, so strict progression requires earned Wrath for rated play. Bot Strand/random/arena participation and autonomous all-bot matches remain disabled. No PvP entry grants levels, equipment, gold or forced resurrection; ghosts use normal spirit-guide waves. Install the complete server ZIP and apply profiles to update an older Vanilla-only setup. See docs/earned-bot-brackets.md for requirements and AI limits.')
-          } else {
-              $lines.Add('Bots fill real players'' Warsong Gulch (levels 10–60), Arathi Basin (20–60) and Alterac Valley (51–60) queues with their earned levels and equipment. Autonomous all-bot matches, random/later battlegrounds and arenas stay disabled. Ghosts use normal spirit-guide resurrection waves. Nearby greetings target real players only; random emotes and toxic-link/Thunderfury meme replies stay off.')
-          }
-          $lines.Add('')
-          if (Test-Path 'docs/earned-bot-brackets.md' -PathType Leaf) {
-              $lines.Add('Roughly 35% of random bots earn and stay at levels 19, 29, 39, 49, 59, 69 or 79 (5% each); the rest continue individual progression. The level-69/79 residents first earn their TBC/Wrath unlocks. Every bot starts at 1 and retains its earned equipment. Activity entry grants no catch-up levels, gear or money. Battlegrounds require enough eligible queued characters on both factions at the normal minimums. Legacy level rerolls and bot XP multipliers are blocked in natural mode. Customize or release caps in configs/modules/playerbots.conf; see docs/earned-bot-brackets.md. Install the full server ZIP and apply profiles once before customizing an older installation.')
-              $lines.Add('')
-          }
-          if (Test-Path 'docs/earned-auctions.md' -PathType Leaf) {
-              $lines.Add('Earned auction trading is enabled for autonomous random bots. They visit reachable auctioneers to list surplus inventory and buy useful items with their existing gold, using normal auction deposits, sale cuts and buyouts. Purchases, proceeds and expired listings use normal mail collected at a reachable mailbox after delivery. Trading visits are bounded and paced by AiPlayerbot.EarnedAuctionInterval (300 seconds by default); busy bots continue their current activity. AH Bot Plus synthetic seller/buyer operations stay disabled, and no trading items or gold are generated. Install the complete server ZIP and apply profiles once to update an existing realm. See docs/earned-auctions.md for settings and limits.')
-              $lines.Add('')
-          }
-          $lines.Add('Audited profiles keep normal earned talent/skill rates, paid trainer respecs, two primary professions and riding at levels 40/60. New dual-spec purchases are unavailable below level 80. Shortcut bot mail and unsolicited event broadcasts are disabled. AutoBalance counts actual party members, including bots, with explicit dungeon/raid minimums and no player-count offset.')
-          $lines.Add('')
-          $lines.Add('Quest Loot Party is now included and enabled. Eligible party members can individually loot their own copy of naturally dropped normal-quality quest items from the corpse; drop chances and ordinary equipment loot rules stay unchanged. Login announcements are off. Forced drops, automatic item delivery and broad personal-loot features are not included.')
-          $lines.Add('')
-          if ($lock.modules | Where-Object { $_.name -eq 'mod-token-turnin' }) {
-              $lines.Add('Token Turn-in permits only read-only token inventory/mapping checks (.check). The .redeem command is blocked because it bypasses AQ/Naxx scarab, reputation and material requirements.')
-              $lines.Add('')
-          }
-          if ($lock.clientPatch) {
-              $lines.Add('Historical Vanilla/TBC talent trees and era spells use mod-era-talents, adapted to earned character progression for players and bots. Players must install EraTalents and the merged Data/patch-V.mpq from EraTalents-client-' + $version + '.zip into their WoW 3.3.5a client, then fully restart WoW. Both client files must match this server build; bots need no client files. The patch starts from the pinned Individual Progression client archive and preserves its other DBCs. See docs/era-talents.md for setup, historical data limits and upgrade behavior.')
-          } else {
-              $lines.Add('Progression begins in Vanilla on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
-          }
-          $lines.Add('')
-          $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
-          $lines.Add('')
-          if ($individualMode) {
-              $lines.Add('For an existing realm, install this complete server ZIP, stop the servers, run startup.exe --set-expansion individual and startup.exe --apply-profiles, then restart normally. A launcher-only upgrade cannot fix bot account checks. Changed configs are backed up; characters/databases are preserved. Existing selected Vanilla/TBC ceilings remain until explicitly changed. Individual mode needs no later realm switch. See docs/changing-expansions.md.')
-              $lines.Add('Natural talent allocation now spends earned points without free resets, and fallback allocation respects Vanilla/TBC talent depth. Into the Breach cannot skip unearned Vanilla tiers. Balancing counts actual bots and humans, preserves creature levels, and adds no bonus tokens or increased rewards. Some upstream encounter AI still has movement/combat shortcuts; see the included audit for limits.')
-              $lines.Add('')
-          } elseif (Test-Path 'cmd/startup/expansion.go' -PathType Leaf) {
-              $lines.Add('To open TBC or WotLK later, stop the realm and run startup.exe --set-expansion tbc or startup.exe --set-expansion wotlk, then restart normally. Linked configs change together with backups; the selected phase survives --apply-profiles. Every character still earns its own progression. See docs/changing-expansions.md.')
-              $lines.Add('')
-          }
-          $lines.Add('### Locked upstream versions')
-          $lines.Add('')
-          foreach ($dependency in @($lock.core) + @($lock.modules)) {
-              $repo = $dependency.url -replace '\.git$', ''
-              $lines.Add('- **' + $dependency.name + '**: [' + $dependency.revision.Substring(0, 12) + '](' + $repo + '/commit/' + $dependency.revision + ')')
-          }
-          $lines.Add('')
-          $lines.Add('### Included client addons')
-          $lines.Add('')
-          foreach ($addon in @($lock.clientAddons)) {
-              $repo = $addon.url -replace '\.git$', ''
-              $archiveName = if ($null -ne $addon.archiveName) { $addon.archiveName } else { $addon.name }
-              $install = 'Copy addons/' + $addon.name + ' from the server ZIP into your client Interface/AddOns/ folder.'
-              if ('${{ steps.package_features.outputs.standalone_addons }}' -eq 'true') {
-                  $install = 'Download the standalone ' + $archiveName + '-' + $version + '.zip and copy its ' + $addon.name + '/ folder into your client Interface/AddOns/ folder, or use addons/' + $addon.name + ' from the server ZIP.'
-              }
-              $lines.Add('- **' + $archiveName + '**: [' + $addon.revision.Substring(0, 12) + '](' + $repo + '/commit/' + $addon.revision + ') for WoW 3.3.5a. ' + $install + ' The installed folder must be named ' + $addon.name + '.')
-          }
-          $lines.Add('')
-          if ($lock.clientAddons | Where-Object { $_.url -like '*/MultiBot-Chatless.git' }) {
-              $lines.Add('Remove the old MultiBot folder from Interface/AddOns/ before replacing it with MultiBot-Chatless. Install the replacement as Interface/AddOns/MultiBot/ so MultiBot.toc loads correctly.')
-          }
-          $lines.Add('')
-          $patchNotes = [System.Collections.Generic.List[string]]::new()
-          foreach ($dependency in $lock.modules) {
-              foreach ($patch in @($dependency.patches)) {
-                  if ($patch) { $patchNotes.Add('- **' + $dependency.name + '**: `' + $patch + '`') }
-              }
-          }
-          if ($patchNotes.Count -gt 0) {
-              $lines.Add('### Included source patches')
-              $lines.Add('')
-              $lines.AddRange($patchNotes)
-              $lines.Add('')
-              $lines.Add('Upstream revisions remain pinned. See README.md for patch behavior and limits.')
-          }
-          [System.IO.File]::WriteAllText('release_notes.md', ($lines -join "`n"), [System.Text.UTF8Encoding]::new($false))
-
       - name: Upload compiled ZIP for review
         uses: actions/upload-artifact@v7
         with:
@@ -560,48 +442,3 @@ jobs:
           path: output/*.zip
           if-no-files-found: error
           compression-level: 0
-
-      - name: Upload release notes
-        if: steps.version.outputs.release_tag != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-notes
-          path: release_notes.md
-          if-no-files-found: error
-
-  release:
-    name: Publish tagged ZIP release
-    if: needs.build.outputs.release_tag != ''
-    needs: [build, era_client]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download verified ZIP
-        uses: actions/download-artifact@v7
-        with:
-          name: portable-zip
-          path: output
-
-      - name: Download release notes
-        uses: actions/download-artifact@v7
-        with:
-          name: release-notes
-
-      - name: Download verified historical client ZIP
-        if: needs.era_client.outputs.enabled == 'true'
-        uses: actions/download-artifact@v7
-        with:
-          name: era-client-zip
-          path: output
-
-      - name: Publish ZIP release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.build.outputs.release_tag }}
-          name: ${{ needs.build.outputs.release_tag }}
-          body_path: release_notes.md
-          prerelease: false
-          draft: false
-          files: output/*.zip
-          fail_on_unmatched_files: true

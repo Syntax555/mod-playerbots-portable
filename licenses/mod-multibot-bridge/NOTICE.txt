@@ -9,5 +9,5 @@ https://github.com/Wishmaster117/mod-multibot-bridge/blob/1da05982e478cb00e0b6c8
 
 This upstream revision contains no LICENSE/COPYING file or explicit source
 license declaration. This notice records provenance; it does not assign or
-infer an upstream license. The portable integration patch is included under
-patches/mod-multibot-bridge-natural-progression.patch.
+infer an upstream license. Local integration patches and their order are
+recorded in versions.lock.json and included under patches/.
