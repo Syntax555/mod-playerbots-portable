@@ -31,6 +31,27 @@ file(COPY "${core}/data/sql" DESTINATION "${PORTABLE_DIST_DIR}/src/data")
 file(COPY "${core}/LICENSE" DESTINATION "${PORTABLE_DIST_DIR}/licenses")
 file(RENAME "${PORTABLE_DIST_DIR}/licenses/LICENSE" "${PORTABLE_DIST_DIR}/licenses/azerothcore-wotlk.txt")
 
+# Preserve bundled library notices, including grants embedded in source headers.
+set(core_dependency_notices "${PORTABLE_DIST_DIR}/licenses/core-dependencies")
+file(REMOVE_RECURSE "${core_dependency_notices}")
+file(GLOB_RECURSE dependency_files LIST_DIRECTORIES FALSE RELATIVE "${core}/deps" "${core}/deps/*")
+foreach(relative IN LISTS dependency_files)
+    get_filename_component(filename "${relative}" NAME)
+    string(TOUPPER "${filename}" notice_name)
+    if(notice_name MATCHES "^(LICENSE|LICENCE|COPYING|NOTICE|COPYRIGHT|AUTHORS)"
+        OR relative MATCHES "^utf8cpp/utf8(/.*)?[.]h$"
+        OR relative STREQUAL "zlib/zlib.h"
+        OR relative STREQUAL "gsoap/stdsoap2.h"
+        OR relative STREQUAL "gsoap/soapH.h"
+        OR relative STREQUAL "fkYAML/fkYAML/node.hpp"
+        OR relative STREQUAL "g3dlite/source/license.cpp")
+        get_filename_component(parent "${relative}" DIRECTORY)
+        file(MAKE_DIRECTORY "${core_dependency_notices}/${parent}")
+        configure_file("${core}/deps/${relative}"
+            "${core_dependency_notices}/${relative}" COPYONLY)
+    endif()
+endforeach()
+
 foreach(app authserver worldserver)
     file(COPY "${core}/src/server/apps/${app}/${app}.conf.dist"
         DESTINATION "${PORTABLE_DIST_DIR}/configs")
@@ -114,8 +135,12 @@ file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"
 # Compare manifest contents rather than timestamps when assembling again.
 configure_file("${PORTABLE_SOURCE_DIR}/versions.lock.json"
     "${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)
-file(COPY "${PORTABLE_SOURCE_DIR}/README.md" "${PORTABLE_SOURCE_DIR}/LICENSE"
-    DESTINATION "${PORTABLE_DIST_DIR}")
+foreach(document README.md LICENSE THIRD_PARTY_NOTICES.md CONTRIBUTING.md)
+    if(EXISTS "${PORTABLE_SOURCE_DIR}/${document}")
+        configure_file("${PORTABLE_SOURCE_DIR}/${document}"
+            "${PORTABLE_DIST_DIR}/${document}" COPYONLY)
+    endif()
+endforeach()
 file(GLOB patches "${PORTABLE_SOURCE_DIR}/patches/*.patch")
 if(patches)
     file(COPY ${patches} DESTINATION "${PORTABLE_DIST_DIR}/patches")

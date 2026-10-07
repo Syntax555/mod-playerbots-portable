@@ -1,567 +1,146 @@
-# Vanilla configuration and module audit
+# Configuration reference
 
-Reviewed on 5 October 2026 against portable v1.0.8 (`2ef9230`), its exact locked sources and the generated patched modules. The follow-up changes described below affect configuration profiles and documentation. No CMake configuration, compilation, server start, SQL import, release tag or release was performed for this audit.
+The launcher creates active configurations from full templates and applies the
+bundled profiles. Active server files live in `configs/`; module files live in
+`configs/modules/`. The readable `defaults/` files are references, while
+`startup.exe` embeds the profiles used by `--apply-profiles`.
 
-The opening sections retain that historical audit's findings. The later dated
-addenda record source integrations and supersede their corresponding earlier
-limitations; the current earned progression, historical talents and
-battleground behavior are described in the final addenda.
+Existing configurations preserve custom values until profiles are explicitly
+applied. Stop the launcher and servers, back up the installation, then run:
 
-## Scope and effective configuration
+```powershell
+.\startup.exe --apply-profiles
+```
 
-The review combines the complete shipped templates with the launcher's managed profiles. Existing user installations retain custom values until deliberately changed; their active files and database were not available for this review.
+Changed files receive `.backup.*` copies. Managed values return to bundled
+defaults; unrelated values, characters and databases are retained. Make custom
+edits afterward. Install the full server package to update compiled behavior.
 
-| Configuration | Template settings | Managed settings after this audit |
-| --- | ---: | ---: |
-| `worldserver.conf` | 591 | 45 |
-| `authserver.conf` | 36 | 0 |
-| `dbimport.conf` | 25 | 0 |
-| `playerbots.conf` | 894 | 125 |
-| `individualProgression.conf` | 63 | 24 |
-| `AutoBalance.conf` | 254 | 13 |
-| `mod_ahbot.conf` | 448 | 3 |
-| `mod_dungeon_clear.conf` | 117 | 8 |
+## Progression and character creation
 
-All 2,428 template assignments were inventoried. All 218 managed assignments use known template keys, with no duplicate profile keys. This is a configuration validity check, with source review of relevant behavior; it does not mean every unused optional feature received a gameplay test. IP also applies runtime overrides: a 60-second breath timer, disabled low-level regeneration boost, enabled player settings, disabled item DBC attribute enforcement, monster sight 80, and hidden object quest markers/sparkles. These overrides were reviewed separately from the merged file assignments.
-
-`authserver` and `dbimport` retain ordinary template defaults, with connection information, source/data paths and loopback bindings supplied by the launcher. The generated MySQL configuration binds to loopback, reserves roughly one quarter of detected RAM for its buffer pool (512 MiB to 8 GiB), and leaves memory for worldserver and bots. No database or credential migration is part of this audit.
-
-## Confirmed configuration corrections
-
-| Setting | Follow-up value | Reason |
-| --- | --- | --- |
-| `Rate.Talent`, `Rate.Talent.Pet` | `1` | Keep ordinary earned core talent points; this is not a replacement for historical talent data. |
-| `MinDualSpecLevel` | `80` | Prevent new dual-specialization purchases during the level-60 phase. Existing specializations are retained. |
-| `NoResetTalentsCost` | `0` | Normal paid trainer respecs; automatic bot template resets use a separate internal path. |
-| `AlwaysMaxSkillForLevel`, `AlwaysMaxWeaponSkill` | `0` | Skills must improve through ordinary use. |
-| `MaxPrimaryTradeSkill` | `2` | Ordinary profession limit. |
-| Bot ground/fast-ground/flying mount minimum | `40 / 60 / 70` | Match IP's actual paid trainer/item requirements rather than inherited Wrath thresholds. |
-| `AiPlayerbot.BotSendMailEnabled` | `0` | Upstream bot mail bypasses mailbox proximity and normal postage. Human mail and direct trading remain available. |
-| All 34 `AiPlayerbot.BroadcastChance*` settings | `0` | Prevent unsolicited event, suggestion, guild-management and meme announcements across 2,500 bots. Scoped greetings and command replies use separate paths. |
-| `AiPlayerbot.EnableBroadcasts` | `1` | Keep its random-range initialization valid; the unguarded upstream Thunderfury helper assumes a positive range. Zero event chances suppress output safely. |
-| `IndividualProgression.DisableDefaultProgression`, `CustomProgression` | `0`, empty | Keep the normal earned progression chain. |
-| IP Vanilla damage/healing, `BotOnlyAdjustments` | `1.0 / 1.0`, `0` | A shared output policy for humans and bots; no unmeasured extra global nerf stacked with party scaling. |
-| `IndividualProgression.EnforceGroupRules` | `0` | Allow recruiting bots at different earned tiers; each character still meets their own content/quest/item gates. |
-| `IndividualProgression.EnableAllSpellRanks` | `0` | Keep IP's default legacy-rank restriction for later Wrath progression; this flag is inactive during Vanilla and does not block later low-level spells. |
-| AutoBalance normal/heroic dungeon and raid minima, difficulty offset | All minima `1`, offset `0` | Count the actual non-GM occupants, including playerbots, without an artificial count offset. Explicit heroic floors also cover restored Vanilla raids using an internal heroic difficulty. Existing per-instance overrides still take precedence. |
-
-Mail behavior is established in [SendMailAction.cpp](https://github.com/mod-playerbots/mod-playerbots/blob/037c01418b5d01506917a3db9b44fd56ac5f965c/src/Ai/Base/Actions/SendMailAction.cpp), including the enable check before item/money handling. Broadcast probabilities and the separate Thunderfury path are in [BroadcastHelper.cpp](https://github.com/mod-playerbots/mod-playerbots/blob/037c01418b5d01506917a3db9b44fd56ac5f965c/src/Util/BroadcastHelper.cpp). IP restores the riding trainer levels and costs in [mounts_and_riding.sql](https://github.com/ZhengPeiRu21/mod-individual-progression/blob/60336b349cce2bc209d154bb840f2370f1cc16f2/data/sql/world/base/mounts_and_riding.sql). Actual group/guild invitation messages can still appear through a separate path; the profile does not mute ordinary command responses or every social interaction.
-
-## Individual Progression is correctly limited to Vanilla
-
-The required policy remains:
-
-- Enabled; starting tier `0`, progression limit `7` (completed Vanilla Naxxramas). Tier `8` starts TBC; a limit of `0` means unlimited.
-- Core and random-bot maximum level `60`; fresh humans and bots start at level `1` with ordinary earned resources.
-- Empty bot/excluded account regexes. Random bots receive normal attunement and boss progression instead of class-spell grants, account exemptions or leader-tier copying.
-- Blood elves, draenei and death knights blocked by core creation masks, with IP expansion unlock tiers `8` and `13`.
-- Core `Expansion = 2` retained for restored map 533. Changing it to `0` is not the correct way to enforce this IP setup.
-- Core Dungeon Finder mask `0`, IP `DisableRDF = 0`. Setting IP's flag to `1` would overwrite the fully disabled core mask with `4`.
-- Early Dungeon Set 2/Scourge bosses and reputation administration commands disabled. The module's default Molten Core rune/quest requirements and Naxx mechanics retained.
-
-Every IP template key has a corresponding source configuration consumer. Its base SQL is already included in the distribution; no additional progression or AQ war-effort module is required. IP supplies a personal war-effort completion route after the faction's collection quests.
-
-Naxx40's SQL-backed map difficulty has `MaxPlayers = 40` on difficulty 2; the custom entrance selects that mode. Core loads the SQL DBC override, so AutoBalance uses the 40-player capacity rather than incorrectly treating the restored raid as a ten-player instance. This is source/data-input verification, not an inspection of the user's running database.
-
-## Talents and class balance are not original 1.12 rules
-
-**51 earned talent points at level 60 are correct. The talent identities, trees and effects remain Wrath.** Vanilla's end-of-tree talent required 31 points in that tree; a 51-point total was distributed across trees. The current core instead lets a human invest those 51 points into a Wrath tree and obtain a Wrath capstone.
-
-`AiPlayerbot.LimitTalentsExpansion = 1` only restricts the depth of bot talent templates approximately to the seven-row/31-point tier. It does not recreate old talent identities, provide a global human talent gate, or fully constrain fallback allocation. Humans also retain Wrath glyphs and pet talent trees; natural bots receive no generated glyphs and limit pet talent auto-allocation. Consequently, the current setup must not be advertised as equal original-1.12 talent rules for humans and bots.
-
-Automatic bot talent allocation also calls the factory with `reset = true`, which internally performs a free talent reset. `NoResetTalentsCost = 0` controls normal trainer respecs, not that AI path. Simply disabling `AutoPickTalents` would leave naturally levelling bots without their automatic talent allocation. A future code correction should spend new earned points incrementally without resetting previously chosen talents; this audit does not change that source behavior or claim a complete zero-shortcut talent implementation.
-
-IP restores many class quest/book acquisitions, professions, mounts, items and dungeon rules. Some later low-level skills and professions remain, including Wrath class abilities and Inscription/Jewelcrafting. Its optional archives contain profession/reagent or Spell DBC overrides plus paired client patches; none contains `Talent.dbc` or `TalentTab.dbc`.
-
-Original Vanilla talent trees need a coordinated client/server data, spell and bot-template/rotation implementation. There is no verified drop-in maintained module for that with this exact core/module pair. A server configuration toggle cannot perform the conversion.
-
-Do not import IP's optional expansion-spell SQL unchanged: it ends with a fixed `USE acore_characters` and deletes existing learned spells. Selected trainer restrictions would need a separate world-only policy and AI review. Likewise, optional DBC/MPQ pairs require matching client and server changes; they are not silently applied by this portable launcher.
-
-IP documents approximate damage `0.5–0.6` and healing `0.5` adjustments as tuning options. They do not establish per-class historical balance. The reviewed profile keeps both at `1.0`, applied equally to humans/bots, rather than claiming an arbitrary global nerf has recreated Vanilla. Actual class/encounter tuning remains a separate gameplay decision.
-
-## Solo play and module coverage
-
-At the original audit, the existing core/module/addon pins matched their stable/default upstream heads in fresh checks on 5 October 2026. The later Chatless replacement and added modules are recorded in the addendum below and in [module-versions.md](module-versions.md). They cover the necessary systems for one human with companions:
-
-| Component | Policy |
+| Setting or system | Default behavior |
 | --- | --- |
-| Playerbots | Enabled, natural earned progression, local companions and ordinary groups, human-triggered Vanilla BGs. |
-| Individual Progression | Enabled, earned Vanilla tier gates and restored content. |
-| AutoBalance | Enabled for instances, original creature levels, normal full-party stats, smaller-party scaling with matching XP/money scaling. |
-| AH Bot Plus | Included but seller/buyer off: they generate supply and synthetic demand. |
-| Dungeon Clear | Included but off: scripted navigation teleports and filler/recovery shortcuts conflict with the current policy. |
-| MultiBot (original audit) | Client control UI, subsequently replaced by MultiBot Chatless and its server bridge. |
-
-Do not add SoloCraft alongside AutoBalance: it buffs player stats/spellpower, restores health/mana and modifies XP while AutoBalance already reduces instance enemies. Solo Dungeon Finder adds no value when RDF is disabled. NPC buffers and generated bot/gear services conflict with earned play; extra AQ/PvP reward modules duplicate IP systems.
-
-AutoBalance counts the actual non-GM players in an instance, including bots. One human plus four bots therefore receives ordinary five-player creature stats. Its default curve gives approximately `12.4%` of the ordinary creature health/damage multiplier with one occupant in a five-player dungeon, before any creature-specific overrides. This is a curve calculation, not proof every class can solo every mechanic. Scaling is locked against reducing party count mid-combat and reduces XP/money for scaled-down encounters.
-
-Outdoor elites and world bosses remain at ordinary world difficulty. Suitable earned companions are the intended solution; a second outdoor/solo scaler would change that policy.
-
-**At the original audit, no autonomous earned-item auction economy was implemented.** The upstream auction-listing function is commented out; `ITEM_USAGE_AH` is an inventory valuation category that vendor selling also consumes. The earned-auctions addendum below records the later source implementation using existing inventory, normal deposits/cuts and available gold. It supersedes the earlier auction limitation without enabling synthetic AH operations.
-
-Raid AI has concrete compatibility boundaries. For example, the specialized Onyxia whelp action recognizes entry `11262`, whereas IP's restored whelps use `301001`. Generic combat may still attack them, but that is not complete encounter support. AQ40 and restored Naxx40 coverage is also incomplete/unverified. AutoBalance cannot supply missing positioning or mechanic tactics. Optional Naxx mechanic simplifications, early no-cooldown Quintessence, removed Garr adds and fortyfold AQ reputation/drop boosts remain unapplied.
-
-## Applying the audited profiles
-
-The published **v1.0.8 ZIP remains unchanged**. `startup.exe` embeds its profiles at compile time; the v1.0.8 `--apply-profiles` command still applies its earlier defaults and does not read replacement source profiles from `defaults/`.
-
-The reviewed profiles are in the v1.0.9 sources. After downloading that version's compiled ZIP, stop the servers, extract it into the existing installation and run `startup.exe --apply-profiles` once. The new launcher applies its embedded profiles, creates config backups and exits without starting the services. No existing character, inventory, spellbook or progression state is reset.
-
-Alternatively, individual values can be applied manually to the corresponding active configuration files after stopping the servers and backing up those files. These short profiles are overlays, not complete replacement configurations. Preserve database connection strings, ports, paths and unrelated custom values. Exact 1.12 talents, broader class restoration and targeted raid compatibility fixes remain separate implementation choices. Earned auction AI was subsequently added as documented below.
-
-## v1.0.10 addendum: Quest Loot Party
-
-Added at the user's request after the v1.0.9 configuration audit. The original author's [mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party/tree/6f073c1bef1bba1aa73787d1e30db7429f2b1c7b) is pinned to `6f073c1bef1bba1aa73787d1e30db7429f2b1c7b`, the upstream default branch head checked for this integration. All previous core, module and addon pins remain unchanged.
-
-Its shipped template is `configs/modules/mod-quest-loot-party.conf.dist`; the launcher creates `mod-quest-loot-party.conf` with `QuestParty.Enable = true` and `QuestParty.Message = false`. These two known template settings bring the managed total to 220 assignments across seven profiles and the complete template inventory to 2,430 assignments across nine templates.
-
-The source marks only normal-quality entries passing through the core's quest-loot list as free-for-all. The pinned core already provides `OnPlayerBeforeFillQuestLootItem`; its existing loot code determines eligibility, creates per-player loot slots and checks inventory when an item is taken. A qualifying party member must still loot the corpse. This preserves drop rolls, ordinary equipment loot, quest prerequisites and earned progression. It intentionally changes party quest-item distribution; it does not recreate original Vanilla loot rules or guarantee every quest item's sharing, since higher-quality quest items are unchanged.
-
-Playerbots use the ordinary player/corpse loot path, so the feature applies to eligible bots as well as humans. Quest synchronization remains disabled. No automatic bag delivery, forced drop chance or general personal equipment loot from broader forks is included. The module's SQL only installs its scoped login-message translations; it does not alter character state or loot tables. Its SQL and upstream AGPL license are included in the ZIP and handled by the existing packaging/database updater.
-
-For an existing installation, stop the servers, extract the v1.0.10 ZIP into the installation and run its new `startup.exe --apply-profiles` once. Missing module configurations are created from the new template; an existing configuration is updated with a backup. Characters, inventory and progression are preserved.
-
-## Chatless and token turn-in addendum
-
-The current sources replace `Macx-Lio/MultiBot` with the matching
-`Wishmaster117/MultiBot-Chatless` addon and `Wishmaster117/mod-multibot-bridge`
-server module, and add `Zerathane/mod-token-turnin`. Their exact upstream heads,
-checked on 5 October 2026, are pinned in `versions.lock.json` and summarized in
-[module-versions.md](module-versions.md). Existing server module revisions were
-already current and remain unchanged.
-
-Players can download `MultiBot-Chatless-<version>.zip` separately from the server
-ZIP. Both contain the same pinned addon, installed as `Interface/AddOns/MultiBot/`.
-Replace the old client folder completely. This project remains mostly chatless:
-some upstream UI controls still use scoped legacy Playerbots commands.
-
-The bridge's new `mod-multibot-bridge-natural-progression.patch` follows
-`AiPlayerbot.NaturalProgression` on the server. It applies these restrictions:
-
-- Custom talent application and preset specialization writes are rejected,
-  because upstream rebuilds talent templates without an ordinary paid trainer
-  reset. Existing earned talents and automatic talent selection are retained.
-- Bridge trainer purchases require authorization and the bot's normal NPC
-  interaction range. Purchases run through the core trainer handler, including
-  costs, prerequisites and progression hooks. Remote manual spell grants are
-  unavailable in strict mode.
-- Personal bank transfers, including exact deposits, require the bot to be
-  within ordinary banker interaction range and use the core's validated item
-  storage APIs. The bridge corrects quest-item accounting when depositing items
-  and withdrawing into an existing stack; capacity failures retain their reason
-  and partial transfers report the amount actually moved. Guild-bank actions retain their
-  existing core interaction and membership/withdrawal checks.
-- SelfBot autogear and maintenance shortcuts are rejected even if their
-  individual command settings are later enabled.
-
-Rejected shortcuts return `NATURAL_PROGRESSION` to the addon. Roster/inventory
-inspection and normal resource-consuming actions remain available. Existing
-Playerbots restrictions still block free summoning, quest synchronization,
-generated gear/gold and cheat masks. This is a targeted integration audit, not
-a guarantee that every upstream action or encounter is free of shortcuts; the
-earlier AI and Vanilla class-system limitations still apply.
-
-`MultiBotBridge.conf` disables console logs. `mod_token_turnin.conf` enables the
-module with `IncludeSelf = 0` and `IncludeRealPlayers = 0`, so token checks target
-grouped bots rather than altering a human teammate's possessions.
-
-Upstream Token Turn-in directly awards gear and destroys tokens, intentionally
-waiving normal AQ/Naxx reputation and extra materials. Its
-`mod-token-turnin-natural-progression.patch` therefore blocks `.tokenturnin redeem`
-before any character is processed while natural progression is enabled, with a
-second guard in the conversion function. `.tokenturnin check` remains a read-only
-inventory/spec mapping preview and explicitly states that it does not verify
-normal exchange eligibility. Bots still have to farm every required item, earn
-reputation and complete the original quest/NPC exchange.
-
-The release build prepares both modules with the other pinned sources, includes
-their configuration templates, token SQL, provenance/licenses and local patches,
-and embeds the two new profiles into the launcher. Its separate addon asset is
-verified against every prepared file, including textures, the 3.3.5a TOC, license
-and source revision. Preparation re-exports the addon from its immutable cached
-Git revision, and packaging independently compares every asset against that
-revision before creating the player ZIP. The server ZIP verifier also checks
-every addon byte and rejects obsolete SQL migrations. Assembly replaces only
-generated SQL exports, preserving live databases and active configs.
-Existing configurations require the new launcher's
-`--apply-profiles` command to apply the recommended settings with backups;
-characters and databases are preserved.
-
-Local verification includes forward/reverse patch checks, C++20 syntax compilation
-of all four new module source files against the pinned core and patched Playerbots
-headers, Windows launcher/test cross-compilation and vet, native launcher tests
-with race detection, standalone addon verification and 45 positive/negative
-assembly/ZIP regression checks. The workflow runs the launcher and packaging
-checks before compiling, smoke-testing and packaging the Windows server.
-Live in-game verification remains unperformed in this Linux workspace.
-
-## Expansion phase switch addendum
-
-The launcher now supports `--set-expansion vanilla|tbc|wotlk` and
-`--show-expansion`; see [changing-expansions.md](changing-expansions.md).
-Selecting a later phase changes the linked caps, map lists and creation masks
-with config backups. The selected phase survives `--apply-profiles` and
-missing-config creation. No characters or databases are reset; earned tier
-requirements remain active for bots and humans.
-
-The Individual Progression patch also restores an already-rewarded **Into the
-Breach** transition when the character has earned tier 7 and the realm's limit
-allows tier 8. This resolves a quest completed while TBC was still locked.
-The existing raid-achievement recovery remains, and no unearned levels, loot,
-quest completions or reputation are granted. The original v1.0.11 server does
-not include this added recovery path; use updated server binaries for it.
-
-## v1.0.13 addendum: earned expansion unlocks
-
-Fresh realms now use individual progression with a level-80 realm ceiling and
-no shared tier ceiling. Each character still starts in Vanilla and needs tiers
-8/13 to earn XP beyond 60/70 and access TBC/Wrath. Existing selected Vanilla/TBC
-ceilings survive updates; see [changing-expansions.md](changing-expansions.md)
-for the explicit migration command.
-
-Random bot creation now calls the ordinary account creation hook before choosing
-a race. Login callbacks recheck that hook on the world thread before loading an
-existing bot, without adding database work to map-thread actions. Blood elves
-and draenei require tier 8 on that bot's own account. Their starting progression
-remains 0; account unlocks grant no levels or equipment. Death knight bots remain
-disabled because their class start at 55 conflicts with level-1 bot creation.
-
-Into the Breach can advance progression only after earned Vanilla tier 7.
-Rewarding the quest early cannot fill missing Vanilla tiers. Existing rewarded
-quests can still be recovered after tier 7 is earned and the realm permits TBC.
-Empty account filters also skip account-name queries in the creation hook.
-
-Natural talent helpers no longer perform free resets, including the automatic
-selection action. Existing talents remain and only earned free points are
-allocated. Fallback allocation now obeys the same Vanilla/TBC depth restriction
-as templates. This supersedes the earlier free-template-reset limitation; it
-does not replace Wrath talent identities or add historical human talent trees.
-
-AutoBalance continues to count actual bots/humans and preserve creature levels,
-with normal full-group stats and reduced rewards for reduced-size encounters.
-Vanilla and TBC damage/healing modifiers are explicitly 1.0 for both humans and
-bots. Later encounter AI shortcuts and autonomous quest/raid coverage still need
-their own review; no literal zero-shortcut guarantee is made.
-
-Verification includes launcher configuration/migration tests, race detection,
-Windows cross-compilation, exact forward/reverse patch checks and the 45
-assembly/ZIP regressions. `cmake/tests/TestEarnedProgression.py` compiles patched
-production snippets with isolated core/database fixtures under AddressSanitizer
-and UndefinedBehaviorSanitizer: all account tiers, account isolation, bot race
-selection/login, earned XP caps, Into the Breach prerequisites, talent reset
-guards and fallback talent depth. The workflow runs it before the full Windows
-server build, which checks integration with the actual core headers and modules.
-These checks do not start a live realm or prove every encounter's behavior.
-
-## v1.0.14 addendum: earned bracket residents
-
-The default assigns approximately 5% of random bots to each earned cap at
-19/29/39/49/59; the remaining 75% continue normal individual progression. A
-character GUID determines its assignment across restarts. Each bot must earn
-its assigned level from 1, keeps its earned inventory and can continue farming
-and participating at the cap. Existing higher-level bots are never downgraded.
-See [earned-bot-brackets.md](earned-bot-brackets.md) for configuration and updates.
-
-XP awards stop at the cap, and the core level-change hook also prevents large
-or rested XP awards from overshooting it. Caps do not set the Wrath XP-off flag
-or split matchmaking. Humans/account alts receive no automatic assignment.
-Policies are parsed once and published atomically; XP hooks perform no database
-queries or population scans. Natural mode also ignores the legacy bracket/reset
-manager and bot XP multiplier, even if those older settings are enabled.
-
-Dungeon, raid and battleground entry changes tactics without generating a new
-level, gear set, money or supplies. Natural factory/refresh and resource guards
-remain active. Battleground eligibility uses the actual bot level and faction;
-normal core queue minimums are retained (WS 5, AB 8, AV 20 per faction), with no
-new minimum overrides or testing mode. Insufficient eligible queues must wait.
-
-`TestEarnedBotBrackets.py`, invoked by the progression preflight, compiles the
-production policy, XP/level hooks, core XP level loop and battleground eligibility
-function with isolated fixtures under ASan/UBSan. It checks valid/invalid
-configuration, stable approximate distribution, oversized/rested XP, existing
-higher-level characters, excluded humans, cap release, queue rejection and
-legacy reset/XP modifier guards. These checks preserve the previously documented
-Wrath mechanics and encounter AI limitations; they do not prove every live raid.
-
-## Earned-auctions addendum
-
-`mod-playerbots-earned-auctions.patch` adds a bounded market loop on top of the
-same pinned Playerbots source and natural-progression patch. Autonomous random
-bots without a player master can list eligible surplus from their actual bags
-and buy useful equipment or supplies with their own money. They retain quest
-items and needed equipment, profession materials and supplies. Bots walk to a real
-auctioneer; the core's normal auction handlers charge deposits, transfer items,
-validate buyouts and apply sale cuts. No market-seeding items or gold are granted.
-
-The default profile sets `AiPlayerbot.EarnedAuctions = 1` and
-`AiPlayerbot.EarnedAuctionInterval = 300` seconds, clamped to 60–3,600.
-Natural progression is required. Trading is limited to at most 20 active
-listings per bot and at most two new listings plus one buyout per visit.
-Busy bots do not abandon their activity to trade. AH Bot Plus seller/buyer and
-the upstream outgoing-mail shortcut remain disabled.
-
-Scheduling alternates nearby auctioneer and mailbox visits with a stable
-per-bot stagger of up to 119 additional seconds. Local searches cover 150 yards.
-Eligible solo bots from level 10 can also walk to the closest compatible or
-neutral auctioneer on the same map and phase within 5,000 yards, when they own
-tradable surplus or at least one silver in available purchase funds. Trips use
-ordinary walking with a ten-minute total budget and fifteen-minute cooldown;
-failed paths or unavailable NPCs back off and ordinary AI resumes. Trading
-still requires normal NPC interaction range. Vendor fallback remains available
-for nearly full bags or unaffordable listing fees.
-
-Automatic vendor sales separately protect completed-quest turn-in items,
-learned-spell reagents and the last pet-food supply in natural mode, including
-when earned auctions are disabled or listing fees cannot be afforded.
-Legacy bot mail-send and mail-management shortcuts are also blocked in source
-whenever natural progression is enabled. Re-enabling the old mail setting does
-not bypass these guards.
-
-Auction purchases, sale proceeds and expired items use normal mail. Bots walk
-to a mailbox and collect delivered auction mail through the core handlers.
-Delivery delays and inventory checks remain; full bags leave attachments in mail for a
-later attempt. See [earned-auctions.md](earned-auctions.md) for configuration
-and migration.
-
-This supersedes the original audit's absent auction-AI finding. Install the
-complete updated server binaries and run their launcher's `--apply-profiles`
-after stopping the servers; configuration changes alone cannot add the loop.
-Existing characters, items and gold are retained. No historical provenance
-ledger proves that possessions already present on an older realm were earned.
-
-A fresh market needs bots to acquire tradable surplus, earn money and reach
-the NPCs. It is not immediately filled or subsidized, and the change does not
-establish complete autonomous farming, crafting, questing or live-market
-reliability. The earlier class-system, pathfinding and encounter AI limitations
-still apply. Source and regression checks cannot replace live observation of
-the realm's auction stock, prices, bot activity and performance.
-
-## Strict milestones and historical talents addendum
-
-Added on 7 October 2026. This supersedes the earlier Wrath-only talent limitation,
-looser progression recovery, level-55 human death knight availability and
-five-bracket population description. Existing core/module revisions remain
-pinned; the new historical module and its native client-build dependency are
-listed in [module versions](module-versions.md).
-
-### Strict character progression
-
-The portable profile enables `IndividualProgression.StrictEarnedProgression = 1`
-with default progression enabled and no custom chain. Ordinary humans and bots
-start at tier 0 and advance only when the next prerequisite is earned. Boss
-credit is durable and may be recorded out of order; rewarded Bang a Gong, Chaos
-and Destruction, and Into the Breach transitions remain separate requirements.
-The full chain is documented in [changing expansions](changing-expansions.md).
-Stage 11 is reserved: advancement goes from 10 to 12, and a narrowly targeted
-migration corrects only the module-owned positive conditions that referenced
-the unused marker. No fictitious tier-11 completion is awarded.
-
-Eligible tapped-encounter credit also reaches nearby eligible party members
-with explicit distance, map/phase, life/corpse, damage/loot and reward checks.
-A remote member of the same raid cannot receive progression merely because
-the core permits broad instance kill-credit distance. Group-leader copying,
-account exemptions, ordinary group attunement commands and bot tier
-synchronization cannot supply strict progress. Explicit GM operations remain
-privileged administrative tools.
-
-An early rewarded Into the Breach is recoverable only after the preceding
-Vanilla chain and realm ceiling permit tier 8. Existing highest stored tiers
-are retained, but old broad raid achievements are not imported as new strict
-boss evidence. Missing future credit may require a new eligible kill. Existing
-levels, items and gold are retained without claiming that their old provenance
-has been proved.
-
-Strict mode blocks new death knights on every account because their normal
-level-55 start violates the level-1 policy. Existing death knights retain native
-class behavior. Blood elf/draenei creation requires tier 8 on that same account;
-an unlocked alt still starts at level 1, tier 0. Bot factory creation and login
-use the same account gate. No accounts or characters are recycled to replace the
-race/class mix.
-
-The bracket policy now assigns approximately 5% of random bots to each earned
-cap at 19/29/39/49/59/69/79; 65% continue individual progression. Appending the
-later brackets preserves the previous lower-bracket assignments. Level-69/79
-residents earn TBC/Wrath access before their cap becomes reachable. Levels,
-equipment and money are never generated to populate brackets. The 7 October
-battleground correction below supersedes the former Vanilla-only selection.
-
-### Historical trees and earned spell sources
-
-The default enables the pinned MIT-licensed
-`lathcf/azerothcore-mod-era-talents` with the portable earned-progression patch.
-Humans and bots select Vanilla below tier 8, TBC at 8–12, and native Wrath at
-13+. Level alone and another account character's progression cannot select an
-era. Vanilla talents reference 1.12.1; TBC talents reference Classic 2.5.4,
-including later balance changes. Selected class spell variants, talent effects
-and core-handled effects are supplied as part of that integration. This does
-not establish an exact original 2.4.3 or complete 1.12 combat simulation.
-
-Bots incrementally spend newly earned points and retain their chosen build.
-Login, level changes and factory refresh do not reset it. Historical trained
-ranks use ordinary paid trainer purchases and prerequisites; talent/class-quest
-sources must be earned. Existing known variants transfer conservatively rather
-than automatically granting every level-eligible rank. Broad upstream
-character-spell cleanup SQL is neutralized.
-
-Ordinary trainer respecs charge the native escalating cost once and update the
-normal persisted reset history and criteria. The historical tree uses the same
-1g/5g/10g/.../50g schedule and monthly decay. A real earned era crossing refunds
-the departing tree's earned points once, outside combat, and validates its
-target again before changing talent state. Routine relogs or stale callbacks do
-not authorize another reset. Faction-leader force-advance gossip is inactive;
-the upstream manual-advance IP patch is not applied.
-
-Before earned Wrath, owned glyph effects/client slots and new glyph use are
-suppressed. Ownership IDs in both specifications are retained and the owned
-active-spec glyphs return in Wrath; the gate does not consume existing glyphs.
-Existing death knights remain native and are exempt from historical-tree/glyph
-conversion.
-
-Character talent and settled-era state is preloaded into a cache. Routine
-polling, bot refresh and rank lookups do not issue synchronous map-thread
-database queries. Ordered immutable persistence batches avoid queued Player
-pointers, retain failed writes for retry and flush on shutdown. This is a
-targeted hot-path correction, not a guarantee that all module diagnostics or
-upstream game actions are database-free.
-
-### Prices and shared economy
-
-A core trainer-cost hook and IP strict policy quote riding lesson prices by the
-actual purchasing character's earned era. Trainer display and purchase use the
-same native path, including normal reputation discounts. Base prices are late
-Vanilla 90g/900g for apprentice/journeyman; original TBC 35g/600g/800g/5,000g;
-and pinned Wrath 4g/50g/250g/5,000g. Unknown lessons retain their configured cost.
-The new hook does not change trainer level/availability rules, refund old
-training, generate gold or change the price of mount items.
-
-IP's existing ground riding levels 40/60 and flying prerequisites at 70 remain.
-Other item/vendor and trainer prices still use shared world SQL, so this is
-not a complete per-character historical price database. The auction house stays
-one market with bots' owned surplus and earned purchase funds; deposits, cuts,
-buyouts and delivered mail remain normal core transactions. Artificial AH Bot
-Plus supply/demand stays disabled.
-
-### Matched client artifacts and migration
-
-Every human player needs the same build's `EraTalents-client-<version>.zip`:
-its EraTalents addon plus merged `Data/patch-V.mpq`, followed by a full client
-restart. Bots need only server files. The addon-only ZIP or server's addon copy
-does not supply the MPQ. [Era Talents](era-talents.md) documents exact paths,
-generation diagnostics, normal respecs and upgrade behavior.
-
-The client packager exports locked source revisions with their ordered local
-patches and builds native StormLib tools from a pinned revision. It starts from
-IP's locked base client archive, merges the generated spell and skill rows,
-verifies the server/client generation marker, and preserves all other base
-entries byte for byte. The output records source, patch and file hashes and
-dependency licenses. No mutable upstream bootstrap or latest-clone script is
-part of the build.
-
-Ordered core compatibility/accounting/price patches are applied to a generated
-core checkout; modules and the adapted addon are exported into generated
-directories. The original core and Playerbots submodules stay pristine at their
-locked revisions. Independent packaging re-exports the locked sources and
-patches to compare the prepared addon rather than trusting a stale cached copy.
-
-For an upgrade, back up databases/configs, stop the launcher and servers, install
-the complete updated ZIP and same-build client files, then use the new
-launcher's `--apply-profiles`. Explicitly select `--set-expansion individual`
-only when removing an older shared realm ceiling. The normal server updater
-imports bundled SQL. Profile application backs up managed config changes and
-does not reset the realm; historical activation converts talent/spell state for
-the character's earned era. Disabling the module after custom allocations exist
-requires a separate migration and is not a supported in-place toggle.
-
-### Verification and remaining limits
-
-Local checks cover strict milestone/eligible credit policy, out-of-order and
-stored progress, reserved-stage condition migration, bot bracket stability,
-historical point budgets, era transitions, ordered persistence, incremental bot
-talents, paid training/respecs and preserved glyph handling. Production fixtures
-run with AddressSanitizer and UndefinedBehaviorSanitizer; actual pinned-core
-header/object compilation checks C++ integration. Launcher race tests, Windows
-cross-compilation, portable ZIP regressions, native client packaging regressions
-and repeated deterministic client builds exercise the release tooling.
-
-CI performs the complete Windows server build and verifies the final server and
-addon ZIPs; the Linux client job verifies the matched MPQ package. These source
-checks do not start the user's realm or replace live testing of every class,
-raid mechanic, autonomous quest/profession step, market behavior or 2,500-bot
-performance. The earlier encounter/pathfinding limitations remain. Full
-historical price/world/pet/combat data and a literal audit of every upstream
-shortcut are outside this implemented scope.
-
-
-## 7 October 2026: earned-era battleground correction
-
-The portable profile replaces the global Vanilla-only bot restriction with
-`AiPlayerbot.EarnedEraBattlegrounds = 1`. Named Warsong Gulch, Arathi Basin and
-Alterac Valley queues are available in every earned era; Eye of the Storm needs
-tier 8 and Isle of Conquest needs tier 13. Each map's actual IP/core level
-requirements also apply. Preserved older characters above their earned era's
-level ceiling cannot queue until they earn the appropriate expansion; they are
-not downgraded or given catch-up progress.
-
-Humans can unlock Strand of the Ancients and random battlegrounds at tier 13.
-Human arena skirmishes require earned TBC and retain ordinary core level/team
-rules. Native rated arenas require level 80, so rated participation needs earned
-Wrath; TBC characters capped at 70 can use skirmishes only. TBC arena selection
-uses Nagrand, Blade's Edge and Ruins of Lordaeron; Wrath also adds Dalaran Sewers
-and Ring of Valor. The queue and invitation checks use each character's own
-progression, including the actual selected map behind an arena or
-random-battleground packet.
-
-Bots fill real players' eligible named queues only. Autonomous all-bot creation,
-bot random battlegrounds, bot Strand participation and bot arena team creation
-remain disabled. The pinned AI has no Strand tactics; its arena gathering uses
-teleport shortcuts. Enabling later named maps does not authorize factory gear,
-levels, gold, refresh supplies or instant resurrection. Humans need ordinary
-participants for the queues that bots cannot fill.
-
-Matching separates earned Vanilla, TBC and Wrath within the native level
-brackets, including overlapping level-60/70 characters. Premades, group queues,
-skirmishes, rated teams and refills retain the same era policy while preserving
-normal faction, team-size and rating requirements. Accepting an invitation
-checks the selected instance and era again, so advancement while queued cannot
-place a newly advanced character into its departing era's match.
-
-Per-match Arathi Basin victory points are 2,000 in Vanilla/TBC and 1,600 in
-Wrath, with the corresponding 1,800/1,400 near-victory warning. Eye of the Storm
-uses 2,000 points in TBC and 1,600 in Wrath. Alterac Valley has no reinforcement
-countdown in Vanilla and 600 starting reinforcements in TBC/Wrath. Warsong Gulch
-has no fixed time limit in Vanilla/TBC and uses the pinned core's native
-25-minute limit in Wrath. Vanilla omits Focused/Brutal Assault flag-carry
-penalties; TBC/Wrath retain native penalties. Their exact original TBC values
-are not retrofitted, and these changes do not recreate every historical patch
-version.
-
-Eye's override sets the server victory threshold. Its native initial world
-states do not publish a configurable maximum, so the Wrath client's static
-scoreboard text is not claimed to reproduce the TBC display.
-
-Match rules are chosen before players enter and remain fixed for that instance.
-Normal spirit-guide resurrection waves and native minimum team sizes remain.
-Marks of Honor use IP's existing Vanilla/TBC reward policy.
-
-The profile also sets `AiPlayerbot.LimitTalentsExpansion = 0`. Historical trees
-and authoritative earned gates already select Vanilla/TBC talents; the older
-level-based factory flag could restrict native Wrath allocation at level 70
-after that character legitimately earned Wrath. This change does not grant
-extra talent points, a free routine respec or trained spells.
-
-Launcher migration checks cover the older Vanilla-only configs, later map
-settings, native fallback rules and preservation of database/configuration
-state. Focused source fixtures cover queue eligibility, era isolation, fixed
-match rules and the earned bot policy; the release workflow also builds the
-complete Windows server. These checks do not establish perfect live tactics for
-every battleground. Normal player counts are still required and a population of
-2,500 does not guarantee an available match in every era/bracket.
-
-The changes do not turn every global core setting into a historical per-character
-rule. Dungeon Finder remains disabled, IP's realm-wide breathing/low-level
-regeneration and quest-marker settings remain, riding acquisition levels remain
-40/60/70, and general vendor/trainer prices and the auction market remain shared.
-Pet systems and every combat/world-data formula are not historical replacements.
-See [earned bot brackets](earned-bot-brackets.md#waiting-for-battlegrounds) for the
-queue matrix and [changing expansions](changing-expansions.md) for migration.
+| Realm mode | `individual`: per-character Vanilla→TBC→Wrath progression |
+| Core expansion / maximum level | `Expansion = 2`, `MaxPlayerLevel = 80` |
+| Fresh characters | Level 1, tier 0, normal starter items, zero gold |
+| Strict earned milestones | Enabled; preceding boss and rewarded-quest markers required |
+| TBC / Wrath access | Earned tiers 8 / 13; XP stops at 60 / 70 until unlocked |
+| Expansion races | Same-account earned TBC unlock; alts start at tier 0 |
+| New death knights | Blocked by strict mode; existing characters retained |
+| XP, drops, reputation and honor | Normal 1.0 rates |
+| Skills and professions | Trained and improved normally; two primary professions |
+| Talent points | Normal 1.0 rate; historical trees selected by earned era |
+| New dual-spec purchases | Level 80 in individual mode |
+| Ordinary respecs | Paid trainer path and normal cost history |
+| Dungeon Finder | Disabled |
+
+`IndividualProgression.StrictEarnedProgression = 1` depends on the module's
+default chain: enabled IP, an empty `CustomProgression` and
+`DisableDefaultProgression = 0`. Random-bot and human accounts share the gates;
+the account exclusion expressions are empty. GM login starts in ordinary visible
+player mode, but explicit GM administration remains possible.
+
+Core expansion access is required for restored Vanilla Naxxramas. Optional realm
+ceilings must be changed through the launcher's linked settings, rather than a
+single core expansion toggle. See [progression and ceilings](changing-expansions.md).
+
+## Bots and population
+
+| Setting | Default |
+| --- | --- |
+| Natural progression | Enabled |
+| Fresh bot level / XP rate | 1 / 1.0 |
+| Online population target | 2,500 while a real player session is connected |
+| Login / logout delays | 30 / 60 seconds after real-player presence changes |
+| Resident earned caps | About 5% each at 19, 29, 39, 49, 59, 69 and 79 |
+| Free factory equipment, money and supplies | Disabled |
+| Level, quest and leader-progress synchronization | Disabled |
+| Routine free talent resets / spell grants | Disabled |
+| Ordinary paid training and earned talent allocation | Enabled |
+| Automatic use of earned loot upgrades | Enabled |
+| Teleport recovery and free summon support | Disabled |
+| Earned auction trading | Enabled; ordinary auctioneer/mailbox access |
+| Unsolicited broadcasts and random emotes | Disabled |
+| Nearby greetings | Real players only |
+
+The population logs in gradually. Smart activity scaling reduces distant solo
+activity as tick time rises, while nearby/grouped bots and combat stay active.
+A target of 2,500 requires substantial server resources and does not imply every
+bot is available in every level, faction or era. Lower
+`AiPlayerbot.MinRandomBots` and `AiPlayerbot.MaxRandomBots` to fit the host.
+
+See [earned bot brackets and PvP](earned-bot-brackets.md) and
+[earned auction trading](earned-auctions.md) for their settings and limits.
+
+## Modules and group play
+
+| Component | Default policy |
+| --- | --- |
+| AutoBalance | Scale smaller instance parties; count actual non-GM occupants, including bots |
+| Individual Progression | Earned maps, items, quests, attunements and era access |
+| Era Talents | Historical Vanilla/TBC trees; native Wrath after earned access |
+| MultiBot Chatless and Bridge | Bot-control UI with natural-progression restrictions |
+| Quest Loot Party | Share naturally rolled normal-quality quest loot with eligible corpse looters |
+| AH Bot Plus | Seller, buyer and generated stock disabled |
+| Dungeon Clear | Scripted runs, filler creation, recovery and spectate shortcuts disabled |
+| Token Turn-in | Read-only checks available; shortcut redemption blocked in natural mode |
+
+AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
+smaller parties receive the upstream scaling curve with reduced XP and money.
+Bonus tokens and party-count difficulty offsets are disabled. Outdoor elites
+and world bosses retain ordinary world difficulty. Scaling cannot supply missing
+mechanic tactics or guarantee that every class can solo an encounter.
+
+Quest Loot Party changes only eligible normal-quality quest-item distribution.
+Players and bots must still loot the corpse; drop rolls, ordinary equipment loot,
+quest prerequisites and earned progression remain in place.
+
+MultiBot trainer actions require ordinary NPC range and paid core transactions.
+Personal bank actions require banker range and validated storage operations.
+Free preset talent writes, SelfBot autogear and maintenance grants are blocked
+in natural mode. Token checks do not waive NPC exchange reputation, materials or
+quest requirements.
+
+## Historical rules and shared settings
+
+Talent data uses Vanilla 1.12.1, TBC Classic 2.5.4 and native Wrath. Every human
+client needs the matching [EraTalents addon and MPQ](era-talents.md).
+Riding prices follow earned era, while acquisition levels remain 40/60/70.
+General vendor/trainer prices and the auction market use shared data.
+
+Battleground matching separates earned eras, with fixed per-instance scores,
+reinforcements and Warsong timers. Ordinary minimum team sizes apply.
+Bot Strand, random battleground and arena participation is disabled. See the
+[queue and rules reference](earned-bot-brackets.md#waiting-for-battlegrounds).
+
+IP also applies realm-wide settings: a 60-second breath timer, no low-level
+regeneration boost, enabled player settings, disabled item DBC attribute
+enforcement, monster sight range 80 and hidden object quest markers/sparkles.
+Vanilla/TBC damage and healing modifiers remain 1.0 for both humans and bots.
+These are shared settings rather than complete per-character historical rules.
+
+## Supported scope
+
+The project uses a Wrath core and client. Historical trees and selected spell,
+price and battleground rules do not replace every combat formula, profession,
+pet system, world-data rule or original patch balance value. TBC talents use
+Classic 2.5.4 rather than exact original 2.4.3 data.
+
+Bot pathfinding and encounter tactics depend on upstream AI. Disabling teleport
+recovery can leave bots stuck. Autonomous completion of every class quest,
+profession and raid is not guaranteed. Some upstream encounter actions retain
+special movement or combat shortcuts; the earned-play guards do not cover every
+AI action. For example, the specialized Onyxia
+whelp action recognizes entry `11262`, while restored Vanilla whelps use
+`301001`; generic combat does not establish full encounter support.
+
+Source fixtures, launcher checks and package verification cover the implemented
+policies and release tooling. Full compilation verifies integration. These
+checks do not establish perfect live tactics, market activity, historical class
+balance or a fixed 2,500-bot performance target.
+
+Existing-realm upgrades preserve prior levels, tiers, items and gold. They cannot
+retroactively prove those possessions were earned. Use a fresh database when
+a level-1 earned history for every character is required. See
+[upgrade behavior](changing-expansions.md#updating-an-existing-realm),
+[dependencies](module-versions.md) and [building](building.md).

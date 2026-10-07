@@ -1,31 +1,28 @@
 # Individual progression through expansions
 
-Fresh installations use **individual** mode on the WoW 3.3.5a client. The realm
-supports level 80 and all expansions, while each ordinary character starts at
-level 1, tier 0, and earns its own progression. Humans and bots use the same
-milestones. An account unlock permits race creation; it never advances an alt.
+The default `individual` mode supports Vanilla, TBC and Wrath on the WoW 3.3.5a
+client. Each new character starts at level 1, tier 0 and earns its own access.
+Players and bots use the same milestone chain. Account race unlocks permit
+character creation; they do not advance an alt.
 
-| Earned milestone | Character access | Account creation unlock |
+| Earned progression | Content and level ceiling | Account creation unlock |
 | --- | --- | --- |
-| Starting tier 0 | Vanilla; XP stops at 60 until TBC is earned | Vanilla races/classes |
-| Tier 8: Vanilla prerequisites, then Into the Breach | TBC; XP stops at 70 until Wrath is earned | Blood elves and draenei |
-| Tier 13: TBC prerequisites, including Kil'jaeden | Wrath; normal XP up to 80 | No additional level-1 class |
-| Tier 18 | Wrath progression completed | No levels, gear or money granted |
+| Tiers 0–7 | Vanilla; level 60 | Vanilla races and classes |
+| Tier 8 | TBC; level 70 | Blood elves and draenei |
+| Tier 13 | Wrath; level 80 | No additional level-1 class |
+| Tier 18 | Completed default Wrath chain | No levels, equipment or gold granted |
 
-The default enables `IndividualProgression.StrictEarnedProgression = 1` with the
-module's normal milestone chain. Eligible boss credit is recorded durably,
-including when earned out of order, but advancement requires every preceding
-milestone. Rewarded transition quests are checked separately. A later kill or an
-early Into the Breach completion cannot fill missing Vanilla tiers.
+Strict earned progression requires each preceding milestone. Eligible boss
+credit is saved even when earned out of order, but cannot fill missing earlier
+tiers. Transition quests must be rewarded as well as have their prerequisites
+met. Ordinary quest, item, map and attunement requirements remain in force.
 
 ## Required milestone chain
 
-The table names the completion marker for each tier, rather than every encounter
-available at that tier. IP's ordinary quest, item, map and attunement requirements
-also apply. Completing every optional quest or raid is not an extra requirement
-introduced by this patch.
+These are the completion markers for each tier, rather than every encounter
+available in that tier. Optional quests and raids are not additional requirements.
 
-| Tier earned | Required completion | Next content opened |
+| Tier earned | Required completion | Progression opened |
 | --- | --- | --- |
 | 1 | Ragnaros | Blackwing Lair progression |
 | 2 | Restored Vanilla Onyxia | Next Vanilla milestone |
@@ -45,164 +42,124 @@ introduced by this patch.
 | 17 | The Lich King | Ruby Sanctum progression |
 | 18 | Halion | Completed default chain |
 
-Tier 11 is reserved and has no default milestone. The chain moves from 10 to 12;
-module-owned item/vendor/quest conditions that depended on the unused tier have
-been corrected to 12 without awarding a fictitious completion.
+Tier 11 is reserved; the default chain moves from 10 to 12.
 
 Boss credit requires eligible participation in the tapped encounter. Nearby
-eligible party members can receive their own credit; merely sharing a group,
-being elsewhere in the instance, copying its leader's tier or possessing a broad
-raid achievement is insufficient. Ordinary group-attunement commands and bot
-progression synchronization cannot bypass strict mode. Explicit GM administration
-remains available, so playing accounts should not have GM privileges.
+eligible party members can receive their own credit. Group membership alone,
+a leader's tier or a broad raid achievement does not award it. Progress-copy
+and group-attunement shortcuts are disabled in strict mode. GM administration
+remains available; playing accounts should use ordinary player privileges.
 
-If a transition quest was already rewarded, it becomes usable when the preceding
-chain is complete and the selected realm ceiling permits advancement. The system
-does not reward the ordinary quest again or grant catch-up resources.
+An already-rewarded transition quest becomes usable once the preceding chain is
+complete and the realm ceiling permits advancement. It is not rewarded twice.
 
 ## Accounts and the bot population
 
-Race unlocks use rewarded progression markers from characters on **that
-account**. Your account's progress does not unlock races on random-bot accounts.
-The patched bot factory checks the ordinary account hook before choosing a race;
-bot login checks it again. An existing unearned expansion-race bot stays offline
-rather than being deleted or rerolled.
+Blood elf and draenei creation uses earned markers on the same account. An
+unlocked character still starts at level 1, tier 0 with normal starter items and
+zero gold. A player's account unlock does not apply to random-bot accounts.
+Existing expansion-race bots without their account unlock remain offline.
 
-An unlocked blood elf or draenei starts at level 1, tier 0, with the normal starter
-kit and zero gold. It earns its own levels, equipment and content access. The
-nine-class bot account pools are not automatically recycled into expansion races.
-Eligible new characters can use unlocked races when requested and an account has
-space.
+Strict mode blocks new death knight creation because their native level-55 start
+conflicts with the level-1 policy. Existing death knights retain native class
+talents. Bot death knight login is disabled in the default profile.
 
-**Strict mode blocks new death knight creation for every account.** Their native
-level-55 start cannot meet the level-1 policy. Existing death knights are retained
-with native class talents; this change does not redesign their starting zone.
-
-Approximately 5% of random bots are assigned each earned cap at 19, 29, 39, 49,
-59, 69 or 79; the remaining 65% continue individual progression. Every fresh bot
-levels from 1, and level-69/79 residents first earn TBC/Wrath access. This maintains
-companions at lower levels over time without creating pre-levelled populations.
-See [earned bot brackets](earned-bot-brackets.md) for cap changes and release.
+About 5% of random bots are assigned each earned cap at 19, 29, 39, 49, 59, 69
+and 79; the remaining 65% continue progression. Every bot levels from 1, and
+level-69/79 residents must first earn TBC/Wrath. See
+[earned bot brackets](earned-bot-brackets.md) to adjust or release these caps.
 
 ## Battleground access and rules
 
-Battleground access follows the same earned expansion as talents. Humans and bots
-can enter the classic maps with their normal level requirements. Tier 8 adds Eye
-of the Storm and TBC arena skirmishes; tier 13 adds Isle of Conquest, Strand of
-the Ancients, random battleground queues and Wrath arenas. Ordinary native level, faction,
-team and bracket checks still apply. A level alone cannot unlock a later map.
-Preserved older characters above their earned era's level ceiling must first
-earn the needed milestones before queueing; their levels are not reduced.
-Human TBC arena skirmishes use Nagrand, Blade's Edge and Ruins of Lordaeron;
-Wrath also adds Dalaran Sewers and Ring of Valor. Native rated arenas require
-level 80, so rated participation needs earned Wrath; TBC characters capped at
-70 can use skirmishes only.
+Classic battlegrounds use ordinary level requirements. Tier 8 opens Eye of the
+Storm and human TBC arena skirmishes; tier 13 opens Isle of Conquest, Strand of
+the Ancients, random battlegrounds and Wrath arenas. Rated arenas require the
+native level 80, so TBC characters can use skirmishes only.
 
-Matchmaking separates earned Vanilla, TBC and Wrath characters even where their
-level brackets overlap. Group queues and premades require one era and independent
-eligibility for every member. Bots fill real players' named Warsong, Arathi,
-Alterac, Eye and Isle queues in their own era. Bot Strand/random/arena filling
-and autonomous all-bot matches remain disabled.
+Matchmaking separates earned eras within each level bracket. Every member of a
+queued group must qualify and share one era. Match rules remain fixed for that
+instance, including refills. Invitation acceptance checks the selected map and
+match era again. Preserved characters above their earned level ceiling must earn
+the required expansion before queueing; their levels are retained.
 
-Arathi Basin uses 2,000 points in Vanilla/TBC and 1,600 in Wrath; Eye of the
-Storm uses 2,000 in TBC and 1,600 in Wrath. Alterac Valley has no reinforcement
-countdown in Vanilla and 600 starting reinforcements in TBC/Wrath. Warsong Gulch
-has no fixed time limit in Vanilla/TBC and the native 25-minute limit in Wrath.
-Vanilla also omits Focused/Brutal Assault flag-carry penalties; TBC/Wrath retain
-the native penalties. These targeted rules do not reproduce every historical
-patch version. Rules remain fixed for a match, including refills. See
-[earned bot levels and PvP brackets](earned-bot-brackets.md#waiting-for-battlegrounds)
-for the eligible level ranges, normal minimums and AI limits.
+Bots fill real players' named Warsong, Arathi, Alterac, Eye and Isle queues.
+Bot Strand, random battlegrounds, arena teams and autonomous all-bot matches are
+disabled. See the [PvP guide](earned-bot-brackets.md#waiting-for-battlegrounds)
+for brackets, minimum participants, historical scores and timers, and AI limits.
 
 ## Era talents, training and prices
 
-The default [Era Talents integration](era-talents.md) selects each character's
-historical tree from earned progression: Vanilla below 8, TBC at 8–12, and native
-Wrath at 13+. The Vanilla source is 1.12.1; the TBC talent source is Classic 2.5.4,
-which includes changes from the original 2.4.3 game. Players require the matching
-EraTalents addon and merged client `Data/patch-V.mpq`; bots use server data only.
+[Era Talents](era-talents.md) selects each character's tree from earned
+progression: Vanilla 1.12.1 below tier 8, TBC Classic 2.5.4 at tiers 8–12 and
+native Wrath at tier 13+. The TBC dataset includes changes from original 2.4.3.
+Players need the matching EraTalents addon and `Data/patch-V.mpq`; bots use
+server data only.
 
-Bots add newly earned points to their existing build. Ordinary respecs use the
-paid trainer path and normal escalating cost. A real era crossing refunds the
-departing tree's earned points once, out of combat, so the character can choose
-the new tree. It grants no levels, trained ranks, equipment or gold. Historical
-class spell variants require their paid lesson or earned talent/quest source.
-Stored glyph ownership in both specializations is retained, with glyph effects
-and new glyph use blocked before earned Wrath.
+Bots add earned points to their existing build. Ordinary respecs use a paid
+trainer. A genuine era crossing refunds the departing tree's points once,
+out of combat. Training requires the paid lesson or earned talent/quest source.
+Glyph ownership is retained, with effects and new use blocked before Wrath.
 
-Strict mode quotes riding training costs by the purchasing character's earned
-era. The same quote is used for trainer display and the actual purchase; normal
-reputation discounts still apply.
+Riding lesson prices follow the purchasing character's earned era. Normal
+reputation discounts apply to these base prices.
 
-| Riding skill | Vanilla below tier 8 | TBC tiers 8–12 | Wrath tier 13+ |
+| Riding skill | Vanilla | TBC | Wrath |
 | --- | ---: | ---: | ---: |
 | Apprentice | 90g | 35g | 4g |
 | Journeyman | 900g | 600g | 50g |
-| Expert | Configured cost; ordinary prerequisites apply | 800g | 250g |
-| Artisan | Configured cost; ordinary prerequisites apply | 5,000g | 5,000g |
+| Expert | Configured cost and ordinary prerequisites | 800g | 250g |
+| Artisan | Configured cost and ordinary prerequisites | 5,000g | 5,000g |
 
-These are base skill-training prices: late Vanilla 1.12.1, original TBC 2.4.3 and
-the pinned Wrath dataset. Existing IP level and acquisition prerequisites remain,
-including ground riding at 40/60 and flying at 70. This does not lower riding
-levels on reaching Wrath, change owned skill ranks, refund old purchases or change
-the price of mount items. Other item/vendor and trainer prices still use shared
-IP/core SQL. The mixed-era auction house also remains one earned market.
+Riding acquisition levels remain 40/60 for ground mounts and 70 for flying.
+Owned skills, earlier purchases and mount-item prices are unchanged. General
+vendor and trainer prices use shared world data. The auction house is one market
+with owned items, earned gold and ordinary fees.
 
 ## Updating an existing realm
 
-Use the **complete updated server ZIP**; replacing the launcher alone cannot add
-the strict milestone, training or talent hooks.
+Download the complete server and matching client packages from
+[Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
 
 1. Back up databases and configurations, then stop the launcher and servers.
-2. Install the updated ZIP using the existing installation's upgrade procedure.
-3. Install the matching `EraTalents-client-<version>.zip` addon and MPQ in every
-   human player's client, then fully restart WoW.
-4. In PowerShell in the installation folder, run `startup.exe --apply-profiles`.
-   If an older shared Vanilla/TBC ceiling should be removed, first run
-   `startup.exe --set-expansion individual`.
-5. Restart `startup.exe` normally and allow the server's normal SQL updater to
-   import the bundled migrations.
+2. Install the complete server package using the installation's upgrade procedure.
+3. Install `EraTalents-client-latest.zip` in each player's client and fully restart WoW.
+4. If removing a shared Vanilla/TBC ceiling, run `startup.exe --set-expansion individual`.
+5. Run `startup.exe --apply-profiles`, then restart the launcher normally. The
+   server updater imports the bundled SQL migrations.
 
-The launcher backs up changed configurations, retains unrelated settings and
-does not reset characters or databases. Historical talent activation converts
-talent/spell state for the character's earned era; see the detailed
-[migration notes](era-talents.md#updating-an-existing-realm).
+The launcher backs up changed configs and preserves unrelated settings,
+characters and databases. Applying profiles restores managed defaults; make
+custom profile edits afterward. Replacing the launcher alone cannot update
+server behavior. See [talent migration](era-talents.md#updating-an-existing-realm).
 
-Existing levels, highest stored tiers, items and gold are preserved. Strict mode
-does not retroactively certify old grants or import every old raid achievement
-as new durable boss evidence. Missing future milestone credit may require another
-eligible kill. A fresh database is needed if the aim is to establish that every
-character began under the new earned policy; updating does not erase an old realm.
+Existing levels, stored tiers, inventory and gold are retained. An update cannot
+certify that earlier grants were earned, and missing durable milestone credit
+may require another eligible kill. A fresh database establishes the level-1,
+tier-0 policy from character creation.
 
-Existing Vanilla/TBC ceilings stay selected until explicitly changed. A normal
-upgrade or `--apply-profiles` does not open an established realm automatically.
+## Optional realm ceilings
 
-## Optional realm ceilings and remaining limits
+`startup.exe --show-expansion` displays the selected mode. The alternatives add
+shared ceilings while retaining each character's earned requirements:
 
-`--show-expansion` displays the selected mode. `--set-expansion vanilla` or
-`--set-expansion tbc` adds a shared level 60/tier 7 or level 70/tier 12 ceiling
-while retaining individual requirements. `--set-expansion wotlk` retains the
-older level-80 phase option; `individual` is recommended with a level-80 minimum
-for new dual-spec purchases. The older `wotlk` mode permits dual spec from 40.
+| Mode | Realm level ceiling | Progression ceiling |
+| --- | ---: | --- |
+| `individual` | 80 | None |
+| `vanilla` | 60 | Tier 7 |
+| `tbc` | 70 | Tier 12 |
+| `wotlk` | 80 | None |
 
-Phase changes require initialized active configs and a stopped realm. The
-launcher validates updates, creates timestamped `.backup.*` copies and rolls
-back earlier writes if replacement fails. It refuses lower level ceilings after
-an expansion has opened; reverting requires matching database/config backups.
-The mode in `configs/realm-phase.txt` survives profile updates and missing-config
-creation. Do not edit that marker alone. Core `Expansion = 2` remains required
-for the restored Vanilla Naxxramas map.
+`individual` requires level 80 for new dual-spec purchases. The `wotlk` option
+permits dual spec from 40. Existing choices survive profile updates; an upgrade
+does not automatically open an established realm.
 
-AutoBalance counts actual non-GM occupants, including bots. Full groups retain
-ordinary creature stats; smaller parties use instance scaling with reduced
-XP/money. Creature levels remain unchanged, bonus tokens are disabled, and
-Vanilla/TBC damage and healing modifiers remain 1.0 for humans and bots.
+Phase changes require initialized configs and stopped servers. The launcher
+validates linked changes, creates `.backup.*` copies and rolls back failed
+writes. It refuses a lower level ceiling after an expansion has opened; reverting
+requires matching database/config backups. Do not edit `configs/realm-phase.txt`
+alone. Core `Expansion = 2` is needed for restored Vanilla Naxxramas.
 
-Dungeon Finder and bot arena teams remain disabled. Supported battlegrounds
-follow each character's earned era; see
-[the battleground guide](earned-bot-brackets.md#waiting-for-battlegrounds). Some
-upstream encounter AI has special movement or combat shortcuts, and autonomous
-completion of every raid or class/profession quest is unverified. Historical talents do not
-replace every Wrath combat, profession, pet or world-data rule. See
-[the configuration audit](vanilla-config-audit.md) for the scope of source checks
-and live-gameplay limits.
+Historical progression remains on a Wrath core and client. AutoBalance scales
+smaller instance parties; it does not add encounter tactics. General prices,
+world data, professions, pets and every combat formula are not independently
+historical for each character. See the [configuration reference](vanilla-config-audit.md).

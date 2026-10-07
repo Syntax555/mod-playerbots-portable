@@ -1,16 +1,15 @@
 # Earned bot levels and PvP brackets
 
-Random bots start at level 1 with normal starter items. Inviting them to a party,
-dungeon, raid or battleground does not raise their level or generate equipment,
-gold or supplies. They keep their earned inventory and can acquire upgrades
-through ordinary loot, quests, purchases and trades. Natural progression blocks
-factory upgrades, refresh grants, legacy level resets and bot XP multipliers.
-Individual Progression still enforces each character's expansion gates.
+Random bots start at level 1 with normal starter items. They earn XP, equipment,
+gold, supplies and expansion access through play. Joining a party or queue does
+not raise their level or generate resources.
 
-The default reserves roughly 35% of random bots for these earned caps:
+## Resident level caps
 
-| Cap | Share of the bot population |
-| --- | --- |
+The default reserves about 35% of random bots for earned level caps:
+
+| Cap | Share of the population |
+| --- | ---: |
 | 19 | 5% |
 | 29 | 5% |
 | 39 | 5% |
@@ -20,24 +19,20 @@ The default reserves roughly 35% of random bots for these earned caps:
 | 79 | 5% |
 | Continue individual progression | 65% |
 
-Every assigned bot must earn its cap through normal XP. At its cap, it can still
-quest, farm, earn gold and honor, obtain equipment and join eligible activities;
-further XP and levels are blocked. This does not use the Wrath XP-off flag or
-place these bots in a separate XP-disabled battleground queue.
+Assigned bots must earn their cap through normal XP. At the cap they can still
+quest, farm, earn gold and honor, improve equipment and join eligible activities.
+Further XP is blocked without the Wrath XP-off flag or a separate XP-disabled
+battleground queue. Level-69/79 residents must earn TBC/Wrath before crossing
+level 60/70.
 
-The level-69 and level-79 groups first have to earn TBC and Wrath access. Their
-assignment does not let them cross the level-60/70 progression stops. Appending
-these two groups keeps the five lower groups' existing GUID assignments.
-
-Assignment uses a stable character GUID bucket, so the same configuration keeps
-the same caps across logouts and restarts. These are approximate shares across
-the population, not exact online counts, faction quotas or instant catch-up.
-Existing bots already above their assigned cap keep their level and continue
-normal progression. No character is downgraded or rerolled.
+Assignment uses a stable character GUID bucket and persists across restarts.
+These are approximate population shares, not exact online counts or faction
+quotas. Existing bots above their assigned cap keep their levels and continue
+progression. Human characters and account alts receive no automatic caps.
 
 ## Change the distribution
 
-Stop the servers and edit `configs/modules/playerbots.conf`:
+Edit `configs/modules/playerbots.conf` with the servers stopped:
 
 ```ini
 AiPlayerbot.NaturalProgression = 1
@@ -46,33 +41,26 @@ AiPlayerbot.LevelBrackets.Enabled = 0
 AiPlayerbot.ResetBotLevel.Enabled = 0
 ```
 
-Each entry is `level:percentage`, with unique levels from 1 to 80 and positive
-whole percentages totaling at most 100. The remainder continues normally. For
-only level-19 residents, use `"19:10"` to reserve roughly 10%; for a smaller
-spread use `"19:2,29:2,39:2,49:2,59:2"`. Use `""` to release every cap. Raising a
-cap or removing it allows normal earned XP again; it grants no catch-up XP.
+Each entry is `level:percentage`: unique levels from 1 to 80 and positive whole
+percentages totaling at most 100. The remainder progresses normally. For example,
+`"19:10"` reserves about 10% at level 19; `""` releases all caps. Raising or
+removing a cap allows earned XP again without granting catch-up XP.
 
-Restart after editing, or use the normal administrator `.reload config` command.
-Reload publishes the policy atomically for map threads. Invalid syntax logs an
-error and disables earned caps. Changing entry order or percentages changes
-some assignments; keep the order stable when you want to retain residents.
+Restart or use the administrator `.reload config` command. Invalid syntax logs
+an error and disables earned caps. Changing order or percentages can reassign
+some bots; retain the order when preserving residents.
 
-For an older installation, install the **complete updated server ZIP**, stop
-the servers and run `startup.exe --apply-profiles` once. It backs up configs and
-applies the recommended defaults, including this 35% distribution. Make custom
-distribution edits afterward; applying profiles again restores bundled defaults.
-The launcher alone cannot add these server hooks. Characters and databases are
-preserved. No additional bracket module is required: Playerbots already includes
-the older bracket/reset feature, whose level rerolls are blocked in natural mode.
+`startup.exe --apply-profiles` backs up configs and restores the bundled
+distribution. Apply custom edits afterward. The complete server package is
+required for these hooks; replacing the launcher alone is insufficient.
 
 ## Waiting for battlegrounds
 
-Bots fill real players' named queues with their actual level, earned era, faction
-and equipment. A level-1 bot cannot become level 19 just because you queue, and
-an assigned level-69/79 cap does not unlock TBC/Wrath. Queue eligibility needs
-both the map's normal level requirements and the character's earned expansion.
+Bots fill real players' named queues with their actual level, earned era,
+faction and equipment. Both ordinary map requirements and earned expansion
+access apply.
 
-| Battleground | IP level brackets within the level-80 realm | Required earned tier | Minimum per faction |
+| Battleground | Level brackets | Required tier | Minimum per faction |
 | --- | --- | --- | ---: |
 | Warsong Gulch | 10–19, 20–29, 30–39, 40–49, 50–59, 60, 61–69, 70, 71–79, 80 | 0+ | 5 |
 | Arathi Basin | 20–29, 30–39, 40–49, 50–59, 60, 61–69, 70, 71–79, 80 | 0+ | 8 |
@@ -80,21 +68,16 @@ both the map's normal level requirements and the character's earned expansion.
 | Eye of the Storm | 61–69, 70, 71–79, 80 | 8+ | 8 |
 | Isle of Conquest | 71–79, 80 | 13+ | 20 |
 
-The pinned IP/core level data determines the actual bracket; these settings do
-not fabricate missing brackets or lower map requirements. Matchmaking also
-separates Vanilla (tiers 0–7), TBC (8–12) and Wrath (13+) within each bracket.
-A Vanilla level-60 character and a TBC level-60 character enter separate pools;
-so do TBC and Wrath characters at level 70. Premades and group queues must have
-one earned era, and every member must independently qualify. Existing matches
-retain their era for invitations and refills. Accepting an invitation rechecks
-the actual selected map and match era, so an expansion change while queued
-cannot move a character into the departing era's match.
+The pinned IP/core data supplies these brackets. Matchmaking separates Vanilla
+(tiers 0–7), TBC (8–12) and Wrath (13+) within each bracket, including overlapping
+level-60/70 characters. Queued groups must share one earned era and every member
+must qualify. Invitations and refills retain the instance's era; invitation
+acceptance checks the actual map and era again.
 
-Preserved older characters above their earned era's level ceiling (60 in Vanilla,
-70 in TBC) must earn the appropriate milestones before queueing. The update
-keeps their levels and possessions; it does not downgrade them to fit a match.
+Preserved characters above their earned ceiling, level 60 in Vanilla or 70 in
+TBC, must earn the needed expansion before queueing. Their levels are retained.
 
-The portable defaults are:
+The defaults in `configs/modules/playerbots.conf` are:
 
 ```ini
 AiPlayerbot.EarnedEraBattlegrounds = 1
@@ -103,14 +86,12 @@ AiPlayerbot.RandomBotJoinBG = 1
 AiPlayerbot.RandomBotAutoJoinBG = 0
 ```
 
-Bots fill a real player's eligible pool rather than seed autonomous all-bot
-matches. Normal faction/team minimums remain in place; battleground testing mode
-stays disabled. Recruitment and leveling take time. Bots may be offline, busy,
-grouped or unable to reach a task. A population target of 2,500 does not guarantee
-an available match in every era and bracket. Humans and account alts receive no
-automatic earned-cap assignment.
+Bots fill a real player's eligible queue; autonomous all-bot matches and
+battleground testing mode are disabled. Native faction and team minimums apply.
+Recruitment and leveling take time, and bots can be offline or busy. A population
+target of 2,500 does not guarantee a match in every era and bracket.
 
-Match rules follow the pool's earned era:
+## Match rules
 
 | Rule | Vanilla | TBC | Wrath |
 | --- | --- | --- | --- |
@@ -120,33 +101,24 @@ Match rules follow the pool's earned era:
 | Warsong Gulch time limit | None | None | Native 25 minutes |
 | Warsong Focused/Brutal Assault penalties | Disabled | Native penalties | Native penalties |
 
-The Wrath time limit is the pinned core's 25-minute rule. Vanilla omits the
-later Focused/Brutal Assault flag-carry penalties; TBC/Wrath retain native
-penalties, whose exact original TBC values are not retrofitted. These are selected
-era rules, not a recreation of every historical patch version.
+Rules are fixed before players enter and remain unchanged through refills.
+Marks of Honor follow IP's Vanilla/TBC reward policy. Bots use normal invitation
+transport and spirit-guide resurrection waves, without free PvP resources.
 
-These rules are fixed before players enter; another era's queued players cannot
-change them during a match. Marks of Honor continue through Vanilla/TBC according
-to IP's existing earned-era reward rules. The natural progression patch supplies
-no free equipment, levels, consumables or forced resurrection for PvP. Bots use
-normal invitations, transport and spirit-guide resurrection waves.
+These are selected era rules. Original TBC assault-penalty values are not
+retrofitted. Eye's server victory threshold changes, but the Wrath client's
+static scoreboard maximum is not a historical TBC display.
 
-Humans unlock Strand of the Ancients and random battleground queues with earned
-Wrath, and arena skirmishes with earned TBC, while retaining normal level/team
-requirements. Native rated arenas require level 80, so rated participation needs
-earned Wrath; TBC characters capped at 70 can use skirmishes only. TBC arena
-selection uses Nagrand, Blade's Edge and Ruins of Lordaeron; Wrath also adds
-Dalaran Sewers and Ring of Valor. Bots do not fill those queues. The pinned AI
-has no Strand tactics, and its arena team gathering uses teleport shortcuts, so
-bot arena teams remain disabled. These human activities need ordinary
-participants.
+## Human queues and AI limits
 
-Install the complete updated server ZIP and run `startup.exe --apply-profiles`
-with the servers stopped to replace an older Vanilla-only queue configuration.
-This backs up changed configs and preserves characters. Simply replacing the
-launcher cannot add the server matchmaking hooks.
+Humans unlock Strand of the Ancients and random battlegrounds with earned Wrath,
+and arena skirmishes with earned TBC. Native rated arenas require level 80 and
+earned Wrath; TBC characters can use skirmishes only. TBC arenas select Nagrand,
+Blade's Edge and Ruins of Lordaeron. Wrath also adds Dalaran Sewers and Ring of
+Valor. Ordinary team and rating requirements remain in force.
 
-Progression still uses the Wrath client/core. Historical human and bot talents
-follow earned eras, but not every world rule or encounter tactic is historical.
-Source and fixture checks do not establish perfect live battleground tactics;
-see [the audit](vanilla-config-audit.md) for the broader limits.
+Bots do not fill Strand, random battlegrounds or arenas. The pinned AI lacks
+Strand tactics, and its arena gathering uses teleport shortcuts, so those bot
+paths are disabled. These human queues need ordinary participants. Other
+battleground tactics and pathfinding also depend on upstream AI; see the
+[configuration reference](vanilla-config-audit.md#supported-scope).

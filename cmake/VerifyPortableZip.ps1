@@ -163,6 +163,12 @@ try {
         'defaults/MultiBotBridge.conf' = 'cmd/startup/profiles/MultiBotBridge.conf'
         'defaults/mod_token_turnin.conf' = 'cmd/startup/profiles/mod_token_turnin.conf'
     }
+    foreach ($document in @('THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md', 'docs/building.md')) {
+        if (Test-Path (Join-Path $RepositoryRoot $document) -PathType Leaf) {
+            if (-not $files.Contains($document)) { throw "Portable ZIP is missing $document" }
+            $textSources[$document] = $document
+        }
+    }
     if (@($lock.modules | Where-Object { $_.name -eq 'mod-era-talents' }).Count -gt 0) {
         foreach ($name in @('docs/era-talents.md', 'defaults/mod_era_talents.conf',
             'configs/modules/mod_era_talents.conf.dist')) {
