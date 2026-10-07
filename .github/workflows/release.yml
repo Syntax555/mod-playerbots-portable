@@ -178,8 +178,10 @@ jobs:
           $hasVerifier = Test-Path 'cmake/VerifyClientAddonZip.ps1' -PathType Leaf
           if ($hasPackager -ne $hasVerifier) { throw 'Selected source has an incomplete standalone addon packaging implementation.' }
           $hasArchiveTarget = Select-String -Path 'CMakeLists.txt' -Pattern 'add_custom_target\(package_zip_archive' -Quiet
+          $hasResourcePreflight = Select-String -Path 'CMakeLists.txt' -Pattern 'ExternalProject_Add_StepTargets\(azerothcore\s+configure\)' -Quiet
           "standalone_addons=$($hasPackager.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "archive_only=$($hasArchiveTarget.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "resource_preflight=$($hasResourcePreflight.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -257,6 +259,23 @@ jobs:
               $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
               Write-Output "::error title=CMake configure failed::$message"
               exit $configureExitCode
+          }
+
+      - name: Check Windows resources before C++ compilation
+        if: steps.package_features.outputs.resource_preflight == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake --build build --target azerothcore-configure --config Release
+          if ($LASTEXITCODE -ne 0) { throw 'Native server configuration failed.' }
+          $nativeBuild = Join-Path (Get-Location) 'build/azerothcore-build'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild -or -not (Test-Path $msbuild -PathType Leaf)) { throw 'MSBuild was not found.' }
+          foreach ($application in @('authserver', 'worldserver')) {
+              $project = Join-Path $nativeBuild "src/server/apps/$application.vcxproj"
+              & $msbuild $project '/t:PrepareForBuild;ResourceCompile' '/p:Configuration=Release' '/p:Platform=x64' '/p:BuildProjectReferences=false' '/m:1' '/nologo'
+              if ($LASTEXITCODE -ne 0) { throw "Windows resource compilation failed: $application" }
           }
 
       - name: Compile and assemble complete distribution

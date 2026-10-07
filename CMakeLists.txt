@@ -118,6 +118,7 @@ ExternalProject_Add(azerothcore
     BUILD_ALWAYS 1
     INSTALL_DIR "${CMAKE_INSTALL_PREFIX_CLEAN}"
 )
+ExternalProject_Add_StepTargets(azerothcore configure)
 
 # 5. Assemble every module's SQL, config templates, defaults and licenses.
 ExternalProject_Add_Step(azerothcore assemble_distribution

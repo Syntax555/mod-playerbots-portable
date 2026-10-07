@@ -280,7 +280,7 @@ Windows server build, then runs the launcher tests again on Windows.
 
 For a fork, first enable workflows on the repository's [Actions page](https://github.com/Syntax555/mod-playerbots-portable/actions), if GitHub shows the **Enable workflows** button. Enabling them does not replay tags pushed while Actions was disabled. To publish an existing tag, open **Build portable ZIP**, choose **Run workflow** on `main`, enter the tag (for example `v1.0.10`) in **release_tag**, and start the run. It checks out that exact tag and publishes its compiled ZIP only after all build and verification steps succeed. Leave **release_tag** empty to create a downloadable build artifact without publishing a release.
 
-For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.21+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
+For a local source build, use Windows 10/11 x64, Visual Studio 2022 with the C++ workload, CMake 3.22+, Go 1.26.6+, PowerShell 7+, Git, Boost 1.84+, MySQL Server 8.0 x64 and OpenSSL 3 x64:
 
 ```powershell
 git clone --recurse-submodules https://github.com/Syntax555/mod-playerbots-portable.git

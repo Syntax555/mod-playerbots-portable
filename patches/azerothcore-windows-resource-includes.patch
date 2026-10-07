@@ -1,0 +1,23 @@
+diff --git a/src/server/apps/CMakeLists.txt b/src/server/apps/CMakeLists.txt
+index 8befd84..a1ec382 100644
+--- a/src/server/apps/CMakeLists.txt
++++ b/src/server/apps/CMakeLists.txt
+@@ -112,6 +112,18 @@ foreach(APPLICATION_NAME ${APPLICATIONS_BUILD_LIST})
+ 
+     if (MSVC)
+       list(APPEND APP_PRIVATE_SOURCES ${SOURCE_APP_PATH}/${APPLICATION_NAME}.rc)
++
++      if(CMAKE_GENERATOR MATCHES "^Visual Studio")
++        if(CMAKE_VERSION VERSION_LESS 3.22)
++          message(FATAL_ERROR "Visual Studio resource compilation requires CMake 3.22 or newer")
++        endif()
++
++        # Resource files need only their local headers/icons and generated revision.h.
++        # Inheriting every C++ module include can exceed Windows' command-line limit.
++        # Escaping the separator keeps both paths in one VS_SETTINGS metadata value.
++        set_source_files_properties(${SOURCE_APP_PATH}/${APPLICATION_NAME}.rc PROPERTIES
++          VS_SETTINGS "AdditionalIncludeDirectories=${SOURCE_APP_PATH}\\;${CMAKE_BINARY_DIR}")
++      endif()
+     endif()
+   endif()
+ 
