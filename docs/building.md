@@ -27,11 +27,15 @@ cmake -B build -S . `
 $env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
 cmake --build build --config Release --parallel 2
 pwsh -File scripts/CopyWindowsRuntime.ps1 -DistDir dist
+pwsh -File scripts/CopyDependencyLicenses.ps1 -DistDir dist `
+  -MySQLRootDir "C:/tools/mysql/current" `
+  -OpenSSLRootDir "C:/tools/openssl/current/x64" `
+  -BoostRootDir "C:/local/boost_1_84_0"
 cmake --build build --config Release --target package_zip
 cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
 ```
 
-Run each command only after the previous command succeeds. `CopyWindowsRuntime.ps1` bundles the Visual C++ runtime needed by the server and portable MySQL.
+Run each command only after the previous command succeeds. `CopyWindowsRuntime.ps1` bundles the Visual C++ runtime needed by the server and portable MySQL. `CopyDependencyLicenses.ps1` preserves dependency notices; pass the same dependency paths used to configure the build.
 
 Outputs:
 
