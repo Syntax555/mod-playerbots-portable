@@ -4,8 +4,8 @@ Reviewed on 5 October 2026 against portable v1.0.8 (`2ef9230`), its exact locked
 
 The opening sections retain that historical audit's findings. The later dated
 addenda record source integrations and supersede their corresponding earlier
-limitations; the current strict progression and historical talent behavior is
-described in the final addendum.
+limitations; the current earned progression, historical talents and
+battleground behavior are described in the final addenda.
 
 ## Scope and effective configuration
 
@@ -383,8 +383,8 @@ The bracket policy now assigns approximately 5% of random bots to each earned
 cap at 19/29/39/49/59/69/79; 65% continue individual progression. Appending the
 later brackets preserves the previous lower-bracket assignments. Level-69/79
 residents earn TBC/Wrath access before their cap becomes reachable. Levels,
-equipment and money are never generated to populate brackets, and current bot
-battleground selection remains Vanilla-only.
+equipment and money are never generated to populate brackets. The 7 October
+battleground correction below supersedes the former Vanilla-only selection.
 
 ### Historical trees and earned spell sources
 
@@ -458,7 +458,7 @@ entries byte for byte. The output records source, patch and file hashes and
 dependency licenses. No mutable upstream bootstrap or latest-clone script is
 part of the build.
 
-Eight core compatibility/accounting/price patches are applied to a generated
+Ordered core compatibility/accounting/price patches are applied to a generated
 core checkout; modules and the adapted addon are exported into generated
 directories. The original core and Playerbots submodules stay pristine at their
 locked revisions. Independent packaging re-exports the locked sources and
@@ -491,3 +491,77 @@ raid mechanic, autonomous quest/profession step, market behavior or 2,500-bot
 performance. The earlier encounter/pathfinding limitations remain. Full
 historical price/world/pet/combat data and a literal audit of every upstream
 shortcut are outside this implemented scope.
+
+
+## 7 October 2026: earned-era battleground correction
+
+The portable profile replaces the global Vanilla-only bot restriction with
+`AiPlayerbot.EarnedEraBattlegrounds = 1`. Named Warsong Gulch, Arathi Basin and
+Alterac Valley queues are available in every earned era; Eye of the Storm needs
+tier 8 and Isle of Conquest needs tier 13. Each map's actual IP/core level
+requirements also apply. Preserved older characters above their earned era's
+level ceiling cannot queue until they earn the appropriate expansion; they are
+not downgraded or given catch-up progress.
+
+Humans can unlock Strand of the Ancients and random battlegrounds at tier 13.
+Human arena skirmishes require earned TBC and retain ordinary core level/team
+rules. Native rated arenas require level 80, so rated participation needs earned
+Wrath; TBC characters capped at 70 can use skirmishes only. TBC arena selection
+uses Nagrand, Blade's Edge and Ruins of Lordaeron; Wrath also adds Dalaran Sewers
+and Ring of Valor. The queue and invitation checks use each character's own
+progression, including the actual selected map behind an arena or
+random-battleground packet.
+
+Bots fill real players' eligible named queues only. Autonomous all-bot creation,
+bot random battlegrounds, bot Strand participation and bot arena team creation
+remain disabled. The pinned AI has no Strand tactics; its arena gathering uses
+teleport shortcuts. Enabling later named maps does not authorize factory gear,
+levels, gold, refresh supplies or instant resurrection. Humans need ordinary
+participants for the queues that bots cannot fill.
+
+Matching separates earned Vanilla, TBC and Wrath within the native level
+brackets, including overlapping level-60/70 characters. Premades, group queues,
+skirmishes, rated teams and refills retain the same era policy while preserving
+normal faction, team-size and rating requirements. Accepting an invitation
+checks the selected instance and era again, so advancement while queued cannot
+place a newly advanced character into its departing era's match.
+
+Per-match Arathi Basin victory points are 2,000 in Vanilla/TBC and 1,600 in
+Wrath, with the corresponding 1,800/1,400 near-victory warning. Eye of the Storm
+uses 2,000 points in TBC and 1,600 in Wrath. Alterac Valley has no reinforcement
+countdown in Vanilla and 600 starting reinforcements in TBC/Wrath. Warsong Gulch
+has no fixed time limit in Vanilla/TBC and uses the pinned core's native
+25-minute limit in Wrath. Vanilla omits Focused/Brutal Assault flag-carry
+penalties; TBC/Wrath retain native penalties. Their exact original TBC values
+are not retrofitted, and these changes do not recreate every historical patch
+version.
+
+Eye's override sets the server victory threshold. Its native initial world
+states do not publish a configurable maximum, so the Wrath client's static
+scoreboard text is not claimed to reproduce the TBC display.
+
+Match rules are chosen before players enter and remain fixed for that instance.
+Normal spirit-guide resurrection waves and native minimum team sizes remain.
+Marks of Honor use IP's existing Vanilla/TBC reward policy.
+
+The profile also sets `AiPlayerbot.LimitTalentsExpansion = 0`. Historical trees
+and authoritative earned gates already select Vanilla/TBC talents; the older
+level-based factory flag could restrict native Wrath allocation at level 70
+after that character legitimately earned Wrath. This change does not grant
+extra talent points, a free routine respec or trained spells.
+
+Launcher migration checks cover the older Vanilla-only configs, later map
+settings, native fallback rules and preservation of database/configuration
+state. Focused source fixtures cover queue eligibility, era isolation, fixed
+match rules and the earned bot policy; the release workflow also builds the
+complete Windows server. These checks do not establish perfect live tactics for
+every battleground. Normal player counts are still required and a population of
+2,500 does not guarantee an available match in every era/bracket.
+
+The changes do not turn every global core setting into a historical per-character
+rule. Dungeon Finder remains disabled, IP's realm-wide breathing/low-level
+regeneration and quest-marker settings remain, riding acquisition levels remain
+40/60/70, and general vendor/trainer prices and the auction market remain shared.
+Pet systems and every combat/world-data formula are not historical replacements.
+See [earned bot brackets](earned-bot-brackets.md#waiting-for-battlegrounds) for the
+queue matrix and [changing expansions](changing-expansions.md) for migration.

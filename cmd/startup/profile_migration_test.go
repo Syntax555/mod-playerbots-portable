@@ -25,10 +25,10 @@ func TestApplyRecommendedProfilesPreservesUnmanagedSettingsAndData(t *testing.T)
 		path := filepath.Join(directory, entry.Name())
 		content := "# My own comments\r\nCustom.Value = \"retain=me\"\r\nLoginDatabaseInfo = \"192.168.0.10;3307;custom;secret;custom_auth\"\r\n"
 		if entry.Name() == "playerbots.conf" {
-			content += "AiPlayerbot.DisabledWithoutRealPlayer = 0\r\nAiPlayerbot.RandomBotJoinBG = 0\r\nAiPlayerbot.RandomBotAutoJoinBG = 1\r\nAiPlayerbot.VanillaBattlegroundsOnly = 0\r\nAiPlayerbot.RandomBotArenaTeam2v2Count = 10\r\nAiPlayerbot.GreetRealPlayersOnly = 0\r\nAiPlayerbot.RandomBotEmote = 1\r\n"
+			content += "AiPlayerbot.DisabledWithoutRealPlayer = 0\r\nAiPlayerbot.RandomBotJoinBG = 0\r\nAiPlayerbot.RandomBotAutoJoinBG = 1\r\nAiPlayerbot.VanillaBattlegroundsOnly = 1\r\nAiPlayerbot.EarnedEraBattlegrounds = 0\r\nAiPlayerbot.LimitTalentsExpansion = 1\r\nAiPlayerbot.RandomBotAutoJoinBGEYCount = 0\r\nAiPlayerbot.RandomBotAutoJoinBGICCount = 0\r\nAiPlayerbot.RandomBotArenaTeam2v2Count = 10\r\nAiPlayerbot.GreetRealPlayersOnly = 0\r\nAiPlayerbot.RandomBotEmote = 1\r\n"
 		}
 		if entry.Name() == "worldserver.conf" {
-			content += "Expansion = 0\r\nBattleground.Arathi.CapturePoints = 1600\r\nBattleground.Alterac.Reinforcements = 600\r\nBattleground.Override.LowLevels.MinPlayers.WS = 1\r\nBattleground.Override.LowLevels.MinPlayers.AB = 1\r\nBattleground.Override.LowLevels.MinPlayers.AV = 1\r\nWorldServerPort = 8095\r\nDataDir = \"D:/realm-data\"\r\nCharacterDatabaseInfo = \"192.168.0.10;3307;custom;secret;custom_characters\"\r\n"
+			content += "Expansion = 0\r\nBattleground.Arathi.CapturePoints = 2000\r\nBattleground.Alterac.Reinforcements = 0\r\nBattleground.Override.LowLevels.MinPlayers.WS = 1\r\nBattleground.Override.LowLevels.MinPlayers.AB = 1\r\nBattleground.Override.LowLevels.MinPlayers.AV = 1\r\nWorldServerPort = 8095\r\nDataDir = \"D:/realm-data\"\r\nCharacterDatabaseInfo = \"192.168.0.10;3307;custom;secret;custom_characters\"\r\n"
 		}
 		originals[path] = content
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
@@ -84,7 +84,11 @@ func TestApplyRecommendedProfilesPreservesUnmanagedSettingsAndData(t *testing.T)
 		"AiPlayerbot.DisabledWithoutRealPlayer = 1\r\n",
 		"AiPlayerbot.RandomBotJoinBG = 1\r\n",
 		"AiPlayerbot.RandomBotAutoJoinBG = 0\r\n",
-		"AiPlayerbot.VanillaBattlegroundsOnly = 1\r\n",
+		"AiPlayerbot.VanillaBattlegroundsOnly = 0\r\n",
+		"AiPlayerbot.EarnedEraBattlegrounds = 1\r\n",
+		"AiPlayerbot.LimitTalentsExpansion = 0\r\n",
+		"AiPlayerbot.RandomBotAutoJoinBGEYCount = 1\r\n",
+		"AiPlayerbot.RandomBotAutoJoinBGICCount = 1\r\n",
 		"AiPlayerbot.RandomBotArenaTeam2v2Count = 0\r\n",
 		"AiPlayerbot.GreetRealPlayersOnly = 1\r\n",
 		"AiPlayerbot.RandomBotEmote = 0\r\n",
@@ -101,8 +105,8 @@ func TestApplyRecommendedProfilesPreservesUnmanagedSettingsAndData(t *testing.T)
 	}
 	for _, setting := range []string{
 		"Expansion = 2\r\n",
-		"Battleground.Arathi.CapturePoints = 2000\r\n",
-		"Battleground.Alterac.Reinforcements = 0\r\n",
+		"Battleground.Arathi.CapturePoints = 1600\r\n",
+		"Battleground.Alterac.Reinforcements = 600\r\n",
 		"Battleground.Override.LowLevels.MinPlayers.WS = 0\r\n",
 		"Battleground.Override.LowLevels.MinPlayers.AB = 0\r\n",
 		"Battleground.Override.LowLevels.MinPlayers.AV = 0\r\n",

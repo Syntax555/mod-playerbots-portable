@@ -35,14 +35,16 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 		"AiPlayerbot.RandomBotMaps = 0,1,530,571\r\n",
 		"AiPlayerbot.ApplyInstanceStrategies = 1\r\n",
 		"AiPlayerbot.AutoAvoidAoe = 1\r\n",
-		"AiPlayerbot.VanillaBattlegroundsOnly = 1\r\n",
+		"AiPlayerbot.VanillaBattlegroundsOnly = 0\r\n",
+		"AiPlayerbot.EarnedEraBattlegrounds = 1\r\n",
+		"AiPlayerbot.LimitTalentsExpansion = 0\r\n",
 		"AiPlayerbot.RandomBotJoinBG = 1\r\n",
 		"AiPlayerbot.RandomBotAutoJoinBG = 0\r\n",
-		"AiPlayerbot.RandomBotAutoJoinWSBrackets = 0,1,2,3,4,5\r\n",
-		"AiPlayerbot.RandomBotAutoJoinABBrackets = 0,1,2,3,4\r\n",
-		"AiPlayerbot.RandomBotAutoJoinAVBrackets = 0\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGEYCount = 0\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGICCount = 0\r\n",
+		"AiPlayerbot.RandomBotAutoJoinWSBrackets = 0,1,2,3,4,5,6,7,8,9\r\n",
+		"AiPlayerbot.RandomBotAutoJoinABBrackets = 0,1,2,3,4,5,6,7,8\r\n",
+		"AiPlayerbot.RandomBotAutoJoinAVBrackets = 0,1,2,3\r\n",
+		"AiPlayerbot.RandomBotAutoJoinBGEYCount = 1\r\n",
+		"AiPlayerbot.RandomBotAutoJoinBGICCount = 1\r\n",
 		"AiPlayerbot.RandomBotAutoJoinBGRatedArena2v2Count = 0\r\n",
 		"AiPlayerbot.RandomBotAutoJoinBGRatedArena3v3Count = 0\r\n",
 		"AiPlayerbot.RandomBotAutoJoinBGRatedArena5v5Count = 0\r\n",
@@ -77,7 +79,7 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 }
 
 func TestFreshWorldProfileKeepsEarnedStartsAndRewards(t *testing.T) {
-	merged, err := applyConfigProfile("worldserver.conf.dist", "[worldserver]\nMaxPlayerLevel = 80\nBattleground.Arathi.CapturePoints = 1600\nBattleground.Alterac.Reinforcements = 600\n")
+	merged, err := applyConfigProfile("worldserver.conf.dist", "[worldserver]\nMaxPlayerLevel = 80\nBattleground.Arathi.CapturePoints = 2000\nBattleground.Alterac.Reinforcements = 0\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +98,8 @@ func TestFreshWorldProfileKeepsEarnedStartsAndRewards(t *testing.T) {
 		"StartPlayerMoney":                              "0",
 		"CharacterCreating.Disabled.RaceMask":           "0",
 		"CharacterCreating.Disabled.ClassMask":          "0",
-		"Battleground.Arathi.CapturePoints":             "2000",
-		"Battleground.Alterac.Reinforcements":           "0",
+		"Battleground.Arathi.CapturePoints":             "1600",
+		"Battleground.Alterac.Reinforcements":           "600",
 		"Battleground.Override.LowLevels.MinPlayers":    "0",
 		"Battleground.Override.LowLevels.MinPlayers.WS": "0",
 		"Battleground.Override.LowLevels.MinPlayers.AB": "0",

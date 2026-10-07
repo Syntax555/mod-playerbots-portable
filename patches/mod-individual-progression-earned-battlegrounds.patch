@@ -1,0 +1,579 @@
+diff --git a/src/EarnedEraBattlegrounds.cpp b/src/EarnedEraBattlegrounds.cpp
+new file mode 100644
+index 0000000..3d27732
+--- /dev/null
++++ b/src/EarnedEraBattlegrounds.cpp
+@@ -0,0 +1,526 @@
++/*
++ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
++ * Released under the GNU AGPL v3 license:
++ * https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
++ */
++
++#include <array>
++#include <map>
++#include <mutex>
++
++#include "AllBattlegroundScript.h"
++#include "Battleground.h"
++#include "BattlegroundAB.h"
++#include "BattlegroundAV.h"
++#include "BattlegroundEY.h"
++#include "BattlegroundMgr.h"
++#include "BattlegroundQueue.h"
++#include "BattlegroundWS.h"
++#include "GameTime.h"
++#include "Group.h"
++#include "GroupScript.h"
++#include "IndividualProgression.h"
++#include "IndividualProgressionBattlegrounds.h"
++
++// Bridge functions keep Playerbots independent of the progression module's
++// enums. These checks read the character's already loaded rewarded quests.
++uint8 IndividualProgression_GetEarnedEra(Player* player)
++{
++    if (!player || !player->IsInWorld() || !sIndividualProgression->IsStrictDefaultProgression())
++        return 255;
++
++    uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
++    return stage >= PROGRESSION_TBC_TIER_5 ? 2 : stage >= PROGRESSION_PRE_TBC ? 1 : 0;
++}
++
++uint8 IndividualProgression_BattlegroundEra(Player* player) { return IndividualProgression_GetEarnedEra(player); }
++
++bool IndividualProgression_CanJoinBattleground(Player* player, uint32 battlegroundType)
++{
++    if (!player || !player->IsInWorld() || battlegroundType >= MAX_BATTLEGROUND_TYPE_ID)
++        return false;
++
++    BattlegroundTypeId const type = BattlegroundTypeId(battlegroundType);
++    if (!player->GetBGAccessByLevel(type))
++        return false;
++
++    if (!sIndividualProgression->IsStrictDefaultProgression())
++        return true;
++
++    uint8 const era = IndividualProgression_GetEarnedEra(player);
++    // Preserve migrated characters, but never treat a preserved level above
++    // their earned expansion cap as an authentic historical PvP bracket.
++    if ((era == 0 && player->GetLevel() > 60) || (era == 1 && player->GetLevel() > 70))
++        return false;
++
++    switch (type)
++    {
++        case BATTLEGROUND_WS:
++        case BATTLEGROUND_AB:
++        case BATTLEGROUND_AV:
++            return true;
++        case BATTLEGROUND_EY:
++        case BATTLEGROUND_NA:
++        case BATTLEGROUND_BE:
++        case BATTLEGROUND_RL:
++        case BATTLEGROUND_AA:
++            return era >= 1;
++        case BATTLEGROUND_SA:
++        case BATTLEGROUND_IC:
++        case BATTLEGROUND_DS:
++        case BATTLEGROUND_RV:
++        case BATTLEGROUND_RB:
++            return era >= 2;
++        default:
++            return false;
++    }
++}
++
++namespace
++{
++bool CanQueueParty(Player* player, BattlegroundTypeId type, bool asGroup)
++{
++    if (!IndividualProgression_CanJoinBattleground(player, type))
++        return false;
++
++    if (!asGroup)
++        return true;
++
++    Group* group = player->GetGroup();
++    if (!group)
++        return false;
++
++    uint8 const era = IndividualProgression_GetEarnedEra(player);
++    bool eligible = true;
++    // Iterate actual online group references, never the leader's account
++    // progression. Native queue validation also rejects offline members.
++    for (GroupReference* reference = group->GetFirstMember(); reference; reference = reference->next())
++    {
++        Player* member = reference->GetSource();
++        if (!IndividualProgression_CanJoinBattleground(member, type) ||
++            IndividualProgression_GetEarnedEra(member) != era)
++            eligible = false;
++    }
++    return eligible;
++}
++}  // namespace
++
++class IndividualProgressionEarnedBattlegroundPlayer : public PlayerScript
++{
++public:
++    IndividualProgressionEarnedBattlegroundPlayer()
++        : PlayerScript("IndividualProgressionEarnedBattlegroundPlayer",
++                       {PLAYERHOOK_CAN_JOIN_IN_BATTLEGROUND_QUEUE, PLAYERHOOK_CAN_JOIN_IN_ARENA_QUEUE,
++                        PLAYERHOOK_CAN_BATTLEFIELD_PORT})
++    {
++    }
++
++    bool OnPlayerCanJoinInBattlegroundQueue(Player* player, ObjectGuid /*battlemaster*/, BattlegroundTypeId type,
++                                            uint8 asGroup, GroupJoinBattlegroundResult& error) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression() || CanQueueParty(player, type, asGroup != 0))
++            return true;
++
++        error = ERR_BATTLEGROUND_JOIN_FAILED;
++        return false;
++    }
++
++    bool OnPlayerCanJoinInArenaQueue(Player* player, ObjectGuid /*battlemaster*/, uint8 /*arenaSlot*/,
++                                     BattlegroundTypeId type, uint8 asGroup, uint8 /*rated*/,
++                                     GroupJoinBattlegroundResult& error) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression() || CanQueueParty(player, type, asGroup != 0))
++            return true;
++
++        error = ERR_BATTLEGROUND_JOIN_FAILED;
++        return false;
++    }
++
++    bool OnPlayerCanBattleFieldPort(Player* player, uint8 arenaType, BattlegroundTypeId type, uint8 action) override
++    {
++        // Leaving a queue must always remain possible. Accepting an invitation
++        // rechecks both map eligibility and the immutable invited match era.
++        if (action == 0 || !sIndividualProgression->IsStrictDefaultProgression())
++            return true;
++        if (!IndividualProgression_CanJoinBattleground(player, type))
++            return false;
++
++        BattlegroundQueue& queue =
++            sBattlegroundMgr->GetBattlegroundQueue(BattlegroundMgr::BGQueueTypeId(type, arenaType));
++        GroupQueueInfo info;
++        if (!queue.GetPlayerGroupInfoData(player->GetGUID(), &info) || !info.IsInvitedToBGInstanceGUID)
++            return false;
++
++        Battleground* battleground =
++            sBattlegroundMgr->GetBattleground(info.IsInvitedToBGInstanceGUID, BATTLEGROUND_TYPE_NONE);
++        return battleground && IndividualProgression_CanJoinBattleground(player, battleground->GetBgTypeID(true)) &&
++               IndividualProgression_BattlegroundMatchEra(battleground) == IndividualProgression_GetEarnedEra(player);
++    }
++};
++
++class IndividualProgressionEarnedBattlegroundGroup : public GroupScript
++{
++public:
++    IndividualProgressionEarnedBattlegroundGroup()
++        : GroupScript("IndividualProgressionEarnedBattlegroundGroup", {GROUPHOOK_CAN_GROUP_JOIN_BATTLEGROUND_QUEUE})
++    {
++    }
++
++    bool CanGroupJoinBattlegroundQueue(Group const* group, Player* member, Battleground const* battleground,
++                                       uint32 /*minimumPlayers*/, bool /*rated*/, uint32 /*arenaSlot*/) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression())
++            return true;
++
++        if (!group || !battleground || !IndividualProgression_CanJoinBattleground(member, battleground->GetBgTypeID()))
++            return false;
++
++        GroupReference const* first = group->GetFirstMember();
++        return first &&
++               IndividualProgression_GetEarnedEra(first->GetSource()) == IndividualProgression_GetEarnedEra(member);
++    }
++};
++
++namespace
++{
++std::mutex matchEraMutex;
++std::map<uint32, uint8> matchEras;
++
++uint8 QueuedGroupEra(GroupQueueInfo const* group)
++{
++    if (!group || group->Players.empty())
++        return 255;
++
++    uint8 era = 255;
++    for (ObjectGuid const& guid : group->Players)
++    {
++        Player* player = ObjectAccessor::FindConnectedPlayer(guid);
++        if (!IndividualProgression_CanJoinBattleground(player, group->BgTypeId))
++            return 255;
++
++        uint8 const memberEra = IndividualProgression_GetEarnedEra(player);
++        if (memberEra >= 3 || (era < 3 && memberEra != era))
++            return 255;
++        era = memberEra;
++    }
++    return era;
++}
++
++uint8 SelectedEra(BattlegroundQueue const* queue)
++{
++    for (uint8 team = 0; team < PVP_TEAMS_COUNT; ++team)
++        for (GroupQueueInfo const* group : queue->m_SelectionPools[team].SelectedGroups)
++        {
++            uint8 const era = QueuedGroupEra(group);
++            if (era < 3)
++                return era;
++        }
++    return 255;
++}
++}  // namespace
++
++uint8 IndividualProgression_BattlegroundMatchEra(Battleground* battleground)
++{
++    if (!battleground || !battleground->GetInstanceID() || !sIndividualProgression->IsStrictDefaultProgression())
++        return 255;
++
++    uint32 const instanceId = battleground->GetInstanceID();
++    {
++        std::lock_guard<std::mutex> lock(matchEraMutex);
++        auto const found = matchEras.find(instanceId);
++        if (found != matchEras.end())
++            return found->second;
++    }
++
++    // A config reload cannot invent an era for an already running match.
++    // Initial assignment happens before the first player enters the instance.
++    if (battleground->GetStatus() != STATUS_WAIT_JOIN || battleground->GetStartTime() != 0 ||
++        !battleground->GetPlayers().empty())
++        return 255;
++
++    // StartBattleground registers the instance only after invitations exist.
++    // Resolve GUIDs now and retain just the era; later joins cannot change it.
++    BattlegroundQueue& queue = sBattlegroundMgr->GetBattlegroundQueue(
++        BattlegroundMgr::BGQueueTypeId(battleground->GetBgTypeID(), battleground->GetArenaType()));
++    uint8 era = 255;
++    for (auto const& [guid, group] : queue.m_QueuedPlayers)
++    {
++        if (group->IsInvitedToBGInstanceGUID != instanceId)
++            continue;
++
++        uint8 const groupEra = QueuedGroupEra(group);
++        if (groupEra >= 3 || (era < 3 && era != groupEra))
++            return 255;
++        era = groupEra;
++    }
++    if (era >= 3)
++        return 255;
++
++    std::lock_guard<std::mutex> lock(matchEraMutex);
++    return matchEras.emplace(instanceId, era).first->second;
++}
++
++class IndividualProgressionEarnedBattlegroundQueue : public AllBattlegroundScript
++{
++public:
++    IndividualProgressionEarnedBattlegroundQueue()
++        : AllBattlegroundScript(
++              "IndividualProgressionEarnedBattlegroundQueue",
++              {ALLBATTLEGROUNDHOOK_ON_QUEUE_UPDATE, ALLBATTLEGROUNDHOOK_IS_CHECK_NORMAL_MATCH,
++               ALLBATTLEGROUNDHOOK_CAN_ADD_GROUP_TO_MATCHING_POOL, ALLBATTLEGROUNDHOOK_ON_BATTLEGROUND_CREATE,
++               ALLBATTLEGROUNDHOOK_ON_BATTLEGROUND_DESTROY, ALLBATTLEGROUNDHOOK_CAN_MATCH_ARENA_TEAMS,
++               ALLBATTLEGROUNDHOOK_CAN_SELECT_ARENA_MAP})
++    {
++    }
++
++    void OnQueueUpdate(BattlegroundQueue* queue, uint32 /*diff*/, BattlegroundTypeId /*type*/,
++                       BattlegroundBracketId bracket, uint8 arenaType, bool rated, uint32 /*rating*/) override
++    {
++        _premadeEra.erase(queue);
++        if (!sIndividualProgression->IsStrictDefaultProgression() || arenaType || rated)
++            return;
++
++        // Native CheckPremadeMatch returns early when the first opposing
++        // premades have different eras. Keep its ordinary timeout demotion
++        // working so an incompatible first pair cannot block the queue forever.
++        uint32 const now = GameTime::GetGameTimeMS().count();
++        uint32 const wait = sWorld->getIntConfig(CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH);
++        for (uint8 team = 0; team < PVP_TEAMS_COUNT; ++team)
++        {
++            auto& premades = queue->m_QueuedGroups[bracket][BG_QUEUE_PREMADE_ALLIANCE + team];
++            for (auto iterator = premades.begin(); iterator != premades.end();)
++            {
++                GroupQueueInfo* group = *iterator;
++                if (!group->IsInvitedToBGInstanceGUID && uint32(now - group->JoinTime) >= wait)
++                {
++                    group->GroupType = BG_QUEUE_NORMAL_ALLIANCE + team;
++                    queue->m_QueuedGroups[bracket][group->GroupType].push_back(group);
++                    iterator = premades.erase(iterator);
++                }
++                else
++                    ++iterator;
++            }
++        }
++    }
++
++    bool CanAddGroupToMatchingPool(BattlegroundQueue* queue, GroupQueueInfo* group, uint32 /*poolCount*/,
++                                   Battleground* battleground, BattlegroundBracketId /*bracket*/) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression())
++            return true;
++
++        uint8 const era = QueuedGroupEra(group);
++        if (era >= 3)
++            return false;
++
++        if (battleground && battleground->GetInstanceID())
++            return IndividualProgression_BattlegroundMatchEra(battleground) == era;
++
++        uint8 const selectedEra = SelectedEra(queue);
++        if (selectedEra < 3)
++            return selectedEra == era;
++
++        // Both premade candidates are checked before either is added to a
++        // pool, so remember the first candidate's value for the second check.
++        if (!battleground && group->GroupType <= BG_QUEUE_PREMADE_HORDE)
++            return _premadeEra.emplace(queue, era).first->second == era;
++
++        return true;
++    }
++
++    bool IsCheckNormalMatch(BattlegroundQueue* queue, Battleground* battleground, BattlegroundBracketId bracket,
++                            uint32 minimum, uint32 maximum) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression() || !battleground)
++            return false;
++
++        auto const key = std::make_pair(queue, uint8(bracket));
++        uint8& nextEra = _nextEra[key];
++        for (uint8 attempt = 0; attempt < 3; ++attempt)
++        {
++            uint8 const era = (nextEra + attempt) % 3;
++            for (auto& pool : queue->m_SelectionPools)
++                pool.Init();
++
++            std::array<BattlegroundQueue::GroupsQueueType::const_iterator, PVP_TEAMS_COUNT> iterators;
++            for (uint8 team = 0; team < PVP_TEAMS_COUNT; ++team)
++            {
++                auto const& groups = queue->m_QueuedGroups[bracket][BG_QUEUE_NORMAL_ALLIANCE + team];
++                iterators[team] = groups.begin();
++                for (; iterators[team] != groups.end(); ++iterators[team])
++                {
++                    GroupQueueInfo* group = *iterators[team];
++                    if (group->IsInvitedToBGInstanceGUID || QueuedGroupEra(group) != era ||
++                        !sScriptMgr->CanAddGroupToMatchingPool(
++                            queue, group, queue->m_SelectionPools[team].GetPlayerCount(), battleground, bracket))
++                        continue;
++
++                    queue->m_SelectionPools[team].AddGroup(group, maximum);
++                    if (queue->m_SelectionPools[team].GetPlayerCount() >= minimum)
++                        break;
++                }
++            }
++
++            uint32 alliance = queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount();
++            uint32 horde = queue->m_SelectionPools[TEAM_HORDE].GetPlayerCount();
++            if (battleground->isArena())
++            {
++                if (alliance >= minimum && horde >= minimum)
++                {
++                    nextEra = (era + 1) % 3;
++                    return true;
++                }
++
++                // Let the native same-faction selector move queue sides and
++                // preserve its invite ledgers. Keep just its first full team
++                // when another full team of this era can form behind it.
++                for (uint8 team = 0; team < PVP_TEAMS_COUNT; ++team)
++                {
++                    if (queue->m_SelectionPools[team].GetPlayerCount() != minimum)
++                        continue;
++                    auto const& groups = queue->m_QueuedGroups[bracket][BG_QUEUE_NORMAL_ALLIANCE + team];
++                    auto iterator = iterators[team];
++                    if (iterator != groups.end())
++                        ++iterator;
++                    uint32 available = 0;
++                    for (; iterator != groups.end(); ++iterator)
++                    {
++                        GroupQueueInfo* group = *iterator;
++                        if (group->IsInvitedToBGInstanceGUID || QueuedGroupEra(group) != era ||
++                            group->Players.size() > minimum - available ||
++                            !sScriptMgr->CanAddGroupToMatchingPool(queue, group, available, battleground, bracket))
++                            continue;
++                        available += group->Players.size();
++                        if (available == minimum)
++                        {
++                            queue->m_SelectionPools[1 - team].Init();
++                            nextEra = (era + 1) % 3;
++                            return true;
++                        }
++                    }
++                }
++                continue;
++            }
++
++            bool const testing = sBattlegroundMgr->isTesting();
++            if (!testing && (alliance < minimum || horde < minimum))
++                continue;
++            if (testing && !alliance && !horde)
++                continue;
++
++            // Preserve the native invitation balance rule, including complete
++            // group sizes and the permitted difference of at most two players.
++            if (alliance >= minimum && horde >= minimum &&
++                sWorld->getIntConfig(CONFIG_BATTLEGROUND_INVITATION_TYPE) != BG_QUEUE_INVITATION_TYPE_NO_BALANCE)
++            {
++                uint8 const smaller = horde < alliance ? TEAM_HORDE : TEAM_ALLIANCE;
++                uint32 const desired = queue->m_SelectionPools[1 - smaller].GetPlayerCount();
++                auto const& groups = queue->m_QueuedGroups[bracket][BG_QUEUE_NORMAL_ALLIANCE + smaller];
++                if (iterators[smaller] != groups.end())
++                    ++iterators[smaller];
++                for (; iterators[smaller] != groups.end(); ++iterators[smaller])
++                {
++                    GroupQueueInfo* group = *iterators[smaller];
++                    if (group->IsInvitedToBGInstanceGUID || QueuedGroupEra(group) != era ||
++                        !sScriptMgr->CanAddGroupToMatchingPool(
++                            queue, group, queue->m_SelectionPools[smaller].GetPlayerCount(), battleground, bracket))
++                        continue;
++                    if (!queue->m_SelectionPools[smaller].AddGroup(group, desired))
++                        break;
++                }
++                alliance = queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount();
++                horde = queue->m_SelectionPools[TEAM_HORDE].GetPlayerCount();
++                if (alliance > horde + 2 || horde > alliance + 2)
++                    continue;
++            }
++
++            nextEra = (era + 1) % 3;
++            return true;
++        }
++
++        // Returning true tells the core this hook supplied the pools. Empty
++        // pools mean no eligible match; its native selector must not mix eras.
++        for (auto& pool : queue->m_SelectionPools)
++            pool.Init();
++        return true;
++    }
++
++    bool CanMatchArenaTeams(BattlegroundQueue* /*queue*/, GroupQueueInfo* first, GroupQueueInfo* second,
++                            BattlegroundBracketId /*bracket*/) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression())
++            return true;
++        uint8 const era = QueuedGroupEra(first);
++        return first != second && era >= 1 && era < 3 && QueuedGroupEra(second) == era;
++    }
++
++    bool CanSelectArenaMap(BattlegroundTypeId candidate, BattlegroundQueue* queue, BattlegroundBracketId /*bracket*/,
++                           GroupQueueInfo* first, GroupQueueInfo* second) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression())
++            return true;
++
++        if (!queue)
++            return false;
++        uint8 const era = first ? QueuedGroupEra(first) : SelectedEra(queue);
++        if (era < 1 || era >= 3 || (second && QueuedGroupEra(second) != era))
++            return false;
++        switch (candidate)
++        {
++            case BATTLEGROUND_NA:
++            case BATTLEGROUND_BE:
++            case BATTLEGROUND_RL:
++                return true;
++            case BATTLEGROUND_DS:
++            case BATTLEGROUND_RV:
++                return era >= 2;
++            default:
++                return false;
++        }
++    }
++
++    void OnBattlegroundCreate(Battleground* battleground) override
++    {
++        uint8 const era = IndividualProgression_BattlegroundMatchEra(battleground);
++        if (era >= 3)
++            return;
++        switch (battleground->GetBgTypeID(true))
++        {
++            case BATTLEGROUND_AB:
++                battleground->ToBattlegroundAB()->ConfigureScoreLimit(era < 2 ? 2000 : 1600, era < 2 ? 1800 : 1400);
++                break;
++            case BATTLEGROUND_AV:
++                battleground->ToBattlegroundAV()->ConfigureReinforcements(era == 0 ? 0 : 600);
++                break;
++            case BATTLEGROUND_EY:
++                battleground->ToBattlegroundEY()->ConfigureScoreLimit(era == 1 ? 2000 : 1600);
++                break;
++            case BATTLEGROUND_WS:
++                battleground->ToBattlegroundWS()->ConfigureEraRules(era);
++                break;
++            default:
++                break;
++        }
++    }
++
++    void OnBattlegroundDestroy(Battleground* battleground) override
++    {
++        if (!battleground)
++            return;
++        std::lock_guard<std::mutex> lock(matchEraMutex);
++        matchEras.erase(battleground->GetInstanceID());
++    }
++
++private:
++    // Queues live for the server lifetime. No player or queued-group pointers
++    // are retained beyond a call; rotation is independent for each bracket.
++    std::map<std::pair<BattlegroundQueue*, uint8>, uint8> _nextEra;
++    std::map<BattlegroundQueue*, uint8> _premadeEra;
++};
++
++void AddSC_individual_progression_earned_battlegrounds()
++{
++    new IndividualProgressionEarnedBattlegroundPlayer();
++    new IndividualProgressionEarnedBattlegroundGroup();
++    new IndividualProgressionEarnedBattlegroundQueue();
++}
+diff --git a/src/IndividualProgressionBattlegrounds.h b/src/IndividualProgressionBattlegrounds.h
+new file mode 100644
+index 0000000..31ff44f
+--- /dev/null
++++ b/src/IndividualProgressionBattlegrounds.h
+@@ -0,0 +1,21 @@
++/*
++ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
++ * Released under the GNU AGPL v3 license:
++ * https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
++ */
++
++#ifndef INDIVIDUAL_PROGRESSION_BATTLEGROUNDS_H
++#define INDIVIDUAL_PROGRESSION_BATTLEGROUNDS_H
++
++#include "Define.h"
++
++class Player;
++class Battleground;
++
++// 0: Vanilla, 1: TBC, 2: Wrath; 255: unavailable or unrestricted policy.
++uint8 IndividualProgression_GetEarnedEra(Player* player);
++uint8 IndividualProgression_BattlegroundEra(Player* player);
++bool IndividualProgression_CanJoinBattleground(Player* player, uint32 battlegroundType);
++uint8 IndividualProgression_BattlegroundMatchEra(Battleground* battleground);
++
++#endif
+diff --git a/src/IndividualProgression_loader.cpp b/src/IndividualProgression_loader.cpp
+index 8ad4354..804b1e1 100644
+--- a/src/IndividualProgression_loader.cpp
++++ b/src/IndividualProgression_loader.cpp
+@@ -5,6 +5,7 @@
+ // From SC
+ void AddSC_mod_individual_progression();
+ void AddSC_individual_progression_era_riding_prices();
++void AddSC_individual_progression_earned_battlegrounds();
+ void AddSC_boss_onyxia_40();
+ void AddSC_instance_onyxias_lair_40();
+ void AddSC_instance_blackrock_spire_50_59_B();
+@@ -58,6 +59,7 @@ void Addmod_individual_progressionScripts()
+ {
+     AddSC_mod_individual_progression();
+     AddSC_individual_progression_era_riding_prices();
++    AddSC_individual_progression_earned_battlegrounds();
+     AddSC_boss_onyxia_40();
+     AddSC_instance_onyxias_lair_40();
+     AddSC_instance_blackrock_spire_50_59_B();

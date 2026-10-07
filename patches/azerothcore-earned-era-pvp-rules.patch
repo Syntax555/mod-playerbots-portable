@@ -1,0 +1,172 @@
+diff --git a/src/server/game/Battlegrounds/Zones/BattlegroundEY.cpp b/src/server/game/Battlegrounds/Zones/BattlegroundEY.cpp
+index 51ff6c4..25017a5 100644
+--- a/src/server/game/Battlegrounds/Zones/BattlegroundEY.cpp
++++ b/src/server/game/Battlegrounds/Zones/BattlegroundEY.cpp
+@@ -353,6 +353,16 @@ bool BattlegroundEY::SetupBattleground()
+     return true;
+ }
+ 
++void BattlegroundEY::ConfigureScoreLimit(uint32 maxScore)
++{
++    // Resolve the earned match era before any player enters or score is earned.
++    if (!GetInstanceID() || GetStatus() != STATUS_WAIT_JOIN || GetStartTime() || GetPlayersSize() || !maxScore ||
++        maxScore > 0x7FFFFFFF)
++        return;
++
++    _configurableMaxTeamScore = maxScore;
++}
++
+ void BattlegroundEY::Init()
+ {
+     //call parent's class reset
+diff --git a/src/server/game/Battlegrounds/Zones/BattlegroundEY.h b/src/server/game/Battlegrounds/Zones/BattlegroundEY.h
+index 85ef738..17685e2 100644
+--- a/src/server/game/Battlegrounds/Zones/BattlegroundEY.h
++++ b/src/server/game/Battlegrounds/Zones/BattlegroundEY.h
+@@ -384,6 +384,8 @@ public:
+     /* achievement req. */
+     bool AllNodesConrolledByTeam(TeamId teamId) const override;
+     TeamId GetPrematureWinner() override;
++    void ConfigureScoreLimit(uint32 maxScore);
++    [[nodiscard]] uint32 GetConfiguredMaxScore() const { return _configurableMaxTeamScore; }
+ 
+ private:
+     void PostUpdateImpl(uint32 diff) override;
+diff --git a/src/server/game/Battlegrounds/Zones/BattlegroundWS.cpp b/src/server/game/Battlegrounds/Zones/BattlegroundWS.cpp
+index f5bd8a8..905a329 100644
+--- a/src/server/game/Battlegrounds/Zones/BattlegroundWS.cpp
++++ b/src/server/game/Battlegrounds/Zones/BattlegroundWS.cpp
+@@ -62,10 +62,14 @@ void BattlegroundWS::PostUpdateImpl(uint32 diff)
+         switch (_bgEvents.ExecuteEvent())
+         {
+             case BG_WS_EVENT_UPDATE_GAME_TIME:
++                if (!_timeLimitEnabled)
++                    break;
+                 UpdateWorldState(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER, GetMatchTime());
+                 _bgEvents.ScheduleEvent(BG_WS_EVENT_UPDATE_GAME_TIME, Milliseconds(((BG_WS_TOTAL_GAME_TIME - GetStartTime()) % (MINUTE * IN_MILLISECONDS)) + 1));
+                 break;
+             case BG_WS_EVENT_NO_TIME_LEFT:
++                if (!_timeLimitEnabled)
++                    break;
+                 if (GetTeamScore(TEAM_ALLIANCE) == GetTeamScore(TEAM_HORDE))
+                     EndBattleground(_lastFlagCaptureTeam);
+                 else
+@@ -84,12 +88,16 @@ void BattlegroundWS::PostUpdateImpl(uint32 diff)
+                 RespawnFlagAfterDrop(TEAM_HORDE);
+                 break;
+             case BG_WS_EVENT_BOTH_FLAGS_KEPT10:
++                if (!_assaultDebuffsEnabled)
++                    break;
+                 if (Player* player = ObjectAccessor::GetPlayer(FindBgMap(), GetFlagPickerGUID(TEAM_ALLIANCE)))
+                     player->CastSpell(player, BG_WS_SPELL_FOCUSED_ASSAULT, true);
+                 if (Player* player = ObjectAccessor::GetPlayer(FindBgMap(), GetFlagPickerGUID(TEAM_HORDE)))
+                     player->CastSpell(player, BG_WS_SPELL_FOCUSED_ASSAULT, true);
+                 break;
+             case BG_WS_EVENT_BOTH_FLAGS_KEPT15:
++                if (!_assaultDebuffsEnabled)
++                    break;
+                 if (Player* player = ObjectAccessor::GetPlayer(FindBgMap(), GetFlagPickerGUID(TEAM_ALLIANCE)))
+                 {
+                     player->RemoveAurasDueToSpell(BG_WS_SPELL_FOCUSED_ASSAULT);
+@@ -136,9 +144,15 @@ void BattlegroundWS::StartingEventOpenDoors()
+     SpawnBGObject(BG_WS_OBJECT_DOOR_H_4, RESPAWN_ONE_DAY);
+ 
+     StartTimedAchievement(ACHIEVEMENT_TIMED_TYPE_EVENT, WS_EVENT_START_BATTLE);
+-    UpdateWorldState(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER_ACTIVE, 1);
+-    _bgEvents.ScheduleEvent(BG_WS_EVENT_UPDATE_GAME_TIME, 0ms);
+-    _bgEvents.ScheduleEvent(BG_WS_EVENT_NO_TIME_LEFT, Milliseconds(BG_WS_TOTAL_GAME_TIME - 2 * MINUTE * IN_MILLISECONDS)); // 27 - 2 = 25 minutes
++    UpdateWorldState(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER_ACTIVE, _timeLimitEnabled ? 1 : 0);
++    if (_timeLimitEnabled)
++    {
++        _bgEvents.ScheduleEvent(BG_WS_EVENT_UPDATE_GAME_TIME, 0ms);
++        _bgEvents.ScheduleEvent(BG_WS_EVENT_NO_TIME_LEFT,
++                                Milliseconds(BG_WS_TOTAL_GAME_TIME - 2 * MINUTE * IN_MILLISECONDS));  // 25 minutes
++    }
++    else
++        UpdateWorldState(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER, 0);
+     _bgEvents.ScheduleEvent(BG_WS_EVENT_DESPAWN_DOORS, BG_WS_DOOR_DESPAWN_TIME);
+ }
+ 
+@@ -284,7 +298,7 @@ void BattlegroundWS::EventPlayerClickedOnFlag(Player* player, GameObject* gameOb
+         PlaySoundToAll(BG_WS_SOUND_ALLIANCE_FLAG_PICKED_UP);
+         SendBroadcastText(BG_WS_TEXT_ALLIANCE_FLAG_PICKED_UP, CHAT_MSG_BG_SYSTEM_HORDE, player);
+ 
+-        if (GetFlagState(TEAM_HORDE) != BG_WS_FLAG_STATE_ON_BASE)
++        if (_assaultDebuffsEnabled && GetFlagState(TEAM_HORDE) != BG_WS_FLAG_STATE_ON_BASE)
+         {
+             _bgEvents.RescheduleEvent(BG_WS_EVENT_BOTH_FLAGS_KEPT10, BG_WS_SPELL_FORCE_TIME);
+             _bgEvents.RescheduleEvent(BG_WS_EVENT_BOTH_FLAGS_KEPT15, BG_WS_SPELL_BRUTAL_TIME);
+@@ -304,7 +318,7 @@ void BattlegroundWS::EventPlayerClickedOnFlag(Player* player, GameObject* gameOb
+         PlaySoundToAll(BG_WS_SOUND_HORDE_FLAG_PICKED_UP);
+         SendBroadcastText(BG_WS_TEXT_HORDE_FLAG_PICKED_UP, CHAT_MSG_BG_SYSTEM_ALLIANCE, player);
+ 
+-        if (GetFlagState(TEAM_ALLIANCE) != BG_WS_FLAG_STATE_ON_BASE)
++        if (_assaultDebuffsEnabled && GetFlagState(TEAM_ALLIANCE) != BG_WS_FLAG_STATE_ON_BASE)
+         {
+             _bgEvents.RescheduleEvent(BG_WS_EVENT_BOTH_FLAGS_KEPT10, BG_WS_SPELL_FORCE_TIME);
+             _bgEvents.RescheduleEvent(BG_WS_EVENT_BOTH_FLAGS_KEPT15, BG_WS_SPELL_BRUTAL_TIME);
+@@ -487,12 +501,23 @@ bool BattlegroundWS::SetupBattleground()
+     return true;
+ }
+ 
++void BattlegroundWS::ConfigureEraRules(uint8 era)
++{
++    if (!GetInstanceID() || GetStatus() != STATUS_WAIT_JOIN || GetStartTime() || GetPlayersSize() || era > 2)
++        return;
++
++    _timeLimitEnabled = era >= 2;
++    _assaultDebuffsEnabled = era >= 1;
++}
++
+ void BattlegroundWS::Init()
+ {
+     //call parent's class reset
+     Battleground::Init();
+ 
+     _bgEvents.Reset();
++    _timeLimitEnabled = true;
++    _assaultDebuffsEnabled = true;
+     _flagKeepers[TEAM_ALLIANCE].Clear();
+     _flagKeepers[TEAM_HORDE].Clear();
+     _droppedFlagGUID[TEAM_ALLIANCE].Clear();
+@@ -561,8 +586,9 @@ void BattlegroundWS::FillInitialWorldStates(WorldPackets::WorldState::InitWorldS
+     packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_FLAG_CAPTURES_HORDE, GetTeamScore(TEAM_HORDE));
+     packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_FLAG_CAPTURES_MAX, _configurableMaxTeamScore);
+ 
+-    packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER_ACTIVE, GetStatus() == STATUS_IN_PROGRESS ? 1 : 0);
+-    packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER, GetMatchTime());
++    packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER_ACTIVE,
++                                    _timeLimitEnabled && GetStatus() == STATUS_IN_PROGRESS ? 1 : 0);
++    packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_STATE_TIMER, _timeLimitEnabled ? GetMatchTime() : 0);
+ 
+     packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_FLAG_STATE_HORDE, GetFlagState(TEAM_HORDE));
+     packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_WS_FLAG_STATE_ALLIANCE, GetFlagState(TEAM_ALLIANCE));
+@@ -578,6 +604,9 @@ TeamId BattlegroundWS::GetPrematureWinner()
+ 
+ uint32 BattlegroundWS::GetAssaultSpellId() const
+ {
++    if (!_assaultDebuffsEnabled)
++        return 0;
++
+     if ((!GetFlagPickerGUID(TEAM_ALLIANCE) && GetFlagState(TEAM_ALLIANCE) != BG_WS_FLAG_STATE_ON_GROUND) ||
+             (!GetFlagPickerGUID(TEAM_HORDE) && GetFlagState(TEAM_HORDE) != BG_WS_FLAG_STATE_ON_GROUND) ||
+             _bgEvents.HasTimeUntilEvent(BG_WS_EVENT_BOTH_FLAGS_KEPT10))
+diff --git a/src/server/game/Battlegrounds/Zones/BattlegroundWS.h b/src/server/game/Battlegrounds/Zones/BattlegroundWS.h
+index ff3dc64..a87a2ce 100644
+--- a/src/server/game/Battlegrounds/Zones/BattlegroundWS.h
++++ b/src/server/game/Battlegrounds/Zones/BattlegroundWS.h
+@@ -248,11 +248,14 @@ public:
+ 
+     TeamId GetPrematureWinner() override;
+     uint32 GetMatchTime() const { return 1 + (BG_WS_TOTAL_GAME_TIME - GetStartTime()) / (MINUTE * IN_MILLISECONDS); }
++    void ConfigureEraRules(uint8 era);
+     uint32 GetAssaultSpellId() const;
+     void RemoveAssaultAuras();
+ 
+ private:
+     EventMap _bgEvents;
++    bool _timeLimitEnabled = true;
++    bool _assaultDebuffsEnabled = true;
+ 
+     ObjectGuid _flagKeepers[2];
+     ObjectGuid _droppedFlagGUID[2];

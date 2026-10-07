@@ -13,7 +13,10 @@
       "patches/azerothcore-era-wand-specialization.patch",
       "patches/azerothcore-era-molten-fury.patch",
       "patches/azerothcore-era-respec-accounting.patch",
-      "patches/azerothcore-earned-riding-prices.patch"
+      "patches/azerothcore-earned-riding-prices.patch",
+      "patches/azerothcore-earned-era-battleground-rules.patch",
+      "patches/azerothcore-earned-era-arena-matching.patch",
+      "patches/azerothcore-earned-era-pvp-rules.patch"
     ]
   },
   "modules": [
@@ -25,7 +28,8 @@
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
-        "patches/mod-playerbots-era-talents.patch"
+        "patches/mod-playerbots-era-talents.patch",
+        "patches/mod-playerbots-earned-era-battlegrounds.patch"
       ]
     },
     {
@@ -39,7 +43,8 @@
       "revision": "60336b349cce2bc209d154bb840f2370f1cc16f2",
       "patches": [
         "patches/mod-individual-progression-empty-account-filters.patch",
-        "patches/mod-individual-progression-earned-milestones.patch"
+        "patches/mod-individual-progression-earned-milestones.patch",
+        "patches/mod-individual-progression-earned-battlegrounds.patch"
       ]
     },
     {

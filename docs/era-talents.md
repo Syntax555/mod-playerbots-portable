@@ -63,7 +63,10 @@ client rather than trying to change server progression to clear the warning.
 Bot allocation adds newly earned points to the existing tree. Login, level
 changes, factory maintenance and ordinary refresh do not give bots a free respec.
 Bots' specialization and spell-resolution bridges recognize historical talents
-and their known class spell variants.
+and their known class spell variants. At earned Wrath, bot allocation uses the
+full native tree even if the character is still level 70. The portable profile
+sets `AiPlayerbot.LimitTalentsExpansion = 0`: earned progression, rather than
+the older level-based factory limit, selects and validates the tree.
 
 The server validates each talent purchase against its era, level-earned budget,
 row depth, rank and prerequisites. It blocks native Wrath talent purchases while
@@ -100,6 +103,8 @@ item/vendor and trainer prices remain shared; the
 [expansion guide](changing-expansions.md#era-talents-training-and-prices) lists the
 riding prices and their limits. The auction house stays one market using owned
 items, earned gold and ordinary fees rather than separate generated era stock.
+Battleground queue access and match rules also follow earned progression; see
+[earned bot levels and PvP brackets](earned-bot-brackets.md#waiting-for-battlegrounds).
 
 ## Configuration
 
