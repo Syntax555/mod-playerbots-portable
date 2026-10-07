@@ -3,9 +3,10 @@
 from pathlib import Path
 import subprocess
 import tempfile
+from PreparedSources import prepared_core
 
 repo = Path(__file__).resolve().parents[2]
-pb = repo / 'azerothcore-wotlk/modules/mod-playerbots/src'
+pb = prepared_core(repo) / 'modules/mod-playerbots/src'
 
 
 def function(source, signature):
@@ -21,7 +22,7 @@ def function(source, signature):
 level_source = (pb / 'Bot/RandomBotLevelMgr.cpp').read_text()
 hooks = '\n'.join(function(level_source, signature) for signature in [
     '    static uint8 GetEarnedLevelCap(', '    void OnPlayerGiveXP(', '    bool OnPlayerCanGiveLevel('])
-core = (repo / 'azerothcore-wotlk/src/server/game/Entities/Player/Player.cpp').read_text()
+core = (prepared_core(repo) / 'src/server/game/Entities/Player/Player.cpp').read_text()
 xp = function(core, 'void Player::GiveXP(')
 loop = xp[xp.index('    while (newXP >= nextLvlXP'):xp.rindex('}')]
 legacy = []
@@ -114,6 +115,21 @@ int main() {
     }
     for (int cap : {19,29,39,49,59}) assert(counts[cap]>450 && counts[cap]<550);
     assert(counts[0]>7400 && counts[0]<7600);
+    EarnedLevelBracketPolicy extended;
+    assert(extended.Load(config + ",69:5,79:5"));
+    unsigned extendedCounts[81]{};
+    for (uint32 guid=1; guid<=10000; ++guid) {
+        auto previous=policy.GetCap(guid,1), current=extended.GetCap(guid,1);
+        if (previous) assert(current==previous); // Appending preserves every lower resident.
+        ++extendedCounts[current];
+        if (current==69 || current==79) {
+            assert(extended.GetCap(guid,1)==current); // Cap assignment grants no levels.
+            assert(extended.GetCap(guid,current)==current);
+            assert(extended.GetCap(guid,current+1)==0); // Existing higher characters survive.
+        }
+    }
+    for (int cap : {19,29,39,49,59,69,79}) assert(extendedCounts[cap]>450 && extendedCounts[cap]<550);
+    assert(extendedCounts[0]>6400 && extendedCounts[0]<6600);
     for (std::string bad : {"19", "19:", ":5", "19:0", "0:5", "81:5", "19:101", "19:5,",
             "19:5,,29:5", "19:5,19:1", "19:60,29:41", "-19:5", "19:-5", "19:5x", "1 9:5",
             "19:42949672960", "19:5:1"}) {

@@ -163,6 +163,14 @@ try {
         'defaults/MultiBotBridge.conf' = 'cmd/startup/profiles/MultiBotBridge.conf'
         'defaults/mod_token_turnin.conf' = 'cmd/startup/profiles/mod_token_turnin.conf'
     }
+    if (@($lock.modules | Where-Object { $_.name -eq 'mod-era-talents' }).Count -gt 0) {
+        foreach ($name in @('docs/era-talents.md', 'defaults/mod_era_talents.conf',
+            'configs/modules/mod_era_talents.conf.dist')) {
+            if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+        }
+        $textSources['docs/era-talents.md'] = 'docs/era-talents.md'
+        $textSources['defaults/mod_era_talents.conf'] = 'cmd/startup/profiles/mod_era_talents.conf'
+    }
     foreach ($name in $textSources.Keys) {
         $reader = [System.IO.StreamReader]::new($entries[$name].Open())
         try { $packagedText = $reader.ReadToEnd() } finally { $reader.Dispose() }
@@ -174,7 +182,15 @@ try {
     }
 
     $expectedSql = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $coreSqlSource = Join-Path $RepositoryRoot 'azerothcore-wotlk/data/sql'
+    $preparedCore = if (@($lock.core.patches | Where-Object { $_ }).Count -gt 0) {
+        Join-Path $RepositoryRoot '.module-cache/prepared-core'
+    } else {
+        Join-Path $RepositoryRoot $lock.core.source
+    }
+    foreach ($patch in @($lock.core.patches)) {
+        if ($patch -and -not $files.Contains($patch)) { throw "Portable ZIP is missing core source patch $patch" }
+    }
+    $coreSqlSource = Join-Path $preparedCore 'data/sql'
     if (-not (Test-Path -LiteralPath $coreSqlSource -PathType Container)) { throw 'AzerothCore SQL source is missing.' }
     foreach ($sql in Get-ChildItem -LiteralPath $coreSqlSource -Recurse -File -Force -Filter '*.sql') {
         $relative = [System.IO.Path]::GetRelativePath($coreSqlSource, $sql.FullName).Replace('\', '/')
@@ -186,7 +202,7 @@ try {
         foreach ($patch in @($module.patches)) {
             if ($patch -and -not $files.Contains($patch)) { throw "Portable ZIP is missing source patch $patch" }
         }
-        $sqlSource = Join-Path $RepositoryRoot "azerothcore-wotlk/modules/$($module.name)/data/sql"
+        $sqlSource = Join-Path $preparedCore "modules/$($module.name)/data/sql"
         if (Test-Path -LiteralPath $sqlSource -PathType Container) {
             foreach ($sql in Get-ChildItem -LiteralPath $sqlSource -Recurse -File -Force -Filter '*.sql') {
                 $relative = [System.IO.Path]::GetRelativePath($sqlSource, $sql.FullName).Replace('\', '/')

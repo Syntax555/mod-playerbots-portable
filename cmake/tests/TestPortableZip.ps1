@@ -235,6 +235,27 @@ try {
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql')) {
         Test-NegativeZip "obsolete SQL $obsolete" 'Unexpected SQL file' -ExtraEntries @(@{ Name = $obsolete; Bytes = [byte[]]@(1) })
     }
+    # Core adaptations must package from the generated checkout, while older
+    # manifests above continue to use the pristine submodule.
+    $preparedCore = Join-Path $source '.module-cache/prepared-core'
+    [void][System.IO.Directory]::CreateDirectory((Split-Path $preparedCore -Parent))
+    Copy-Item -LiteralPath (Join-Path $source 'azerothcore-wotlk') -Destination $preparedCore -Recurse
+    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/data/sql/updates/db_world/unprepared.sql')
+    Write-FixtureText (Join-Path $source 'patches/core-fixture.patch')
+    $lock.core.patches = @('patches/core-fixture.patch')
+    Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
+    Invoke-Assembly
+    $script:baseline.Clear()
+    foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File -Force) {
+        $relative = [System.IO.Path]::GetRelativePath($dist, $file.FullName).Replace('\', '/')
+        $script:baseline.Add($relative, [System.IO.File]::ReadAllBytes($file.FullName))
+    }
+    $patchedZip = Join-Path $temporaryRoot 'patched-core.zip'
+    New-FixtureZip $patchedZip
+    Test-Zip 'patched core selects generated SQL and retains original source' $patchedZip
+    Assert-Condition (-not $script:baseline.ContainsKey('src/data/sql/updates/db_world/unprepared.sql')) 'Original core SQL leaked into generated export'
+    Test-NegativeZip 'missing core adaptation patch' 'missing core source patch' -Omit @('patches/core-fixture.patch')
+    Test-NegativeZip 'missing generated core SQL' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')
     Write-Host "Passed $script:passed portable assembly/ZIP regression checks."
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force }

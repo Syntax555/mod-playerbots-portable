@@ -1,0 +1,92 @@
+diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
+index e2e2b21..c0fba76 100644
+--- a/src/server/game/Entities/Player/Player.cpp
++++ b/src/server/game/Entities/Player/Player.cpp
+@@ -3853,13 +3853,15 @@ uint32 Player::resetTalentsCost() const
+         return 10 * GOLD;
+     else
+     {
+-        uint64 months = (GameTime::GetGameTime().count() - m_resetTalentsTime) / MONTH;
++        auto now = GameTime::GetGameTime().count();
++        uint64 months = now > m_resetTalentsTime ? (now - m_resetTalentsTime) / MONTH : 0;
+         if (months > 0)
+         {
+             // This cost will be reduced by a rate of 5 gold per month
+-            int32 new_cost = int32(m_resetTalentsCost - 5 * GOLD * months);
+-            // to a minimum of 10 gold.
+-            return (new_cost < 10 * GOLD ? 10 * GOLD : new_cost);
++            // Clamp the elapsed reduction before subtraction so old/future timestamps
++            // cannot underflow the persisted unsigned cost.
++            uint64 reduction = std::min<uint64>(m_resetTalentsCost, 5 * GOLD * months);
++            return std::max<uint32>(10 * GOLD, m_resetTalentsCost - uint32(reduction));
+         }
+         else
+         {
+@@ -3873,14 +3875,33 @@ uint32 Player::resetTalentsCost() const
+     }
+ }
+ 
++void Player::RecordTalentReset(uint32 paidCost)
++{
++    UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_GOLD_SPENT_FOR_TALENTS, paidCost);
++    UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_NUMBER_OF_TALENT_RESETS, 1);
++    m_resetTalentsCost = paidCost;
++    m_resetTalentsTime = GameTime::GetGameTime().count();
++}
++
++void Player::CompleteCustomTalentReset() { m_customTalentsResetCompleted = true; }
++
+ bool Player::resetTalents(bool noResetCost)
+ {
++    // A custom tree can handle the hook without owning any native talent entries.
++    // Clear the transient signal on entry and consume it before native charges/refunds.
++    m_customTalentsResetCompleted = false;
+     sScriptMgr->OnPlayerTalentsReset(this, noResetCost);
+ 
+     // xinef: remove at login flag upon talents reset
+     if (HasAtLoginFlag(AT_LOGIN_RESET_TALENTS))
+         RemoveAtLoginFlag(AT_LOGIN_RESET_TALENTS, true);
+ 
++    if (m_customTalentsResetCompleted)
++    {
++        m_customTalentsResetCompleted = false;
++        return true;
++    }
++
+     // xinef: get max available talent points amount
+     uint32 talentPointsForLevel = CalculateTalentsPoints();
+ 
+@@ -3958,11 +3979,7 @@ bool Player::resetTalents(bool noResetCost)
+     if (!noResetCost)
+     {
+         ModifyMoney(-(int32)resetCost);
+-        UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_GOLD_SPENT_FOR_TALENTS, resetCost);
+-        UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_NUMBER_OF_TALENT_RESETS, 1);
+-
+-        m_resetTalentsCost = resetCost;
+-        m_resetTalentsTime = GameTime::GetGameTime().count();
++        RecordTalentReset(resetCost);
+     }
+ 
+     return true;
+diff --git a/src/server/game/Entities/Player/Player.h b/src/server/game/Entities/Player/Player.h
+index d5f030e..d9ba2c2 100644
+--- a/src/server/game/Entities/Player/Player.h
++++ b/src/server/game/Entities/Player/Player.h
+@@ -1741,6 +1741,8 @@ public:
+     void SetFreeTalentPoints(uint32 points);
+     bool resetTalents(bool noResetCost = false);
+     [[nodiscard]] uint32 resetTalentsCost() const;
++    void RecordTalentReset(uint32 paidCost);  // custom trees share the native persisted reset counter
++    void CompleteCustomTalentReset();         // OnPlayerTalentsReset hook only: consume successful external handling
+     bool IsMaxLevel() const;
+     void InitTalentForLevel();
+     void BuildPlayerTalentsInfoData(WorldPacket* data);
+@@ -2949,6 +2951,7 @@ protected:
+     uint32 _restFlagMask;
+     ////////////////////Rest System/////////////////////
+     uint32 m_resetTalentsCost;
++    bool m_customTalentsResetCompleted = false;
+     time_t m_resetTalentsTime;
+     uint32 m_usedTalentCount;
+     uint32 m_questRewardTalentCount;

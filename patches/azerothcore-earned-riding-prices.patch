@@ -1,0 +1,140 @@
+diff --git a/src/server/game/Entities/Creature/Trainer.cpp b/src/server/game/Entities/Creature/Trainer.cpp
+index 3f1a0dd..402ef7f 100644
+--- a/src/server/game/Entities/Creature/Trainer.cpp
++++ b/src/server/game/Entities/Creature/Trainer.cpp
+@@ -22,6 +22,7 @@
+ #include "ScriptMgr.h"
+ #include "SpellInfo.h"
+ #include "SpellMgr.h"
++#include <cmath>
+ 
+ namespace Trainer
+ {
+@@ -37,8 +38,6 @@ namespace Trainer
+ 
+     void Trainer::SendSpells(Creature* npc, Player* player, LocaleConstant locale) const
+     {
+-        float reputationDiscount = player->GetReputationPriceDiscount(npc);
+-
+         WorldPackets::NPC::TrainerList trainerList;
+         trainerList.TrainerGUID = npc->GetGUID();
+         trainerList.TrainerType = AsUnderlyingType(_type);
+@@ -66,7 +65,7 @@ namespace Trainer
+             WorldPackets::NPC::TrainerListSpell& trainerListSpell = trainerList.Spells.back();
+             trainerListSpell.SpellID = trainerSpell.SpellId;
+             trainerListSpell.Usable = AsUnderlyingType(GetSpellState(player, &trainerSpell));
+-            trainerListSpell.MoneyCost = int32(trainerSpell.MoneyCost * reputationDiscount);
++            trainerListSpell.MoneyCost = int32(GetSpellCost(player, npc, &trainerSpell));
+             trainerListSpell.PointCost[0] = 0; // spells don't cost talent points
+             trainerListSpell.PointCost[1] = (primaryProfessionFirstRank ? 1 : 0);
+             trainerListSpell.ReqLevel = trainerSpell.ReqLevel;
+@@ -80,6 +79,22 @@ namespace Trainer
+         player->SendDirectMessage(trainerList.Write());
+     }
+ 
++    uint32 Trainer::GetSpellCost(Player const* player, Creature const* npc, Spell const* trainerSpell) const
++    {
++        if (!player || !npc || !trainerSpell)
++            return MAX_MONEY_AMOUNT;
++
++        uint32 moneyCost = trainerSpell->MoneyCost;
++        sScriptMgr->OnPlayerGetTrainerSpellCost(player, npc, trainerSpell->SpellId, moneyCost);
++
++        // Apply the normal faction discount after the per-player base quote.
++        float const discountedCost = moneyCost * player->GetReputationPriceDiscount(npc);
++        if (!std::isfinite(discountedCost) || discountedCost < 0 || double(discountedCost) > MAX_MONEY_AMOUNT)
++            return MAX_MONEY_AMOUNT;
++
++        return uint32(discountedCost);
++    }
++
+     void Trainer::TeachSpell(Creature* npc, Player* player, uint32 spellId)
+     {
+         if (!IsTrainerValidForPlayer(player))
+@@ -98,15 +113,14 @@ namespace Trainer
+             return;
+         }
+ 
+-        float reputationDiscount = player->GetReputationPriceDiscount(npc);
+-        int32 moneyCost = int32(trainerSpell->MoneyCost * reputationDiscount);
++        uint32 moneyCost = GetSpellCost(player, npc, trainerSpell);
+         if (!player->HasEnoughMoney(moneyCost))
+         {
+             SendTeachFailure(npc, player, spellId, FailReason::NotEnoughMoney);
+             return;
+         }
+ 
+-        player->ModifyMoney(-moneyCost);
++        player->ModifyMoney(-int32(moneyCost));
+ 
+         npc->SendPlaySpellVisual(179); // 53 SpellCastDirected
+         npc->SendPlaySpellImpact(player->GetGUID(), 362); // 113 EmoteSalute
+diff --git a/src/server/game/Entities/Creature/Trainer.h b/src/server/game/Entities/Creature/Trainer.h
+index 3772744..6680db7 100644
+--- a/src/server/game/Entities/Creature/Trainer.h
++++ b/src/server/game/Entities/Creature/Trainer.h
+@@ -69,6 +69,7 @@ namespace Trainer
+ 
+             [[nodiscard]] Spell const* GetSpell(uint32 spellId) const;
+             [[nodiscard]] std::vector<Spell> const& GetSpells() const { return _spells; }
++            [[nodiscard]] uint32 GetSpellCost(Player const* player, Creature const* npc, Spell const* trainerSpell) const;
+             void SendSpells(Creature* npc, Player* player, LocaleConstant locale) const;
+             bool CanTeachSpell(Player const* player, Spell const* trainerSpell) const;
+             void TeachSpell(Creature* npc, Player* player, uint32 spellId);
+diff --git a/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp b/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp
+index 4ac4571..26fa5fe 100644
+--- a/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp
+@@ -1004,6 +1004,13 @@ void ScriptMgr::OnPlayerAfterTrainSpell(Player* player, Creature* trainer, uint3
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_AFTER_TRAIN_SPELL, script->OnPlayerAfterTrainSpell(player, trainer, spellId));
+ }
+ 
++void ScriptMgr::OnPlayerGetTrainerSpellCost(Player const* player, Creature const* trainer, uint32 spellId,
++                                          uint32& moneyCost)
++{
++    CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_GET_TRAINER_SPELL_COST,
++        script->OnPlayerGetTrainerSpellCost(player, trainer, spellId, moneyCost));
++}
++
+ PlayerScript::PlayerScript(char const* name, std::vector<uint16> enabledHooks)
+     : ScriptObject(name, PLAYERHOOK_END)
+ {
+diff --git a/src/server/game/Scripting/ScriptDefines/PlayerScript.h b/src/server/game/Scripting/ScriptDefines/PlayerScript.h
+index 0d2314e..276359d 100644
+--- a/src/server/game/Scripting/ScriptDefines/PlayerScript.h
++++ b/src/server/game/Scripting/ScriptDefines/PlayerScript.h
+@@ -235,6 +235,7 @@ enum PlayerHook
+     PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
+     PLAYERHOOK_ON_GET_TRAINER_SPELL_STATE,
+     PLAYERHOOK_ON_AFTER_TRAIN_SPELL,
++    PLAYERHOOK_ON_GET_TRAINER_SPELL_COST,
+     PLAYERHOOK_END
+ };
+ 
+@@ -966,6 +967,14 @@ public:
+      * @param spellId The id of the trainer spell that was bought
+      */
+     virtual void OnPlayerAfterTrainSpell(Player* /*player*/, Creature* /*trainer*/, uint32 /*spellId*/) {}
++
++    /**
++     * Called for both a trainer's displayed quote and its purchase charge.
++     * Edits the base copper cost before the normal reputation discount.
++     * Spell availability, requirements and money checks still apply.
++     */
++    virtual void OnPlayerGetTrainerSpellCost(Player const* /*player*/, Creature const* /*trainer*/,
++                                            uint32 /*spellId*/, uint32& /*moneyCost*/) {}
+ };
+ 
+ #endif
+diff --git a/src/server/game/Scripting/ScriptMgr.h b/src/server/game/Scripting/ScriptMgr.h
+index 7f0f30d..c35f365 100644
+--- a/src/server/game/Scripting/ScriptMgr.h
++++ b/src/server/game/Scripting/ScriptMgr.h
+@@ -484,6 +484,7 @@ public: /* PlayerScript */
+     void OnPlayerBeforeReceiveSpellListFromTrainer(Player* player, Creature* trainer, WorldPackets::NPC::TrainerList& trainerList);
+     void OnPlayerGetTrainerSpellState(Player const* player, uint32 trainerId, uint32 spellId, Trainer::SpellState& state);
+     void OnPlayerAfterTrainSpell(Player* player, Creature* trainer, uint32 spellId);
++    void OnPlayerGetTrainerSpellCost(Player const* player, Creature const* trainer, uint32 spellId, uint32& moneyCost);
+ 
+     // Anti cheat
+     void AnticheatSetCanFlybyServer(Player* player, bool apply);

@@ -49,12 +49,82 @@ jobs:
         shell: pwsh
         run: ./cmake/tests/TestPortableZip.ps1
 
+      - name: Test historical client packaging
+        if: hashFiles('cmake/tests/TestEraClientPackaging.py') != ''
+        run: python3 cmake/tests/TestEraClientPackaging.py
+
       - name: Check earned bot progression against pinned sources
         if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
         run: |
           git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
           python3 cmake/tests/TestEarnedProgression.py
+
+  era_client:
+    name: Build and verify historical client patch
+    needs: launcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      enabled: ${{ steps.features.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Check selected source client packaging capabilities
+        id: features
+        env:
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag || '' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          paths = [pathlib.Path(p) for p in ('cmake/PackageEraClient.cmake', 'cmake/PackageEraClient.py', 'cmake/era-client-tools/CMakeLists.txt')]
+          if any(p.is_file() for p in paths) and not all(p.is_file() for p in paths):
+              raise SystemExit('Selected source has an incomplete historical client packager')
+          lock = json.loads(pathlib.Path('versions.lock.json').read_text())
+          enabled = all(p.is_file() for p in paths) and bool(lock.get('clientPatch'))
+          tag = ''
+          if os.environ['GITHUB_EVENT_NAME'] == 'push' and os.environ['GITHUB_REF'].startswith('refs/tags/v'):
+              tag = os.environ['GITHUB_REF_NAME']
+          elif os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch':
+              tag = os.environ['REQUESTED_RELEASE_TAG']
+          if tag and not re.fullmatch(r'v[0-9A-Za-z][0-9A-Za-z._-]*', tag):
+              raise SystemExit('Invalid release tag. Select an existing v* tag.')
+          version = tag[1:] if tag else 'dev-' + os.environ['GITHUB_RUN_NUMBER']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('enabled=' + str(enabled).lower() + '\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write('PACKAGE_VERSION=' + version + '\n')
+          PY
+
+      - name: Install native client patch tools
+        if: steps.features.outputs.enabled == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential cmake p7zip-full python3-venv
+          python3 -m venv "$RUNNER_TEMP/era-client-python"
+          "$RUNNER_TEMP/era-client-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          echo "$RUNNER_TEMP/era-client-python/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare locked server and addon sources
+        if: steps.features.outputs.enabled == 'true'
+        run: |
+          git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
+          cmake -P cmake/PrepareModules.cmake
+
+      - name: Build merged IP and historical talent client ZIP
+        if: steps.features.outputs.enabled == 'true'
+        run: cmake "-DPACKAGE_VERSION=$PACKAGE_VERSION" -P cmake/PackageEraClient.cmake
+
+      - name: Upload verified historical client ZIP
+        if: steps.features.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: era-client-zip
+          path: output/EraTalents-client-*.zip
+          if-no-files-found: error
+          compression-level: 0
 
   build:
     name: Build and verify Windows ZIP
@@ -371,7 +441,7 @@ jobs:
           $lines.Add('Bots fill real players'' Warsong Gulch (levels 10–60), Arathi Basin (20–60) and Alterac Valley (51–60) queues with their earned levels and equipment. Autonomous all-bot matches, random/later battlegrounds and arenas stay disabled. Ghosts use normal spirit-guide resurrection waves. Nearby greetings target real players only; random emotes and toxic-link/Thunderfury meme replies stay off.')
           $lines.Add('')
           if (Test-Path 'docs/earned-bot-brackets.md' -PathType Leaf) {
-              $lines.Add('Roughly 25% of random bots earn and stay at levels 19, 29, 39, 49 or 59 (5% each); the rest continue individual progression. Every bot starts at 1 and retains its earned equipment. Activity entry grants no catch-up levels, gear or money. Battlegrounds require enough eligible queued characters on both factions at the normal minimums. Legacy level rerolls and bot XP multipliers are blocked in natural mode. Customize or release caps in configs/modules/playerbots.conf; see docs/earned-bot-brackets.md. Install the full server ZIP and apply profiles once before customizing an older installation.')
+              $lines.Add('Roughly 35% of random bots earn and stay at levels 19, 29, 39, 49, 59, 69 or 79 (5% each); the rest continue individual progression. The level-69/79 residents first earn their TBC/Wrath unlocks. Every bot starts at 1 and retains its earned equipment. Activity entry grants no catch-up levels, gear or money. Battlegrounds require enough eligible queued characters on both factions at the normal minimums. Legacy level rerolls and bot XP multipliers are blocked in natural mode. Customize or release caps in configs/modules/playerbots.conf; see docs/earned-bot-brackets.md. Install the full server ZIP and apply profiles once before customizing an older installation.')
               $lines.Add('')
           }
           if (Test-Path 'docs/earned-auctions.md' -PathType Leaf) {
@@ -386,7 +456,11 @@ jobs:
               $lines.Add('Token Turn-in permits only read-only token inventory/mapping checks (.check). The .redeem command is blocked because it bypasses AQ/Naxx scarab, reputation and material requirements.')
               $lines.Add('')
           }
-          $lines.Add('Progression begins in Vanilla on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
+          if ($lock.clientPatch) {
+              $lines.Add('Historical Vanilla/TBC talent trees and era spells use mod-era-talents, adapted to earned character progression for players and bots. Players must install EraTalents and the merged Data/patch-V.mpq from EraTalents-client-' + $version + '.zip into their WoW 3.3.5a client, then fully restart WoW. Both client files must match this server build; bots need no client files. The patch starts from the pinned Individual Progression client archive and preserves its other DBCs. See docs/era-talents.md for setup, historical data limits and upgrade behavior.')
+          } else {
+              $lines.Add('Progression begins in Vanilla on the Wrath client/core: talent trees and some class systems are not original 1.12 rules. See the included docs/vanilla-config-audit.md for limitations and module coverage. Existing spellbooks are preserved.')
+          }
           $lines.Add('')
           $lines.Add('For an existing installation, stop the servers and run startup.exe --apply-profiles once to apply the recommended settings with config backups. Existing characters and databases are preserved.')
           $lines.Add('')
@@ -455,7 +529,7 @@ jobs:
   release:
     name: Publish tagged ZIP release
     if: needs.build.outputs.release_tag != ''
-    needs: build
+    needs: [build, era_client]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -470,6 +544,13 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: release-notes
+
+      - name: Download verified historical client ZIP
+        if: needs.era_client.outputs.enabled == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: era-client-zip
+          path: output
 
       - name: Publish ZIP release
         uses: softprops/action-gh-release@v3

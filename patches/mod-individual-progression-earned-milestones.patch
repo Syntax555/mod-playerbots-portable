@@ -1,0 +1,883 @@
+diff --git a/conf/individualProgression.conf.dist b/conf/individualProgression.conf.dist
+index 2810ce1..7dbce8e 100644
+--- a/conf/individualProgression.conf.dist
++++ b/conf/individualProgression.conf.dist
+@@ -20,6 +20,23 @@
+ #
+ IndividualProgression.Enable = 1
+ 
++# IndividualProgression.StrictEarnedProgression
++#
++#        Description: Require each default progression milestone in order for
++#                     players and bots, without account exemptions or automatic
++#                     leader copying, attunement items or class spell grants.
++#                     Eligible boss kills are recorded in PlayerSettings; quest
++#                     transitions require ordinary rewarded quests. Existing
++#                     saved tiers are preserved. Stage 11 remains unused.
++#                     Requires EnablePlayerSettings = 1. Custom progression
++#                     retains its configured milestone policy. Explicit GM
++#                     commands remain administrative overrides.
++#
++#        Default:     0 - Disabled
++#                     1 - Enabled
++#
++IndividualProgression.StrictEarnedProgression = 0
++
+ # IndividualProgression.EnforceGroupRules
+ #
+ #        Description: Enable this to only allow players to group with others in the same progression phase
+diff --git a/data/sql/world/base/player_progression.sql b/data/sql/world/base/player_progression.sql
+index 060d5ee..148cea1 100644
+--- a/data/sql/world/base/player_progression.sql
++++ b/data/sql/world/base/player_progression.sql
+@@ -435,5 +435,5 @@ INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry
+ (1, 13285, 22529, 0, 0, 8, 0, 66006, 0, 0, 0, 0, 0, '', 'Savage Frond will only drop if the player has completed PROGRESSION_AQ'),
+ (1, 14303, 22529, 0, 0, 8, 0, 66006, 0, 0, 0, 0, 0, '', 'Savage Frond will only drop if the player has completed PROGRESSION_AQ'),
+ --
+-(1, 19768, 34689, 0, 1, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'Design: Chaotic Skyfire Diamond will only drop if the player has completed PROGRESSION_TBC_TIER_3'),
++(1, 19768, 34689, 0, 1, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Design: Chaotic Skyfire Diamond will only drop if the player has completed PROGRESSION_TBC_TIER_4'),
+ (1, 19768, 34689, 0, 1, 7, 0, 755, 1, 0, 0, 0, 0, '',   'Design: Chaotic Skyfire Diamond will only drop if the player has the Jewelcrafting skill');
+diff --git a/data/sql/world/base/tbc_vendors.sql b/data/sql/world/base/tbc_vendors.sql
+index 95e7c47..ddb55dc 100644
+--- a/data/sql/world/base/tbc_vendors.sql
++++ b/data/sql/world/base/tbc_vendors.sql
+@@ -6,52 +6,52 @@ INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry
+ `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorType`, `ErrorTextId`, `ScriptName`, `Comment`) VALUES 
+ --
+ (23, 18756, 51809, 0, 0, 8, 0, 66013, 0, 0, 0, 0, 0, '', 'Haris Pilton will not sell Portable Hole until the player has completed PROGRESSION_TBC_TIER_5'),
+-(23, 17585, 34201, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'Urgronn will not sell Pattern: Netherscale Ammo Pouch until the player has completed PROGRESSION_TBC_TIER_3'),
+-(23, 17657, 34201, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'Ulrike will not sell Pattern: Netherscale Ammo Pouch until the player has completed PROGRESSION_TBC_TIER_3'),
+-(23, 21655, 34200, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'Nakodu will not sell Pattern: Quiver of a Thousand Feathers until the player has completed PROGRESSION_TBC_TIER_3'),
++(23, 17585, 34201, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Urgronn will not sell Pattern: Netherscale Ammo Pouch until the player has completed PROGRESSION_TBC_TIER_4'),
++(23, 17657, 34201, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Ulrike will not sell Pattern: Netherscale Ammo Pouch until the player has completed PROGRESSION_TBC_TIER_4'),
++(23, 21655, 34200, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Nakodu will not sell Pattern: Quiver of a Thousand Feathers until the player has completed PROGRESSION_TBC_TIER_4'),
+ --
+ (23, 18525, 30183, 0, 0, 8, 0, 66009, 0, 0, 0, 0, 0, '', 'G\'eras - Nether Vortex available at TBC tier 2'),
+-(23, 18525, 33192, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Carved Witch Doctor\'s Stick available at TBC tier 4'),
+-(23, 18525, 33207, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Implacable Guardian Sabatons available at TBC tier 4'),
++(23, 18525, 33192, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Carved Witch Doctor\'s Stick available at TBC tier 4'),
++(23, 18525, 33207, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Implacable Guardian Sabatons available at TBC tier 4'),
+ (23, 18525, 33222, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Nyn\'jah\'s Tabi Boots available at TBC tier 3'),
+-(23, 18525, 33279, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Iron-tusk Girdle available at TBC tier 4'),
+-(23, 18525, 33280, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - War-Feathered Loop available at TBC tier 4'),
++(23, 18525, 33279, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Iron-tusk Girdle available at TBC tier 4'),
++(23, 18525, 33280, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - War-Feathered Loop available at TBC tier 4'),
+ (23, 18525, 33287, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Gnarled Ironwood Pauldrons available at TBC tier 3'),
+-(23, 18525, 33291, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Voodoo-woven Belt available at TBC tier 4'),
+-(23, 18525, 33296, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Brooch of Deftness Belt available at TBC tier 4'),
+-(23, 18525, 33304, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Cloak of Subjugated Power available at TBC tier 4'),
+-(23, 18525, 33324, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Treads of the Life Path available at TBC tier 4'),
+-(23, 18525, 33325, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Voodoo Shaker available at TBC tier 4'),
+-(23, 18525, 33331, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Chain of Unleashed Rage available at TBC tier 4'),
+-(23, 18525, 33333, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Kharmaa\'s Shroud of Hope available at TBC tier 4'),
+-(23, 18525, 33334, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Fetish of the Primal Gods available at TBC tier 4'),
+-(23, 18525, 33386, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Man\'kin\'do\'s Belt available at TBC tier 4'),
+-(23, 18525, 33484, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Dory\'s Embrace available at TBC tier 4'),
+-(23, 18525, 33501, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Bloodthirster\'s Wargreaves available at TBC tier 4'),
+-(23, 18525, 33502, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Libram of Mending available at TBC tier 4'),
+-(23, 18525, 33504, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Libram of Divine Purpose available at TBC tier 4'),
+-(23, 18525, 33512, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Furious Deathgrips available at TBC tier 4'),
+-(23, 18525, 33513, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Eternium Rage-shackles available at TBC tier 4'),
+-(23, 18525, 33514, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Pauldrons of Gruesome Fate available at TBC tier 4'),
+-(23, 18525, 33515, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Unwavering Legguards available at TBC tier 4'),
+-(23, 18525, 33516, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Bracers of the Ancient Phalanx available at TBC tier 4'),
+-(23, 18525, 33517, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Bonefist Gauntlets available at TBC tier 4'),
+-(23, 18525, 33518, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - High Justicar\'s Legplates available at TBC tier 4'),
+-(23, 18525, 33519, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Handguards of the Templar available at TBC tier 4'),
+-(23, 18525, 33520, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Vambraces of the Naaru available at TBC tier 4'),
+-(23, 18525, 33522, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Chestguard of the Stoic Guardian available at TBC tier 4'),
+-(23, 18525, 33523, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Sabatons of the Righteous Defender available at TBC tier 4'),
+-(23, 18525, 33524, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Girdle of the Protector available at TBC tier 4'),
+-(23, 18525, 33527, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Shifting Camouflage Pants available at TBC tier 4'),
+-(23, 18525, 33528, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Gauntlets of Sniping available at TBC tier 4'),
+-(23, 18525, 33529, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Steadying Bracers available at TBC tier 4'),
+-(23, 18525, 33530, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Natural Life Leggings available at TBC tier 4'),
+-(23, 18525, 33531, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Polished Waterscale Gloves available at TBC tier 4'),
+-(23, 18525, 33532, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Gleaming Earthen Bracers available at TBC tier 4'),
+-(23, 18525, 33534, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Grips of Nature\'s Wrath available at TBC tier 4'),
+-(23, 18525, 33535, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Earthquake Bracers available at TBC tier 4'),
+-(23, 18525, 33536, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Stormwrap available at TBC tier 4'),
+-(23, 18525, 33537, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Treads of Booming Thunder available at TBC tier 4'),
++(23, 18525, 33291, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Voodoo-woven Belt available at TBC tier 4'),
++(23, 18525, 33296, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Brooch of Deftness Belt available at TBC tier 4'),
++(23, 18525, 33304, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Cloak of Subjugated Power available at TBC tier 4'),
++(23, 18525, 33324, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Treads of the Life Path available at TBC tier 4'),
++(23, 18525, 33325, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Voodoo Shaker available at TBC tier 4'),
++(23, 18525, 33331, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Chain of Unleashed Rage available at TBC tier 4'),
++(23, 18525, 33333, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Kharmaa\'s Shroud of Hope available at TBC tier 4'),
++(23, 18525, 33334, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Fetish of the Primal Gods available at TBC tier 4'),
++(23, 18525, 33386, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Man\'kin\'do\'s Belt available at TBC tier 4'),
++(23, 18525, 33484, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Dory\'s Embrace available at TBC tier 4'),
++(23, 18525, 33501, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Bloodthirster\'s Wargreaves available at TBC tier 4'),
++(23, 18525, 33502, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Libram of Mending available at TBC tier 4'),
++(23, 18525, 33504, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Libram of Divine Purpose available at TBC tier 4'),
++(23, 18525, 33512, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Furious Deathgrips available at TBC tier 4'),
++(23, 18525, 33513, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Eternium Rage-shackles available at TBC tier 4'),
++(23, 18525, 33514, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Pauldrons of Gruesome Fate available at TBC tier 4'),
++(23, 18525, 33515, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Unwavering Legguards available at TBC tier 4'),
++(23, 18525, 33516, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Bracers of the Ancient Phalanx available at TBC tier 4'),
++(23, 18525, 33517, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Bonefist Gauntlets available at TBC tier 4'),
++(23, 18525, 33518, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - High Justicar\'s Legplates available at TBC tier 4'),
++(23, 18525, 33519, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Handguards of the Templar available at TBC tier 4'),
++(23, 18525, 33520, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Vambraces of the Naaru available at TBC tier 4'),
++(23, 18525, 33522, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Chestguard of the Stoic Guardian available at TBC tier 4'),
++(23, 18525, 33523, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Sabatons of the Righteous Defender available at TBC tier 4'),
++(23, 18525, 33524, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Girdle of the Protector available at TBC tier 4'),
++(23, 18525, 33527, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Shifting Camouflage Pants available at TBC tier 4'),
++(23, 18525, 33528, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Gauntlets of Sniping available at TBC tier 4'),
++(23, 18525, 33529, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Steadying Bracers available at TBC tier 4'),
++(23, 18525, 33530, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Natural Life Leggings available at TBC tier 4'),
++(23, 18525, 33531, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Polished Waterscale Gloves available at TBC tier 4'),
++(23, 18525, 33532, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Gleaming Earthen Bracers available at TBC tier 4'),
++(23, 18525, 33534, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Grips of Nature\'s Wrath available at TBC tier 4'),
++(23, 18525, 33535, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Earthquake Bracers available at TBC tier 4'),
++(23, 18525, 33536, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Stormwrap available at TBC tier 4'),
++(23, 18525, 33537, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Treads of Booming Thunder available at TBC tier 4'),
+ (23, 18525, 33538, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Shallow-grave Trousers available at TBC tier 3'),
+ (23, 18525, 33539, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Trickster\'s Stickyfingers available at TBC tier 3'),
+ (23, 18525, 33540, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Master Assassin Wristwraps available at TBC tier 3'),
+@@ -65,24 +65,24 @@ INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry
+ (23, 18525, 33580, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Band of the Swift Paw available at TBC tier 3'),
+ (23, 18525, 33582, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Footwraps of Wild Encroachment available at TBC tier 3'),
+ (23, 18525, 33583, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Waistguard of the Great Beast available at TBC tier 3'),
+-(23, 18525, 33584, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Pantaloons of Arcane Annihilation available at TBC tier 4'),
+-(23, 18525, 33585, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Achromic Trousers of the Naaru available at TBC tier 4'),
+-(23, 18525, 33586, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Studious Wraps available at TBC tier 4'),
+-(23, 18525, 33587, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Light-Blessed Bonds available at TBC tier 4'),
+-(23, 18525, 33588, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Runed Spell-cuffs available at TBC tier 4'),
++(23, 18525, 33584, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Pantaloons of Arcane Annihilation available at TBC tier 4'),
++(23, 18525, 33585, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Achromic Trousers of the Naaru available at TBC tier 4'),
++(23, 18525, 33586, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Studious Wraps available at TBC tier 4'),
++(23, 18525, 33587, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Light-Blessed Bonds available at TBC tier 4'),
++(23, 18525, 33588, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Runed Spell-cuffs available at TBC tier 4'),
+ (23, 18525, 33589, 0, 0, 8, 0, 66010, 0, 0, 0, 0, 0, '', 'G\'eras - Wristguards of Tranquil Thought available at TBC tier 3'),
+-(23, 18525, 33593, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Slikk\'s Cloak of Placation available at TBC tier 4'),
+-(23, 18525, 33810, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Amani Mask of Death available at TBC tier 4'),
+-(23, 18525, 33832, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Determination available at TBC tier 4'),
+-(23, 18525, 33965, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Hauberk of the Furious Elements available at TBC tier 4'),
+-(23, 18525, 33970, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Pauldrons of the Furious Elements available at TBC tier 4'),
+-(23, 18525, 33972, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Mask of Primal Power available at TBC tier 4'),
+-(23, 18525, 33973, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Pauldrons of Tribal Fury available at TBC tier 4'),
+-(23, 18525, 33974, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Grasp of the Moonkin available at TBC tier 4'),
+-(23, 18525, 34049, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Audacity available at TBC tier 4'),
+-(23, 18525, 34050, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Perseverance available at TBC tier 4'),
+-(23, 18525, 34162, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Depravity available at TBC tier 4'),
+-(23, 18525, 34163, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Cruelty available at TBC tier 4'),
+-(23, 18525, 35321, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'G\'eras - Cloak of Arcane Alacrity available at TBC tier 4'),
++(23, 18525, 33593, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Slikk\'s Cloak of Placation available at TBC tier 4'),
++(23, 18525, 33810, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Amani Mask of Death available at TBC tier 4'),
++(23, 18525, 33832, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Determination available at TBC tier 4'),
++(23, 18525, 33965, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Hauberk of the Furious Elements available at TBC tier 4'),
++(23, 18525, 33970, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Pauldrons of the Furious Elements available at TBC tier 4'),
++(23, 18525, 33972, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Mask of Primal Power available at TBC tier 4'),
++(23, 18525, 33973, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Pauldrons of Tribal Fury available at TBC tier 4'),
++(23, 18525, 33974, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Grasp of the Moonkin available at TBC tier 4'),
++(23, 18525, 34049, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Audacity available at TBC tier 4'),
++(23, 18525, 34050, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Perseverance available at TBC tier 4'),
++(23, 18525, 34162, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Depravity available at TBC tier 4'),
++(23, 18525, 34163, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Cruelty available at TBC tier 4'),
++(23, 18525, 35321, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Cloak of Arcane Alacrity available at TBC tier 4'),
+ (23, 18525, 35324, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Cloak of Swift Reprieve available at TBC tier 5'),
+ (23, 18525, 35326, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'G\'eras - Battlemaster\'s Alacrity available at TBC tier 5');
+diff --git a/data/sql/world/base/zone_shattrath.sql b/data/sql/world/base/zone_shattrath.sql
+index 0e55141..1d0ca1d 100644
+--- a/data/sql/world/base/zone_shattrath.sql
++++ b/data/sql/world/base/zone_shattrath.sql
+@@ -8,7 +8,7 @@ DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 19 AND `ConditionType
+ INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTypeOrReference`, `ConditionTarget`, 
+ `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorType`, `ErrorTextId`, `ScriptName`, `Comment`) VALUES 
+ --
+-(19, 0, 11130, 0, 0, 8, 0, 66011, 0, 0, 0, 0, 0, '', 'Hide \'Oooh, Shinies!\' until the player reaches TBC T4'),
++(19, 0, 11130, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Hide \'Oooh, Shinies!\' until the player reaches TBC T4'),
+ (19, 0, 11481, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Hide \'Crisis at the Sunwell\' until the player reaches TBC T5'),
+ (19, 0, 11482, 0, 0, 8, 0, 66012, 0, 0, 0, 0, 0, '', 'Hide \'Duty Calls\' until the player reaches TBC T5');
+ 
+diff --git a/data/sql/world/updates/2026_10_06_00_reserved_progression_stage.sql b/data/sql/world/updates/2026_10_06_00_reserved_progression_stage.sql
+new file mode 100644
+index 0000000..bee5872
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_06_00_reserved_progression_stage.sql
+@@ -0,0 +1,70 @@
++-- Default progression has no stage 11. Gate these module-owned rewards on
++-- the actual Illidan milestone (12), without synthesizing quest 66011.
++-- This updates existing realms; base SQL uses the same actual milestone.
++UPDATE `conditions` SET `ConditionValue1` = 66012
++WHERE `ConditionTypeOrReference` = 8 AND `ConditionValue1` = 66011
++AND `ConditionValue2` = 0 AND `ConditionValue3` = 0 AND `NegativeCondition` = 0
++AND (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTarget`) IN
++(
++    (1, 19768, 34689, 0, 1, 0),
++    (19, 0, 11130, 0, 0, 0),
++    (23, 17585, 34201, 0, 0, 0),
++    (23, 17657, 34201, 0, 0, 0),
++    (23, 18525, 33192, 0, 0, 0),
++    (23, 18525, 33207, 0, 0, 0),
++    (23, 18525, 33279, 0, 0, 0),
++    (23, 18525, 33280, 0, 0, 0),
++    (23, 18525, 33291, 0, 0, 0),
++    (23, 18525, 33296, 0, 0, 0),
++    (23, 18525, 33304, 0, 0, 0),
++    (23, 18525, 33324, 0, 0, 0),
++    (23, 18525, 33325, 0, 0, 0),
++    (23, 18525, 33331, 0, 0, 0),
++    (23, 18525, 33333, 0, 0, 0),
++    (23, 18525, 33334, 0, 0, 0),
++    (23, 18525, 33386, 0, 0, 0),
++    (23, 18525, 33484, 0, 0, 0),
++    (23, 18525, 33501, 0, 0, 0),
++    (23, 18525, 33502, 0, 0, 0),
++    (23, 18525, 33504, 0, 0, 0),
++    (23, 18525, 33512, 0, 0, 0),
++    (23, 18525, 33513, 0, 0, 0),
++    (23, 18525, 33514, 0, 0, 0),
++    (23, 18525, 33515, 0, 0, 0),
++    (23, 18525, 33516, 0, 0, 0),
++    (23, 18525, 33517, 0, 0, 0),
++    (23, 18525, 33518, 0, 0, 0),
++    (23, 18525, 33519, 0, 0, 0),
++    (23, 18525, 33520, 0, 0, 0),
++    (23, 18525, 33522, 0, 0, 0),
++    (23, 18525, 33523, 0, 0, 0),
++    (23, 18525, 33524, 0, 0, 0),
++    (23, 18525, 33527, 0, 0, 0),
++    (23, 18525, 33528, 0, 0, 0),
++    (23, 18525, 33529, 0, 0, 0),
++    (23, 18525, 33530, 0, 0, 0),
++    (23, 18525, 33531, 0, 0, 0),
++    (23, 18525, 33532, 0, 0, 0),
++    (23, 18525, 33534, 0, 0, 0),
++    (23, 18525, 33535, 0, 0, 0),
++    (23, 18525, 33536, 0, 0, 0),
++    (23, 18525, 33537, 0, 0, 0),
++    (23, 18525, 33584, 0, 0, 0),
++    (23, 18525, 33585, 0, 0, 0),
++    (23, 18525, 33586, 0, 0, 0),
++    (23, 18525, 33587, 0, 0, 0),
++    (23, 18525, 33588, 0, 0, 0),
++    (23, 18525, 33593, 0, 0, 0),
++    (23, 18525, 33810, 0, 0, 0),
++    (23, 18525, 33832, 0, 0, 0),
++    (23, 18525, 33965, 0, 0, 0),
++    (23, 18525, 33970, 0, 0, 0),
++    (23, 18525, 33972, 0, 0, 0),
++    (23, 18525, 33973, 0, 0, 0),
++    (23, 18525, 33974, 0, 0, 0),
++    (23, 18525, 34049, 0, 0, 0),
++    (23, 18525, 34050, 0, 0, 0),
++    (23, 18525, 34162, 0, 0, 0),
++    (23, 18525, 34163, 0, 0, 0),
++    (23, 18525, 35321, 0, 0, 0),
++    (23, 21655, 34200, 0, 0, 0));
+diff --git a/src/EarnedEraRidingPrices.cpp b/src/EarnedEraRidingPrices.cpp
+new file mode 100644
+index 0000000..7866728
+--- /dev/null
++++ b/src/EarnedEraRidingPrices.cpp
+@@ -0,0 +1,30 @@
++/*
++    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
++*/
++
++#include "EarnedEraRidingPricesPolicy.h"
++#include "IndividualProgression.h"
++
++class IndividualProgressionEraRidingPrices : public PlayerScript
++{
++public:
++    IndividualProgressionEraRidingPrices()
++        : PlayerScript("IndividualProgressionEraRidingPrices", {PLAYERHOOK_ON_GET_TRAINER_SPELL_COST})
++    {
++    }
++
++    void OnPlayerGetTrainerSpellCost(Player const* player, Creature const* /*trainer*/, uint32 spellId,
++                                     uint32& moneyCost) override
++    {
++        if (!player || !player->IsInWorld() || !sIndividualProgression->IsStrictDefaultProgression())
++            return;
++
++        uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(const_cast<Player*>(player));
++        moneyCost = EarnedEraRidingPricesPolicy::BaseCost(stage, spellId, moneyCost);
++    }
++};
++
++void AddSC_individual_progression_era_riding_prices()
++{
++    new IndividualProgressionEraRidingPrices();
++}
+diff --git a/src/EarnedEraRidingPricesPolicy.h b/src/EarnedEraRidingPricesPolicy.h
+new file mode 100644
+index 0000000..dacedff
+--- /dev/null
++++ b/src/EarnedEraRidingPricesPolicy.h
+@@ -0,0 +1,32 @@
++/*
++    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
++*/
++
++#ifndef EARNED_ERA_RIDING_PRICES_POLICY_H
++#define EARNED_ERA_RIDING_PRICES_POLICY_H
++
++#include <cstdint>
++
++namespace EarnedEraRidingPricesPolicy
++{
++// Undiscounted copper, using late Vanilla (1.12.1), original TBC (2.4.3),
++// and the pinned Wrath trainer table. This changes costs, not availability.
++constexpr std::uint32_t BaseCost(std::uint8_t stage, std::uint32_t spellId, std::uint32_t configuredCost)
++{
++    switch (spellId)
++    {
++        case 33388: // Apprentice Riding
++            return stage < 8 ? 900000 : stage < 13 ? 350000 : 40000;
++        case 33391: // Journeyman Riding
++            return stage < 8 ? 9000000 : stage < 13 ? 6000000 : 500000;
++        case 34090: // Expert Riding
++            return stage < 8 ? configuredCost : stage < 13 ? 8000000 : 2500000;
++        case 34091: // Artisan Riding
++            return stage < 8 ? configuredCost : 50000000;
++        default:
++            return configuredCost;
++    }
++}
++}
++
++#endif
+diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
+index 3f9123a..cf697c8 100644
+--- a/src/IndividualProgression.cpp
++++ b/src/IndividualProgression.cpp
+@@ -3,8 +3,11 @@
+ */
+ 
+ #include "IndividualProgression.h"
+-#include "naxxramas_40.h"
++
++#include "Corpse.h"
+ #include "ReputationMgr.h"
++#include "StrictEarnedProgressionPolicy.h"
++#include "naxxramas_40.h"
+ 
+ IndividualProgression* IndividualProgression::instance()
+ {
+@@ -27,6 +30,55 @@ uint8 IndividualProgression::GetPlayerProgressionFromQuests(Player* player) cons
+     return progressionLevel;
+ }
+ 
++bool IndividualProgression::IsStrictDefaultProgression() const
++{
++    return enabled && strictEarnedProgression && !disableDefaultProgression && customProgressionMap.empty();
++}
++
++bool IndividualProgression::HasStrictEarnedMilestone(Player* player, uint8 stage) const
++{
++    if (!player || !player->IsInWorld())
++        return false;
++
++    switch (stage)
++    {
++        case PROGRESSION_PRE_AQ:
++            return player->GetQuestStatus(BANG_A_GONG) == QUEST_STATUS_REWARDED ||
++                   player->GetQuestStatus(SIMPLY_BANG_A_GONG) == QUEST_STATUS_REWARDED;
++        case PROGRESSION_AQ_WAR:
++            return player->GetQuestStatus(CHAOS_AND_DESTRUCTION) == QUEST_STATUS_REWARDED;
++        case PROGRESSION_PRE_TBC:
++            return player->GetQuestStatus(INTO_THE_BREACH) == QUEST_STATUS_REWARDED;
++        default:
++        {
++            uint32 const credit = StrictEarnedProgressionPolicy::BossCredit(stage);
++            return credit && player
++                                 ->GetPlayerSetting(StrictEarnedProgressionPolicy::SettingsSource,
++                                                    StrictEarnedProgressionPolicy::SettingsIndex)
++                                 .HasFlag(credit);
++        }
++    }
++}
++
++bool IndividualProgression::IsEligibleStrictKill(Player* player, Creature* killed)
++{
++    if (!player || !killed || !player->IsInWorld() || !killed->IsInWorld() || killed->IsAlive() ||
++        !killed->IsDamageEnoughForLootingAndReward() || killed->IsLootRewardDisabled() || !killed->isTappedBy(player) ||
++        !player->IsAtLootRewardDistance(killed))
++        return false;
++
++    // The core allows unlimited reward distance inside dungeons. Strict credit
++    // also requires presence near the boss, using a dead member's corpse.
++    WorldObject const* rewardPosition = player;
++    if (!player->IsAlive() && player->GetCorpse())
++        rewardPosition = player->GetCorpse();
++
++    // Use a strict three-dimensional center distance, without combat-reach
++    // radii, and the core's same-map/instance and same-phase checks.
++    return killed->IsWithinDistInMap(rewardPosition, sWorld->getFloatConfig(CONFIG_GROUP_XP_DISTANCE), true, false,
++                                     false);
++}
++
+ bool IndividualProgression::hasPassedProgression(Player* player, ProgressionState state) const
+ {
+     if (!enabled || !state || !player || !player->IsInWorld())
+@@ -55,6 +107,25 @@ void IndividualProgression::UpdateProgressionState(Player* player, ProgressionSt
+         return;
+ 
+     uint8 currentState = GetPlayerProgressionFromQuests(player);
++    if (IsStrictDefaultProgression())
++    {
++        if (newState != StrictEarnedProgressionPolicy::NextStage(currentState) ||
++            !HasStrictEarnedMilestone(player, newState))
++            return;
++
++        // Each previous marker must already have been earned. Stage 11 is not
++        // an implemented milestone and is not synthesized on the way to 12.
++        uint32 const questId = 66000 + newState;
++        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
++        if (!quest)
++            return;
++
++        player->AddQuest(quest, nullptr);
++        player->CompleteQuest(questId);
++        player->RewardQuest(quest, 0, player, false, false);
++        return;
++    }
++
+     if (newState > currentState)
+     {
+         for (uint8 i = currentState; i <= newState; ++i)
+@@ -152,6 +223,9 @@ uint8 IndividualProgression::GetAccountProgression(uint32 accountId)
+ 
+ void IndividualProgression::UpdateRNDbotSpells(Player* player)
+ {
++    if (enabled && strictEarnedProgression)
++        return;
++
+     if (!player || !player->IsInWorld())
+         return;
+ 
+@@ -184,6 +258,10 @@ void IndividualProgression::UpdateAccountReputation(uint32 factionId, uint32 acc
+     if (!factionId || !accountId || !player || !player->IsInWorld())
+         return;
+ 
++    if (enabled && strictEarnedProgression &&
++        (!player->GetSession() || player->GetSession()->GetSecurity() < SEC_GAMEMASTER))
++        return;
++
+     Group* group = player->GetGroup();
+     uint32 account = player->GetSession()->GetAccountId();
+     std::string factionName = sFactionStore.LookupEntry(factionId)->name[0];
+@@ -229,6 +307,10 @@ void IndividualProgression::UpdateGroupAttunement(Player* player, std::string lo
+     if (!player || !player->IsInWorld() )
+         return;
+ 
++    if (enabled && strictEarnedProgression &&
++        (!player->GetSession() || player->GetSession()->GetSecurity() < SEC_GAMEMASTER))
++        return;
++
+     if (location.empty())
+         return;
+ 
+@@ -371,6 +453,9 @@ bool IndividualProgression::isAttuned(Player* player)
+ 
+ bool IndividualProgression::isExcludedAccount(Player* player)
+ {
++    if (enabled && strictEarnedProgression)
++        return false;
++
+     // An empty account filter excludes nobody and needs no database lookup.
+     if (!player || sIndividualProgression->excludedAccountsRegex.empty())
+         return false;
+@@ -384,6 +469,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
+ 
+ bool IndividualProgression::isBotAccount(Player* player)
+ {
++    if (enabled && strictEarnedProgression)
++        return false;
++
+     // An empty account filter excludes nobody and needs no database lookup.
+     if (!player || sIndividualProgression->botAccountsRegex.empty())
+         return false;
+@@ -417,6 +505,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
+ 
+ void IndividualProgression::SyncBotsProgressionToLeader(Group* group)
+ {
++    if (enabled && strictEarnedProgression)
++        return;
++
+     if (!group)
+         return;
+ 
+@@ -756,6 +847,26 @@ void IndividualProgression::checkIPProgression(Player* killer)
+ 
+     uint8 currentState = GetPlayerProgressionFromQuests(killer);
+ 
++    if (IsStrictDefaultProgression())
++    {
++        // Credits remain recorded above a realm ceiling or when earned out of
++        // order. Advance only through the next satisfied milestone.
++        for (uint8 attempt = 0; attempt < StrictEarnedProgressionPolicy::LastStage; ++attempt)
++        {
++            uint8 const next = StrictEarnedProgressionPolicy::NextStage(currentState);
++            if (!next || !HasStrictEarnedMilestone(killer, next))
++                return;
++
++            UpdateProgressionState(killer, static_cast<ProgressionState>(next));
++            uint8 const updated = GetPlayerProgressionFromQuests(killer);
++            if (updated == currentState)
++                return;
++
++            currentState = updated;
++        }
++        return;
++    }
++
+     // A completed transition quest remains earned when the realm opens TBC.
+     // UpdateProgressionState still enforces the configured realm tier limit.
+     if (currentState == PROGRESSION_NAXX40 && killer->GetQuestStatus(INTO_THE_BREACH) == QUEST_STATUS_REWARDED)
+@@ -833,6 +944,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
+         return;
+     */
+ 
++    if (IsStrictDefaultProgression())
++    {
++        uint8 const stage = StrictEarnedProgressionPolicy::BossStage(entry);
++        if (!stage || !IsEligibleStrictKill(killer, killed))
++            return;
++
++        uint32 const credit = StrictEarnedProgressionPolicy::BossCredit(stage);
++        uint32 const earned = killer
++                                  ->GetPlayerSetting(StrictEarnedProgressionPolicy::SettingsSource,
++                                                     StrictEarnedProgressionPolicy::SettingsIndex)
++                                  .value;
++        if (!(earned & credit))
++            killer->UpdatePlayerSetting(StrictEarnedProgressionPolicy::SettingsSource,
++                                        StrictEarnedProgressionPolicy::SettingsIndex, earned | credit);
++
++        if (entry == KELTHUZAD_40)
++            UpdateProgressionAchievements(killer, KEL_THUZAD_40_KILL);
++
++        checkIPProgression(killer);
++        return;
++    }
++
+     static const std::unordered_map<uint32, ProgressionState> bossMap =
+     {
+         { RAGNAROS,     PROGRESSION_MOLTEN_CORE    },
+@@ -1053,6 +1186,8 @@ private:
+     {
+         sIndividualProgression->customProgressionMap.clear();
+         sIndividualProgression->enabled = sConfigMgr->GetOption<bool>("IndividualProgression.Enable", true);
++        sIndividualProgression->strictEarnedProgression =
++            sConfigMgr->GetOption<bool>("IndividualProgression.StrictEarnedProgression", false);
+         sIndividualProgression->vanillaPowerAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.VanillaPowerAdjustment", 1);
+         sIndividualProgression->vanillaHealingAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.VanillaHealingAdjustment", 1);
+         sIndividualProgression->tbcPowerAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.TBCPowerAdjustment", 1);
+diff --git a/src/IndividualProgression.h b/src/IndividualProgression.h
+index e3c5c9a..66cbad9 100644
+--- a/src/IndividualProgression.h
++++ b/src/IndividualProgression.h
+@@ -404,6 +404,11 @@ class IndividualProgression
+ public:
+     static IndividualProgression* instance();
+ 
++    bool strictEarnedProgression = false;
++    bool IsStrictDefaultProgression() const;
++    bool HasStrictEarnedMilestone(Player* player, uint8 stage) const;
++    static bool IsEligibleStrictKill(Player* player, Creature* killed);
++
+     std::map<uint32, uint8> customProgressionMap;
+     questXpMapType questXpMap;
+     float vanillaPowerAdjustment, tbcPowerAdjustment, vanillaHealingAdjustment, tbcHealingAdjustment;
+diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
+index 28103d3..73cd6a0 100644
+--- a/src/IndividualProgressionPlayer.cpp
++++ b/src/IndividualProgressionPlayer.cpp
+@@ -86,6 +86,29 @@ public:
+             sIndividualProgression->UpdateRNDbotSpells(player);
+     }
+ 
++    bool OnPlayerCanLearnTalent(Player* player, TalentEntry const* talent, uint32 /*rank*/) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression())
++            return true;
++
++        if (!player || !talent)
++            return false;
++
++        if (player->IsGameMaster())
++            return true;
++
++        // These are Wrath talent rows, not replacement historical trees.
++        // The earned expansion controls depth for humans and bots alike.
++        uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
++        if (stage < PROGRESSION_PRE_TBC)
++            return talent->Row <= 6;
++
++        if (stage < PROGRESSION_TBC_TIER_5)
++            return talent->Row <= 8;
++
++        return true;
++    }
++
+     void OnPlayerResurrect(Player* player, float /*restore_percent*/, bool& /*applySickness*/) override
+     {
+         if (!player || !player->IsInWorld())
+@@ -879,6 +902,11 @@ public:
+             }
+             break;
+         }
++
++        if (sIndividualProgression->IsStrictDefaultProgression() &&
++            (quest->GetQuestId() == BANG_A_GONG || quest->GetQuestId() == SIMPLY_BANG_A_GONG ||
++             quest->GetQuestId() == CHAOS_AND_DESTRUCTION || quest->GetQuestId() == INTO_THE_BREACH))
++            sIndividualProgression->checkIPProgression(player);
+     }
+ 
+     bool OnPlayerCanGroupInvite(Player* player, std::string& membername) override
+@@ -1130,6 +1158,11 @@ public:
+             }
+         }
+ 
++        // Strict default tier credit uses the tapped recipient hook below,
++        // including kills finished by pets and totems.
++        if (sIndividualProgression->IsStrictDefaultProgression())
++            return;
++
+         Group* group = killer->GetGroup();
+         
+         if (killed->GetCreatureTemplate()->rank > CREATURE_ELITE_NORMAL)
+@@ -1185,6 +1218,24 @@ public:
+         }
+     }
+ 
++    void OnPlayerCreatureKillCredit(Player* player, Creature* killed) override
++    {
++        if (!sIndividualProgression->IsStrictDefaultProgression() || !player || !killed)
++            return;
++
++        // Credit the actual tapped party, not the party of the finishing blow.
++        if (Group* group = killed->GetLootRecipientGroup())
++        {
++            for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
++            {
++                if (Player* member = itr->GetSource())
++                    sIndividualProgression->checkKillProgression(member, killed);
++            }
++        }
++        else
++            sIndividualProgression->checkKillProgression(player, killed);
++    }
++
+     bool OnPlayerUpdateFishingSkill(Player* player, int32 /*skill*/, int32 /*zone_skill*/, int32 chance, int32 roll) override
+     {
+         if (!player || !player->IsInWorld() || !chance || !roll)
+@@ -1329,6 +1380,12 @@ public:
+         if (!accountId || !charRace || !charClass)
+             return false;
+ 
++        // A hero-class character cannot start from level 1. Existing characters
++        // remain intact; disable the strict policy to create new Death Knights.
++        if (sIndividualProgression->enabled && sIndividualProgression->strictEarnedProgression &&
++            charClass == CLASS_DEATH_KNIGHT)
++            return false;
++
+         if ((!sIndividualProgression->enabled) ||
+             (charRace != RACE_DRAENEI && charRace != RACE_BLOODELF && charClass != CLASS_DEATH_KNIGHT) ||
+             (!sIndividualProgression->tbcRacesProgressionLevel && !sIndividualProgression->deathKnightProgressionLevel))
+@@ -1337,7 +1394,9 @@ public:
+         }
+ 
+         // Check if the account is a bot or excluded from progression
+-        if (!sIndividualProgression->botAccountsRegex.empty() || !sIndividualProgression->excludedAccountsRegex.empty())
++        if (!sIndividualProgression->strictEarnedProgression &&
++            (!sIndividualProgression->botAccountsRegex.empty() ||
++             !sIndividualProgression->excludedAccountsRegex.empty()))
+         {
+             std::string accountName;
+             if (AccountMgr::GetName(accountId, accountName) &&
+diff --git a/src/IndividualProgression_loader.cpp b/src/IndividualProgression_loader.cpp
+index 07ee51e..8ad4354 100644
+--- a/src/IndividualProgression_loader.cpp
++++ b/src/IndividualProgression_loader.cpp
+@@ -4,6 +4,7 @@
+ 
+ // From SC
+ void AddSC_mod_individual_progression();
++void AddSC_individual_progression_era_riding_prices();
+ void AddSC_boss_onyxia_40();
+ void AddSC_instance_onyxias_lair_40();
+ void AddSC_instance_blackrock_spire_50_59_B();
+@@ -56,6 +57,7 @@ void AddSC_serpentshrine_cavern_70();
+ void Addmod_individual_progressionScripts()
+ {
+     AddSC_mod_individual_progression();
++    AddSC_individual_progression_era_riding_prices();
+     AddSC_boss_onyxia_40();
+     AddSC_instance_onyxias_lair_40();
+     AddSC_instance_blackrock_spire_50_59_B();
+diff --git a/src/StrictEarnedProgressionPolicy.h b/src/StrictEarnedProgressionPolicy.h
+new file mode 100644
+index 0000000..0c95a74
+--- /dev/null
++++ b/src/StrictEarnedProgressionPolicy.h
+@@ -0,0 +1,85 @@
++/*
++    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license:
++   https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
++*/
++
++#ifndef STRICT_EARNED_PROGRESSION_POLICY_H
++#define STRICT_EARNED_PROGRESSION_POLICY_H
++
++#include <cstdint>
++
++namespace StrictEarnedProgressionPolicy
++{
++constexpr char SettingsSource[] = "mod-individual-progression-strict-earned";
++constexpr std::uint32_t SettingsIndex = 0;
++constexpr std::uint8_t LastStage = 18;
++
++// Stage 11 has no milestone in the upstream default progression.
++constexpr std::uint8_t NextStage(std::uint8_t current)
++{
++    return current >= LastStage ? 0 : (current == 10 ? 12 : current + 1);
++}
++
++constexpr std::uint32_t BossCredit(std::uint8_t stage)
++{
++    switch (stage)
++    {
++        case 1:
++        case 2:
++        case 3:
++        case 6:
++        case 7:
++        case 9:
++        case 10:
++        case 12:
++        case 13:
++        case 14:
++        case 15:
++        case 16:
++        case 17:
++        case 18:
++            return std::uint32_t{1} << stage;
++        default:
++            return 0;
++    }
++}
++
++constexpr std::uint8_t BossStage(std::uint32_t entry)
++{
++    switch (entry)
++    {
++        case 11502:
++            return 1;  // Ragnaros
++        case 301000:
++            return 2;  // Vanilla Onyxia
++        case 11583:
++            return 3;  // Nefarian
++        case 15727:
++            return 6;  // C'Thun
++        case 351019:
++            return 7;  // Kel'Thuzad 40
++        case 15690:
++            return 9;  // Prince Malchezaar
++        case 19622:
++            return 10;  // Kael'thas
++        case 22917:
++            return 12;  // Illidan
++        case 25315:
++            return 13;  // Kil'jaeden
++        case 15990:
++            return 14;  // Wrath Kel'Thuzad
++        case 33288:
++            return 15;  // Yogg-Saron
++        case 34564:
++            return 16;  // Anub'arak
++        case 36597:
++            return 17;  // Lich King
++        case 39863:
++            return 18;  // Halion
++        default:
++            return 0;
++    }
++}
++}  // namespace StrictEarnedProgressionPolicy
++
++#endif
+diff --git a/src/cs_individualProgression.cpp b/src/cs_individualProgression.cpp
+index 04c15a3..5e6abd7 100644
+--- a/src/cs_individualProgression.cpp
++++ b/src/cs_individualProgression.cpp
+@@ -121,6 +121,16 @@ public:
+ 
+     static bool HandleSetBotIndividualProgressionCommand(ChatHandler* handler)
+     {
++        if (!handler->GetSession())
++            return false;
++
++        if (sIndividualProgression->enabled && sIndividualProgression->strictEarnedProgression &&
++            handler->GetSession()->GetSecurity() < SEC_GAMEMASTER)
++        {
++            handler->SendSysMessage("This command is disabled during strict earned progression.");
++            return false;
++        }
++
+         Player* player = handler->GetSession()->GetPlayer();
+ 
+         if (!player)
+@@ -144,7 +154,22 @@ public:
+         for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+         {
+             Player* member = itr->GetSource();
+-            if (!member || sIndividualProgression->isNormalAccount(member))
++            if (!member)
++                continue;
++
++            if (sIndividualProgression->strictEarnedProgression)
++            {
++                // This is an explicit, security-checked GM override. Account
++                // filters never provide an exemption in ordinary gameplay.
++                std::string accountName;
++                if (!AccountMgr::GetName(member->GetSession()->GetAccountId(), accountName) ||
++                    !((!sIndividualProgression->botAccountsRegex.empty() &&
++                       std::regex_match(accountName, std::regex(sIndividualProgression->botAccountsRegex))) ||
++                      (!sIndividualProgression->excludedAccountsRegex.empty() &&
++                       std::regex_match(accountName, std::regex(sIndividualProgression->excludedAccountsRegex)))))
++                    continue;
++            }
++            else if (sIndividualProgression->isNormalAccount(member))
+                 continue;
+ 
+             sIndividualProgression->ForceUpdateProgressionState(member, static_cast<ProgressionState>(currentState));
+@@ -158,6 +183,16 @@ public:
+ 
+     static bool HandleSetRepIndividualProgressionCommand(ChatHandler* handler)
+     {
++        if (!handler->GetSession())
++            return false;
++
++        if (sIndividualProgression->enabled && sIndividualProgression->strictEarnedProgression &&
++            handler->GetSession()->GetSecurity() < SEC_GAMEMASTER)
++        {
++            handler->SendSysMessage("This command is disabled during strict earned progression.");
++            return false;
++        }
++
+         Player* player = handler->GetSession()->GetPlayer();
+         uint32 accountId = handler->GetSession()->GetAccountId();
+         
+@@ -405,6 +440,16 @@ public:
+ 
+     static bool HandleAttuneIndividualProgressionCommand(ChatHandler* handler, std::string location)
+     {
++        if (!handler->GetSession())
++            return false;
++
++        if (sIndividualProgression->enabled && sIndividualProgression->strictEarnedProgression &&
++            handler->GetSession()->GetSecurity() < SEC_GAMEMASTER)
++        {
++            handler->SendSysMessage("This command is disabled during strict earned progression.");
++            return false;
++        }
++
+         Player* player = handler->GetSession()->GetPlayer();
+ 
+         if (!player)

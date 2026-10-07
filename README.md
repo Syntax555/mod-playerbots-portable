@@ -1,6 +1,6 @@
 # AzerothCore Playerbots Portable
 
-A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and seven additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm uses **earned individual progression through Vanilla, TBC and Wrath, level-1 random bots, and a target of 2,500 bots while a real player is connected**.
+A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and eight additional modules. Extract the release archive and run `startup.exe`; no compiler or separate MySQL installation is needed. The default realm uses **earned individual progression through Vanilla, TBC and Wrath, historical Vanilla/TBC talent trees, level-1 random bots, and a target of 2,500 bots while a real player is connected**.
 
 ## Download and play
 
@@ -11,9 +11,10 @@ A prebuilt **Windows x64 ZIP** for AzerothCore 3.3.5a, Playerbots and seven addi
    ```text
    account create <username> <password>
    ```
-5. Set your **WoW 3.3.5a** client's realmlist to `set realmlist 127.0.0.1` and log in.
+5. Download **`EraTalents-client-<version>.zip`** from the same server release or Actions build. Close WoW completely, copy `Interface/AddOns/EraTalents/` into the matching client folder, and copy `Data/patch-V.mpq` into its `Data/` folder. Replace an older IP `patch-V.mpq` with this merged version. Both pieces are required for the default historical-talent profile; `/reload` cannot load an MPQ.
+6. Set your **WoW 3.3.5a** client's realmlist to `set realmlist 127.0.0.1`, restart the client and log in.
 
-The world/auth/database services bind locally by default. A Vanilla content progression server still requires the 3.3.5a client. Do not grant your playing account GM privileges if you want ordinary gameplay.
+The world/auth/database services bind locally by default. A Vanilla content progression server still requires the 3.3.5a client (build 12340). Bots need the server files only. Do not grant your playing account GM privileges if you want ordinary gameplay. See [historical talents and client installation](docs/era-talents.md) for generation checks and migration limits.
 
 The [configuration audit](docs/vanilla-config-audit.md) describes the profiles released in v1.0.9: normal talent/skill rules, riding at 40/60, disabled shortcut bot mail and quiet event broadcasts. Its v1.0.10 addendum covers Quest Loot Party. Use the new version's launcher to apply them to an existing installation; v1.0.8 embeds the earlier profiles.
 
@@ -55,17 +56,18 @@ Server module sources are pinned in [versions.lock.json](versions.lock.json), co
 | --- | --- |
 | [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Enabled; 2,500 online target with real players connected, level 1 creation, natural progression and earned-inventory auction trading described below. |
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Enabled; adjusts instance difficulty to the party size, keeps original creature levels and disables extra reward tokens. |
-| [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled; characters start at tier 0 and earn Vanilla, TBC and Wrath tiers. Random bots follow the same gates; expansion race creation also requires their own account's unlock. |
+| [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Enabled with strict earned milestones; characters start at tier 0 and complete their own boss/quest prerequisites. Random bots follow the same gates; expansion race creation also requires their own account's unlock. |
+| [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | Enabled; human and bot Vanilla/TBC talent trees and class spell variants follow earned character progression. Requires the matching EraTalents addon and merged client MPQ. |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Included; automatic seller and buyer disabled. Earned auctions use Playerbots' own inventory and gold instead of this module's generated supply and artificial demand. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Included; disabled in the strict profile because some scripted routes teleport bots across navigation gaps. Queue fillers and route/recovery shortcuts are also disabled. Its optional post-combat resurrection uses a surviving party member's normal spell. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Enabled; eligible party members can each loot a copy of naturally dropped normal-quality quest items. Each member still opens the corpse; login announcements are disabled. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Included for the Chatless addon, with quiet logging and additional natural-progression restrictions on shortcut actions. |
 | [Token Turn-in](https://github.com/Zerathane/mod-token-turnin) | Enabled for `.tokenturnin check` on grouped bots. Shortcut `.tokenturnin redeem` is blocked during natural progression because upstream skips normal NPC, reputation and material requirements. |
 
-All locked sources were compared with their upstream branch heads on **5 October
-2026**. Existing server pins were already current; the Chatless addon and both
-new modules use the current upstream heads. [Module versions](docs/module-versions.md)
-records the exact revisions, source choices and verification limits.
+The existing core, module and Chatless source pins were compared with upstream
+branch heads on **5 October 2026**. Era Talents and its client build dependency
+have separately pinned immutable revisions. [Module versions](docs/module-versions.md)
+records the exact revisions, local adaptations and verification limits.
 
 Token Turn-in's check only previews token-to-item mappings for the bot's class
 and spec. It does not establish quest eligibility or grant equipment. Bots must
@@ -83,15 +85,33 @@ The launcher merges the bundled [profiles](cmd/startup/profiles) into complete u
 The fresh realm uses:
 
 - A realm ceiling of 80, normal XP/drop/money rates, zero starting gold and no Dungeon Finder. Individual Progression holds each character at 60/70 until it earns TBC/Wrath access.
-- Vanilla races/classes on fresh accounts. Blood elves and draenei require that account to earn tier 8; human-controlled death knights require tier 13. Death knight bots stay disabled because all new random bots must start at level 1.
+- Vanilla races/classes on fresh accounts. Blood elves and draenei require that account to earn tier 8, then start at level 1/tier 0 themselves. Strict earned progression blocks new death knights because their level-55 class start cannot meet the level-1 policy; existing characters are preserved.
 - Individual Progression starts every ordinary character at tier 0, with no random-bot account exemption. The patched bot factory and login both enforce account unlocks. Core `Expansion = 2` supports later content and restored Vanilla Naxxramas.
 - 278 random-bot accounts with nine permitted classes: a pool of up to 2,502 characters, of which 2,500 are targeted online. They begin with the normal level 1 starter equipment and acquire XP, gold and equipment through gameplay.
 - Gradual bot login begins after a real player session has been connected for 30 seconds. Bots save and log out about 60 seconds after the last real session disconnects. Character selection and queued sessions also count as a connection.
 - Disabled random level jumps, equipment upgrades, character recycling and quest synchronization shortcuts.
 
-The pinned upstream Playerbots code grants equipment, money, supplies and repairs even when several existing cheat settings are disabled. [The natural progression patch](patches/mod-playerbots-natural-progression.patch) adds `AiPlayerbot.NaturalProgression = 1` to disable these factory/refresh grants and additional free recovery, travel and resource shortcuts. Normal core XP, loot, quests, vendors, trainers and character creation remain available. The patch is applied to a generated module copy; both upstream submodules stay at their original revisions.
+The pinned upstream Playerbots code grants equipment, money, supplies and repairs even when several existing cheat settings are disabled. [The natural progression patch](patches/mod-playerbots-natural-progression.patch) adds `AiPlayerbot.NaturalProgression = 1` to disable these factory/refresh grants and additional free recovery, travel and resource shortcuts. Normal core XP, loot, quests, vendors, trainers and character creation remain available. Local patches are applied to generated core/module copies; both upstream submodules stay at their original revisions.
 
 Autonomous bots also seek nearby trainers, vendors and repair NPCs for available spells, earned-loot sales and needed supplies. They walk to the NPC and use normal server interactions, prices, gold, level and learning prerequisites. Their maintenance target is cached for 30 seconds to limit repeated scans. Matching class quests are retained, and hunter pets can only be fed with owned suitable food through the learned Feed Pet spell.
+
+Strict earned progression also protects the module's default milestone chain.
+Each character records eligible boss credit and rewarded transition quests, then
+advances only through completed prerequisites. Group-leader copying, account
+exemptions and ordinary group-attunement item grants cannot replace that work.
+The default Era Talents profile gives humans and bots historical trees based on
+Vanilla 1.12.1 and TBC Classic 2.5.4 data; earned tier 13 returns to native Wrath
+trees. Level or account progress alone cannot change a character's era. Bots
+spend newly earned talent points without routine free resets, and class spell
+variants require paid training or their earned talent/quest source. An actual
+expansion crossing refunds the old tree's earned points once. Existing glyphs
+are retained but inactive before earned Wrath. This improves historical class
+behavior, but TBC Classic data is not an exact original 2.4.3 simulation and broad
+item/vendor prices remain shared. Riding lessons use the purchasing character's
+earned-era price with normal reputation discounts and retained IP level
+prerequisites. See [expansion progression](docs/changing-expansions.md)
+for the milestone chain and [Era Talents](docs/era-talents.md) for client setup,
+training, respecs and compatibility limits.
 
 ## Earned auction-house economy
 
@@ -124,7 +144,7 @@ crafting, questing and live-market reliability still require in-game checks.
 
 Bots can fill a real player's named Vanilla battleground queue using their earned levels, equipment and faction. Autonomous all-bot match creation stays disabled. Fresh level 1 bots must level normally before they are eligible; an eligible population may take time to develop.
 
-About 25% of random bots are assigned earned caps at 19, 29, 39, 49 or 59 (5% each); the rest continue individual progression. They start at 1, earn every level and retain their own equipment. Capped bots can still farm and participate in activities. Joining a party or activity supplies no catch-up levels, equipment or gold. Battlegrounds wait for enough eligible queued characters on both factions. See [earned bot brackets](docs/earned-bot-brackets.md) to customize or release caps; no additional bracket module is needed.
+About 35% of random bots are assigned earned caps at 19, 29, 39, 49, 59, 69 or 79 (5% each); the rest continue individual progression. They start at 1, earn every level and retain their own equipment. Capped bots can still farm and participate in activities. Joining a party or activity supplies no catch-up levels, equipment or gold. Level-69 and level-79 residents must first earn TBC and Wrath access respectively. Battlegrounds wait for enough eligible queued characters on both factions; the current battleground policy still enables only Vanilla activities. See [earned bot brackets](docs/earned-bot-brackets.md) to customize or release caps; no additional bracket module is needed.
 
 | Battleground | Eligible levels | Individual Progression brackets |
 | --- | --- | --- |
@@ -150,7 +170,14 @@ bot mail-management shortcuts in source, including when old settings are re-enab
 
 Bot debug logging is disabled by default and log writes run asynchronously. Empty Individual Progression account filters skip repeated database queries and regex construction, while preserving the same progression gates for players and bots.
 
-Progression begins with Vanilla content on the WotLK core, with its client/class mechanics and some later-added low-level quests and professions. **The talent trees remain Wrath trees.** Normal talent rates give 51 earned points at level 60; `LimitTalentsExpansion` approximates Vanilla/TBC depth for bot templates and fallback allocation, without replacing talent identities or restricting human trees. Human glyphs, pet talent trees and some later low-level class spells also remain. Natural bot talent allocation retains existing talents and spends earned points without free resets. Individual mode keeps new dual specialization purchases unavailable below level 80. True 1.12 talents require coordinated client, server and bot changes; the optional Individual Progression DBC files do not contain replacement talent tables.
+Progression still runs on the WotLK core and 3.3.5a client. The default historical
+module replaces human and bot Vanilla/TBC talent allocation and selected class
+spell behavior, with 51/61 earned points at levels 60/70. It does not replace
+every combat formula, pet system, low-level quest, profession or world price
+with historical data. Individual mode keeps new dual specialization purchases
+unavailable below level 80. The native Wrath-tree depth approximation remains a
+fallback for a fresh realm deliberately configured without Era Talents; disabling
+the module after characters have custom talents needs a separate migration.
 
 AutoBalance counts the non-GM players actually present, including bots. A human plus four bots receives normal five-player dungeon stats; smaller parties use the upstream scaling curve and scaled XP/money, with original creature levels. Outdoor elites and world bosses retain their ordinary difficulty and need suitable companions. Instance scaling does not solve every encounter tactic; full AQ40/Naxx40 bot support is not established. A source/configuration audit cannot establish exact historical class balance or completion of every raid.
 
@@ -158,13 +185,21 @@ See [the configuration audit](docs/vanilla-config-audit.md), included in the ZIP
 
 Existing characters keep their levels, inventory, money and progression. Existing active configs also keep their settings; the new defaults do not silently reset an established realm. Back up databases and configurations before migrating an existing realm.
 
-To apply the recommended settings to an existing installation, stop the server, extract the new ZIP into its folder and run this once from PowerShell:
+To apply the recommended settings to an existing installation, back up its
+databases and configurations, stop the launcher and servers, install the complete
+updated server ZIP, update each player's matching EraTalents client files, and run
+this once from PowerShell:
 
 ```powershell
 .\startup.exe --apply-profiles
 ```
 
-The command backs up every changed config, updates only the settings managed by the bundled profiles and exits without starting the servers. Database credentials, paths and unrelated custom settings are retained. Start `startup.exe` normally afterwards. This command does not reset characters or databases.
+The command backs up every changed config, updates only the settings managed by
+the bundled profiles and exits without starting the servers. Database credentials,
+paths and unrelated custom settings are retained. Start `startup.exe` normally
+afterwards; the normal server updater imports bundled SQL. This command does not
+reset characters or databases. Activating historical trees converts talent/spell
+state for the character's earned era; see [the migration notes](docs/era-talents.md#updating-an-existing-realm).
 
 ## Configuration
 
@@ -176,6 +211,7 @@ After first launch:
 | `configs/authserver.conf` | Authentication and database connection. |
 | `configs/modules/playerbots.conf` | Population, activity, natural progression, earned auctions and bot AI. |
 | `configs/modules/individualProgression.conf` | Starting tier, content limit and account exemptions. |
+| `configs/modules/mod_era_talents.conf` | Historical human/bot talent trees, earned-era class spell variants and glyph gate. |
 | `configs/modules/AutoBalance.conf` | Instance difficulty and reward scaling. |
 | `configs/modules/mod_ahbot.conf` | Generated auction-house supply and automated buying; both disabled for earned auctions. |
 | `configs/modules/mod_dungeon_clear.conf` | Optional dungeon navigation and queue filling. |
@@ -185,7 +221,7 @@ After first launch:
 | `mysql/my.cnf` | MySQL/InnoDB tuning generated for the host's RAM. |
 
 Fresh installations use individual progression automatically. To remove an
-older realm's global Vanilla/TBC ceiling, install the complete v1.0.13 server
+older realm's global Vanilla/TBC ceiling, install the complete updated server
 ZIP, stop the launcher and servers, then run:
 
 ```powershell
@@ -209,9 +245,10 @@ For commands and AI behavior, see the [Playerbot wiki](https://github.com/mod-pl
 ## Build and release
 
 The [GitHub Actions workflow](.github/workflows/release.yml) tests the launcher,
-prepares pinned modules, builds Release binaries and verifies both the portable
-server ZIP and separate player addon ZIP before uploading them. A pushed `v*`
-tag publishes both assets. Pull requests and pushes to `main` or `codex/**`
+prepares pinned modules, builds Release binaries and verifies the portable
+server ZIP and separate player addon ZIPs. A Linux job builds and verifies the
+merged historical client package from pinned sources. A pushed `v*` tag publishes
+these assets. Pull requests and pushes to `main` or `codex/**`
 review branches create downloadable build artifacts with read-only repository
 permissions. New pushes cancel an unfinished build on the same branch.
 The workflow checks the portable launcher logic on Linux before starting the
@@ -238,8 +275,11 @@ cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
 ```
 
 This generates `output/mod-playerbots-portable-dev.zip` and the separate
-`output/MultiBot-Chatless-dev.zip`. Subsequent configuration reuses the pinned
-module cache. Changing a revision or patch rebuilds the managed module copy;
+`output/MultiBot-Chatless-dev.zip` and `output/EraTalents-dev.zip` addon archives.
+The required combined `EraTalents-client-dev.zip` is built separately on Linux;
+see [the client build instructions](docs/era-talents.md#building-the-client-package).
+Subsequent configuration reuses the pinned module cache. Changing a revision or
+patch rebuilds the managed module copy;
 unmarked module directories are never overwritten. `cmake -P cmake/PrepareModules.cmake`
 can also prepare the modules independently.
 

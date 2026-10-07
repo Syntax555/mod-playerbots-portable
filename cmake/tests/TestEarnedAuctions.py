@@ -10,12 +10,13 @@ from pathlib import Path
 import argparse
 import subprocess
 import tempfile
+from PreparedSources import prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path,
-                    default=repo / 'azerothcore-wotlk/modules/mod-playerbots/src',
+                    default=prepared_core(repo) / 'modules/mod-playerbots/src',
                     help='prepared Playerbots src directory')
 parser.add_argument('--travel-source', type=Path,
                     help='optional separate src directory for the market-travel policy')

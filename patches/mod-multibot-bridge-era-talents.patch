@@ -1,0 +1,30 @@
+diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
+index 41c43fe..3d8c800 100644
+--- a/src/MultiBotBridge.cpp
++++ b/src/MultiBotBridge.cpp
+@@ -59,6 +59,9 @@
+ #include <utility>
+ #include <vector>
+ 
++// Custom era talent points are stored separately from the native talent map.
++extern bool EraTalentBots_SpecTabs(Player* bot, uint32* tabs3);
++
+ namespace
+ {
+ char const* const kAddonPrefix = "MBOT";
+@@ -903,6 +906,15 @@ std::array<uint32, 3> BuildTalentTabPoints(Player* bot)
+     if (!bot)
+         return tabs;
+ 
++    uint32 eraTabs[3] = {0, 0, 0};
++    if (EraTalentBots_SpecTabs(bot, eraTabs))
++    {
++        tabs[0] = eraTabs[0];
++        tabs[1] = eraTabs[1];
++        tabs[2] = eraTabs[2];
++        return tabs;
++    }
++
+     uint8 const activeSpecMask = bot->GetActiveSpecMask();
+ 
+     for (PlayerTalentMap::const_iterator it = bot->GetTalentMap().begin(); it != bot->GetTalentMap().end(); ++it)

@@ -4,7 +4,17 @@
     "name": "azerothcore-wotlk",
     "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
     "revision": "f19a18799a35f7c24bdcdc9ea399c601f166259b",
-    "source": "azerothcore-wotlk"
+    "source": "azerothcore-wotlk",
+    "patches": [
+      "patches/azerothcore-era-shatter.patch",
+      "patches/azerothcore-era-corruption.patch",
+      "patches/azerothcore-era-heart-of-the-wild.patch",
+      "patches/azerothcore-era-sentry-totem.patch",
+      "patches/azerothcore-era-wand-specialization.patch",
+      "patches/azerothcore-era-molten-fury.patch",
+      "patches/azerothcore-era-respec-accounting.patch",
+      "patches/azerothcore-earned-riding-prices.patch"
+    ]
   },
   "modules": [
     {
@@ -14,7 +24,8 @@
       "source": "mod-playerbots",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
-        "patches/mod-playerbots-earned-auctions.patch"
+        "patches/mod-playerbots-earned-auctions.patch",
+        "patches/mod-playerbots-era-talents.patch"
       ]
     },
     {
@@ -26,7 +37,10 @@
       "name": "mod-individual-progression",
       "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
       "revision": "60336b349cce2bc209d154bb840f2370f1cc16f2",
-      "patches": ["patches/mod-individual-progression-empty-account-filters.patch"]
+      "patches": [
+        "patches/mod-individual-progression-empty-account-filters.patch",
+        "patches/mod-individual-progression-earned-milestones.patch"
+      ]
     },
     {
       "name": "mod-ah-bot-plus",
@@ -37,7 +51,9 @@
       "name": "mod-dungeon-clear",
       "url": "https://github.com/jrad7/mod-dungeon-clear.git",
       "revision": "60f3d98b83143714041df4120abd45f0e3c3ebd7",
-      "patches": ["patches/mod-dungeon-clear-playerbots-compat.patch"]
+      "patches": [
+        "patches/mod-dungeon-clear-playerbots-compat.patch"
+      ]
     },
     {
       "name": "mod-quest-loot-party",
@@ -48,13 +64,26 @@
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
       "revision": "1da05982e478cb00e0b6c87314afe7e0e9653ffb",
-      "patches": ["patches/mod-multibot-bridge-natural-progression.patch"]
+      "patches": [
+        "patches/mod-multibot-bridge-natural-progression.patch",
+        "patches/mod-multibot-bridge-era-talents.patch"
+      ]
     },
     {
       "name": "mod-token-turnin",
       "url": "https://github.com/Zerathane/mod-token-turnin.git",
       "revision": "73e447c499751559549e129a39c58c42fe661e73",
-      "patches": ["patches/mod-token-turnin-natural-progression.patch"]
+      "patches": [
+        "patches/mod-token-turnin-natural-progression.patch"
+      ]
+    },
+    {
+      "name": "mod-era-talents",
+      "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
+      "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8",
+      "patches": [
+        "patches/mod-era-talents-earned-progression.patch"
+      ]
     }
   ],
   "clientAddons": [
@@ -66,6 +95,27 @@
       "interface": 30300,
       "toc": "MultiBot.toc",
       "license": "LICENSE"
+    },
+    {
+      "name": "EraTalents",
+      "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
+      "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8",
+      "archiveName": "EraTalents",
+      "interface": 30300,
+      "toc": "EraTalents.toc",
+      "license": "LICENSE",
+      "sourceModule": "mod-era-talents",
+      "sourcePath": "client-addon/EraTalents"
     }
-  ]
+  ],
+  "clientPatch": {
+    "name": "EraTalents-client",
+    "eraModule": "mod-era-talents",
+    "baseModule": "mod-individual-progression",
+    "baseArchive": "optional/patch-V.7z",
+    "stormLib": {
+      "url": "https://github.com/ladislav-zezula/StormLib.git",
+      "revision": "86f9b99ffe4d3417dad16d00541cf6f2e3d7bf79"
+    }
+  }
 }
