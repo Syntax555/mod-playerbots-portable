@@ -127,6 +127,23 @@
     "stormLib": {
       "url": "https://github.com/ladislav-zezula/StormLib.git",
       "revision": "86f9b99ffe4d3417dad16d00541cf6f2e3d7bf79"
+    },
+    "localizations": {
+      "deDE": {
+        "url": "https://github.com/Haeniken/TrinityCore-3.3.5-data-multilang.git",
+        "revision": "b21c94991a28d3fde14f2e73b993fa74492063b7",
+        "sourcePath": "dbc/deDE",
+        "clientBuild": 12340,
+        "englishSpellSha256": "d5cce1a83550dcfa9eb2f0251dbb11fd24c272534b2b1a9b230924a44d817ab3",
+        "files": {
+          "Achievement.dbc": "ffb1b5ecb51a9e8236be18b50760f0156303494e9f89d9866d7e6d35a1f9ac6c",
+          "SkillLine.dbc": "301f87bb9a215914099ebbd189e0b1005a1915173f2f5aa815ec592c4fb41888",
+          "Spell.dbc": "a17bfd2d4b0ac0dbf8263371c771651e783f123329995d0ae609a08bc05a8bf7",
+          "SpellItemEnchantment.dbc": "bfbc2c54c2f4172f4e017e120008b7d5a3222556b7045f86eaed7bccd2a67236"
+        },
+        "overrides": "cmake/client-locales/deDE-overrides.json",
+        "overridesSha256": "7a0aebfcca683284289e9d121ac40c102da4fb3b97aa215993cd2549761c4454"
+      }
     }
   }
 }

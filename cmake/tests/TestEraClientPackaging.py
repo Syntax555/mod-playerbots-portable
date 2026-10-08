@@ -94,6 +94,27 @@ class ClientZipTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.verify()
 
+    def test_locked_localization_identity_and_source_notice_required(self):
+        source = {"deDE": {"revision": "c" * 40, "files": {"Spell.dbc": "d" * 64},
+                            "overridesSha256": "e" * 64}}
+        self.lock["clientPatch"]["localizations"] = source
+        self.manifest["localizations"] = copy.deepcopy(source)
+        self.files["licenses/client-locales.txt"] = b"Client data source and original terms"
+        self.manifest["files"]["licenses/client-locales.txt"] = PACKAGE.sha(self.files["licenses/client-locales.txt"])
+        self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+        self.verify()
+        for field in ("revision", "files", "overridesSha256"):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(self.manifest)
+                changed["localizations"]["deDE"][field] = "different"
+                self.files["SOURCE_MANIFEST.json"] = json.dumps(changed).encode()
+                with self.assertRaisesRegex(ValueError, "localization source differs"):
+                    self.verify()
+        self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+        del self.files["licenses/client-locales.txt"]
+        with self.assertRaisesRegex(ValueError, "localization source notice"):
+            self.verify()
+
     def test_missing_toc_asset_rejected_even_with_updated_hashes(self):
         del self.files["Interface/AddOns/EraTalents/Main.lua"]
         del self.files["SOURCE_MANIFEST.json"]
