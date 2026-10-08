@@ -1,0 +1,512 @@
+diff --git a/client-addon/EraTalents/Comms.lua b/client-addon/EraTalents/Comms.lua
+index 16c8d87..c4d6ab1 100644
+--- a/client-addon/EraTalents/Comms.lua
++++ b/client-addon/EraTalents/Comms.lua
+@@ -2,6 +2,7 @@
+ -- No WoW API calls at file scope (so this file loads under a headless lua5.1 test).
+ EraTalents = EraTalents or {}
+ local ET = EraTalents
++local L = ET.L
+ 
+ -- Inspect state: `current` = the GUID string the stock Inspect frame is showing (set by Inspect.lua),
+ -- `cache[guid]` = { era, managed, classId, ranks } from ISYNC. Wiped when the Inspect frame closes.
+@@ -77,9 +78,8 @@ function ET.CheckGeneration(serverStamp)
+   ET.state.clientGen = clientStamp
+   if clientStamp ~= serverStamp then
+     local msg = string.format(
+-      "|cffff2020EraTalents: your client patch is generation %s but the server is %s. " ..
+-      "Replace Data/patch-V.mpq with the current one and restart the game.|r",
+-      clientStamp or "MISSING", serverStamp)
++      L["|cffff2020EraTalents: your client patch is generation %s but the server is %s. Replace Data/patch-V.mpq with the current one and restart the game.|r"],
++      clientStamp or L["MISSING"], serverStamp)
+     if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage(msg) end
+   end
+ end
+diff --git a/client-addon/EraTalents/EraTalents.toc b/client-addon/EraTalents/EraTalents.toc
+index 3f7b784..27199d0 100644
+--- a/client-addon/EraTalents/EraTalents.toc
++++ b/client-addon/EraTalents/EraTalents.toc
+@@ -1,6 +1,7 @@
+ ## Interface: 30300
+ ## Title: EraTalents
+ ## Notes: Era-authentic talent panel for era-wow characters
++## Notes-deDE: Epochengetreue Talentbäume für Era-Charaktere
+ ## Author: era-wow
+ ## Version: 0.1
+ data\generated\MageVanilla.lua
+@@ -21,6 +22,7 @@ data\generated\PriestTBC.lua
+ data\generated\HunterTBC.lua
+ data\generated\WarlockTBC.lua
+ data\generated\MageTBC.lua
++Locales.lua
+ EraTalents.lua
+ Comms.lua
+ Tooltip.lua
+diff --git a/client-addon/EraTalents/Hook.lua b/client-addon/EraTalents/Hook.lua
+index ff9afed..4fbc372 100644
+--- a/client-addon/EraTalents/Hook.lua
++++ b/client-addon/EraTalents/Hook.lua
+@@ -4,6 +4,7 @@
+ -- micro-button on 3.3.5a (only the keybind routed through it).
+ EraTalents = EraTalents or {}
+ local ET = EraTalents
++local L = ET.L
+ 
+ local function GuardStockFrame()
+   if not PlayerTalentFrame or PlayerTalentFrame._eraGuarded then return end
+@@ -86,7 +87,7 @@ end
+ -- before we Show; ShowUIPanel fires OnShow synchronously too, so the spec tabs are populated.
+ function ET.OpenStockTalents()
+   if not UnitExists("pet") then
+-    DEFAULT_CHAT_FRAME:AddMessage("|cffffd000EraTalents:|r summon a pet to view its talent tree.")
++    DEFAULT_CHAT_FRAME:AddMessage(L["|cffffd000EraTalents:|r summon a pet to view its talent tree."])
+     return
+   end
+   ET._allowStock = true
+diff --git a/client-addon/EraTalents/Locales.lua b/client-addon/EraTalents/Locales.lua
+new file mode 100644
+index 0000000..b0ad288
+--- /dev/null
++++ b/client-addon/EraTalents/Locales.lua
+@@ -0,0 +1,52 @@
++-- Client language affects presentation only; IDs, ranks and protocol remain unchanged.
++EraTalents = EraTalents or {}
++local ET = EraTalents
++ET.locale = (GetLocale and GetLocale()) or "enUS"
++
++local deDE = {
++  ["Talents"] = "Talente",
++  ["Pet Talents"] = "Begleitertalente",
++  ["Rank %d/%d"] = "Rang %d/%d",
++  ["Next rank:"] = "Nächster Rang:",
++  ["Not enough talent points."] = "Nicht genügend Talentpunkte.",
++  ["%s Talents: %d"] = "%s: %d",
++  ["Unspent Talents: %d"] = "Freie Punkte: %d",
++  ["Instant"] = "Sofort",
++  ["%s sec cast"] = "%s Sek. Zauberzeit",
++  ["MISSING"] = "FEHLT",
++  ["|cffffd000EraTalents:|r summon a pet to view its talent tree."] =
++    "|cffffd000EraTalents:|r Ruft einen Begleiter, um seine Talente anzusehen.",
++  ["|cffff2020EraTalents: your client patch is generation %s but the server is %s. Replace Data/patch-V.mpq with the current one and restart the game.|r"] =
++    "|cffff2020EraTalents: Euer Client-Patch hat die Generation %s, der Server jedoch %s. Ersetzt Data/patch-V.mpq durch die aktuelle Datei und startet das Spiel neu.|r",
++  ["Affliction"] = "Gebrechen", ["Arcane"] = "Arkan", ["Arms"] = "Waffen",
++  ["Assassination"] = "Meucheln", ["Balance"] = "Gleichgewicht",
++  ["Beast Mastery"] = "Tierherrschaft", ["Combat"] = "Kampf",
++  ["Demonology"] = "Dämonologie", ["Destruction"] = "Zerstörung",
++  ["Discipline"] = "Disziplin", ["Elemental"] = "Elementar",
++  ["Enhancement"] = "Verstärkung", ["Feral Combat"] = "Wilder Kampf",
++  ["Fire"] = "Feuer", ["Frost"] = "Frost", ["Fury"] = "Furor",
++  ["Holy"] = "Heilig", ["Marksmanship"] = "Treffsicherheit",
++  ["Protection"] = "Schutz", ["Restoration"] = "Wiederherstellung",
++  ["Retribution"] = "Vergeltung", ["Shadow"] = "Schatten",
++  ["Subtlety"] = "Täuschung", ["Survival"] = "Überleben",
++}
++ET.L = setmetatable(ET.locale == "deDE" and deDE or {}, {
++  __index = function(_, key) return key end,
++})
++
++-- Generated talent translations are keyed by locale. A missing field/rank keeps the
++-- authored English text, without substituting a different expansion's spell tooltip.
++function ET.LocalizedField(data, field, rank)
++  if not data then return nil end
++  local localized = data.localized and data.localized[ET.locale]
++  local value = localized and localized[field]
++  if rank then value = type(value) == "table" and value[rank] or nil end
++  if type(value) == "string" and value ~= "" then return value end
++  local fallback = data[field]
++  if rank then fallback = type(fallback) == "table" and fallback[rank] or nil end
++  return fallback
++end
++
++function ET.TabName(tab)
++  return ET.L[ET.LocalizedField(tab, "name") or "Talents"]
++end
+diff --git a/client-addon/EraTalents/TalentUI.lua b/client-addon/EraTalents/TalentUI.lua
+index f818285..782703c 100644
+--- a/client-addon/EraTalents/TalentUI.lua
++++ b/client-addon/EraTalents/TalentUI.lua
+@@ -10,6 +10,7 @@
+ -- tooltips, no local rank mutation, frame global "EraTalentFrame", _classId=8) is preserved.
+ EraTalents = EraTalents or {}
+ local ET = EraTalents
++local L = ET.L
+ 
+ -- ---------------------------------------------------------------------------
+ -- Layout constants (from the real FrameXML).
+@@ -176,7 +177,7 @@ local function BuildChrome(v)
+ 
+   f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+   f.title:SetPoint("TOP", 0, -18)
+-  f.title:SetText("Talents")
++  f.title:SetText(L["Talents"])
+ 
+   -- Close button: real anchor (CENTER relative to TOPRIGHT, offset -44,-25).
+   local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+@@ -187,9 +188,9 @@ local function BuildChrome(v)
+   -- no route to it. This reopens the stock frame on demand (ET.OpenStockTalents bypasses the era
+   -- guard once); click the Pet side-tab there. Visibility is re-asserted in ET.Refresh.
+   f.petTalents = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+-  f.petTalents:SetWidth(82); f.petTalents:SetHeight(20)
++  f.petTalents:SetWidth(ET.locale == "deDE" and 125 or 82); f.petTalents:SetHeight(20)
+   f.petTalents:SetPoint("TOPRIGHT", f, "TOPRIGHT", -34, -44)   -- top-right slot (was the dev Reset button's)
+-  f.petTalents:SetText("Pet Talents")
++  f.petTalents:SetText(L["Pet Talents"])
+   f.petTalents:SetScript("OnClick", function() if ET.OpenStockTalents then ET.OpenStockTalents() end end)
+   if ET._classId ~= 3 then f.petTalents:Hide() end
+ end
+@@ -348,21 +349,21 @@ local function NodeTooltip(btn)
+   local gid = node.grant and (node.grant[(rank > 0) and rank or 1] or node.grant[1])
+   if gid and tonumber(gid) and tonumber(gid) >= 920000 then
+     GameTooltip:SetHyperlink("spell:" .. gid)
+-    GameTooltip:AddLine("Rank " .. rank .. "/" .. node.maxRank, 0.8, 0.8, 0.8)
++    GameTooltip:AddLine(string.format(L["Rank %d/%d"], rank, node.maxRank), 0.8, 0.8, 0.8)
+     GameTooltip:Show()
+     return
+   end
+ 
+   -- Passive/modifier talents (spellmods, stats, procs) keep the authored per-rank effect prose.
+-  GameTooltip:SetText(node.name, 1, 1, 1)
+-  GameTooltip:AddLine("Rank " .. rank .. "/" .. node.maxRank, 0.8, 0.8, 0.8)
++  GameTooltip:SetText(ET.LocalizedField(node, "name"), 1, 1, 1)
++  GameTooltip:AddLine(string.format(L["Rank %d/%d"], rank, node.maxRank), 0.8, 0.8, 0.8)
+   local shown = (rank > 0) and rank or 1
+-  GameTooltip:AddLine(node.tooltip[shown] or "", 1, 0.82, 0, true)
++  GameTooltip:AddLine(ET.LocalizedField(node, "tooltip", shown) or "", 1, 0.82, 0, true)
+   -- Read-only (inspect) views show the current rank only: no "Next rank", nothing to learn.
+   if not v.readOnly and rank < node.maxRank then
+     GameTooltip:AddLine(" ")
+-    GameTooltip:AddLine("Next rank:", 0.6, 0.6, 0.6)
+-    GameTooltip:AddLine(node.tooltip[rank + 1] or "", 0.3, 1, 0.3, true)
++    GameTooltip:AddLine(L["Next rank:"], 0.6, 0.6, 0.6)
++    GameTooltip:AddLine(ET.LocalizedField(node, "tooltip", rank + 1) or "", 0.3, 1, 0.3, true)
+   end
+   GameTooltip:Show()
+ end
+@@ -377,7 +378,7 @@ local function OnNodeClick(btn)
+   local rank = v.state.ranks[node.id] or 0
+   if rank >= node.maxRank then return end
+   if (v.state.availPts or 0) < 1 then
+-    UIErrorsFrame:AddMessage("Not enough talent points.", 1, 0.2, 0.2, 1, 3)
++    UIErrorsFrame:AddMessage(L["Not enough talent points."], 1, 0.2, 0.2, 1, 3)
+     return
+   end
+   ET.Learn(node.id)     -- server validates; UI updates when the SYNC arrives
+@@ -558,12 +559,12 @@ end
+ local function UpdateFooter(v, tree)
+   local f = v.frame
+   local pts = ET.SpecPoints(tree, v.state.ranks)
+-  local tabName = (tree.tabs[v.activeTab] and tree.tabs[v.activeTab].name) or "Talents"
+-  f.footerSpent:SetText(tabName .. " Talents: " .. (pts[v.activeTab] or 0))
++  local tabName = ET.TabName(tree.tabs[v.activeTab])
++  f.footerSpent:SetText(string.format(L["%s Talents: %d"], tabName, pts[v.activeTab] or 0))
+   if v.readOnly then
+     f.footerUnspent:SetText(pts[1] .. "/" .. pts[2] .. "/" .. pts[3])
+   else
+-    f.footerUnspent:SetText("Unspent Talents: " .. (v.state.availPts or 0))
++    f.footerUnspent:SetText(string.format(L["Unspent Talents: %d"], v.state.availPts or 0))
+   end
+ end
+ 
+@@ -578,7 +579,7 @@ function ET.ShowViewTab(v, i)
+   for t = 1, 3 do
+     local tab = f.tabs[t]
+     if tab and tree.tabs[t] then
+-      tab:SetText(tree.tabs[t].name)
++      tab:SetText(ET.TabName(tree.tabs[t]))
+       PanelTemplates_TabResize(tab, v.tabPad)
+     end
+   end
+diff --git a/client-addon/EraTalents/Tooltip.lua b/client-addon/EraTalents/Tooltip.lua
+index 3c126d8..b96552b 100644
+--- a/client-addon/EraTalents/Tooltip.lua
++++ b/client-addon/EraTalents/Tooltip.lua
+@@ -23,6 +23,7 @@
+ -- (ET.InitTooltips) and ApplyToTooltip touch WoW only inside functions.
+ EraTalents = EraTalents or {}
+ local ET = EraTalents
++local L = ET.L
+ 
+ -- ---------------------------------------------------------------------------
+ -- Pure helpers (headless-testable: client-addon/tests/test_tooltip.lua).
+@@ -57,7 +58,7 @@ function ET.FormatSecs(secs)
+   local whole = math.floor(tenths / 10)
+   local frac = tenths - whole * 10
+   if frac == 0 then return tostring(whole) end
+-  return whole .. "." .. frac
++  return whole .. (ET.locale == "deDE" and "," or ".") .. frac
+ end
+ 
+ -- Era base-cast override (generated castTimeBase). It does NOT read the base out of the line — the
+@@ -65,10 +66,34 @@ end
+ -- both an "Instant..." line and a "X sec cast" line (idempotent re-fires).
+ function ET.RewriteCastBase(text, baseMs, flat, pct)
+   if not text then return nil end
+-  if not (string.match(text, "^([%d%.]+)%s+sec cast$") or string.match(text, "^Instant")) then return nil end
++  -- Use the client's own localized cast-time templates where available. English
++  -- lines remain recognized because an untranslated custom row can fall back to them.
++  local instant = SPELL_CAST_TIME_INSTANT or L["Instant"]
++  local isCast = string.match(text, "^([%d%.]+)%s+sec cast$") or
++                 string.match(text, "^Instant") or text == instant
++  if SPELL_CAST_TIME_SEC then
++    local first, last = string.find(SPELL_CAST_TIME_SEC, "%%[%d%.]*[fgds]")
++    if first then
++      local function EscapePattern(value)
++        return (value:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"))
++      end
++      local pattern = "^" .. EscapePattern(string.sub(SPELL_CAST_TIME_SEC, 1, first - 1)) ..
++                      "[%d%.,]+" .. EscapePattern(string.sub(SPELL_CAST_TIME_SEC, last + 1)) .. "$"
++      isCast = isCast or string.match(text, pattern)
++    end
++  elseif ET.locale == "deDE" then
++    isCast = isCast or string.match(text, "^[%d%.,]+ Sek%. Zauberzeit$")
++  end
++  if not isCast then return nil end
+   local newSecs = (baseMs / 1000) * (pct or 1) + (flat or 0) / 1000
+-  if newSecs <= 0 then return "Instant" end
+-  return ET.FormatSecs(newSecs) .. " sec cast"
++  if newSecs <= 0 then return instant end
++  if SPELL_CAST_TIME_SEC then
++    local rounded = math.floor(newSecs * 10 + 0.5) / 10
++    local formatted = string.format(SPELL_CAST_TIME_SEC, rounded)
++    if ET.locale == "deDE" then formatted = formatted:gsub("(%d)%.(%d)", "%1,%2") end
++    return formatted
++  end
++  return string.format(L["%s sec cast"], ET.FormatSecs(newSecs))
+ end
+ 
+ -- ---------------------------------------------------------------------------
+@@ -92,6 +117,8 @@ function ET.ApplyToTooltip(tooltip)
+   if not name then return end
+   local titleFS = _G[name .. "TextLeft1"]
+   local spellName = titleFS and titleFS:GetText()
++  local localizedNames = tree.localizedSpellNames and tree.localizedSpellNames[ET.locale]
++  spellName = localizedNames and localizedNames[spellName] or spellName
+   local baseMs = spellName and tree.castTimeBase and tree.castTimeBase[spellName]
+   if not baseMs then return end
+ 
+diff --git a/client-addon/EraTalents/test_comms.lua b/client-addon/EraTalents/test_comms.lua
+index 8ad5c7e..5e4a04f 100644
+--- a/client-addon/EraTalents/test_comms.lua
++++ b/client-addon/EraTalents/test_comms.lua
+@@ -1,4 +1,5 @@
+ -- test_comms.lua — headless: Comms.lua must load with no file-scope WoW API calls.
++dofile("client-addon/EraTalents/Locales.lua")
+ dofile("client-addon/EraTalents/Comms.lua")
+ local ET = EraTalents
+ ET.state = { ranks = {} }
+diff --git a/client-addon/EraTalents/test_inspect.lua b/client-addon/EraTalents/test_inspect.lua
+index 45adae8..1a0724b 100644
+--- a/client-addon/EraTalents/test_inspect.lua
++++ b/client-addon/EraTalents/test_inspect.lua
+@@ -1,5 +1,6 @@
+ -- test_inspect.lua — headless: the ISYNC protocol (Comms.lua) and the pure view helpers (TalentUI.lua).
+ -- Run: lua5.1 client-addon/EraTalents/test_inspect.lua   (cwd = repo root)
++dofile("client-addon/EraTalents/Locales.lua")
+ dofile("client-addon/EraTalents/Comms.lua")
+ local ET = EraTalents
+ 
+diff --git a/client-addon/EraTalents/test_locales.lua b/client-addon/EraTalents/test_locales.lua
+new file mode 100644
+index 0000000..3bac399
+--- /dev/null
++++ b/client-addon/EraTalents/test_locales.lua
+@@ -0,0 +1,187 @@
++-- Run with Lua 5.1 from the module root. Locale changes affect text only.
++local addon = "client-addon/EraTalents/"
++GetLocale = function() return "deDE" end
++dofile(addon .. "Locales.lua")
++local ET = EraTalents
++assert(ET.locale == "deDE")
++assert(ET.L["Pet Talents"] == "Begleitertalente")
++assert(ET.L["Rank %d/%d"] == "Rang %d/%d")
++assert(string.format(ET.L["Rank %d/%d"], 2, 5) == "Rang 2/5")
++assert(ET.TabName({ name = "Beast Mastery" }) == "Tierherrschaft")
++assert(ET.TabName({ name = "Affliction" }) == "Gebrechen")
++assert(ET.TabName({ name = "Arms" }) == "Waffen")
++assert(ET.L["A future untranslated message"] == "A future untranslated message")
++
++local node = { id = 18250, name = "Improved Corruption", tooltip = { "English one", "English two" },
++               localized = { deDE = { name = "Verbesserte Verderbnis", tooltip = { "Deutsch eins" } } } }
++assert(ET.LocalizedField(node, "name") == "Verbesserte Verderbnis")
++assert(ET.LocalizedField(node, "tooltip", 1) == "Deutsch eins")
++assert(ET.LocalizedField(node, "tooltip", 2) == "English two", "missing rank retains era text")
++assert(ET.LocalizedField(node, "tooltip", 3) == nil)
++assert(ET.TabName({ name = "Arcane", localized = { deDE = { name = "Arkan" } } }) == "Arkan")
++node.localized.deDE.name = ""
++assert(ET.LocalizedField(node, "name") == "Improved Corruption", "empty translation falls back")
++node.localized.deDE.tooltip = "malformed"
++assert(ET.LocalizedField(node, "tooltip", 1) == "English one", "invalid rank table falls back")
++assert(node.id == 18250 and node.name == "Improved Corruption", "localization never mutates IDs or authored data")
++
++dofile(addon .. "Comms.lua")
++ET.state = { ranks = {} }
++local warnings = {}
++DEFAULT_CHAT_FRAME = { AddMessage = function(_, message) table.insert(warnings, message) end }
++GetSpellInfo = function(id) assert(id == 932999); return "EraTalents Gen a1b2c3d4" end
++ET.CheckGeneration("a1b2c3d4")
++assert(#warnings == 0, "German matching marker remains accepted")
++ET.CheckGeneration("ffffffff")
++assert(warnings[1]:find("Generation a1b2c3d4", 1, true))
++assert(warnings[1]:find("Server jedoch ffffffff", 1, true))
++assert(warnings[1]:find("Data/patch-V.mpq", 1, true), "filename remains exact")
++GetSpellInfo = function() return nil end
++ET.CheckGeneration("a1b2c3d4")
++assert(warnings[2]:find("FEHLT", 1, true), "missing MPQ still warns in German")
++local sent
++SendAddonMessage = function(prefix, payload) sent = payload end
++UnitName = function() return "Spieler" end
++ET.Learn(18250)
++assert(sent == "LEARN 18250", "wire protocol remains English and numeric")
++
++UnitExists = function() return false end
++dofile(addon .. "Hook.lua")
++ET.OpenStockTalents()
++assert(warnings[3]:find("Ruft einen Begleiter", 1, true))
++
++dofile(addon .. "Tooltip.lua")
++assert(ET.RewriteCastBase("Sofort", 2000, -1600, 1) == "0,4 Sek. Zauberzeit")
++assert(ET.RewriteCastBase("0,4 Sek. Zauberzeit", 2000, -1600, 1) == "0,4 Sek. Zauberzeit")
++assert(ET.RewriteCastBase("2 Sek. Zauberzeit", 2000, -2000, 1) == "Sofort")
++assert(ET.RewriteCastBase("100 Mana", 2000, 0, 1) == nil)
++-- Prefer localized templates exposed by WoW rather than assuming a German client phrasing.
++SPELL_CAST_TIME_SEC = "Wirken in %.3g Sek."
++SPELL_CAST_TIME_INSTANT = "Sofort"
++assert(ET.RewriteCastBase("Wirken in 2 Sek.", 2000, -1600, 1) == "Wirken in 0,4 Sek.")
++assert(ET.RewriteCastBase("Wirken in 0,4 Sek.", 2000, -1600, 1) == "Wirken in 0,4 Sek.")
++assert(ET.RewriteCastBase("Wirken in 2 Sek.", 2000, -2000, 1) == "Sofort")
++assert(ET.RewriteCastBase("6 Sek. Abklingzeit", 2000, 0, 1) == nil, "native cooldown stays untouched")
++
++ET._classId = 9
++ET.state = { isEraChar = true, era = 0, ranks = { [18250] = 4 } }
++EraTalentsData = { [0] = { [9] = {
++  castTimeBase = { Corruption = 2000 },
++  localizedSpellNames = { deDE = { ["Verderbnis"] = "Corruption" } },
++  spellMods = { Corruption = { { talent = 18250, attr = "castTime", kind = "flat",
++                                vals = { -400, -800, -1200, -1600, -2000 } } } },
++} } }
++local function Text(value)
++  return { value = value, GetText = function(self) return self.value end,
++           SetText = function(self, text) self.value = text end }
++end
++GermanTooltipTextLeft1 = Text("Verderbnis")
++GermanTooltipTextLeft2 = Text("Sofort")
++local tooltip = { GetName = function() return "GermanTooltip" end,
++                  NumLines = function() return 2 end, Show = function() end }
++ET.ApplyToTooltip(tooltip)
++assert(GermanTooltipTextLeft2:GetText() == "Wirken in 0,4 Sek.", "localized spell title resolves English mechanical key")
++ET.ApplyToTooltip(tooltip)
++assert(GermanTooltipTextLeft2:GetText() == "Wirken in 0,4 Sek.", "German rewrite remains idempotent")
++ET.state.isEraChar = false
++GermanTooltipTextLeft2:SetText("Sofort")
++ET.ApplyToTooltip(tooltip)
++assert(GermanTooltipTextLeft2:GetText() == "Sofort", "Wrath keeps native spell tooltip")
++
++-- Render the actual player/inspect UI and drive the registered tooltip and click handlers.
++local methods = {}
++local function Object(name)
++  return setmetatable({ name = name, scripts = {} }, { __index = methods })
++end
++for _, name in ipairs({ "SetFrameStrata", "SetPoint", "EnableMouse", "SetMovable", "RegisterForDrag",
++                        "RegisterEvent", "SetAllPoints", "SetFrameLevel", "SetTexture", "SetTexCoord",
++                        "SetTextColor", "SetAlpha", "EnableMouseWheel", "SetScrollChild", "SetDesaturated" }) do
++  methods[name] = function() end
++end
++function methods:GetName() return self.name end
++function methods:GetFrameLevel() return 0 end
++function methods:SetWidth(value) self.width = value end
++function methods:SetHeight(value) self.height = value end
++function methods:SetText(value) self.text = value end
++function methods:SetScript(name, fn) self.scripts[name] = fn end
++function methods:Hide() self.shown = false end
++function methods:Show() self.shown = true end
++function methods:CreateTexture() return Object() end
++function methods:CreateFontString() return Object() end
++function methods:SetNormalTexture() self.normal = Object() end
++function methods:GetNormalTexture() return self.normal end
++CreateFrame = function(_, name) return Object(name) end
++UIParent = Object("UIParent")
++SetPortraitTexture = function() end
++PanelTemplates_TabResize = function() end
++PanelTemplates_SetNumTabs = function() end
++PanelTemplates_SetTab = function() end
++PanelTemplates_UpdateTabs = function() end
++GameTooltip = { lines = {}, SetOwner = function() end,
++                SetText = function(self, value) self.title = value; self.lines = {} end,
++                AddLine = function(self, value) table.insert(self.lines, value) end,
++                Show = function() end, Hide = function() end }
++local errors = {}
++UIErrorsFrame = { AddMessage = function(_, message) table.insert(errors, message) end }
++local uiNode = { id = 18250, tab = 1, tier = 0, col = 0, name = "Improved Corruption", maxRank = 2,
++                 prereqTalent = 0, prereqPoints = 0, tooltip = { "English one", "English two" },
++                 localized = { deDE = { name = "Verbesserte Verderbnis", tooltip = { "Deutsch eins", "Deutsch zwei" } } } }
++local tree = { tabs = { { name = "Affliction" }, { name = "Demonology" }, { name = "Destruction" } },
++               talents = { uiNode } }
++EraTalentsData = { [0] = { [9] = tree } }
++dofile(addon .. "TalentUI.lua")
++local view = ET.NewTreeView({ name = "GermanTalentFrame", chrome = true, defaultTab = 1 })
++ET.RenderView(view, { era = 0, ranks = { [18250] = 1 }, availPts = 0 }, 9)
++assert(view.frame.title.text == "Talente")
++assert(view.frame.petTalents.text == "Begleitertalente" and view.frame.petTalents.width >= 120)
++assert(view.frame.tabs[1].text == "Gebrechen")
++assert(view.frame.footerSpent.text == "Gebrechen: 1")
++assert(view.frame.footerUnspent.text == "Freie Punkte: 0")
++local button = view.frame.pools[tree][18250]
++button.scripts.OnEnter(button)
++assert(GameTooltip.title == "Verbesserte Verderbnis")
++assert(GameTooltip.lines[1] == "Rang 1/2")
++assert(GameTooltip.lines[2] == "Deutsch eins")
++assert(GameTooltip.lines[4] == "Nächster Rang:")
++assert(GameTooltip.lines[5] == "Deutsch zwei")
++button.scripts.OnClick(button)
++assert(errors[1] == "Nicht genügend Talentpunkte.")
++view.readOnly = true
++button.scripts.OnEnter(button)
++assert(#GameTooltip.lines == 2, "inspect has no next rank or learn action")
++button.scripts.OnClick(button)
++assert(#errors == 1, "inspect remains read-only")
++
++-- Stock-granted talents retain authored historical prose: their base DBC can carry
++-- English/Wrath text. Custom helpers keep the native localized DBC cost/cast headers.
++local nativeLinks = {}
++function GameTooltip:SetHyperlink(link)
++  table.insert(nativeLinks, link)
++  self.title = "Deutscher Hilfszauber"
++  self.lines = { "Nativer deutscher Zauberheader" }
++end
++uiNode.grant = { [1] = 11069, [2] = 12338 }
++button.scripts.OnEnter(button)
++assert(#nativeLinks == 0, "stock-granted talent must not use untranslated/Wrath base DBC prose")
++assert(GameTooltip.title == "Verbesserte Verderbnis")
++assert(GameTooltip.lines[2] == "Deutsch eins", "stock grant keeps German era-authored rank text")
++local localized = uiNode.localized
++uiNode.localized = nil
++button.scripts.OnEnter(button)
++assert(#nativeLinks == 0)
++assert(GameTooltip.title == "Improved Corruption" and GameTooltip.lines[2] == "English one",
++       "missing stock-grant translation keeps the English historical text")
++uiNode.localized = localized
++uiNode.grant = { [1] = 932760, [2] = 932761 }
++button.scripts.OnEnter(button)
++assert(nativeLinks[1] == "spell:932760", "custom helper uses native localized DBC header")
++assert(GameTooltip.title == "Deutscher Hilfszauber")
++assert(GameTooltip.lines[1] == "Nativer deutscher Zauberheader" and GameTooltip.lines[2] == "Rang 1/2")
++
++-- Other locales retain English UI and era-authored fallback; no silent switch to German.
++GetLocale = function() return "frFR" end
++dofile(addon .. "Locales.lua")
++assert(ET.L["Pet Talents"] == "Pet Talents")
++assert(ET.TabName({ name = "Beast Mastery" }) == "Beast Mastery")
++assert(ET.LocalizedField(node, "name") == "Improved Corruption")
++print("German locale and English fallback OK")
+diff --git a/client-addon/EraTalents/test_tooltip.lua b/client-addon/EraTalents/test_tooltip.lua
+index fd8b1e7..fd5218a 100644
+--- a/client-addon/EraTalents/test_tooltip.lua
++++ b/client-addon/EraTalents/test_tooltip.lua
+@@ -24,6 +24,7 @@ end
+ 
+ hooksecurefunc = function() end   -- InitTooltips must be a no-op at load
+ 
++dofile("client-addon/EraTalents/Locales.lua")
+ dofile("client-addon/EraTalents/Tooltip.lua")
+ local ET = EraTalents
+ 

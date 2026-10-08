@@ -112,7 +112,7 @@ def dbc_records(raw: bytes, field_count: int):
     return records, raw[20 + count * size:]
 
 
-def verify_merged_spell(base: bytes, merged: bytes, stamp: str, custom_ids):
+def verify_merged_spell(base: bytes, merged: bytes, stamp: str, custom_ids, expected_rows=None):
     base_records, base_strings = dbc_records(base, 234)
     records, strings = dbc_records(merged, 234)
     if not strings.startswith(base_strings):
@@ -140,18 +140,23 @@ def verify_merged_spell(base: bytes, merged: bytes, stamp: str, custom_ids):
     for locale in range(SPELL_LOCALE_COUNT):
         if text(record, SPELL_LOCALIZED_FIELDS["name"] + locale) != f"EraTalents Gen {stamp}":
             raise ValueError(f"Merged client generation sentinel differs from server SQL for locale slot {locale}")
-    # Authored helper text is the fallback for each locale. Check custom rows
-    # only: the original IP records and their translations remain untouched.
+    # German helpers use authored translations; other locale slots fall back to
+    # English. Check custom rows only; preserve every original IP record.
     for key in custom_ids:
         record = records[key]
         for label, field in SPELL_LOCALIZED_FIELDS.items():
             english = text(record, field)
             if label == "name" and not english:
                 raise ValueError(f"Merged client visible era spell has an empty name: {key}")
+            if expected_rows is not None and key in expected_rows and english != (expected_rows[key][field] or ""):
+                raise ValueError(f"Merged client authored spell {label} differs from dataset: spell {key}")
             for locale in range(1, SPELL_LOCALE_COUNT):
-                if text(record, field + locale) != english:
+                expected = english
+                if locale == 3 and expected_rows is not None and key in expected_rows:
+                    expected = expected_rows[key][field + locale] or ""
+                if text(record, field + locale) != expected:
                     raise ValueError(
-                        f"Merged client localized spell {label} differs from enUS: spell {key}, locale slot {locale}")
+                        f"Merged client localized spell {label} differs from authored text: spell {key}, locale slot {locale}")
 
 
 def verify_merged_skill(base: bytes, merged: bytes, custom_spells):
@@ -317,7 +322,7 @@ def build(args):
         merged_spell = (stage / "Spell.dbc").read_bytes()
         merged_skill = (stage / "SkillLineAbility.dbc").read_bytes()
         custom = spell_builder._client_rows(datasets, generator.read_dbc_templates(stage / "base-spell.dbc"))
-        verify_merged_spell(spell_raw, merged_spell, generation, set(custom) | {generator.SENTINEL_SPELL_ID})
+        verify_merged_spell(spell_raw, merged_spell, generation, set(custom) | {generator.SENTINEL_SPELL_ID}, custom)
         custom_skills = {row[2] for row in skill_builder._rows(datasets)}
         verify_merged_skill(skill_raw, merged_skill, custom_skills)
         output_mpq = stage / "patch-V.mpq"
