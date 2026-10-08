@@ -5,7 +5,19 @@ on:
     branches:
       - main
       - 'codex/**'
+    paths-ignore:
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+      - '.github/RELEASE_TEMPLATE.md'
   pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+      - '.github/RELEASE_TEMPLATE.md'
   workflow_dispatch:
 
 permissions:
@@ -51,6 +63,9 @@ jobs:
       - name: Test historical client packaging
         if: hashFiles('cmake/tests/TestEraClientPackaging.py') != ''
         run: python3 cmake/tests/TestEraClientPackaging.py
+
+      - name: Test patched client addon packaging
+        run: python3 cmake/tests/TestClientAddonPatches.py
 
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
@@ -120,6 +135,10 @@ jobs:
           for fixture in sorted((module / 'client-addon/EraTalents').glob('test_*.lua')):
               subprocess.run(['lua5.1', str(fixture)], cwd=module, check=True)
           PYTHON
+
+      - name: Test MultiBot inventory money display
+        if: steps.features.outputs.enabled == 'true'
+        run: python3 cmake/tests/TestMultiBotInventoryMoney.py
 
       - name: Build merged IP and historical talent client ZIP
         if: steps.features.outputs.enabled == 'true'

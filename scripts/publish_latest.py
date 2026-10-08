@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Publish verified build artifacts as the repository's rolling Latest release.
 
-The build must still be the current main commit. Uploads are staged in a draft
-before the existing release or version tags are changed. This script uses only
-the Python standard library and the Actions job's GH_TOKEN.
+The build must still match main's runtime sources. Documentation-only commits
+may follow the built commit. Uploads are staged in a draft before the existing
+release or version tags are changed. This script uses only the Python standard
+library and the Actions job's GH_TOKEN.
 """
 
 from __future__ import annotations
@@ -37,6 +38,9 @@ ZIP_CONTENTS = {
 CHECKSUM_NAME = "SHA256SUMS.txt"
 UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
 SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
+# Keep these paths aligned with release.yml's documentation-only exclusions.
+DOCUMENTATION_FILES = {"README.md", "AGENTS.md", "CONTRIBUTING.md", ".github/RELEASE_TEMPLATE.md"}
+COMPARE_FILE_LIMIT = 300
 # Limit cleanup to numbered version tags. Branches and other tag names are kept.
 VERSION_TAG = re.compile(
     r"^v\d+\.\d+(?:\.\d+"
@@ -133,6 +137,10 @@ class GitHubClient:
 
     def main_sha(self) -> str:
         return self._request("GET", "/git/ref/heads/main")["object"]["sha"]
+
+    def compare_commits(self, base: str, head: str) -> dict[str, Any]:
+        # Files are returned only on the first page, capped at 300 entries.
+        return self._request("GET", f"/compare/{base}...{head}")
 
     def release_by_tag(self, tag: str) -> dict[str, Any] | None:
         try:
@@ -359,6 +367,50 @@ def verify_assets(release: dict[str, Any], assets: list[Asset]) -> None:
             raise PublishError(f"Uploaded asset checksum does not match: {asset.name}")
 
 
+def documentation_path(name: Any) -> bool:
+    if (not isinstance(name, str) or "\\" in name or "\x00" in name
+            or any(part in {"", ".", ".."} for part in name.split("/"))):
+        return False
+    return name in DOCUMENTATION_FILES or name.startswith("docs/")
+
+
+def build_is_current(client: GitHubClient, sha: str) -> bool:
+    current = client.main_sha()
+    if not isinstance(current, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", current):
+        return False
+    current = current.lower()
+    if current == sha:
+        return True
+    comparison = client.compare_commits(sha, current)
+    if not isinstance(comparison, dict) or comparison.get("status") != "ahead":
+        return False
+    for field in ("base_commit", "merge_base_commit"):
+        commit = comparison.get(field)
+        if not isinstance(commit, dict) or commit.get("sha") != sha:
+            return False
+    ahead, behind, total = (comparison.get(field) for field in ("ahead_by", "behind_by", "total_commits"))
+    if (any(type(count) is not int for count in (ahead, behind, total))
+            or ahead <= 0 or behind != 0 or total != ahead):
+        return False
+    files = comparison.get("files")
+    # At the API cap, a documentation-only prefix could hide runtime changes.
+    if not isinstance(files, list) or len(files) >= COMPARE_FILE_LIMIT:
+        return False
+    for entry in files:
+        if not isinstance(entry, dict):
+            return False
+        status = entry.get("status")
+        if (not isinstance(status, str) or status not in {
+                "added", "removed", "modified", "renamed", "copied", "changed", "unchanged",
+        } or not documentation_path(entry.get("filename"))):
+            return False
+        if status in {"renamed", "copied"} and "previous_filename" not in entry:
+            return False
+        if "previous_filename" in entry and not documentation_path(entry["previous_filename"]):
+            return False
+    return True
+
+
 def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, run_id: str) -> PublishResult:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
         raise PublishError("--sha must be a full 40-character commit SHA")
@@ -367,7 +419,7 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
     sha = sha.lower()
     assets = prepare_assets(directory, sha)
     notes = render_notes(notes_path, client.repository, sha)
-    if client.main_sha().lower() != sha:
+    if not build_is_current(client, sha):
         return PublishResult(skipped=True)
 
     stage_tag = f"build-{run_id}-{uuid.uuid4().hex[:12]}"
@@ -380,7 +432,7 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
         if not verified_draft.get("draft") or verified_draft.get("tag_name") != stage_tag:
             raise PublishError("GitHub did not preserve the staged draft release")
         verify_assets(verified_draft, assets)
-        if client.main_sha().lower() != sha:
+        if not build_is_current(client, sha):
             client.delete_release(draft_id)
             client.delete_tag(stage_tag)
             return PublishResult(skipped=True)
@@ -395,7 +447,7 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
 
     previous = client.release_by_tag("latest")
     # Final freshness check immediately before the release replacement.
-    if client.main_sha().lower() != sha:
+    if not build_is_current(client, sha):
         client.delete_release(draft_id)
         client.delete_tag(stage_tag)
         return PublishResult(skipped=True)

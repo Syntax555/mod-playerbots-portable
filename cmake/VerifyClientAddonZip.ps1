@@ -18,21 +18,23 @@ if ($AddonName -cnotmatch '^[A-Za-z0-9_-]+$' -or $addon.toc -cne "$AddonName.toc
     $addon.revision -cnotmatch '^[a-f0-9]{40}$' -or $addon.interface -ne 30300) {
     throw "Invalid pinned WotLK client addon: $AddonName"
 }
-$source = Join-Path $RepositoryRoot ".module-cache/prepared-addons/$AddonName"
-if (-not (Test-Path (Join-Path $source '.portable-source') -PathType Leaf)) {
-    throw "Prepared client addon source is missing: $AddonName"
-}
-$runtimeJson = & $Python (Join-Path $PSScriptRoot 'AddonRuntime.py') --source $source --toc $addon.toc --list
-if ($LASTEXITCODE -ne 0) { throw "Cannot determine runtime assets for client addon $AddonName." }
-$runtimeFiles = @($runtimeJson | ConvertFrom-Json)
-
 function Read-ZipText([System.IO.Compression.ZipArchiveEntry]$Entry) {
     $reader = [System.IO.StreamReader]::new($Entry.Open())
     try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
 }
 
-$archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ZipPath).Path)
+$verificationRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('client-addon-verification-' + [guid]::NewGuid().ToString('N'))
+$source = Join-Path $verificationRoot 'source'
+$archive = $null
 try {
+    # A ZIP and mutable prepared cache could share the same corruption. Rebuild
+    # expected bytes independently from the immutable locked Git object + patches.
+    & $Python (Join-Path $PSScriptRoot 'ExportClientAddon.py') --repository $RepositoryRoot --addon $AddonName --destination $source
+    if ($LASTEXITCODE -ne 0) { throw "Cannot reconstruct locked client addon $AddonName." }
+    $runtimeJson = & $Python (Join-Path $PSScriptRoot 'AddonRuntime.py') --source $source --toc $addon.toc --list
+    if ($LASTEXITCODE -ne 0) { throw "Cannot determine runtime assets for client addon $AddonName." }
+    $runtimeFiles = @($runtimeJson | ConvertFrom-Json)
+    $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ZipPath).Path)
     $entries = [System.Collections.Generic.Dictionary[string, System.IO.Compression.ZipArchiveEntry]]::new([System.StringComparer]::Ordinal)
     $paths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $archive.Entries) {
@@ -60,7 +62,9 @@ try {
         $entries.Add($path, $entry)
     }
 
-    foreach ($relative in @($addon.toc, $addon.license, 'README.md', 'SOURCE_REVISION.txt')) {
+    $requiredFiles = @($addon.toc, $addon.license, 'README.md', 'SOURCE_REVISION.txt')
+    if (@($addon.patches).Count -gt 0 -and $addon.patches) { $requiredFiles += 'SOURCE_MANIFEST.json' }
+    foreach ($relative in $requiredFiles) {
         $path = "$AddonName/$relative"
         if (-not $entries.ContainsKey($path) -or $entries[$path].Length -eq 0) {
             throw "Client addon ZIP is missing required nonempty file $path"
@@ -82,7 +86,7 @@ try {
         }
     }
 
-    # Compare the runtime export to unchanged prepared sources, including all
+    # Compare the runtime export to reconstructed locked sources, including all
     # dynamic and binary resources. Development-only assets are not installed.
     $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
@@ -90,18 +94,18 @@ try {
         foreach ($relative in $runtimeFiles) {
             $item = Get-Item -LiteralPath (Join-Path $source $relative) -Force
             if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                throw "Symbolic link in prepared client addon: $relative"
+                throw "Symbolic link in locked client addon: $relative"
             }
             $path = "$AddonName/$relative"
             [void]$expected.Add($path)
             if (-not $entries.ContainsKey($path)) { throw "Client addon ZIP is missing asset $path" }
             $entry = $entries[$path]
-            if ($entry.Length -ne $item.Length) { throw "Packaged client addon asset differs from prepared source: $path" }
+            if ($entry.Length -ne $item.Length) { throw "Packaged client addon asset differs from locked source: $path" }
             $stream = $entry.Open()
             try { $packagedHash = [System.BitConverter]::ToString($sha256.ComputeHash($stream)) } finally { $stream.Dispose() }
             $stream = [System.IO.File]::OpenRead($item.FullName)
             try { $sourceHash = [System.BitConverter]::ToString($sha256.ComputeHash($stream)) } finally { $stream.Dispose() }
-            if ($packagedHash -cne $sourceHash) { throw "Packaged client addon asset differs from prepared source: $path" }
+            if ($packagedHash -cne $sourceHash) { throw "Packaged client addon asset differs from locked source: $path" }
         }
     } finally {
         $sha256.Dispose()
@@ -109,7 +113,8 @@ try {
     foreach ($path in $entries.Keys) {
         if (-not $expected.Contains($path)) { throw "Unexpected asset in client addon ZIP: $path" }
     }
-    Write-Host "Verified standalone client addon ZIP: $AddonName, $($entries.Count) files matching prepared assets, WotLK TOC, license and source revision."
+    Write-Host "Verified standalone client addon ZIP: $AddonName, $($entries.Count) files matching locked sources and patches, WotLK TOC, license and source provenance."
 } finally {
-    $archive.Dispose()
+    if ($archive) { $archive.Dispose() }
+    if (Test-Path -LiteralPath $verificationRoot) { Remove-Item -LiteralPath $verificationRoot -Recurse -Force }
 }
