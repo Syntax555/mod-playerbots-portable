@@ -34,6 +34,9 @@ SPELL_LOCALE_COUNT = 16
 _locale_spec = importlib.util.spec_from_file_location("client_locales", Path(__file__).with_name("ClientLocales.py"))
 CLIENT_LOCALES = importlib.util.module_from_spec(_locale_spec)
 _locale_spec.loader.exec_module(CLIENT_LOCALES)
+_runtime_spec = importlib.util.spec_from_file_location("addon_runtime", Path(__file__).with_name("AddonRuntime.py"))
+ADDON_RUNTIME = importlib.util.module_from_spec(_runtime_spec)
+_runtime_spec.loader.exec_module(ADDON_RUNTIME)
 
 
 def sha(data: bytes) -> str:
@@ -180,12 +183,8 @@ def verify_merged_skill(base: bytes, merged: bytes, custom_spells):
 
 def addon_files(source: Path, module: Path):
     result = {}
-    for path in sorted(source.rglob("*")):
-        if path.is_symlink():
-            raise ValueError(f"Symbolic link in addon: {path}")
-        if path.is_file():
-            relative = relative_path(path.relative_to(source).as_posix())
-            result[f"Interface/AddOns/EraTalents/{relative}"] = path.read_bytes()
+    for relative in ADDON_RUNTIME.runtime_paths(source, "EraTalents.toc"):
+        result[f"Interface/AddOns/EraTalents/{relative}"] = (source / relative).read_bytes()
     for name in ("LICENSE", "README.md"):
         result[f"Interface/AddOns/EraTalents/{name}"] = (module / name).read_bytes()
     return result
@@ -265,6 +264,16 @@ def verify_zip(path: Path, lock):
             relative_path(asset)
             if not files.get(f"Interface/AddOns/EraTalents/{asset}"):
                 raise ValueError(f"Missing EraTalents TOC asset: {asset}")
+    with tempfile.TemporaryDirectory(prefix="era-client-runtime-verify-") as temporary:
+        addon = Path(temporary)
+        prefix = "Interface/AddOns/EraTalents/"
+        assets = {name[len(prefix):]: content for name, content in files.items() if name.startswith(prefix)}
+        for name, content in assets.items():
+            path = addon / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        if set(ADDON_RUNTIME.runtime_paths(addon, "EraTalents.toc")) != set(assets):
+            raise ValueError("Development-only addon asset in client ZIP")
     return files, manifest
 
 
@@ -395,10 +404,10 @@ def build(args):
                 "Source checksums and authored restored-entry overrides are recorded in SOURCE_MANIFEST.json.\n"
             ).encode()
         files["README.txt"] = ("EraTalents client files for World of Warcraft 3.3.5a (build 12340).\n\n"
-            "Close WoW completely. Copy Interface/AddOns/EraTalents to the matching client folder.\n"
-            "Copy Data/patch-V.mpq into the client Data folder, replacing the previous IP patch-V.\n"
-            "Keep the installed addon folder named EraTalents. Restart WoW; /reload does not load MPQs.\n"
-            "Use the client package from the same server build. Later-loading DBC patches can override it.\n"
+            "Close WoW completely. Replace Interface/AddOns/EraTalents/ and Data/patch-V.mpq with this\n"
+            "matching package, then restart WoW. Both are required; /reload cannot load an MPQ.\n"
+            "The server updates through normal startup.exe launches. Install client files manually;\n"
+            "the client and server generations must match. Later-loading DBC patches can override this patch.\n"
             f"Generation: {generation}\n"
             "In game: /run print(GetSpellInfo(932999)) should show EraTalents Gen and this generation.\n"
             "Bots need server files only. This ZIP contains an addon and the merged IP client patch.\n").encode()

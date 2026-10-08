@@ -27,7 +27,7 @@ import zipfile
 
 ZIP_CONTENTS = {
     "mod-playerbots-portable-latest.zip": (
-        "startup.exe", "authserver.exe", "worldserver.exe", "versions.lock.json",
+        "startup.exe", "authserver.exe", "worldserver.exe", "versions.lock.json", "portable-release.json",
     ),
     "EraTalents-client-latest.zip": (
         "Data/patch-V.mpq", "Interface/AddOns/EraTalents/EraTalents.toc",
@@ -35,6 +35,8 @@ ZIP_CONTENTS = {
     "MultiBot-Chatless-latest.zip": ("MultiBot/MultiBot.toc",),
 }
 CHECKSUM_NAME = "SHA256SUMS.txt"
+UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
+SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
 # Limit cleanup to numbered version tags. Branches and other tag names are kept.
 VERSION_TAG = re.compile(
     r"^v\d+\.\d+(?:\.\d+"
@@ -217,7 +219,71 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def prepare_assets(directory: Path) -> list[Asset]:
+def zip_inventory(archive: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
+    """Accept the two supported ZIP writers without changing path semantics."""
+    entries = {}
+    seen = set()
+    for entry in archive.infolist():
+        name = entry.filename.removeprefix("./")
+        if ((not name and entry.filename != "./") or name.startswith("/")
+                or re.search(r'[\\:<>"|?*\x00-\x1f]|(^|/)\.{1,2}(/|$)|//|[. ](/|$)', name)
+                or re.search(r'(^|/)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|/|$)', name, re.I)):
+            raise PublishError(f"Unsafe path in portable ZIP: {entry.filename}")
+        normalized = name.rstrip("/").casefold()
+        if normalized in seen:
+            raise PublishError(f"Duplicate path in portable ZIP: {entry.filename}")
+        seen.add(normalized)
+        if ((entry.external_attr >> 16) & 0xF000 == 0xA000
+                or entry.external_attr & 0x400 or entry.flag_bits & 1):
+            raise PublishError(f"Linked or encrypted file in portable ZIP: {entry.filename}")
+        if entry.is_dir() or not name:
+            if entry.file_size:
+                raise PublishError(f"Nonempty directory in portable ZIP: {entry.filename}")
+            continue
+        if entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+            raise PublishError(f"Unsupported ZIP compression: {entry.filename}")
+        entries[name] = entry
+    folded_files = {name.casefold() for name in entries}
+    for name in entries:
+        parts = name.split("/")
+        if any("/".join(parts[:count]).casefold() in folded_files for count in range(1, len(parts))):
+            raise PublishError(f"File/directory collision in portable ZIP: {name}")
+    return entries
+
+
+def update_manifest(package: Asset, expected_revision: str | None) -> dict[str, Any]:
+    """Inventory final compressed artifacts; never manage mutable user state."""
+    with zipfile.ZipFile(package.path) as archive:
+        entries = zip_inventory(archive)
+        try:
+            identity = json.loads(archive.read(entries["portable-release.json"]))
+        except (KeyError, ValueError, TypeError):
+            raise PublishError("The server package has an invalid portable release identity") from None
+        if (not isinstance(identity, dict) or identity.get("schema") != 1
+                or not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("revision", "")))
+                or identity.get("package") != SERVER_PACKAGE_NAME or identity.get("version") != "latest"
+                or expected_revision is not None and identity["revision"] != expected_revision):
+            raise PublishError("The server package has an invalid or mismatched portable release identity")
+        files = []
+        for name, entry in sorted(entries.items()):
+            if (re.search(r"^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$", name, re.I)
+                    or re.search(r"^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$|(^|/)[.]git(/|$)", name, re.I)
+                    or name == UPDATE_MANIFEST_NAME):
+                raise PublishError(f"Unmanaged user or redundant development file in portable ZIP: {name}")
+            hasher = hashlib.sha256()
+            size = 0
+            with archive.open(entry) as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    size += len(chunk)
+                    hasher.update(chunk)
+            if size != entry.file_size:
+                raise PublishError(f"Incomplete file in portable ZIP: {name}")
+            files.append({"path": name, "size": size, "sha256": hasher.hexdigest()})
+        return {"schema": 1, "revision": identity["revision"], "package": package.name,
+                "sha256": package.sha256, "size": package.size, "files": files}
+
+
+def prepare_assets(directory: Path, expected_revision: str | None = None) -> list[Asset]:
     """Validate the required packages before creating checksums or API writes."""
     if not directory.is_dir():
         raise PublishError("The artifacts directory does not exist")
@@ -232,9 +298,10 @@ def prepare_assets(directory: Path) -> list[Asset]:
             raise PublishError(f"Artifact is empty: {name}")
         try:
             with zipfile.ZipFile(path) as archive:
+                entries = zip_inventory(archive)
                 for entry_name in required:
                     try:
-                        entry = archive.getinfo(entry_name)
+                        entry = entries[entry_name]
                     except KeyError:
                         raise PublishError(f"{name} is missing {entry_name}") from None
                     if entry.is_dir() or entry.file_size == 0 or entry.flag_bits & 1:
@@ -242,6 +309,13 @@ def prepare_assets(directory: Path) -> list[Asset]:
         except (zipfile.BadZipFile, OSError):
             raise PublishError(f"Artifact is not a readable ZIP: {name}") from None
         assets.append(Asset(path, name, size, digest(path)))
+    try:
+        manifest = update_manifest(next(asset for asset in assets if asset.name == SERVER_PACKAGE_NAME), expected_revision)
+    except (zipfile.BadZipFile, OSError):
+        raise PublishError("The server package failed file integrity verification") from None
+    manifest_path = directory / UPDATE_MANIFEST_NAME
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    assets.append(Asset(manifest_path, UPDATE_MANIFEST_NAME, manifest_path.stat().st_size, digest(manifest_path)))
     checksum_path = directory / CHECKSUM_NAME
     checksum_path.write_text(
         "".join(f"{asset.sha256}  {asset.name}\n" for asset in sorted(assets, key=lambda item: item.name)),
@@ -290,7 +364,7 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
     if not re.fullmatch(r"[0-9]+", run_id):
         raise PublishError("--run-id must be a numeric Actions run ID")
     sha = sha.lower()
-    assets = prepare_assets(directory)
+    assets = prepare_assets(directory, sha)
     notes = render_notes(notes_path, client.repository, sha)
     if client.main_sha().lower() != sha:
         return PublishResult(skipped=True)

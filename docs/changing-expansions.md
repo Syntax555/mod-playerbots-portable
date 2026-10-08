@@ -117,20 +117,20 @@ with owned items, earned gold and ordinary fees.
 
 ## Updating an existing realm
 
-Download the complete server and matching client packages from
-[Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+Back up databases and configurations before migration. Start `startup.exe`
+normally to install server updates, merge configuration defaults and apply SQL
+migrations. An older launcher without the updater needs one manual installation
+of the latest server ZIP first; see the [update guide](updating.md).
 
-1. Back up databases and configurations, then stop the launcher and servers.
-2. Install the complete server package using the installation's upgrade procedure.
-3. Install `EraTalents-client-latest.zip` in each player's client and fully restart WoW.
-4. If removing a shared Vanilla/TBC ceiling, run `startup.exe --set-expansion individual`.
-5. Run `startup.exe --apply-profiles`, then restart the launcher normally. The
-   server updater imports the bundled SQL migrations.
+The selected realm ceiling and custom settings are preserved. New defaults
+replace only values that still match their previous managed defaults, with
+backups before changes. To deliberately remove a shared Vanilla/TBC ceiling,
+run `startup.exe --set-expansion individual` with initialized configs and stopped
+servers, then start normally.
 
-The launcher backs up changed configs and preserves unrelated settings,
-characters and databases. Applying profiles restores managed defaults; make
-custom profile edits afterward. Replacing the launcher alone cannot update
-server behavior. See [talent migration](era-talents.md#updating-an-existing-realm).
+Install the matching `EraTalents-client-latest.zip` in each player's client with
+WoW fully closed. The server updater does not install client files. See
+[talent migration](era-talents.md#updating-an-existing-realm).
 
 Existing levels, stored tiers, inventory and gold are retained. An update cannot
 certify that earlier grants were earned, and missing durable milestone credit

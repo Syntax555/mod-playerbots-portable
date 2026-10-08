@@ -1,13 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Port overrides are applied only while creating a missing configuration.
@@ -53,59 +51,6 @@ type profileUpdate struct {
 	mode     os.FileMode
 	backup   string
 	create   bool
-}
-
-// applyRecommendedProfiles is explicitly requested through --apply-profiles.
-// All merges are validated before writing; every changed config gets a backup.
-func applyRecommendedProfiles(workDir string) ([]string, error) {
-	phase, err := loadRealmPhase(workDir)
-	if err != nil {
-		return nil, err
-	}
-	entries, err := configProfiles.ReadDir("profiles")
-	if err != nil {
-		return nil, fmt.Errorf("read recommended profiles: %w", err)
-	}
-	timestamp := time.Now().UTC().Format("20060102T150405.000000000Z")
-	var updates []profileUpdate
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		relative := filepath.Join("configs", "modules", entry.Name())
-		if entry.Name() == "worldserver.conf" {
-			relative = filepath.Join("configs", entry.Name())
-		}
-		path := filepath.Join(workDir, relative)
-		original, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			// ensureConfigFiles normally creates these from packaged templates.
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read config %s: %w", path, err)
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("inspect config %s: %w", path, err)
-		}
-		updated, err := applyConfigProfileForPhase(entry.Name(), string(original), phase)
-		if err != nil {
-			return nil, err
-		}
-		if updated == string(original) {
-			continue
-		}
-		updates = append(updates, profileUpdate{
-			path: path, original: original, updated: []byte(updated),
-			mode: info.Mode().Perm(), backup: path + ".backup." + timestamp,
-		})
-	}
-	marker := filepath.Join(workDir, "configs", realmPhaseFile)
-	if phase.name == "individual" && len(updates) != 0 && !fileExists(marker) {
-		updates = append(updates, profileUpdate{path: marker, updated: []byte(phase.name + "\n"), mode: 0644, create: true})
-	}
-	return applyProfileUpdates(updates)
 }
 
 func applyProfileUpdates(updates []profileUpdate) ([]string, error) {

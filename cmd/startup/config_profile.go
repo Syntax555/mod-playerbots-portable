@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// Missing configs receive these profiles automatically. Applying them to an
-// existing config requires the explicit --apply-profiles migration command.
+// Missing configs receive these embedded profiles automatically. Existing
+// configs follow changed defaults only while their managed values are unchanged.
 //
 //go:embed profiles/*.conf
 var configProfiles embed.FS

@@ -419,7 +419,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           try {
-              ./cmake/VerifyPortableZip.ps1 -ZipPath 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip'
+              ./cmake/VerifyPortableZip.ps1 -ZipPath 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip' -ExpectedRevision '${{ github.sha }}'
               $hash = (Get-FileHash 'output/mod-playerbots-portable-${{ steps.version.outputs.value }}.zip' -Algorithm SHA256).Hash.ToLower()
               Write-Host "SHA-256: $hash"
           } catch {

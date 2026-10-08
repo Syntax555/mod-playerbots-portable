@@ -82,7 +82,7 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 			}
 		}
 		// A future profile migration must retain the chosen expansion.
-		if _, err := applyRecommendedProfiles(directory); err != nil {
+		if _, err := migrateConfigProfiles(directory); err != nil {
 			t.Fatal(err)
 		}
 		for relative, expected := range map[string]map[string]string{
@@ -165,7 +165,7 @@ func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 		if actual, err := loadRealmPhase(directory); err != nil || actual.name != name {
 			t.Fatalf("legacy %s inferred as %+v (%v)", name, actual, err)
 		}
-		if _, err := applyRecommendedProfiles(directory); err != nil {
+		if _, err := migrateConfigProfiles(directory); err != nil {
 			t.Fatal(err)
 		}
 		if actual, _ := loadRealmPhase(directory); actual.name != name {
@@ -175,7 +175,7 @@ func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 	world := filepath.Join(directory, "configs", "worldserver.conf")
 	content, _ := mergeConfigProfile(readPhaseTestFile(t, world), "MaxPlayerLevel = 60")
 	writePhaseTestFile(t, world, content)
-	if _, err := applyRecommendedProfiles(directory); err == nil {
+	if _, err := migrateConfigProfiles(directory); err == nil {
 		t.Fatal("accepted conflicting legacy caps")
 	}
 	wrath, _ := parseRealmPhase("wotlk")
@@ -218,7 +218,7 @@ func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
 	if phase, err := loadRealmPhase(directory); err != nil || phase.name != "individual" {
 		t.Fatalf("fresh mode = %+v (%v)", phase, err)
 	}
-	if _, err := applyRecommendedProfiles(directory); err != nil {
+	if _, err := migrateConfigProfiles(directory); err != nil {
 		t.Fatal(err)
 	}
 	for relative, expected := range map[string]map[string]string{
@@ -237,7 +237,7 @@ func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
 
 func TestIndividualSelectionRestoresEarnedUnlocksAndRetainsLegacyCeilingUntilSelected(t *testing.T) {
 	directory := newPhaseRealm(t)
-	if _, err := applyRecommendedProfiles(directory); err != nil {
+	if _, err := migrateConfigProfiles(directory); err != nil {
 		t.Fatal(err)
 	}
 	if phase, _ := loadRealmPhase(directory); phase.name != "vanilla" {

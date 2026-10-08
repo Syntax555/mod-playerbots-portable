@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ZipPath,
     [Parameter(Mandatory = $true)][string]$AddonName,
-    [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent)
+    [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent),
+    [string]$Python = 'python'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +22,9 @@ $source = Join-Path $RepositoryRoot ".module-cache/prepared-addons/$AddonName"
 if (-not (Test-Path (Join-Path $source '.portable-source') -PathType Leaf)) {
     throw "Prepared client addon source is missing: $AddonName"
 }
+$runtimeJson = & $Python (Join-Path $PSScriptRoot 'AddonRuntime.py') --source $source --toc $addon.toc --list
+if ($LASTEXITCODE -ne 0) { throw "Cannot determine runtime assets for client addon $AddonName." }
+$runtimeFiles = @($runtimeJson | ConvertFrom-Json)
 
 function Read-ZipText([System.IO.Compression.ZipArchiveEntry]$Entry) {
     $reader = [System.IO.StreamReader]::new($Entry.Open())
@@ -78,17 +82,16 @@ try {
         }
     }
 
-    # Verify every prepared asset byte-for-byte via SHA-256, including binary textures.
+    # Compare the runtime export to unchanged prepared sources, including all
+    # dynamic and binary resources. Development-only assets are not installed.
     $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
-        foreach ($item in Get-ChildItem -LiteralPath $source -Recurse -Force) {
-            $relative = [System.IO.Path]::GetRelativePath($source, $item.FullName).Replace('\', '/')
-            if ($relative -match '(^|/)(\.git|\.github|\.portable-source)(/|$)') { continue }
+        foreach ($relative in $runtimeFiles) {
+            $item = Get-Item -LiteralPath (Join-Path $source $relative) -Force
             if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
                 throw "Symbolic link in prepared client addon: $relative"
             }
-            if ($item.PSIsContainer) { continue }
             $path = "$AddonName/$relative"
             [void]$expected.Add($path)
             if (-not $entries.ContainsKey($path)) { throw "Client addon ZIP is missing asset $path" }

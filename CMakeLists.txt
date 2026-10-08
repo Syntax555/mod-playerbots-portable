@@ -122,12 +122,13 @@ ExternalProject_Add(azerothcore
 )
 ExternalProject_Add_StepTargets(azerothcore configure)
 
-# 5. Assemble every module's SQL, config templates, defaults and licenses.
+# 5. Assemble every module's SQL, config templates and licenses.
 ExternalProject_Add_Step(azerothcore assemble_distribution
     COMMAND ${CMAKE_COMMAND}
         "-DPORTABLE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
         "-DPORTABLE_CORE_SOURCE_DIR=${PORTABLE_CORE_SOURCE_DIR}"
         "-DPORTABLE_DIST_DIR=${CMAKE_INSTALL_PREFIX_CLEAN}"
+        "-DPACKAGE_VERSION=${PACKAGE_VERSION}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AssembleDistribution.cmake"
     DEPENDEES install
     COMMENT "Assembling portable configuration, module SQL and documentation"

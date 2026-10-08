@@ -1,20 +1,20 @@
 # Configuration reference
 
-The launcher creates active configurations from full templates and applies the
-bundled profiles. Active server files live in `configs/`; module files live in
-`configs/modules/`. The readable `defaults/` files are references, while
-`startup.exe` embeds the profiles used by `--apply-profiles`.
+The launcher creates missing active configurations from full templates and its
+embedded profiles. Active server files live in `configs/`; module files live in
+`configs/modules/`. Edit these active files with the servers stopped.
 
-Existing configurations preserve custom values until profiles are explicitly
-applied. Stop the launcher and servers, back up the installation, then run:
+Normal startup merges profile updates automatically. A setting follows a new
+default only while its active value still matches the previous managed default.
+Custom values, database credentials, paths and the selected realm phase are
+preserved; missing managed settings are added. Changed files receive `.backup.*`
+copies before replacement. On an older installation without a recorded baseline,
+existing values are preserved unless they match a known bundled default.
 
-```powershell
-.\startup.exe --apply-profiles
-```
-
-Changed files receive `.backup.*` copies. Managed values return to bundled
-defaults; unrelated values, characters and databases are retained. Make custom
-edits afterward. Install the full server package to update compiled behavior.
+`configs/.portable-profiles.json` records the managed baseline for future
+updates; keep it with the active configs when backing up or moving a realm.
+Server binaries and SQL update through the launcher's normal startup check.
+See the [update guide](updating.md) for older installations and offline startup.
 
 ## Progression and character creation
 
@@ -143,4 +143,5 @@ Existing-realm upgrades preserve prior levels, tiers, items and gold. They canno
 retroactively prove those possessions were earned. Use a fresh database when
 a level-1 earned history for every character is required. See
 [upgrade behavior](changing-expansions.md#updating-an-existing-realm),
-[dependencies](module-versions.md) and [building](building.md).
+[dependencies](module-versions.md) and
+[building](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md).

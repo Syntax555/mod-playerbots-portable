@@ -48,7 +48,7 @@ type startupOptions struct {
 	skipDataCheck    bool
 	dataURL          string
 	downloadDataOnly bool
-	applyProfiles    bool
+	noUpdate         bool
 	setExpansion     string
 	showExpansion    bool
 }
@@ -293,7 +293,7 @@ func parseArgs(args []string) (startupOptions, error) {
 	fs.BoolVar(&opts.skipDataCheck, "skip-data-check", false, "Skip checking and downloading client data (maps, vmaps, mmaps, dbc).")
 	fs.StringVar(&opts.dataURL, "data-url", defaultClientDataURL, "Custom URL to download client data Data.zip from.")
 	fs.BoolVar(&opts.downloadDataOnly, "download-data-only", false, "Download and extract client data, then exit.")
-	fs.BoolVar(&opts.applyProfiles, "apply-profiles", false, "Apply recommended server/module settings with config backups, then exit without starting servers.")
+	fs.BoolVar(&opts.noUpdate, "no-update", false, "Start without checking GitHub for a server update.")
 	fs.StringVar(&opts.setExpansion, "set-expansion", "", "Set progression mode (individual, vanilla, tbc or wotlk) with config backups, then exit. Stop the realm first.")
 	fs.BoolVar(&opts.showExpansion, "show-expansion", false, "Show the selected realm expansion and level cap, then exit.")
 
@@ -315,9 +315,6 @@ func parseArgs(args []string) (startupOptions, error) {
 	if opts.timeout <= 0 {
 		return opts, errors.New("timeout must be greater than zero")
 	}
-	if opts.applyProfiles && (opts.initOnly || opts.downloadDataOnly) {
-		return opts, errors.New("apply-profiles cannot be combined with init-only or download-data-only")
-	}
 	setExpansionSelected := false
 	fs.Visit(func(option *flag.Flag) {
 		if option.Name == "set-expansion" {
@@ -331,7 +328,7 @@ func parseArgs(args []string) (startupOptions, error) {
 		}
 		opts.setExpansion = phase.name
 	}
-	if (opts.setExpansion != "" || opts.showExpansion) && (opts.applyProfiles || opts.initOnly || opts.downloadDataOnly || (opts.setExpansion != "" && opts.showExpansion)) {
+	if (opts.setExpansion != "" || opts.showExpansion) && (opts.initOnly || opts.downloadDataOnly || (opts.setExpansion != "" && opts.showExpansion)) {
 		return opts, errors.New("expansion commands cannot be combined with other launcher modes")
 	}
 
@@ -1418,6 +1415,13 @@ func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, 
 }
 
 func main() {
+	if handled, err := runPortableUpdateHelper(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error completing update: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if runtime.GOOS != "windows" {
 		fmt.Fprintf(os.Stderr, "Error: mod-playerbots startup tool is only supported on Windows (detected OS: %s)\n", runtime.GOOS)
 		os.Exit(1)
@@ -1438,6 +1442,12 @@ func main() {
 		fmt.Printf("Running in packaged mode. Working directory: %s\n", workDir)
 	} else {
 		fmt.Printf("Working directory: %s\n", workDir)
+	}
+	if baseDir == workDir {
+		if err := recoverPortableUpdate(baseDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error recovering interrupted update: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	if opts.setExpansion != "" || opts.showExpansion {
 		phase, err := loadRealmPhase(workDir)
@@ -1460,12 +1470,6 @@ func main() {
 		return
 	}
 
-	binaries, err := findMySQLBinaries(opts.mysqlDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Set up early root context and signal handling so Ctrl+C at any time shuts down child processes
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
@@ -1482,6 +1486,22 @@ func main() {
 		}
 	}()
 
+	if baseDir == workDir && !opts.downloadDataOnly {
+		if !opts.noUpdate {
+			if updating, err := checkPortableUpdate(rootCtx, baseDir, os.Args[1:]); err != nil {
+				fmt.Fprintf(os.Stderr, "Update check unavailable; starting installed release: %v\n", err)
+			} else if updating {
+				return
+			}
+		}
+	}
+
+	binaries, err := findMySQLBinaries(opts.mysqlDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Handle -download-data-only mode
 	if opts.downloadDataOnly {
 		if err := ensureClientData(rootCtx, workDir, baseDir, opts.dataURL, false); err != nil {
@@ -1495,7 +1515,7 @@ func main() {
 	authserverExe := findExecutable(baseDir, "authserver")
 	worldserverExe := findExecutable(baseDir, "worldserver")
 
-	if !opts.initOnly && !opts.applyProfiles {
+	if !opts.initOnly {
 		if authserverExe == "" {
 			fmt.Fprintf(os.Stderr, "Error: authserver executable not found in %s or PATH\n", baseDir)
 			os.Exit(1)
@@ -1516,17 +1536,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: failed to ensure config files: %v\n", err)
 		os.Exit(1)
 	}
-	if opts.applyProfiles {
-		backups, err := applyRecommendedProfiles(workDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error applying recommended profiles: %v\n", err)
-			os.Exit(1)
+	if err := ensureRealmStopped(workDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: stop the realm before updating configuration: %v\n", err)
+		os.Exit(1)
+	}
+	backups, err := migrateConfigProfiles(workDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating configuration defaults: %v\n", err)
+		os.Exit(1)
+	}
+	for _, backup := range backups {
+		if strings.Contains(filepath.Base(backup), ".conf.backup.") {
+			fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
 		}
-		for _, backup := range backups {
-			fmt.Printf("Updated config; previous settings saved to %s\n", backup)
-		}
-		fmt.Printf("Recommended profiles applied (%d configs updated). Servers were not started.\n", len(backups))
-		return
 	}
 
 	// Ensure client data files (maps, vmaps, mmaps, dbc) are present
