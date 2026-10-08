@@ -345,6 +345,7 @@ class ModuleAddonTests(unittest.TestCase):
             header = f"prepare: {prepare_hash}\n{URL}\n{revision}\n"
             stamp = header + "interface: 30300\nmodule: mod-era-talents\npath: client-addon/EraTalents\n" + header
             stamp += f"patches/earned.patch: {hashlib.sha256(patch).hexdigest()}\n"
+            stamp += f"export: {hashlib.sha256((ROOT / 'cmake/ExportClientAddon.py').read_bytes()).hexdigest()}\n"
             (prepared / ".portable-source").write_text(stamp)
             command = [CMAKE, f"-DPORTABLE_SOURCE_DIR={root}", "-DPACKAGE_VERSION=fixture", "-P", str(ROOT / "cmake/PackageClientAddons.cmake")]
             result = subprocess.run(command, capture_output=True, text=True)
@@ -430,10 +431,20 @@ class AddonRuntimeTests(unittest.TestCase):
     @unittest.skipUnless(POWERSHELL, "PowerShell needed for standalone runtime verification")
     def test_standalone_verifier_checks_runtime_bytes_and_refuses_development_asset(self):
         repository = self.root / "repository"
+        cached = repository / ".module-cache/client-addon-Demo"
+        shutil.copytree(self.source, cached)
+        (cached / "SOURCE_REVISION.txt").unlink()
+        (cached / ".portable-source").unlink()
+        subprocess.run(["git", "init", "-q", str(cached)], check=True)
+        subprocess.run(["git", "-C", str(cached), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(cached), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "commit", "-qm", "Pinned runtime fixture"], check=True)
+        revision = subprocess.check_output(["git", "-C", str(cached), "rev-parse", "HEAD"], text=True).strip()
+        self.write("SOURCE_REVISION.txt", (revision + "\n").encode())
         prepared = repository / ".module-cache/prepared-addons/Demo"
         shutil.copytree(self.source, prepared)
         (repository / "versions.lock.json").write_text(json.dumps({"schemaVersion": 1, "clientAddons": [
-            {"name": "Demo", "revision": REVISION, "toc": "Demo.toc", "license": "LICENSE", "interface": 30300}]}))
+            {"name": "Demo", "url": URL, "revision": revision, "toc": "Demo.toc", "license": "LICENSE", "interface": 30300}]}))
         path = self.root / "Demo.zip"
 
         def archive(extra=None):
@@ -455,9 +466,15 @@ class AddonRuntimeTests(unittest.TestCase):
         self.assertIn("Unexpected asset", result.stderr)
         archive()
         (prepared / "Textures/test_icon.tga").write_bytes(b"corrupted texture")
+        # Mutating the prepared cache does not change the independently locked
+        # expected bytes. A ZIP containing the same mutation still fails.
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.write("Textures/test_icon.tga", b"corrupted texture")
+        archive()
         result = subprocess.run(command, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("differs from prepared source", result.stderr)
+        self.assertIn("differs from locked source", result.stderr)
 
 
 if __name__ == "__main__":

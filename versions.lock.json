@@ -105,7 +105,10 @@
       "archiveName": "MultiBot-Chatless",
       "interface": 30300,
       "toc": "MultiBot.toc",
-      "license": "LICENSE"
+      "license": "LICENSE",
+      "patches": [
+        "patches/multibot-inventory-money.patch"
+      ]
     },
     {
       "name": "EraTalents",
