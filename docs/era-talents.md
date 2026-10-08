@@ -21,9 +21,9 @@ Existing death knights retain native trees; strict mode blocks new hero characte
 
 Every player needs the addon and merged MPQ from `EraTalents-client-latest.zip`
 in the same [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
-as the server. Install them together when updating. The server's
-`addons/EraTalents/` folder contains only the addon; use the complete client
-package for the required MPQ.
+as the server. Install the matching pair whenever updating client files. Client
+packages are separate downloads; the server updater does not install them or
+modify WoW client folders.
 
 1. Close WoW completely. Use client 3.3.5a, build 12340.
 2. Replace `Interface/AddOns/EraTalents/` with the combined package's folder.
@@ -115,18 +115,16 @@ supported conversion.
 
 ## Updating an existing realm
 
-Back up databases and configs, stop the launcher and servers, then install the
-complete server package and matching client package. Run:
+Back up databases and configs, then start `startup.exe` normally. The launcher
+updates server files, merges configuration defaults and applies bundled SQL
+during startup. Older launchers need one manual server-ZIP upgrade first; see
+the [update guide](updating.md). Custom settings and the selected realm ceiling
+are preserved, with backups before managed configuration changes.
 
-```powershell
-.\startup.exe --apply-profiles
-```
-
-To remove an existing shared Vanilla/TBC ceiling, run
-`startup.exe --set-expansion individual` first. Restart normally and allow the
-server updater to import bundled SQL. Managed config changes receive backups;
-databases, characters and unrelated custom settings are preserved. Applying
-profiles restores managed defaults, so make custom edits afterward.
+Install the matching client package for each player with WoW fully closed. To
+deliberately remove an existing shared Vanilla/TBC ceiling, run
+`startup.exe --set-expansion individual` with initialized configs and stopped
+servers, then start normally.
 
 Historical activation converts incompatible native talent/spell state for the
 character's earned era and makes its earned points available in that tree.
@@ -146,8 +144,8 @@ Sources, the IP base client archive and StormLib are pinned in
 [the dependency manifest](../versions.lock.json). Preparation and packaging
 include ordered local patch hashes as part of build identity.
 
-On Linux with Git, CMake, a C/C++ toolchain, Python 3/PyYAML, 7z, zlib and bzip2
-development libraries:
+From a source checkout on Linux with Git, CMake, a C/C++ toolchain,
+Python 3/PyYAML, 7z, zlib and bzip2 development libraries:
 
 ```bash
 cmake -P cmake/PrepareModules.cmake
@@ -157,5 +155,6 @@ cmake -DPACKAGE_VERSION=dev -P cmake/PackageEraClient.cmake
 The result is `output/EraTalents-client-dev.zip`, including the addon, merged
 MPQ, dependency licenses and source/hash manifest. Packaging checks generated
 rows, generation agreement, preserved base entries and final bytes. See
-[building](building.md) for the complete source-build workflow and the
+[building](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md)
+for the complete source-build workflow and the
 [configuration reference](vanilla-config-audit.md#supported-scope) for gameplay limits.

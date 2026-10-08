@@ -18,6 +18,7 @@ SPEC = importlib.util.spec_from_file_location("era_client_package", ROOT / "cmak
 PACKAGE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PACKAGE)
 CMAKE = os.environ.get("CMAKE_EXECUTABLE") or shutil.which("cmake")
+POWERSHELL = shutil.which("pwsh")
 REVISION = "a" * 40
 URL = "https://github.com/example/module.git"
 
@@ -125,6 +126,23 @@ class ClientZipTests(unittest.TestCase):
     def test_foreign_asset_rejected(self):
         self.files["worldserver.exe"] = b"unexpected"
         with self.assertRaisesRegex(ValueError, "Unexpected client ZIP asset"):
+            self.verify()
+
+    def test_development_asset_rejected_even_with_matching_manifest_hash(self):
+        self.files["Interface/AddOns/EraTalents/test_tooltip.lua"] = b"assert(true)"
+        del self.files["SOURCE_MANIFEST.json"]
+        add_manifest(self.files, self.lock)
+        with self.assertRaisesRegex(ValueError, "Development-only addon asset"):
+            self.verify()
+
+    def test_unknown_dynamic_binary_resource_is_retained_and_hash_checked(self):
+        name = "Interface/AddOns/EraTalents/resources/font.custom"
+        self.files[name] = b"\0runtime font\xff"
+        del self.files["SOURCE_MANIFEST.json"]
+        add_manifest(self.files, self.lock)
+        self.assertEqual(self.verify()[0][name], self.files[name])
+        self.files[name] += b"changed"
+        with self.assertRaisesRegex(ValueError, "hash differs"):
             self.verify()
 
     def test_traversal_case_collision_and_symlink_rejected(self):
@@ -291,6 +309,10 @@ class ModuleAddonTests(unittest.TestCase):
             addon.mkdir(parents=True)
             (addon / "EraTalents.toc").write_text("## Interface: 30300\nMain.lua\n")
             (addon / "Main.lua").write_text("return 'baseline'\n")
+            (addon / "test_tooltip.lua").write_text("assert(true)\n")
+            (addon / "build-addon.sh").write_text("#!/bin/sh\nexit 0\n")
+            (addon / "Fonts").mkdir()
+            (addon / "Fonts/dynamic.resource").write_bytes(b"\0font\xff")
             (source / "LICENSE").write_text("MIT\n")
             (source / "README.md").write_text("Module README\n")
             subprocess.run(["git", "-C", str(source), "add", "."], check=True)
@@ -312,7 +334,10 @@ class ModuleAddonTests(unittest.TestCase):
             prepared = root / ".module-cache/prepared-addons/EraTalents"
             prepared.mkdir(parents=True)
             for path in addon.iterdir():
-                shutil.copyfile(path, prepared / path.name)
+                if path.is_dir():
+                    shutil.copytree(path, prepared / path.name)
+                else:
+                    shutil.copyfile(path, prepared / path.name)
             for name in ("LICENSE", "README.md"):
                 shutil.copyfile(source / name, prepared / name)
             (prepared / "SOURCE_REVISION.txt").write_text(revision + "\n")
@@ -326,6 +351,10 @@ class ModuleAddonTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             with zipfile.ZipFile(root / "output/EraTalents-fixture.zip") as archive:
                 self.assertEqual(archive.read("EraTalents/Main.lua"), b"return 'earned'\n")
+                self.assertEqual(archive.read("EraTalents/Fonts/dynamic.resource"), b"\0font\xff")
+                self.assertNotIn("EraTalents/test_tooltip.lua", archive.namelist())
+                self.assertNotIn("EraTalents/build-addon.sh", archive.namelist())
+            self.assertTrue((prepared / "test_tooltip.lua").is_file())
             (prepared / "Main.lua").write_text("return 'tampered'\n")
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
@@ -339,6 +368,96 @@ class ModuleAddonTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("no historical client patch", result.stdout)
+
+
+class AddonRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="addon-runtime-regression-")
+        self.root = Path(self.temporary.name)
+        self.source = self.root / "Demo"
+        self.source.mkdir()
+        self.write("Demo.toc", b"## Interface: 30300\nMain.lua\nUI/Frame.xml\n")
+        self.write("Main.lua", b"return true\n")
+        self.write("UI/Frame.xml", b'<Ui><Include file="parts/Nested.xml"/></Ui>')
+        self.write("UI/parts/Nested.xml", b'<Ui><Script file="../../test_compat.lua"/></Ui>')
+        self.write("test_compat.lua", b"return 'loaded runtime compatibility'\n")
+        self.write("Textures/test_icon.tga", b"\0\xfftexture\r\n")
+        self.write("Fonts/font.custom", b"\0font\xff")
+        self.write("Dynamic/not_in_toc.lua", b"return 'dynamic'\n")
+        self.write("LICENSE", b"MIT\n")
+        self.write("README.md", b"Install the Demo folder.\n")
+        self.write("SOURCE_REVISION.txt", (REVISION + "\n").encode())
+        self.development = ("test_unloaded.lua", "build-addon.sh", ".editorconfig", ".gitignore", ".gitattributes",
+                            ".luacheckrc", "stylua.toml", "CONTRIBUTING.md", ".github/workflows/test.yml",
+                            "docs/DEBUG_RUNBOOK.md", "tests/fixture.lua", ".portable-source")
+        for path in self.development:
+            self.write(path, b"development only\n")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def write(self, name, value):
+        path = self.source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(value)
+
+    def test_runtime_export_keeps_xml_loads_and_dynamic_binary_assets(self):
+        paths = PACKAGE.ADDON_RUNTIME.runtime_paths(self.source, "Demo.toc")
+        self.assertFalse(set(paths) & set(self.development))
+        for name in ("test_compat.lua", "Textures/test_icon.tga", "Fonts/font.custom", "Dynamic/not_in_toc.lua",
+                     "UI/parts/Nested.xml", "LICENSE", "README.md", "SOURCE_REVISION.txt"):
+            self.assertIn(name, paths)
+
+    def test_export_preserves_prepared_source_and_every_runtime_byte(self):
+        before = {path.relative_to(self.source).as_posix(): path.read_bytes()
+                  for path in self.source.rglob("*") if path.is_file()}
+        destination = self.root / "runtime/Demo"
+        subprocess.run([os.sys.executable, str(ROOT / "cmake/AddonRuntime.py"), "--source", str(self.source),
+                        "--toc", "Demo.toc", "--destination", str(destination)], check=True, capture_output=True)
+        self.assertEqual(before, {path.relative_to(self.source).as_posix(): path.read_bytes()
+                                  for path in self.source.rglob("*") if path.is_file()})
+        for path in destination.rglob("*"):
+            if path.is_file():
+                self.assertEqual(path.read_bytes(), before[path.relative_to(destination).as_posix()])
+
+    def test_missing_or_escaping_xml_script_cannot_be_silently_excluded(self):
+        for include in ("missing.lua", "../../../outside.lua"):
+            with self.subTest(include=include):
+                self.write("UI/parts/Nested.xml", f'<Ui><Script file="{include}"/></Ui>'.encode())
+                with self.assertRaises(ValueError):
+                    PACKAGE.ADDON_RUNTIME.runtime_paths(self.source, "Demo.toc")
+
+    @unittest.skipUnless(POWERSHELL, "PowerShell needed for standalone runtime verification")
+    def test_standalone_verifier_checks_runtime_bytes_and_refuses_development_asset(self):
+        repository = self.root / "repository"
+        prepared = repository / ".module-cache/prepared-addons/Demo"
+        shutil.copytree(self.source, prepared)
+        (repository / "versions.lock.json").write_text(json.dumps({"schemaVersion": 1, "clientAddons": [
+            {"name": "Demo", "revision": REVISION, "toc": "Demo.toc", "license": "LICENSE", "interface": 30300}]}))
+        path = self.root / "Demo.zip"
+
+        def archive(extra=None):
+            with zipfile.ZipFile(path, "w") as output:
+                for relative in PACKAGE.ADDON_RUNTIME.runtime_paths(self.source, "Demo.toc"):
+                    output.writestr("Demo/" + relative, (self.source / relative).read_bytes())
+                for relative, content in (extra or {}).items():
+                    output.writestr("Demo/" + relative, content)
+
+        command = [POWERSHELL, "-NoLogo", "-NoProfile", "-File", str(ROOT / "cmake/VerifyClientAddonZip.ps1"),
+                   "-ZipPath", str(path), "-AddonName", "Demo", "-RepositoryRoot", str(repository),
+                   "-Python", os.sys.executable]
+        archive()
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        archive({"test_unloaded.lua": b"development only\n"})
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unexpected asset", result.stderr)
+        archive()
+        (prepared / "Textures/test_icon.tga").write_bytes(b"corrupted texture")
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("differs from prepared source", result.stderr)
 
 
 if __name__ == "__main__":

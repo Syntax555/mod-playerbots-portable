@@ -5,7 +5,7 @@
 [![Client](https://img.shields.io/badge/client-3.3.5a%20%2812340%29-orange)](#requirements)
 [![Launcher license](https://img.shields.io/badge/launcher%20license-MIT-green)](LICENSE)
 
-A portable **Windows x64** server for World of Warcraft 3.3.5a, built on [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk) and [Playerbots](https://github.com/mod-playerbots/mod-playerbots). Extract the ZIP and run `startup.exe`; the launcher manages the bundled database, server configuration and first-run setup.
+A portable **Windows x64** server for World of Warcraft 3.3.5a, built on [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk) and [Playerbots](https://github.com/mod-playerbots/mod-playerbots). Extract the ZIP and run `startup.exe`; the launcher manages server updates, the bundled database, configuration and first-run setup.
 
 ## Features
 
@@ -21,23 +21,25 @@ The [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releas
 
 | Package | Use |
 | --- | --- |
-| [Server bundle](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip) | Portable server, launcher, database and configuration defaults. |
+| [Server bundle](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip) | Portable server, launcher, database and configuration templates. |
 | [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | **Required** for the default historical talents: addon and merged `patch-V.mpq`. |
 | [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional interface for managing your bot companions. |
-| [SHA-256 checksums](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt) | Verify the downloaded ZIPs. |
+| [SHA-256 checksums](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt) | Verify the packages and update manifest. |
 
-Download the server and client pack together when installing or updating.
+Install the matching server and EraTalents client pack. Client addons and the MPQ are separate downloads; the server bundle contains no client addons.
 
 ## Requirements
 
 - Windows 10/11 x64 and a writable server folder.
 - A WoW **3.3.5a client, build 12340**, including for Vanilla and TBC progression.
-- Internet access for the first-run client-data download.
+- Internet access for automatic server updates and the first-run server-data download.
 - Sufficient CPU, memory and storage for your selected bot population. The default target is **2,500 bots while a real player is connected**; capacity depends on your hardware and active content.
+
+The launcher and server executables are unsigned. Smart App Control can block them; archive checksums do not provide a trusted Windows code signature.
 
 ## Get started
 
-1. Extract the server bundle and run `startup.exe`. On first launch, it downloads missing DBC/maps/vmaps/mmaps, initializes the database and applies server SQL. Initial setup and bot creation can take considerable time.
+1. Extract the server bundle and run `startup.exe`. It checks for server updates, downloads missing DBC/maps/vmaps/mmaps, initializes the database and applies server SQL. Initial setup and bot creation can take considerable time.
 2. Create a player account in the worldserver console:
 
    ```text
@@ -58,20 +60,19 @@ Services bind locally by default. Use an ordinary player account for progression
 
 ### Optional MultiBot interface
 
-Extract the addon ZIP's `MultiBot` folder into `Interface/AddOns/`. Its final path must be `Interface/AddOns/MultiBot/MultiBot.toc`. The server bundle also includes a copy under `addons/MultiBot/`.
+Close WoW and extract the separate addon ZIP's `MultiBot` folder into `Interface/AddOns/`. Its final path must be `Interface/AddOns/MultiBot/MultiBot.toc`.
 
 When updating, remove the old client `MultiBot` folder before copying the new one. Restart WoW, enable the addon and open it with `/multibot`, `/mbot` or `/mb`. The interface uses [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) with the bundled bridge; server progression rules also apply to addon requests.
 
 ## Updating an existing realm
 
-Back up your databases and configuration, stop the launcher and servers, and install the complete server bundle. Update each player's matching EraTalents client files, then run these commands separately from PowerShell in the server folder:
+Start `startup.exe` normally. It checks [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), downloads only changed managed server files, verifies their SHA-256 hashes and restarts after installation. Database SQL and configuration updates run during normal startup. If the update check or download fails, the installed version remains available.
 
-```powershell
-.\startup.exe --set-expansion individual
-.\startup.exe --apply-profiles
-```
+An older launcher without automatic updates needs **one manual installation of the latest server ZIP** with all services stopped. Back up your databases and configuration first; see the [update guide](docs/updating.md) for the procedure and `--no-update` option.
 
-Start `startup.exe` normally afterwards. Characters, inventories, money and databases are preserved. Changed configuration files are backed up; database credentials, paths and unrelated custom settings remain intact. The commands select earned individual progression and apply the bundled defaults to an existing installation.
+Characters, databases, downloaded map data and custom configuration are preserved. New defaults replace only settings that still match their previous managed defaults, with backups before changes. The selected realm ceiling remains in place; use `startup.exe --set-expansion individual` with the servers stopped only when choosing to remove it.
+
+Install matching EraTalents client files for each player with WoW closed. The server updater does not modify WoW client folders or install client packages.
 
 Existing possessions retain their history; an update cannot establish that older equipment or gold was earned. See [realm migration](docs/changing-expansions.md#updating-an-existing-realm) and [talent migration](docs/era-talents.md#updating-an-existing-realm) before changing an established realm's progression rules.
 
@@ -106,14 +107,15 @@ Bot questing, navigation and encounter support varies by content. Bots can get s
 | [Bot brackets](docs/earned-bot-brackets.md) | Resident levels, population and battleground eligibility. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
 | [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |
+| [Updates](docs/updating.md) | Automatic server updates, older-launcher migration and preserved data. |
 | [Source versions](docs/module-versions.md) | Pinned dependencies and reproducible adaptations. |
-| [Building from source](docs/building.md) | Windows build requirements and package generation. |
+| [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build requirements and package generation. |
 
 Bot commands are documented in the [Playerbots wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands).
 
 ## Contributing
 
-[Report a problem](https://github.com/Syntax555/mod-playerbots-portable/issues) with your source manifest, relevant configuration, logs and steps to reproduce. Pull requests are welcome; use the [build guide](docs/building.md) to reproduce the bundled sources and validate changes.
+[Report a problem](https://github.com/Syntax555/mod-playerbots-portable/issues) with your source manifest, relevant configuration, logs and steps to reproduce. Pull requests are welcome; use the [build guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) to reproduce the bundled sources and validate changes.
 
 ## License and credits
 

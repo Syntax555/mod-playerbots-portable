@@ -116,7 +116,7 @@ func detectRealmPhase(workDir string, allowConflictingCaps bool) (realmPhase, er
 		phase, _ := parseRealmPhase(name)
 		if inferred.name != "" && inferred != phase {
 			if !allowConflictingCaps {
-				return realmPhase{}, errors.New("expansion caps disagree; run --set-expansion with the latest expansion already enabled before applying profiles")
+				return realmPhase{}, errors.New("expansion caps disagree; run --set-expansion with the latest expansion already enabled before starting the realm")
 			}
 			if inferred.level > phase.level {
 				continue

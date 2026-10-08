@@ -91,17 +91,11 @@ not configure earned Playerbots trading.
 
 ## Updates and market limits
 
-Install the complete server package from
-[Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
-With the launcher and servers stopped, run:
-
-```powershell
-.\startup.exe --apply-profiles
-```
-
-The command backs up managed configuration changes and preserves databases and
-characters. Apply custom auction intervals afterward; applying profiles again
-restores their defaults. Updating only `startup.exe` cannot update server logic.
+Normal `startup.exe` launches update server files and merge configuration defaults
+automatically. Custom auction settings are preserved; new defaults replace only
+values that still match their previous managed defaults. Changed configs receive
+backups, and existing databases and characters remain intact. An older launcher
+needs one manual server-ZIP upgrade first; see the [update guide](updating.md).
 
 Existing items and money are retained. There is no provenance ledger to separate
 previously generated possessions from earned ones on an older realm. A fresh

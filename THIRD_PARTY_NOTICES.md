@@ -20,9 +20,10 @@ combined EraTalents client pack includes dependency licenses and
 
 ## Included projects
 
-The paths below refer to the server ZIP unless indicated otherwise. A root
-license file can coexist with notices applying to individual source files;
-those notices remain applicable.
+The paths below refer to the server ZIP unless indicated otherwise. Client
+addon notices are included in their separate packages. A root license file can
+coexist with notices applying to individual source files; those notices remain
+applicable.
 
 | Project | Upstream license and notices | Packaged notice |
 | --- | --- | --- |
@@ -35,8 +36,8 @@ those notices remain applicable.
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | AGPL version 3 license text and source notice. | `licenses/mod-quest-loot-party/LICENSE`, `licenses/AGPL-3.0.txt` |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | No explicit license declaration at the locked revision; provenance notice retained. | `licenses/mod-multibot-bridge/NOTICE.txt` |
 | [Token Turn-in](https://github.com/Zerathane/mod-token-turnin) | MIT root license; loader also carries an AGPL version 3 source notice. | `licenses/mod-token-turnin/LICENSE`, `licenses/AGPL-3.0.txt` |
-| [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | MIT upstream license; portable integration files also carry GPL-2.0-or-later notices. | `licenses/mod-era-talents/LICENSE`, `licenses/EraTalents/LICENSE`, `licenses/GPL-2.0.txt` |
-| [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | GPL version 3 upstream license text. | `licenses/MultiBot/LICENSE` and `addons/MultiBot/LICENSE` |
+| [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | MIT upstream license; portable integration files also carry GPL-2.0-or-later notices. | Server: `licenses/mod-era-talents/LICENSE`, `licenses/GPL-2.0.txt`. Combined client pack: `Interface/AddOns/EraTalents/LICENSE`, `licenses/mod-era-talents.txt`. |
+| [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | GPL version 3 upstream license text. | `MultiBot/LICENSE` in the separate addon ZIP. |
 | [StormLib](https://github.com/ladislav-zezula/StormLib) | MIT; used to build and verify the client patch. | `licenses/StormLib.txt` in the combined client pack |
 | [MySQL Community](https://www.mysql.com/products/community/) | GPL version 2 with the package's additional permissions and third-party terms. | `licenses/mysql/`, preserving package license and `INFO_BIN`/`INFO_SRC` files where present |
 | [OpenSSL](https://www.openssl.org/) | Apache-2.0; provider notices are preserved separately. | `licenses/openssl/` |

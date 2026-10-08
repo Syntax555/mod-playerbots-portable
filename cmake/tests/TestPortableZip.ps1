@@ -27,7 +27,7 @@ function Assert-Condition([bool]$Condition, [string]$Message) {
 }
 
 function Invoke-Assembly {
-    & $CMake "-DPORTABLE_SOURCE_DIR=$source" "-DPORTABLE_DIST_DIR=$dist" -P (Join-Path $cmakeRoot 'AssembleDistribution.cmake')
+    & $CMake "-DPORTABLE_SOURCE_DIR=$source" "-DPORTABLE_DIST_DIR=$dist" "-DPORTABLE_RELEASE_REVISION=$revision" "-DPACKAGE_VERSION=latest" -P (Join-Path $cmakeRoot 'AssembleDistribution.cmake')
     if ($LASTEXITCODE -ne 0) { throw "Fixture assembly failed: $LASTEXITCODE" }
 }
 
@@ -63,7 +63,7 @@ function New-FixtureZip(
 
 function Test-Zip([string]$Name, [string]$ZipPath, [string]$ExpectedError = '') {
     $failure = ''
-    try { & $verifier -ZipPath $ZipPath -RepositoryRoot $source } catch { $failure = $_.Exception.Message }
+    try { & $verifier -ZipPath $ZipPath -RepositoryRoot $source -ExpectedRevision ('a' * 40) } catch { $failure = $_.Exception.Message }
     if ($ExpectedError) {
         if (-not $failure -or $failure -notmatch $ExpectedError) {
             throw "$Name expected '$ExpectedError', got '$failure'"
@@ -98,7 +98,7 @@ try {
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
     foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
-        'patches/fixture.patch')) {
+        'patches/fixture.patch', 'CONTRIBUTING.md', 'docs/building.md')) {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
@@ -134,8 +134,9 @@ try {
     # modules, without deleting non-SQL module data, live databases or user configs.
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
-        'src/modules/mod-removed/data/sql/db_world/obsolete.sql')) {
-        Write-FixtureText (Join-Path $dist $name) 'obsolete migration'
+        'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons/OldAddon/OldAddon.lua',
+        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'CONTRIBUTING.md', 'docs/building.md')) {
+        Write-FixtureText (Join-Path $dist $name) 'obsolete export'
     }
     $preserved = @('mysql/data/user.db', 'mysql/my.cnf', 'configs/worldserver.conf',
         'configs/modules/mod_fixture.conf', 'src/modules/mod-removed/keep.txt')
@@ -152,7 +153,8 @@ try {
     Invoke-Assembly
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
-        'src/modules/mod-removed/data/sql/db_world/obsolete.sql')) {
+        'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons', 'defaults',
+        'licenses/MultiBot', 'CONTRIBUTING.md', 'docs/building.md')) {
         Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Assembly retained $name"
     }
     foreach ($path in @($oldCoreSql, $oldModuleSql)) {
@@ -161,12 +163,17 @@ try {
     foreach ($name in $preserved) {
         Assert-Condition ([System.IO.File]::ReadAllText((Join-Path $dist $name)) -ceq "preserve $name") "Assembly modified $name"
     }
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'addons'))) 'Assembly duplicated standalone client addons'
+    Remove-Item -LiteralPath (Join-Path $source '.module-cache/prepared-addons') -Recurse -Force
     Remove-Item -LiteralPath (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/data/sql') -Recurse -Force
     Invoke-Assembly
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'src/modules/mod-fixture/data/sql'))) 'Assembly retained SQL after the module stopped supplying it'
     Write-FixtureText $moduleSql "SELECT 1;`n"
     Invoke-Assembly
-    Write-Host 'PASS: generated SQL replacement preserves live data/configs and removes deleted module SQL'
+    # User data is preserved by assembly, but must never enter a downloadable ZIP.
+    foreach ($name in $preserved) { Remove-Item -LiteralPath (Join-Path $dist $name) -Force }
+    Remove-Item -LiteralPath (Join-Path $dist 'mysql/data') -Recurse -Force
+    Write-Host 'PASS: clean runtime exports preserve user data and need no prepared addon files'
     $script:passed++
 
     # Stub the Windows runtime files; this suite tests packaging, not PE execution.
@@ -180,14 +187,20 @@ try {
     foreach ($profile in $profiles | Where-Object { $_ -ne 'worldserver' }) {
         Write-FixtureText (Join-Path $dist "configs/modules/$profile.conf.dist")
     }
+    Write-FixtureText (Join-Path $dist 'mysql/bin/mysqldump.exe')
+    Write-FixtureText (Join-Path $dist 'mysql/bin/dependency.dll')
+    & $CMake "-DPORTABLE_DIST_DIR=$dist" -P (Join-Path $cmakeRoot 'PrunePortableDistribution.cmake')
+    if ($LASTEXITCODE -ne 0) { throw 'Fixture pruning failed.' }
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'mysql/bin/mysqldump.exe'))) 'Unused MySQL executable survived pruning'
+    Assert-Condition (Test-Path -LiteralPath (Join-Path $dist 'mysql/bin/dependency.dll')) 'MySQL runtime dependency was pruned'
     $script:baseline = [System.Collections.Generic.Dictionary[string, byte[]]]::new([System.StringComparer]::Ordinal)
     foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File -Force) {
         $relative = [System.IO.Path]::GetRelativePath($dist, $file.FullName).Replace('\', '/')
         $script:baseline.Add($relative, [System.IO.File]::ReadAllBytes($file.FullName))
     }
     $plainZip = Join-Path $temporaryRoot 'plain.zip'
-    New-FixtureZip $plainZip -ExtraEntries @(@{ Name = 'addons/MultiBot/Textures/' })
-    Test-Zip 'plain archive with addon textures, hidden and empty assets' $plainZip
+    New-FixtureZip $plainZip -ExtraEntries @(@{ Name = 'licenses/empty/' })
+    Test-Zip 'plain archive contains server runtime and no duplicate client files' $plainZip
 
     $fallbackZip = Join-Path $temporaryRoot 'cmake-fallback.zip'
     Push-Location $dist
@@ -198,7 +211,7 @@ try {
     Test-Zip 'actual CMake ZIP fallback' $fallbackZip
     # CMake/libarchive versions differ in whether they preserve the ./ entries.
     $prefixedZip = Join-Path $temporaryRoot 'prefixed.zip'
-    New-FixtureZip $prefixedZip -Prefix './' -ExtraEntries @(@{ Name = './' }, @{ Name = './addons/' })
+    New-FixtureZip $prefixedZip -Prefix './' -ExtraEntries @(@{ Name = './' }, @{ Name = './docs/' })
     Test-Zip 'literal ./ prefix including ./ root directory' $prefixedZip
 
     foreach ($unsafe in @('../README.md', '/README.md', './/README.md', '././README.md',
@@ -212,7 +225,7 @@ try {
         Test-NegativeZip "duplicate normalized path $duplicate" 'Duplicate path' -ExtraEntries @(@{ Name = $duplicate })
     }
     Test-NegativeZip 'file and directory duplicate' 'Duplicate path' -ExtraEntries @(@{ Name = 'README.md/' })
-    Test-NegativeZip 'file shadows an asset directory' 'File/directory collision' -ExtraEntries @(@{ Name = 'addons/MultiBot/Textures'; Bytes = [byte[]]@(1) })
+    Test-NegativeZip 'file shadows an asset directory' 'File/directory collision' -ExtraEntries @(@{ Name = 'docs'; Bytes = [byte[]]@(1) })
     Test-NegativeZip 'nonempty directory entry' 'Nonempty directory' -ExtraEntries @(@{ Name = 'extra/'; Bytes = [byte[]]@(1) })
     $symlinkAttributes = [int](([int64]0xA1FF -shl 16) - 0x100000000)
     Test-NegativeZip 'Unix symbolic link' 'Symbolic link' -ExtraEntries @(@{ Name = 'link'; Bytes = [byte[]]@(1); Attributes = $symlinkAttributes })
@@ -221,13 +234,17 @@ try {
         Test-NegativeZip "existing metadata/debug guard $forbidden" 'Unexpected source/debug/installer' -ExtraEntries @(@{ Name = $forbidden })
     }
 
-    Test-NegativeZip 'same-length corrupted Lua' 'asset differs from prepared source' -Replacements @{ 'addons/MultiBot/Core/MultiBot.lua' = [System.Text.Encoding]::UTF8.GetBytes("print('evil')`n") }
-    Test-NegativeZip 'same-length corrupted texture outside TOC' 'asset differs from prepared source' -Replacements @{ 'addons/MultiBot/Textures/icon.blp' = [byte[]]@(0, 254, 128, 0) }
-    Test-NegativeZip 'stale duplicated addon license' 'asset differs from prepared source' -Replacements @{ 'licenses/MultiBot/LICENSE' = [System.Text.Encoding]::UTF8.GetBytes("changed`n") }
-    Test-NegativeZip 'missing hidden addon asset' 'missing client addon asset' -Omit @('addons/MultiBot/.hidden.bin')
-    Test-NegativeZip 'unexpected legacy addon file' 'Unexpected client addon asset' -ExtraEntries @(@{ Name = 'addons/MultiBot/legacy.lua'; Bytes = [byte[]]@(1) })
-    Test-NegativeZip 'unexpected addon root' 'Unexpected client addon asset' -ExtraEntries @(@{ Name = 'addons/OldAddon/legacy.lua'; Bytes = [byte[]]@(1) })
-    Test-NegativeZip 'addon asset casing differs from prepared source' 'Unexpected client addon asset' -Omit @('addons/MultiBot/Textures/icon.blp') -ExtraEntries @(@{ Name = 'addons/MultiBot/Textures/ICON.blp'; Bytes = $script:baseline['addons/MultiBot/Textures/icon.blp'] })
+    foreach ($redundant in @('addons/MultiBot/Core.lua', 'defaults/worldserver.conf',
+        'CONTRIBUTING.md', 'docs/building.md', 'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe')) {
+        Test-NegativeZip "redundant file $redundant" 'Redundant development/client' -ExtraEntries @(@{ Name = $redundant; Bytes = [byte[]]@(1) })
+    }
+    foreach ($live in @('configs/worldserver.conf', 'mysql/data/user.db', 'mysql/my.cnf',
+        'mysql/my.ini', 'logs/world.log', 'data/dbc/Spell.dbc', 'configs/.portable-profiles.json', 'configs/realm-phase.txt')) {
+        Test-NegativeZip "protected user file $live" 'Live user data/configuration' -ExtraEntries @(@{ Name = $live; Bytes = [byte[]]@(1) })
+    }
+    Test-NegativeZip 'missing release identity' 'missing portable-release.json' -Omit @('portable-release.json')
+    $wrongIdentity = @{ schema = 1; revision = ('b' * 40); package = 'mod-playerbots-portable-latest.zip'; version = 'latest' } | ConvertTo-Json
+    Test-NegativeZip 'release identity belongs to another commit' 'Invalid or mismatched portable release identity' -Replacements @{ 'portable-release.json' = [System.Text.Encoding]::UTF8.GetBytes($wrongIdentity) }
     Test-NegativeZip 'missing one core database while another remains' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')
     Test-NegativeZip 'missing module migration' 'missing module migration' -Omit @('src/modules/mod-fixture/data/sql/db_world/current.sql')
     foreach ($obsolete in @('src/data/sql/updates/db_world/obsolete.sql',

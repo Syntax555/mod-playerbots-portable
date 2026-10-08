@@ -6,7 +6,7 @@ The [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releas
 
 - Windows 10/11 x64.
 - Visual Studio 2022 with the Desktop development with C++ workload.
-- CMake 3.22 or newer, Go 1.26.6 or newer, PowerShell 7 and Git.
+- CMake 3.22 or newer, Go 1.26.6 or newer, Python 3, PowerShell 7 and Git.
 - Boost 1.84 or newer, MySQL Server 8.0 x64 and OpenSSL 3 x64.
 
 The Windows resource compiler requires CMake 3.22 or newer with the Visual Studio generator. Use x64 dependencies throughout.
@@ -45,6 +45,10 @@ Outputs:
 
 The complete `EraTalents-client-dev.zip` also requires the merged client MPQ. It is built separately on Linux; see [building the client package](era-talents.md#building-the-client-package). Use a client package built from the same pinned sources as your server.
 
+The server ZIP contains runtime files, configuration templates, required SQL, user guides and license notices. Addons are separate downloads; recommended configuration profiles are embedded in the launcher. Client exports omit development files while retaining their runtime resources.
+
+`portable-release.json` records the source commit and package version. The automatic updater applies only to `latest` packages; a `dev` build keeps its custom binaries. See [updating](updating.md) for configuration merging and data preservation.
+
 ## Build resources
 
 The default MSVC configuration uses two compiler processes per project. `CMAKE_BUILD_PARALLEL_LEVEL` also limits the nested server build to two parallel projects, reducing peak memory use.
@@ -76,3 +80,7 @@ The server bundle includes the source manifest, patches and applicable license f
 The [release workflow](../.github/workflows/release.yml) validates the launcher and progression adaptations, builds the Windows server and client packages, and verifies the assembled archives. [Actions](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml) records the checks and source commit for each build.
 
 The public [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest) contains the matching verified packages. Build artifacts are also available from eligible successful Actions runs.
+
+Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP, recording each file's size and SHA-256 hash. Latest contains three ZIPs, this update manifest and `SHA256SUMS.txt`, which covers all four payloads. Publication replaces the existing `latest` release after verification and creates no additional version tags.
+
+The executables are currently unsigned. Windows Smart App Control may block them; package checksums and automated build checks do not replace a trusted Windows code signature.

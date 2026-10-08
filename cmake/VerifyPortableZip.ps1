@@ -1,30 +1,13 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$ZipPath,
-    [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent)
+    [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent),
+    [string]$ExpectedRevision = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
-
-function Assert-AddonFileMatchesSource(
-    [System.IO.Compression.ZipArchiveEntry]$Entry,
-    [System.IO.FileInfo]$SourceFile,
-    [System.Security.Cryptography.SHA256]$Sha256,
-    [string]$Name
-) {
-    if ($Entry.Length -ne $SourceFile.Length) {
-        throw "Packaged client addon asset differs from prepared source: $Name"
-    }
-    $stream = $Entry.Open()
-    try { $packagedHash = [System.BitConverter]::ToString($Sha256.ComputeHash($stream)) } finally { $stream.Dispose() }
-    $stream = [System.IO.File]::OpenRead($SourceFile.FullName)
-    try { $sourceHash = [System.BitConverter]::ToString($Sha256.ComputeHash($stream)) } finally { $stream.Dispose() }
-    if ($packagedHash -cne $sourceHash) {
-        throw "Packaged client addon asset differs from prepared source: $Name"
-    }
-}
 
 $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ZipPath).Path)
 try {
@@ -50,6 +33,13 @@ try {
         if ($name -match '(^|/)\.git(/|$)' -or $name -match '\.(pdb|lib|exp|ilk|msix|msixupload)$') {
             throw "Unexpected source/debug/installer file in portable ZIP: $name"
         }
+        if ($name -match '^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$' -or
+            $name -match '^mysql/(include|docs)(/|$)|^mysql/bin/(?!mysqld[.]exe$|mysql[.]exe$|mysqladmin[.]exe$)[^/]+[.]exe$') {
+            throw "Redundant development/client file in portable ZIP: $name"
+        }
+        if ($name -match '^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$') {
+            throw "Live user data/configuration in portable ZIP: $name"
+        }
         if ($name.Length -eq 0 -or $name.EndsWith('/')) {
             if ($entry.Length -ne 0) { throw "Nonempty directory entry in portable ZIP: $($entry.FullName)" }
             continue
@@ -68,60 +58,6 @@ try {
     }
 
     $lock = Get-Content (Join-Path $RepositoryRoot 'versions.lock.json') -Raw | ConvertFrom-Json
-    $expectedAddonFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    foreach ($addon in @($lock.clientAddons)) {
-        $prefix = "addons/$($addon.name)"
-        $tocPath = "$prefix/$($addon.toc)"
-        foreach ($name in @($tocPath, "$prefix/$($addon.license)", "$prefix/README.md", "$prefix/SOURCE_REVISION.txt", "licenses/$($addon.name)/$($addon.license)")) {
-            if (-not $files.Contains($name)) { throw "Portable ZIP is missing client addon file $name" }
-        }
-        $reader = [System.IO.StreamReader]::new($entries["$prefix/SOURCE_REVISION.txt"].Open())
-        try { $addonRevision = $reader.ReadToEnd().Trim() } finally { $reader.Dispose() }
-        if ($addonRevision -ne $addon.revision) { throw "Client addon $($addon.name) does not match its locked source revision." }
-        $reader = [System.IO.StreamReader]::new($entries[$tocPath].Open())
-        try { $tocText = $reader.ReadToEnd() } finally { $reader.Dispose() }
-        $interface = [regex]::Match($tocText, '(?m)^##\s*Interface\s*:\s*(\d+)\s*$')
-        if (-not $interface.Success -or $interface.Groups[1].Value -ne '30300' -or $addon.interface -ne 30300) {
-            throw "Client addon $($addon.name) must declare WotLK Interface 30300."
-        }
-        foreach ($line in ($tocText -split '\r?\n')) {
-            $asset = $line.Trim().Replace('\', '/')
-            if (-not $asset -or $asset.StartsWith('#')) { continue }
-            if ($asset.StartsWith('/') -or $asset -match '(^|/)\.\.(/|$)' -or -not $files.Contains("$prefix/$asset")) {
-                throw "Client addon $($addon.name) has a missing or invalid TOC asset: $asset"
-            }
-        }
-        # Match all prepared bytes, including hidden files and textures outside the TOC.
-        $addonSource = Join-Path $RepositoryRoot ".module-cache/prepared-addons/$($addon.name)"
-        if (-not (Test-Path -LiteralPath $addonSource -PathType Container)) { throw "Prepared client addon source is missing: $($addon.name)" }
-        if ((Get-Item -LiteralPath $addonSource -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-            throw "Symbolic link in prepared client addon: $($addon.name)"
-        }
-        $sha256 = [System.Security.Cryptography.SHA256]::Create()
-        try {
-            foreach ($sourceFile in Get-ChildItem -LiteralPath $addonSource -Recurse -Force) {
-                if ($sourceFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                    throw "Symbolic link in prepared client addon: $($sourceFile.FullName)"
-                }
-                $relative = [System.IO.Path]::GetRelativePath($addonSource, $sourceFile.FullName).Replace('\', '/')
-                if ($relative -match '(^|/)\.portable-source(/|$)' -or $sourceFile.PSIsContainer) { continue }
-                $name = "$prefix/$relative"
-                [void]$expectedAddonFiles.Add($name)
-                if (-not $entries.ContainsKey($name)) { throw "Portable ZIP is missing client addon asset $name" }
-                Assert-AddonFileMatchesSource $entries[$name] $sourceFile $sha256 $name
-            }
-            $licensePath = "licenses/$($addon.name)/$($addon.license)"
-            Assert-AddonFileMatchesSource $entries[$licensePath] (Get-Item -LiteralPath (Join-Path $addonSource $addon.license)) $sha256 $licensePath
-        } finally {
-            $sha256.Dispose()
-        }
-    }
-    foreach ($name in $entries.Keys) {
-        if ($name.StartsWith('addons/', [System.StringComparison]::OrdinalIgnoreCase) -and -not $expectedAddonFiles.Contains($name)) {
-            throw "Unexpected client addon asset in portable ZIP: $name"
-        }
-    }
-
     $required = @(
         'startup.exe', 'authserver.exe', 'worldserver.exe',
         'map_extractor.exe', 'vmap4_extractor.exe', 'vmap4_assembler.exe', 'mmaps_generator.exe', 'dbimport.exe',
@@ -135,16 +71,20 @@ try {
         'configs/modules/mod_dungeon_clear.conf.dist',
         'configs/modules/mod-quest-loot-party.conf.dist',
         'configs/modules/MultiBotBridge.conf.dist', 'configs/modules/mod_token_turnin.conf.dist',
-        'defaults/playerbots.conf', 'defaults/worldserver.conf', 'defaults/individualProgression.conf',
-        'defaults/AutoBalance.conf', 'defaults/mod_ahbot.conf', 'defaults/mod_dungeon_clear.conf',
-        'defaults/mod-quest-loot-party.conf',
-        'defaults/MultiBotBridge.conf', 'defaults/mod_token_turnin.conf',
-        'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
+        'portable-release.json', 'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
         'LICENSE', 'licenses/azerothcore-wotlk.txt'
     )
     foreach ($name in $required) {
         if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+    }
+    $reader = [System.IO.StreamReader]::new($entries['portable-release.json'].Open())
+    try { $identity = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+    if ($identity.schema -ne 1 -or $identity.revision -cnotmatch '^[0-9a-f]{40}$' -or
+        $identity.version -cnotmatch '^[A-Za-z0-9._-]+$' -or
+        $identity.package -cne "mod-playerbots-portable-$($identity.version).zip" -or
+        ($ExpectedRevision -and $identity.revision -cne $ExpectedRevision)) {
+        throw 'Invalid or mismatched portable release identity.'
     }
     $textSources = [ordered]@{
         'README.md' = 'README.md'
@@ -153,29 +93,19 @@ try {
         'docs/changing-expansions.md' = 'docs/changing-expansions.md'
         'docs/earned-bot-brackets.md' = 'docs/earned-bot-brackets.md'
         'docs/earned-auctions.md' = 'docs/earned-auctions.md'
-        'defaults/playerbots.conf' = 'cmd/startup/profiles/playerbots.conf'
-        'defaults/worldserver.conf' = 'cmd/startup/profiles/worldserver.conf'
-        'defaults/individualProgression.conf' = 'cmd/startup/profiles/individualProgression.conf'
-        'defaults/AutoBalance.conf' = 'cmd/startup/profiles/AutoBalance.conf'
-        'defaults/mod_ahbot.conf' = 'cmd/startup/profiles/mod_ahbot.conf'
-        'defaults/mod_dungeon_clear.conf' = 'cmd/startup/profiles/mod_dungeon_clear.conf'
-        'defaults/mod-quest-loot-party.conf' = 'cmd/startup/profiles/mod-quest-loot-party.conf'
-        'defaults/MultiBotBridge.conf' = 'cmd/startup/profiles/MultiBotBridge.conf'
-        'defaults/mod_token_turnin.conf' = 'cmd/startup/profiles/mod_token_turnin.conf'
+
     }
-    foreach ($document in @('THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md', 'docs/building.md')) {
+    foreach ($document in @('THIRD_PARTY_NOTICES.md')) {
         if (Test-Path (Join-Path $RepositoryRoot $document) -PathType Leaf) {
             if (-not $files.Contains($document)) { throw "Portable ZIP is missing $document" }
             $textSources[$document] = $document
         }
     }
     if (@($lock.modules | Where-Object { $_.name -eq 'mod-era-talents' }).Count -gt 0) {
-        foreach ($name in @('docs/era-talents.md', 'defaults/mod_era_talents.conf',
-            'configs/modules/mod_era_talents.conf.dist')) {
+        foreach ($name in @('docs/era-talents.md', 'configs/modules/mod_era_talents.conf.dist')) {
             if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
         }
         $textSources['docs/era-talents.md'] = 'docs/era-talents.md'
-        $textSources['defaults/mod_era_talents.conf'] = 'cmd/startup/profiles/mod_era_talents.conf'
     }
     foreach ($name in $textSources.Keys) {
         $reader = [System.IO.StreamReader]::new($entries[$name].Open())
@@ -231,7 +161,7 @@ try {
     try { $packagedLock = $reader.ReadToEnd() } finally { $reader.Dispose() }
     $expectedLock = Get-Content (Join-Path $RepositoryRoot 'versions.lock.json') -Raw
     if ($packagedLock.Trim() -ne $expectedLock.Trim()) { throw 'Packaged dependency lock differs from build sources.' }
-    Write-Host "Verified portable ZIP: $($files.Count) nonempty files, required runtime/configs, matching client addon assets and exact SQL file sets."
+    Write-Host "Verified portable ZIP: $($files.Count) nonempty files, required runtime/configs, release identity, separate client downloads and exact SQL file sets."
 } finally {
     $archive.Dispose()
 }

@@ -30,11 +30,13 @@ files against the prepared source.
 The client packager uses IP's locked base archive, merges generated spell and
 skill rows, and preserves other entries byte for byte. `SOURCE_MANIFEST.json`
 records sources, patches, artifact hashes and the server/client generation.
-Install `EraTalents-client-latest.zip` with the matching server; the server's
-addon folder does not include the MPQ. See [client setup](era-talents.md).
+Install `EraTalents-client-latest.zip` with the matching server. Both the addon
+and MPQ are required and are installed manually with WoW closed; the server
+updater does not modify client files. See [client setup](era-talents.md).
 
 MultiBot Chatless installs as `Interface/AddOns/MultiBot/`, with `MultiBot.toc`.
-The separate addon ZIP and server package contain the same prepared addon.
+The separate addon ZIP contains the prepared addon; the server package contains
+no client addons.
 
 ## Licenses
 

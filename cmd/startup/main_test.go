@@ -141,15 +141,14 @@ func TestParseArgsCustomFlags(t *testing.T) {
 	}
 }
 
-func TestParseArgsProfileModeAndInvalidOptions(t *testing.T) {
-	opts, err := parseArgs([]string{"--apply-profiles"})
-	if err != nil || !opts.applyProfiles {
-		t.Fatalf("apply-profiles was not parsed: %+v, %v", opts, err)
+func TestParseArgsUpdateModeAndInvalidOptions(t *testing.T) {
+	opts, err := parseArgs([]string{"--no-update"})
+	if err != nil || !opts.noUpdate {
+		t.Fatalf("no-update was not parsed: %+v, %v", opts, err)
 	}
 	for _, args := range [][]string{
-		{"--apply-profiles", "--init-only"},
-		{"--apply-profiles", "--download-data-only"},
-		{"--port", "0"}, {"--port", "65536"}, {"--auth-port", "-1"}, {"--timeout", "0"},
+		{"--apply-profiles"}, {"--port", "0"}, {"--port", "65536"},
+		{"--auth-port", "-1"}, {"--timeout", "0"},
 	} {
 		if _, err := parseArgs(args); err == nil {
 			t.Errorf("accepted invalid options %v", args)

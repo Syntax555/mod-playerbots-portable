@@ -141,7 +141,16 @@ class PublicationTests(unittest.TestCase):
             artifact_dir.mkdir()
             with zipfile.ZipFile(artifact_dir / filename, "w") as archive:
                 for entry in required:
-                    archive.writestr(entry, f"test payload: {entry}")
+                    content = f"test payload: {entry}"
+                    if entry == "portable-release.json":
+                        content = json.dumps({"schema": 1, "revision": SHA,
+                                              "package": publisher.SERVER_PACKAGE_NAME, "version": "latest"})
+                    archive.writestr(entry, content)
+                if filename == publisher.SERVER_PACKAGE_NAME:
+                    for entry in ("configs/worldserver.conf.dist", "src/data/sql/base/db_auth/base.sql",
+                                  "docs/era-talents.md", "licenses/module/COPYING", "mysql/bin/library.dll"):
+                        archive.writestr(entry, f"runtime payload: {entry}")
+                    archive.writestr("licenses/empty.txt", b"")
         self.notes = self.directory / "notes.md"
         self.notes.write_text(
             "Download Latest from {repository_url}. Source: {source_url}. "
@@ -151,6 +160,18 @@ class PublicationTests(unittest.TestCase):
 
     def publish(self):
         return publisher.publish(self.client, SHA, self.directory, self.notes, "123456")
+
+    def rewrite_server(self, replacements=None, extra=None, prefix=""):
+        path = next(self.directory.rglob(publisher.SERVER_PACKAGE_NAME))
+        with zipfile.ZipFile(path) as archive:
+            files = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+        files.update(replacements or {})
+        with zipfile.ZipFile(path, "w") as archive:
+            for name, content in files.items():
+                archive.writestr(prefix + name, content)
+            for name, content in (extra or {}).items():
+                archive.writestr(name, content)
+        return path
 
     def test_missing_artifact_fails_before_api_writes(self):
         next(self.directory.rglob("EraTalents-client-latest.zip")).unlink()
@@ -212,7 +233,7 @@ class PublicationTests(unittest.TestCase):
         self.client.main_values = [SHA, OLDER_SHA]
         result = self.publish()
         self.assertTrue(result.skipped)
-        self.assertEqual(4, self.client.upload_count)
+        self.assertEqual(5, self.client.upload_count)
         self.assertIn(1, self.client.releases)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
         self.assertNotIn(self.client.draft_id, self.client.releases)
@@ -260,7 +281,7 @@ class PublicationTests(unittest.TestCase):
         self.assertFalse(release["prerelease"])
         self.assertEqual("Latest", release["name"])
         self.assertEqual(SHA, release["target_commitish"])
-        self.assertEqual(set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME},
+        self.assertEqual(set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME},
                          {asset["name"] for asset in release["assets"]})
         self.assertEqual({4, self.client.draft_id}, set(self.client.releases))
         self.assertEqual({"latest", "preview", "build-preserve-me", "version-documentation"},
@@ -289,15 +310,103 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertNotIn(("upload_asset", "EraTalents-latest.zip"), self.client.calls)
 
-    def test_checksum_file_covers_exactly_the_three_public_zips(self):
+    def test_checksum_file_covers_three_public_zips_and_update_manifest(self):
         self.publish()
         checksum_lines = (self.directory / publisher.CHECKSUM_NAME).read_text().splitlines()
-        self.assertEqual(3, len(checksum_lines))
-        self.assertEqual(sorted(publisher.ZIP_CONTENTS), [line.split("  ")[1] for line in checksum_lines])
+        self.assertEqual(4, len(checksum_lines))
+        self.assertEqual(sorted(set(publisher.ZIP_CONTENTS) | {publisher.UPDATE_MANIFEST_NAME}),
+                         [line.split("  ")[1] for line in checksum_lines])
         for line in checksum_lines:
             expected_digest, name = line.split("  ")
             payload = next(self.directory.rglob(name)).read_bytes()
             self.assertEqual(hashlib.sha256(payload).hexdigest(), expected_digest)
+
+    def test_update_manifest_hashes_exact_final_archive_and_every_managed_file(self):
+        self.publish()
+        manifest = json.loads((self.directory / publisher.UPDATE_MANIFEST_NAME).read_text())
+        path = next(self.directory.rglob(publisher.SERVER_PACKAGE_NAME))
+        self.assertEqual(1, manifest["schema"])
+        self.assertEqual(SHA, manifest["revision"])
+        self.assertEqual(publisher.SERVER_PACKAGE_NAME, manifest["package"])
+        self.assertEqual(path.stat().st_size, manifest["size"])
+        self.assertEqual(publisher.digest(path), manifest["sha256"])
+        with zipfile.ZipFile(path) as archive:
+            self.assertEqual(sorted(archive.namelist()), [entry["path"] for entry in manifest["files"]])
+            for entry in manifest["files"]:
+                content = archive.read(entry["path"])
+                self.assertEqual(len(content), entry["size"])
+                self.assertEqual(hashlib.sha256(content).hexdigest(), entry["sha256"])
+        self.assertNotIn(publisher.UPDATE_MANIFEST_NAME, {entry["path"] for entry in manifest["files"]})
+
+    def test_manifest_paths_accept_cmake_prefix_and_are_normalized(self):
+        self.rewrite_server(prefix="./")
+        self.publish()
+        manifest = json.loads((self.directory / publisher.UPDATE_MANIFEST_NAME).read_text())
+        self.assertTrue(all(not entry["path"].startswith("./") for entry in manifest["files"]))
+
+    def test_manifest_rejects_mutable_user_data_before_api_calls(self):
+        for name in ("configs/worldserver.conf", "mysql/data/user.db", "mysql/my.cnf", "mysql/my.ini",
+                     "data/dbc/Spell.dbc", "logs/world.log", "configs/.portable-profiles.json", "configs/realm-phase.txt"):
+            with self.subTest(name=name):
+                self.setUp()
+                self.rewrite_server(extra={name: "private user data"})
+                with self.assertRaisesRegex(publisher.PublishError, "Unmanaged user"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+                self.assertFalse((self.directory / publisher.UPDATE_MANIFEST_NAME).exists())
+
+    def test_manifest_rejects_duplicate_client_and_development_exports(self):
+        for name in ("addons/MultiBot/Core.lua", "defaults/worldserver.conf", "CONTRIBUTING.md", "docs/building.md",
+                     publisher.UPDATE_MANIFEST_NAME):
+            with self.subTest(name=name):
+                self.setUp()
+                self.rewrite_server(extra={name: "redundant file"})
+                with self.assertRaisesRegex(publisher.PublishError, "Unmanaged user or redundant"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+
+    def test_manifest_rejects_wrong_source_identity(self):
+        identity = {"schema": 1, "revision": OLDER_SHA, "package": publisher.SERVER_PACKAGE_NAME, "version": "latest"}
+        self.rewrite_server(replacements={"portable-release.json": json.dumps(identity)})
+        with self.assertRaisesRegex(publisher.PublishError, "mismatched portable release identity"):
+            self.publish()
+        self.assertEqual([], self.client.calls)
+
+    def test_manifest_rejects_invalid_identity_fields(self):
+        for changes in ({"schema": 2}, {"revision": "main"}, {"package": "other.zip"}, {"version": "dev"}):
+            with self.subTest(changes=changes):
+                self.setUp()
+                identity = {"schema": 1, "revision": SHA, "package": publisher.SERVER_PACKAGE_NAME, "version": "latest"}
+                identity.update(changes)
+                self.rewrite_server(replacements={"portable-release.json": json.dumps(identity)})
+                with self.assertRaisesRegex(publisher.PublishError, "portable release identity"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+
+    def test_manifest_rejects_corrupted_file_even_if_required_headers_exist(self):
+        path = next(self.directory.rglob(publisher.SERVER_PACKAGE_NAME))
+        content = path.read_bytes()
+        self.assertIn(b"test payload: startup.exe", content)
+        path.write_bytes(content.replace(b"test payload: startup.exe", b"evil payload: startup.exe", 1))
+        with self.assertRaisesRegex(publisher.PublishError, "file integrity verification"):
+            self.publish()
+        self.assertEqual([], self.client.calls)
+
+    def test_manifest_rejects_unsafe_or_duplicate_windows_paths(self):
+        for name in ("../user.db", "C:/private.db", "README.md:stream", "docs/CON.txt", "././bad.txt",
+                     "WORLDserver.exe", "docs/../private.txt"):
+            with self.subTest(name=name):
+                self.setUp()
+                self.rewrite_server(extra={name: "unsafe payload"})
+                with self.assertRaisesRegex(publisher.PublishError, "Unsafe path|Duplicate path"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+
+    def test_manifest_rejects_file_directory_collision(self):
+        self.rewrite_server(extra={"docs": "shadows docs directory"})
+        with self.assertRaisesRegex(publisher.PublishError, "File/directory collision"):
+            self.publish()
+        self.assertEqual([], self.client.calls)
 
     def test_empty_notes_fail_before_api_writes(self):
         self.notes.write_text("\n  \n")

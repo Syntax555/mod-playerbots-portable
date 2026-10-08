@@ -50,9 +50,10 @@ Restart or use the administrator `.reload config` command. Invalid syntax logs
 an error and disables earned caps. Changing order or percentages can reassign
 some bots; retain the order when preserving residents.
 
-`startup.exe --apply-profiles` backs up configs and restores the bundled
-distribution. Apply custom edits afterward. The complete server package is
-required for these hooks; replacing the launcher alone is insufficient.
+Normal startup preserves a customized bracket distribution while merging new
+defaults for values that still match their previous managed defaults. Changed
+configs receive backups. Server behavior updates automatically; older launchers
+need one manual server-ZIP upgrade first. See the [update guide](updating.md).
 
 ## Waiting for battlegrounds
 
