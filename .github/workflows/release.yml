@@ -352,12 +352,6 @@ jobs:
                       & "./$exe" --version
                       if ($LASTEXITCODE -ne 0) { throw "Bundled runtime smoke test failed: $exe (exit code $LASTEXITCODE)." }
                   }
-                  & './dbimport.exe' --help
-                  if ($LASTEXITCODE -ne 0) { throw "Bundled database import tool failed to load (exit code $LASTEXITCODE)." }
-                  $usage = & './vmap4_assembler.exe' unused unused unused
-                  if ($LASTEXITCODE -ne 1 -or ($usage -join "`n") -notmatch 'usage:') {
-                      throw "Bundled map assembler failed to load (exit code $LASTEXITCODE; expected usage output and exit code 1)."
-                  }
               } finally {
                   Pop-Location
               }
@@ -368,8 +362,6 @@ jobs:
               Write-Output "::error title=Smoke test bundled server and database executables::$message"
               exit 1
           }
-          # The assembler usage check intentionally returns 1. GitHub's pwsh
-          # wrapper otherwise forwards that last native exit code after success.
           exit 0
 
       - name: Create portable ZIP

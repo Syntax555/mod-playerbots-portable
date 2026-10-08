@@ -372,6 +372,16 @@ class PublicationTests(unittest.TestCase):
             self.publish()
         self.assertEqual([], self.client.calls)
 
+    def test_manifest_rejects_unused_optional_tools_and_their_configuration(self):
+        for name in ("dbimport.exe", "map_extractor.exe", "vmap4_extractor.exe", "vmap4_assembler.exe",
+                     "mmaps_generator.exe", "mmaps-config.yaml", "configs/dbimport.conf.dist", "dbimport.conf.dist"):
+            with self.subTest(name=name):
+                self.setUp()
+                self.rewrite_server(extra={name: "unused optional tool"})
+                with self.assertRaisesRegex(publisher.PublishError, "Unmanaged user or redundant"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+
     def test_manifest_rejects_invalid_identity_fields(self):
         for changes in ({"schema": 2}, {"revision": "main"}, {"package": "other.zip"}, {"version": "dev"}):
             with self.subTest(changes=changes):

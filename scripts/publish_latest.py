@@ -268,6 +268,7 @@ def update_manifest(package: Asset, expected_revision: str | None) -> dict[str, 
         for name, entry in sorted(entries.items()):
             if (re.search(r"^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$", name, re.I)
                     or re.search(r"^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$|(^|/)[.]git(/|$)", name, re.I)
+                    or re.search(r"^(dbimport|map_extractor|vmap4_extractor|vmap4_assembler|mmaps_generator)[.]exe$|^mmaps-config[.]yaml$|^(configs/)?dbimport[.]conf[.]dist$", name, re.I)
                     or name == UPDATE_MANIFEST_NAME):
                 raise PublishError(f"Unmanaged user or redundant development file in portable ZIP: {name}")
             hasher = hashlib.sha256()

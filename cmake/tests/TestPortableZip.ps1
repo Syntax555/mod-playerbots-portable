@@ -177,8 +177,7 @@ try {
     $script:passed++
 
     # Stub the Windows runtime files; this suite tests packaging, not PE execution.
-    $runtimeFiles = @('startup.exe', 'authserver.exe', 'worldserver.exe', 'map_extractor.exe',
-        'vmap4_extractor.exe', 'vmap4_assembler.exe', 'mmaps_generator.exe', 'dbimport.exe',
+    $runtimeFiles = @('startup.exe', 'authserver.exe', 'worldserver.exe',
         'mysql/bin/mysqld.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqladmin.exe',
         'libmysql.dll', 'libcrypto-3-x64.dll', 'libssl-3-x64.dll',
         'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
@@ -189,10 +188,17 @@ try {
     }
     Write-FixtureText (Join-Path $dist 'mysql/bin/mysqldump.exe')
     Write-FixtureText (Join-Path $dist 'mysql/bin/dependency.dll')
+    $optionalFiles = @('dbimport.exe', 'map_extractor.exe', 'vmap4_extractor.exe',
+        'vmap4_assembler.exe', 'mmaps_generator.exe', 'mmaps-config.yaml',
+        'configs/dbimport.conf.dist', 'dbimport.conf.dist')
+    foreach ($name in $optionalFiles) { Write-FixtureText (Join-Path $dist $name) }
     & $CMake "-DPORTABLE_DIST_DIR=$dist" -P (Join-Path $cmakeRoot 'PrunePortableDistribution.cmake')
     if ($LASTEXITCODE -ne 0) { throw 'Fixture pruning failed.' }
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'mysql/bin/mysqldump.exe'))) 'Unused MySQL executable survived pruning'
     Assert-Condition (Test-Path -LiteralPath (Join-Path $dist 'mysql/bin/dependency.dll')) 'MySQL runtime dependency was pruned'
+    foreach ($name in $optionalFiles) {
+        Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Unused tool survived pruning: $name"
+    }
     $script:baseline = [System.Collections.Generic.Dictionary[string, byte[]]]::new([System.StringComparer]::Ordinal)
     foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File -Force) {
         $relative = [System.IO.Path]::GetRelativePath($dist, $file.FullName).Replace('\', '/')
@@ -235,7 +241,7 @@ try {
     }
 
     foreach ($redundant in @('addons/MultiBot/Core.lua', 'defaults/worldserver.conf',
-        'CONTRIBUTING.md', 'docs/building.md', 'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe')) {
+        'CONTRIBUTING.md', 'docs/building.md', 'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe') + $optionalFiles) {
         Test-NegativeZip "redundant file $redundant" 'Redundant development/client' -ExtraEntries @(@{ Name = $redundant; Bytes = [byte[]]@(1) })
     }
     foreach ($live in @('configs/worldserver.conf', 'mysql/data/user.db', 'mysql/my.cnf',

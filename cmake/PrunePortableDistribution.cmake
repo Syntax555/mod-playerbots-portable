@@ -9,6 +9,14 @@ foreach(executable startup.exe authserver.exe worldserver.exe
     endif()
 endforeach()
 
+# Client data arrives as pre-extracted files, and the server imports SQL itself.
+# Clear optional tools from reused install directories as well as fresh builds.
+foreach(optional_file dbimport.exe map_extractor.exe vmap4_extractor.exe
+    vmap4_assembler.exe mmaps_generator.exe mmaps-config.yaml
+    configs/dbimport.conf.dist dbimport.conf.dist)
+    file(REMOVE "${PORTABLE_DIST_DIR}/${optional_file}")
+endforeach()
+
 # MySQL's maintenance/development clients are not used by the launcher. Preserve
 # the server, SQL client, readiness/shutdown client and all runtime libraries.
 file(GLOB mysql_executables "${PORTABLE_DIST_DIR}/mysql/bin/*.exe")
