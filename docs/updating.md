@@ -23,9 +23,10 @@ an established realm receives new SQL migrations.
 Configuration updates compare the active value with the previous managed
 default. A new default replaces it only if it still matches that previous value;
 custom values remain intact. Missing managed settings are added, and changed
-files receive adjacent `.backup.*` copies. On an older installation without a
-saved baseline, existing values are preserved unless they match a known bundled
-default. See the [configuration reference](vanilla-config-audit.md).
+files receive adjacent `.backup.*` copies. Without a saved baseline, the first
+startup preserves all existing values, adds only missing managed settings and
+records the bundled defaults for future comparisons. See the
+[configuration reference](vanilla-config-audit.md).
 
 ## Install the updater on an older realm
 

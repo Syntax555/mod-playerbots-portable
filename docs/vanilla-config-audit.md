@@ -8,8 +8,9 @@ Normal startup merges profile updates automatically. A setting follows a new
 default only while its active value still matches the previous managed default.
 Custom values, database credentials, paths and the selected realm phase are
 preserved; missing managed settings are added. Changed files receive `.backup.*`
-copies before replacement. On an older installation without a recorded baseline,
-existing values are preserved unless they match a known bundled default.
+copies before replacement. Without a saved baseline, the first startup preserves
+all existing values, adds only missing managed settings and records the bundled
+defaults for future comparisons.
 
 `configs/.portable-profiles.json` records the managed baseline for future
 updates; keep it with the active configs when backing up or moving a realm.
