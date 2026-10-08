@@ -326,6 +326,34 @@ class PublicationTests(unittest.TestCase):
 
 
 class ClientTests(unittest.TestCase):
+    def test_missing_draft_tag_is_not_deleted(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        # Creating a draft does not create its ref. GitHub GET returns 404,
+        # whereas DELETE would return 422 Reference does not exist.
+        with patch.object(client, "_request", side_effect=publisher.APIError(404, "Not Found")) as request:
+            client.delete_tag("build-123456-staging")
+        request.assert_called_once_with("GET", "/git/ref/tags/build-123456-staging")
+
+    def test_existing_version_tag_is_deleted(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        with patch.object(client, "tag_sha", return_value=OLDER_SHA), patch.object(client, "_request") as request:
+            client.delete_tag("v1.0.16")
+        request.assert_called_once_with("DELETE", "/git/refs/tags/v1.0.16")
+
+    def test_tag_removed_during_cleanup_accepts_422_only_after_confirming_absence(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        with patch.object(client, "tag_sha", side_effect=[OLDER_SHA, None]) as lookup, patch.object(
+                client, "_request", side_effect=publisher.APIError(422, "Reference does not exist")):
+            client.delete_tag("build-123456-staging")
+        self.assertEqual(2, lookup.call_count)
+
+    def test_tag_delete_validation_failure_is_not_hidden(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        with patch.object(client, "tag_sha", return_value=OLDER_SHA), patch.object(
+                client, "_request", side_effect=publisher.APIError(422, "Protected ref")):
+            with self.assertRaisesRegex(publisher.APIError, "Protected ref"):
+                client.delete_tag("v1.0.16")
+
     def test_pagination_fetches_every_numbered_release_and_tag(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         calls = []
