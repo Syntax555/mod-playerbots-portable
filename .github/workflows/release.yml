@@ -52,6 +52,9 @@ jobs:
         if: hashFiles('cmake/tests/TestEraClientPackaging.py') != ''
         run: python3 cmake/tests/TestEraClientPackaging.py
 
+      - name: Test client language merging and gameplay preservation
+        run: python3 cmake/tests/TestClientLocales.py
+
       - name: Check earned bot progression against pinned sources
         if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
         run: |

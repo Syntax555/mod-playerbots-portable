@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -29,6 +30,10 @@ INTERNAL_SKILL = r"DBFilesClient\SkillLineAbility.dbc"
 FIXED_TIME = (2000, 1, 1, 0, 0, 0)
 SPELL_LOCALIZED_FIELDS = {"name": 136, "rank": 153, "description": 170, "aura description": 187}
 SPELL_LOCALE_COUNT = 16
+
+_locale_spec = importlib.util.spec_from_file_location("client_locales", Path(__file__).with_name("ClientLocales.py"))
+CLIENT_LOCALES = importlib.util.module_from_spec(_locale_spec)
+_locale_spec.loader.exec_module(CLIENT_LOCALES)
 
 
 def sha(data: bytes) -> str:
@@ -235,6 +240,11 @@ def verify_zip(path: Path, lock):
             raise ValueError(f"Client source patches differ from lock: {key}")
     if manifest.get("stormLib") != patch["stormLib"] or manifest.get("baseArchive") != patch["baseArchive"]:
         raise ValueError("Client build dependencies differ from lock")
+    if patch.get("localizations"):
+        if manifest.get("localizations") != patch["localizations"]:
+            raise ValueError("Client localization source differs from lock")
+        if not files.get("licenses/client-locales.txt"):
+            raise ValueError("Missing client localization source notice")
     if not re.fullmatch(r"[a-f0-9]{8}", manifest.get("generation", "")):
         raise ValueError("Invalid client generation")
     era = locked_module(lock, patch["eraModule"])
@@ -317,6 +327,23 @@ def build(args):
             raise ValueError("Era module server SQL and client generation differ; regenerate all artifacts")
         spell_raw = read_mpq(mpqread, base, INTERNAL_SPELL, stage / "base-spell.dbc")
         skill_raw = read_mpq(mpqread, base, INTERNAL_SKILL, stage / "base-skill.dbc")
+        localized_tables, localization_reports = {}, {}
+        localization_identity = None
+        if spec.get("localizations"):
+            donors, overrides, localization_identity = CLIENT_LOCALES.load_german_inputs(repository, spec["localizations"])
+            for filename in CLIENT_LOCALES.DBC_LAYOUTS:
+                internal = "DBFilesClient\\" + filename
+                original = spell_raw if filename == "Spell.dbc" else read_mpq(mpqread, base, internal, stage / "locale-base.dbc")
+                if filename == "Spell.dbc" and "Spell.enUS.dbc" in donors:
+                    CLIENT_LOCALES.verify_source_semantics(original, donors["Spell.enUS.dbc"], filename, overrides[filename])
+                localized, report = CLIENT_LOCALES.merge_german_text(original, donors[filename], filename, overrides[filename])
+                if report["fallbackFields"]:
+                    raise ValueError(f"Missing authored German translations: {filename} {report['fallbackFields']}")
+                localized_tables[internal] = localized
+                localization_reports[filename] = report
+                if filename == "Spell.dbc":
+                    spell_raw = localized
+                    (stage / "base-spell.dbc").write_bytes(localized)
         spell_builder.build(datasets, stage / "base-spell.dbc", stage / "Spell.dbc", generation)
         skill_builder.build(datasets, stage / "base-skill.dbc", stage / "SkillLineAbility.dbc")
         merged_spell = (stage / "Spell.dbc").read_bytes()
@@ -327,16 +354,22 @@ def build(args):
         verify_merged_skill(skill_raw, merged_skill, custom_skills)
         output_mpq = stage / "patch-V.mpq"
         shutil.copyfile(base, output_mpq)
-        for internal, source in ((INTERNAL_SPELL, stage / "Spell.dbc"), (INTERNAL_SKILL, stage / "SkillLineAbility.dbc")):
+        merged_tables = {INTERNAL_SPELL: stage / "Spell.dbc", INTERNAL_SKILL: stage / "SkillLineAbility.dbc"}
+        for internal, content in localized_tables.items():
+            if internal != INTERNAL_SPELL:
+                source = stage / (internal.split("\\")[-1])
+                source.write_bytes(content)
+                merged_tables[internal] = source
+        for internal, source in merged_tables.items():
             os.utime(source, (946684800, 946684800))
             run([str(mpqpack), str(output_mpq), internal, str(source)], quiet=True)
             if read_mpq(mpqread, output_mpq, internal, stage / "verify.dbc") != source.read_bytes():
                 raise ValueError(f"MPQ did not retain generated DBC: {internal}")
-        # Preserve all original client patch entries other than the two merged DBCs.
+        # Preserve all entries other than the explicitly verified merged DBCs.
         entries = read_mpq(mpqread, base, "(listfile)", stage / "listfile").decode().splitlines()
         preserved = {}
         for internal in entries:
-            if internal in (INTERNAL_SPELL, INTERNAL_SKILL) or internal.startswith("("):
+            if internal in merged_tables or internal.startswith("("):
                 continue
             before = read_mpq(mpqread, base, internal, stage / "base-entry")
             after = read_mpq(mpqread, output_mpq, internal, stage / "merged-entry")
@@ -352,6 +385,15 @@ def build(args):
             if license_file is None:
                 raise ValueError(f"Client build dependency has no license: {name}")
             files[f"licenses/{name}.txt"] = license_file.read_bytes()
+        if localization_identity is not None:
+            files["licenses/client-locales.txt"] = (
+                "German World of Warcraft 3.3.5a client text source (build 12340).\n"
+                f"Source: {localization_identity['url']}\nRevision: {localization_identity['revision']}\n"
+                "Only German text fields are imported; IP gameplay fields remain intact.\n"
+                "World of Warcraft client data retains its original terms. Neither the launcher MIT\n"
+                "license nor the TrinityCore code license is applied to these extracted game data.\n"
+                "Source checksums and authored restored-entry overrides are recorded in SOURCE_MANIFEST.json.\n"
+            ).encode()
         files["README.txt"] = ("EraTalents client files for World of Warcraft 3.3.5a (build 12340).\n\n"
             "Close WoW completely. Copy Interface/AddOns/EraTalents to the matching client folder.\n"
             "Copy Data/patch-V.mpq into the client Data folder, replacing the previous IP patch-V.\n"
@@ -364,8 +406,11 @@ def build(args):
                     "generation": generation, "eraModule": era_identity, "baseModule": ip_identity,
                     "stormLib": storm, "baseArchive": spec["baseArchive"], "baseArchiveSha256": sha(base_archive.read_bytes()),
                     "baseMpqSha256": sha(base.read_bytes()), "preservedIpEntries": preserved,
-                    "mergedDbcSha256": {INTERNAL_SPELL: sha(merged_spell), INTERNAL_SKILL: sha(merged_skill)},
+                    "mergedDbcSha256": {internal: sha(source.read_bytes()) for internal, source in merged_tables.items()},
                     "files": {name: sha(content) for name, content in files.items()}}
+        if localization_identity is not None:
+            manifest["localizations"] = {"deDE": localization_identity}
+            manifest["localizedDbcReports"] = localization_reports
         files["SOURCE_MANIFEST.json"] = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
         args.output.mkdir(parents=True, exist_ok=True)
         output = args.output / f"{spec['name']}-{args.version}.zip"

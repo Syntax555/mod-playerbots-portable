@@ -1,0 +1,2131 @@
+{
+  "Spell.dbc": {
+    "1784": {
+      "rank": "Rang 1"
+    },
+    "2835": {
+      "name": "Tödliches Gift",
+      "rank": "Rang 1",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $2823h%, den Gegner zu vergiften und ihm ${$2818m1*4+0.12*$AP} Naturschaden im Verlauf von $2818d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "2837": {
+      "name": "Tödliches Gift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $2824h%, den Gegner zu vergiften und ihm ${$2819m1*4+0.12*$AP} Naturschaden im Verlauf von $2819d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "3409": {
+      "rank": "Rang 1"
+    },
+    "3420": {
+      "name": "Verkrüppelndes Gift",
+      "rank": "Rang 1",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt. Jeder Treffer hat eine Chance von $3408h%, den Gegner zu vergiften und sein Bewegungstempo um $3409s1% für $3409d zu verringern."
+    },
+    "3421": {
+      "name": "Verkrüppelndes Gift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt. Jeder Treffer hat eine Chance von $11202h%, den Gegner zu vergiften und sein Bewegungstempo um $11201s1% für $11201d zu verringern."
+    },
+    "5760": {
+      "rank": "Rang 1"
+    },
+    "5761": {
+      "rank": "Rang 1"
+    },
+    "5763": {
+      "name": "Gedankenbenebelndes Gift",
+      "rank": "Rang 1",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt. Jeder Treffer hat eine Chance von $5761h%, den Gegner zu vergiften und seine Zauberzeit um $5760s1% für $5760d zu verlängern."
+    },
+    "6510": {
+      "name": "Blendpulver",
+      "description": "Stellt das Reagenz für die Fähigkeit Blenden her."
+    },
+    "7678": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "7679": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "7680": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "7681": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "7685": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7686": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7687": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7688": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7689": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7696": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7700": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7701": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7702": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7703": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7706": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7707": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7708": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7709": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "7710": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "8042": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "8044": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "8045": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "8046": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "8681": {
+      "name": "Sofort wirkendes Gift",
+      "rank": "Rang 1",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $8679h%, den Gegner zu vergiften und ihm sofort ${$8680m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "8687": {
+      "name": "Sofort wirkendes Gift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $8686h%, den Gegner zu vergiften und ihm sofort ${$8685m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "8691": {
+      "name": "Sofort wirkendes Gift III",
+      "rank": "Rang 3",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $8688h%, den Gegner zu vergiften und ihm sofort ${$8689m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "8692": {
+      "name": "Gedankenbenebelndes Gift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $8693h%, den Gegner zu vergiften und seine Zauberzeit um $8692s1% für $8692d zu verlängern.",
+      "aura description": "Zauberzeit um $s1% verlängert."
+    },
+    "8693": {
+      "name": "Gedankenbenebelndes Gift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $8693h%, den Gegner zu vergiften und seine Zauberzeit um $8692s1% für $8692d zu verlängern."
+    },
+    "8694": {
+      "name": "Gedankenbenebelndes Gift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt. Jeder Treffer hat eine Chance von $8693h%, den Gegner zu vergiften und seine Zauberzeit um $8692s1% für $8692d zu verlängern."
+    },
+    "9294": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9295": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9296": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9298": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9304": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9305": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9306": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9307": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9308": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9314": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9315": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9316": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9317": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9318": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9325": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9326": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9327": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9328": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9342": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9343": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9344": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9345": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9346": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9357": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9358": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9359": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9361": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9393": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9394": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9395": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9396": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9397": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9398": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9400": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9401": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9402": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9403": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9404": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9406": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9407": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9408": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "9411": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9412": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9413": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9414": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "9415": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9416": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "9417": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "10412": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "10413": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "10414": {
+      "description": "Schockt das Ziel unmittelbar mit erschütternder Kraft und verursacht $s2 Naturschaden. Unterbricht außerdem das Wirken von Zaubern und verhindert für $d das Wirken aller Zauber dieser Magieschule."
+    },
+    "11201": {
+      "name": "Verkrüppelndes Gift",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11202h%, den Gegner zu vergiften und sein Bewegungstempo um $11201s1% für $11201d zu verringern.",
+      "aura description": "Bewegungstempo um $s1% verringert."
+    },
+    "11202": {
+      "name": "Verkrüppelndes Gift",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11202h%, den Gegner zu vergiften und sein Bewegungstempo um $11201s1% für $11201d zu verringern."
+    },
+    "11341": {
+      "name": "Sofort wirkendes Gift IV",
+      "rank": "Rang 4",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11338h%, den Gegner zu vergiften und ihm sofort ${$11335m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "11342": {
+      "name": "Sofort wirkendes Gift V",
+      "rank": "Rang 5",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11339h%, den Gegner zu vergiften und ihm sofort ${$11336m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "11343": {
+      "name": "Sofort wirkendes Gift VI",
+      "rank": "Rang 6",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11340h%, den Gegner zu vergiften und ihm sofort ${$11337m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "11357": {
+      "name": "Tödliches Gift III",
+      "rank": "Rang 3",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11355h%, den Gegner zu vergiften und ihm ${$11353m1*4+0.12*$AP} Naturschaden im Verlauf von $11353d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "11358": {
+      "name": "Tödliches Gift IV",
+      "rank": "Rang 4",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11356h%, den Gegner zu vergiften und ihm ${$11354m1*4+0.12*$AP} Naturschaden im Verlauf von $11354d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "11390": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1 für $d. Kampfelixier."
+    },
+    "11398": {
+      "name": "Gedankenbenebelndes Gift III",
+      "rank": "Rang 3",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11399h%, den Gegner zu vergiften und seine Zauberzeit um $11398s1% für $11398d zu verlängern.",
+      "aura description": "Zauberzeit um $s1% verlängert."
+    },
+    "11399": {
+      "name": "Gedankenbenebelndes Gift III",
+      "rank": "Rang 3",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $11399h%, den Gegner zu vergiften und seine Zauberzeit um $11398s1% für $11398d zu verlängern."
+    },
+    "11400": {
+      "name": "Gedankenbenebelndes Gift III",
+      "rank": "Rang 3",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt. Jeder Treffer hat eine Chance von $11399h%, den Gegner zu vergiften und seine Zauberzeit um $11398s1% für $11398d zu verlängern."
+    },
+    "13220": {
+      "name": "Wundgift",
+      "rank": "Rang 1",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $13219h%, den Gegner zu vergiften, ihm ${$13218m2+0.04*$AP} Naturschaden zuzufügen und alle auf ihn gewirkten Heileffekte um $13218s1% für $13218d zu verringern."
+    },
+    "13228": {
+      "name": "Wundgift II",
+      "rank": "Rang 2",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $13225h%, den Gegner zu vergiften, ihm ${$13222m2+0.04*$AP} Naturschaden zuzufügen und alle auf ihn gewirkten Heileffekte um $13222s1% für $13222d zu verringern."
+    },
+    "13229": {
+      "name": "Wundgift III",
+      "rank": "Rang 3",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $13226h%, den Gegner zu vergiften, ihm ${$13223m2+0.04*$AP} Naturschaden zuzufügen und alle auf ihn gewirkten Heileffekte um $13223s1% für $13223d zu verringern."
+    },
+    "13230": {
+      "name": "Wundgift IV",
+      "rank": "Rang 4",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $13227h%, den Gegner zu vergiften, ihm ${$13224m2+0.04*$AP} Naturschaden zuzufügen und alle auf ihn gewirkten Heileffekte um $13224s1% für $13224d zu verringern."
+    },
+    "13595": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13597": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13598": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13599": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13601": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13830": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13831": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "13881": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14047": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14054": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14055": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14127": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14248": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14254": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14793": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "14794": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "14798": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "14799": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "15696": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "15714": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "15715": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "16638": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17280": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "17320": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "17367": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "17371": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "17493": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "17539": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1 für $d. Kampfelixier."
+    },
+    "17628": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden um bis zu $s1 für $d. Gilt sowohl als Kampfelixier als auch als Wächterelixier. Dieser Effekt hält über den Tod hinaus an."
+    },
+    "17747": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17819": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17821": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17824": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17829": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17830": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17846": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17866": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17867": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17868": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17871": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17872": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17873": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17875": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17878": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17882": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17884": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17885": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17890": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17891": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17892": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17896": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17897": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17898": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17899": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17900": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17901": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17902": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17905": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17908": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17909": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17988": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17990": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17993": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17995": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17997": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "17999": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18008": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18009": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18011": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18013": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18014": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18015": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18016": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18017": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18018": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18020": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18025": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18026": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18027": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "18029": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18030": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18031": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18032": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18033": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18034": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18035": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18036": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18037": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18038": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18039": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18040": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18041": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18042": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18043": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18044": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18045": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18046": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "18049": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18050": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18052": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18053": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18054": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18055": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18056": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18057": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "18058": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "21509": {
+      "description": "Erhöht den durch Heiligzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "21518": {
+      "description": "Erhöht den durch Heiligzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "21931": {
+      "description": "Eine Waffe dauerhaft verzaubern, sodass der durch Frostzauber verursachte Schaden um bis zu 7 erhöht wird."
+    },
+    "22749": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass der durch Zauber verursachte Schaden um bis zu 30 erhöht wird."
+    },
+    "22750": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass die durch Heilzauber verursachte Heilung um bis zu 55 erhöht wird."
+    },
+    "22810": {
+      "name": "Öffnen"
+    },
+    "22844": {
+      "description": "Verzaubert einen Gegenstand für den Bein- oder Kopfplatz dauerhaft, sodass die durch Heilzauber verursachte Heilung um bis zu 8 erhöht wird. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "22849": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Untote um bis zu $s1."
+    },
+    "23213": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "23264": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "23265": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "23271": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "23593": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "23594": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "23728": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "23730": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "23732": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "23734": {
+      "description": "Stimmt den Schamanen auf die Natur ein und erhöht den Zauberschaden um $s1%, die Wirkung von Heilzaubern um $s2% und die Manakosten von Zaubern um $s3% für $d.",
+      "aura description": "Zauberschaden um $s1% erhöht. Wirkung von Heilzaubern um $s2% erhöht. Manakosten um $s3% erhöht."
+    },
+    "23802": {
+      "description": "Armschienen dauerhaft verzaubern, sodass die durch Heilzauber verursachte Heilung um bis zu 24 erhöht wird."
+    },
+    "23929": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "24160": {
+      "description": "Fügt einem Gegenstand für den Bein- oder Kopfplatz dauerhaft 10 Ausdauer und 10 Verteidigungswertung hinzu und erhöht die Heilung um bis zu 24. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "24163": {
+      "description": "Fügt einem Gegenstand für den Bein- oder Kopfplatz dauerhaft 15 Intelligenz hinzu und erhöht den durch Zauber verursachten Schaden und die Heilung um bis zu 13. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "24164": {
+      "description": "Verzaubert einen Gegenstand für den Bein- oder Kopfplatz dauerhaft, sodass der Zauberschaden und die Heilung um bis zu 18 und die Trefferwertung um 8 erhöht werden. Durch diese Verzauberung wird der Gegenstand seelengebunden."
+    },
+    "24165": {
+      "description": "Fügt einem Gegenstand für den Bein- oder Kopfplatz dauerhaft 10 Ausdauer hinzu und erhöht den durch Zauber verursachten Schaden und die Heilung um bis zu 18. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "24167": {
+      "description": "Fügt einem Gegenstand für den Bein- oder Kopfplatz dauerhaft 10 Ausdauer und 4 Mana alle 5 Sek. hinzu und erhöht die Heilung um bis zu 24. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "24168": {
+      "description": "Fügt einem Gegenstand für den Bein- oder Kopfplatz dauerhaft 10 Ausdauer und 10 Intelligenz hinzu und erhöht die Heilung um bis zu 24. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "24196": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "24197": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Untote um bis zu $s1."
+    },
+    "24198": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Untote um bis zu $s1. Ermöglicht außerdem das Sammeln von Geißelsteinen im Auftrag der Argentumdämmerung."
+    },
+    "24354": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1 für $d."
+    },
+    "24420": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass die durch Zauber und Effekte verursachte Heilung um bis zu 33 erhöht wird."
+    },
+    "24421": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass der durch magische Zauber und Effekte verursachte Schaden und die Heilung um bis zu 18 erhöht werden."
+    },
+    "24595": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "24666": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "24667": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "24998": {
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 für $d."
+    },
+    "25073": {
+      "description": "Handschuhe dauerhaft verzaubern, sodass der durch Schattenzauber verursachte Schaden um bis zu 20 erhöht wird."
+    },
+    "25074": {
+      "description": "Handschuhe dauerhaft verzaubern, sodass der durch Frostzauber verursachte Schaden um bis zu 20 erhöht wird."
+    },
+    "25078": {
+      "description": "Handschuhe dauerhaft verzaubern, sodass der durch Feuerzauber verursachte Schaden um bis zu 20 erhöht wird."
+    },
+    "25079": {
+      "description": "Handschuhe dauerhaft verzaubern, sodass die durch Heilzauber verursachte Heilung um bis zu 30 erhöht wird."
+    },
+    "25117": {
+      "description": "Erhöht bei Anwendung auf eine Waffe den Zauberschaden um bis zu 8. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "25119": {
+      "description": "Erhöht bei Anwendung auf eine Waffe den Zauberschaden um bis zu 16. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "25121": {
+      "description": "Erhöht bei Anwendung auf eine Waffe den Zauberschaden um bis zu 24. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "25122": {
+      "description": "Erhöht bei Anwendung auf eine Waffe den Zauberschaden um bis zu 36 und die kritische Trefferwertung um 14. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "25123": {
+      "description": "Gewährt bei Anwendung auf eine Waffe alle 5 Sekunden 12 Mana und erhöht die Wirkung von Heilzaubern um bis zu 25. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "25347": {
+      "name": "Tödliches Gift V",
+      "rank": "Rang 5",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $25351h%, den Gegner zu vergiften und ihm ${$25349m1*4+0.12*$AP} Naturschaden im Verlauf von $25349d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "25607": {
+      "description": "Erhöht den Zauberschaden von Gruppenmitgliedern in der Nähe um bis zu $M1 für $d."
+    },
+    "25706": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26142": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "26154": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "26155": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "26158": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "26166": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden um bis zu $s1 und verringert die magischen Widerstände der Ziele Eurer Zauber um $s2 für $d.",
+      "aura description": "Zaubermacht um $s1 erhöht. Magische Widerstände der Ziele Eurer Zauber um $s2 verringert."
+    },
+    "26228": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "26276": {
+      "description": "Erhöht den Feuerzauberschaden um bis zu $s1 für $d. Kampfelixier."
+    },
+    "26395": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "26405": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26459": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "26460": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "26461": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "26599": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "26694": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26695": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26703": {
+      "description": "Erhöht den durch Feuerzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26715": {
+      "description": "Erhöht den durch Arkanzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26717": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26727": {
+      "description": "Erhöht den durch Frostzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26730": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26737": {
+      "description": "Erhöht den durch Schattenzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "26786": {
+      "name": "Beruhigendes Gift",
+      "rank": "Rang 1",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.  Jeder Treffer hat eine Chance von $26785h%, den Gegner zu vergiften, ihm sofort $26688s1 Naturschaden zuzufügen und $26688s2 Wuteffekt zu entfernen, ohne zusätzliche Bedrohung zu erzeugen."
+    },
+    "26814": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "26892": {
+      "name": "Sofort wirkendes Gift VII",
+      "rank": "Rang 7",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $26891h%, den Gegner zu vergiften und ihm sofort ${$26890m1+0.10*$AP} Naturschaden zuzufügen."
+    },
+    "26969": {
+      "name": "Tödliches Gift VI",
+      "rank": "Rang 6",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $26967h%, den Gegner zu vergiften und ihm ${$26968m1*4+0.12*$AP} Naturschaden im Verlauf von $26968d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "27282": {
+      "name": "Tödliches Gift VII",
+      "rank": "Rang 7",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $27186h%, den Gegner zu vergiften und ihm ${$27187m1*4+0.12*$AP} Naturschaden im Verlauf von $27187d zuzufügen.  Bis zu 5-mal auf einem einzelnen Ziel stapelbar."
+    },
+    "27283": {
+      "name": "Wundgift V",
+      "rank": "Rang 5",
+      "description": "Überzieht eine Waffe mit Gift, das 1 Stunde lang wirkt.\nJeder Treffer hat eine Chance von $27188h%, den Gegner zu vergiften, ihm ${$27189m2+0.04*$AP} Naturschaden zuzufügen und alle auf ihn gewirkten Heileffekte um $27189s1% für $27189d zu verringern."
+    },
+    "27721": {
+      "description": "Erhöht den durch Zauber verursachten Schaden um bis zu $s1 für $d."
+    },
+    "27853": {
+      "description": "Erhöht die durch 'Verjüngung' verursachte Heilung um bis zu $s1."
+    },
+    "27855": {
+      "description": "Erhöht die durch 'Geringe Welle der Heilung' verursachte Heilung um bis zu $s1."
+    },
+    "27859": {
+      "description": "Erhöht den durch 'Erdschock', 'Flammenschock' und 'Frostschock' verursachten Schaden um bis zu $s1."
+    },
+    "27911": {
+      "description": "Armschienen dauerhaft verzaubern, sodass die durch Heilzauber verursachte Heilung um bis zu 30 und der durch Schadenszauber verursachte Schaden um bis zu 10 erhöht werden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "27917": {
+      "description": "Armschienen dauerhaft verzaubern, sodass der Zauberschaden und die Heilung um bis zu 15 erhöht werden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "27924": {
+      "description": "Einen Ring dauerhaft verzaubern, sodass der Zauberschaden und die Heilung um bis zu 12 erhöht werden. Nur Ringe des Verzauberers können verzaubert werden und werden dadurch seelengebunden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "27926": {
+      "description": "Einen Ring dauerhaft verzaubern, sodass die durch Heilzauber verursachte Heilung um bis zu 20 erhöht wird. Nur Ringe des Verzauberers können verzaubert werden und werden dadurch seelengebunden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "27975": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass der Zauberschaden und die Heilung um bis zu 40 erhöht werden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "27981": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass der durch Feuer- und Arkanzauber verursachte Schaden um bis zu 50 erhöht wird. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "27982": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass der durch Frost- und Schattenzauber verursachte Schaden um bis zu 54 erhöht wird. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "28004": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass gelegentlich nahe Gruppenmitglieder um 180 bis 300 Gesundheit geheilt werden, wenn ein Gegner getroffen wird. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "28017": {
+      "description": "Erhöht bei Anwendung auf eine Waffe den Zauberschaden um bis zu 42. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "28141": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28143": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung aller Gruppenmitglieder im Umkreis von $a1 Metern um bis zu $s1."
+    },
+    "28144": {
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung aller Gruppenmitglieder im Umkreis von $a1 Metern um bis zu $s1."
+    },
+    "28152": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "28264": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28273": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung geringfügig für 10 Minuten."
+    },
+    "28360": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28488": {
+      "description": "Erhöht den Zauberschaden gegen Untote um bis zu $s1. Hält $d lang an."
+    },
+    "28491": {
+      "description": "Erhöht die Wirkung Eurer Heilzauber um bis zu $s1 für $d. Kampfelixier."
+    },
+    "28508": {
+      "description": "Erhöht die kritische Trefferchance Eurer Zauber um $s2% und den Zauberschaden um $s1 für $d."
+    },
+    "28530": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28686": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "28687": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28693": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28736": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "28767": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28779": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "28780": {
+      "description": "Erhöht die durch die nächsten 5 Zauber verursachte Heilung um bis zu $s2 für $d."
+    },
+    "28792": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "28805": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "28851": {
+      "description": "Erhöht die durch 'Lichtblitz' verursachte Heilung um bis zu $s1."
+    },
+    "28853": {
+      "description": "Erhöht die durch 'Lichtblitz' verursachte Heilung um bis zu $s1."
+    },
+    "28856": {
+      "description": "Erhöht die durch 'Geringe Welle der Heilung' verursachte Heilung um bis zu $s1."
+    },
+    "28857": {
+      "description": "Erhöht den durch 'Kettenblitzschlag' und 'Blitzschlag' verursachten Schaden um bis zu $s1."
+    },
+    "28876": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Untote um bis zu $s1."
+    },
+    "28890": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Untote um bis zu $s1."
+    },
+    "28898": {
+      "description": "Erhöht bei Anwendung auf eine Waffe den Zauberschaden gegen Untote um bis zu 60. Hält 1 Stunde lang an. Kann nicht auf Gegenstände über Stufe 165 angewandt werden."
+    },
+    "29113": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Untote und Dämonen um bis zu $s1. Ermöglicht außerdem das Sammeln von Geißelsteinen im Auftrag der Argentumdämmerung."
+    },
+    "29334": {
+      "description": "Erhöht die durch magische Zauber verursachte Heilung um bis zu $s1 für $d."
+    },
+    "29369": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "29467": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass der durch magische Zauber und Effekte verursachte Schaden und die Heilung um bis zu 15 und die kritische Trefferwertung um 14 erhöht werden."
+    },
+    "29475": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass die durch magische Zauber und Effekte verursachte Heilung um bis zu 31 erhöht wird und alle 5 Sek. 5 Mana regeneriert werden."
+    },
+    "31033": {
+      "description": "Erhöht den Zauberschaden aller Gruppenmitglieder in der Nähe um bis zu $s1. Hält $d lang an."
+    },
+    "31040": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "31369": {
+      "description": "Bestickt Hosen dauerhaft mit einem Zauberfaden, der die Heilung um bis zu 46 und die Ausdauer um 15 erhöht."
+    },
+    "31370": {
+      "description": "Bestickt Hosen dauerhaft mit einem Zauberfaden, der die Heilung um bis zu 66 und die Ausdauer um 20 erhöht."
+    },
+    "31371": {
+      "description": "Bestickt Hosen dauerhaft mit einem Zauberfaden, der den Zauberschaden und die Heilung um bis zu 25 und die Ausdauer um 15 erhöht."
+    },
+    "31372": {
+      "description": "Bestickt Hosen dauerhaft mit einem Zauberfaden, der den Zauberschaden und die Heilung um bis zu 35 und die Ausdauer um 20 erhöht."
+    },
+    "32149": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "32196": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1% Eurer gesamten Intelligenz."
+    },
+    "32200": {
+      "description": "Erhöht die Heilung um bis zu $s1% Eurer gesamten Intelligenz."
+    },
+    "32355": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "32367": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1 und den durch Zauber verursachten Schaden um bis zu $s2 für $d."
+    },
+    "32401": {
+      "description": "Erhöht die durch 'Geringe Welle der Heilung' verursachte Heilung um bis zu $s1."
+    },
+    "32402": {
+      "description": "Erhöht die durch 'Verjüngung' verursachte Heilung um bis zu $s1."
+    },
+    "32403": {
+      "description": "Erhöht die durch 'Lichtblitz' verursachte Heilung um bis zu $s1."
+    },
+    "32607": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "32925": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1 und die Heilung um bis zu $s2 für $d."
+    },
+    "32956": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1 und die Heilung um bis zu $s2 für $d."
+    },
+    "33022": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33094": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33097": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33136": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33139": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33140": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33141": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33233": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33236": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33250": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "33268": {
+      "description": "Erhöht die verursachte Heilung um $s1 und die Willenskraft um $s2. Hält $d lang an."
+    },
+    "33269": {
+      "description": "Stellt $o1 Gesundheit im Verlauf von $d wieder her. Ihr müsst beim Essen sitzen bleiben. Wenn Ihr mindestens 10 Sekunden mit Essen verbringt, werdet Ihr satt, wodurch Eure durch Zauber verursachte Heilung um $33268s1 und Eure Willenskraft um $33268s2 für $33268d erhöht werden."
+    },
+    "33400": {
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1 und den durch Zauber verursachten Schaden um bis zu $s2 für $d."
+    },
+    "33556": {
+      "description": "Erhöht den durch 'Erdschock', 'Flammenschock' und 'Frostschock' verursachten Schaden um bis zu $s1."
+    },
+    "33662": {
+      "description": "Erhöht den verursachten Zauberschaden um bis zu $s1 und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "33997": {
+      "description": "Handschuhe dauerhaft verzaubern, sodass der Zauberschaden und die Heilung um bis zu 20 erhöht werden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "33999": {
+      "description": "Handschuhe dauerhaft verzaubern, sodass die Heilung um bis zu 35 und der Zauberschaden um bis zu 12 erhöht werden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "34000": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "34010": {
+      "description": "Eine Nahkampfwaffe dauerhaft verzaubern, sodass die Heilung um bis zu 81 und der Zauberschaden um bis zu 27 erhöht werden. Erfordert einen Gegenstand der Stufe 35 oder höher."
+    },
+    "34040": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "34230": {
+      "description": "Erhöht den durch 'Kettenblitzschlag' und 'Blitzschlag' verursachten Schaden um bis zu $s1."
+    },
+    "34231": {
+      "description": "Erhöht die durch 'Heiliges Licht' verursachte Heilung um bis zu $s1."
+    },
+    "34294": {
+      "description": "Erhöht die durch 'Welle der Heilung' verursachte Heilung um bis zu $s1."
+    },
+    "34321": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "34598": {
+      "description": "Gewährt Euren Offensivzaubern bei einem Treffer die Chance, den durch Eure Zauber und Effekte verursachten Schaden und die Heilung um bis zu 130 für $34597d zu erhöhen."
+    },
+    "34611": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "34747": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "34760": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "35084": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "35087": {
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2 für $d."
+    },
+    "35163": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "35165": {
+      "description": "Erhöht die durch Zauber verursachte Heilung um bis zu $s1 und den durch Zauber verursachten Schaden um bis zu $s2 für $d."
+    },
+    "35337": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1 und die Heilung um bis zu $s2 für $d."
+    },
+    "35403": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass die Heilung um bis zu 29 erhöht wird. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "35404": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass die Heilung um bis zu 33 erhöht wird und alle 5 Sek. 4 Mana regeneriert werden. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "35405": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass der Zauberschaden und die Heilung um bis zu 15 erhöht werden. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "35406": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass der Zauberschaden und die Heilung um bis zu 18 und die kritische Trefferwertung um 10 erhöht werden. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "35437": {
+      "description": "Verzaubert einen Gegenstand für den Schulterplatz dauerhaft, sodass die kritische Trefferwertung um 15 sowie der Zauberschaden und die Heilung um bis zu 12 erhöht werden. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "35445": {
+      "description": "Verzaubert einen Gegenstand für den Kopfplatz dauerhaft, sodass die Heilung um bis zu 35 erhöht wird und alle 5 Sek. 7 Mana regeneriert werden. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "35447": {
+      "description": "Verzaubert einen Gegenstand für den Kopfplatz dauerhaft, sodass der Zauberschaden und die Heilung um bis zu 22 und die Trefferwertung um 14 erhöht werden. Lässt sich nicht mit anderen Verzauberungen für denselben Ausrüstungsplatz kombinieren."
+    },
+    "36347": {
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2 für $d."
+    },
+    "36385": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "36430": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "36432": {
+      "description": "Erhöht den Zauberschaden um bis zu $s2 für $d."
+    },
+    "36580": {
+      "aura description": "\n"
+    },
+    "36749": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "37542": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "37649": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden gegen Dämonen um bis zu $s1."
+    },
+    "37817": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung geringfügig."
+    },
+    "38305": {
+      "description": "Erhöht den durch Naturzauber und Effekte verursachten Schaden um bis zu $s1."
+    },
+    "38348": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "39201": {
+      "description": "Erhöht den Zauberschaden um bis zu $s1 und die Heilung um bis zu $s2 für $d."
+    },
+    "39569": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "41040": {
+      "description": "Erhöht den durch 'Kettenblitzschlag' und 'Blitzschlag' verursachten Schaden um bis zu $s1."
+    },
+    "41604": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden um bis zu $s1 für $d. Gilt sowohl als Kampfelixier als auch als Wächterelixier. Dieser Effekt hält über den Tod hinaus an."
+    },
+    "41973": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42040": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42057": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42062": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42076": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42099": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42111": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42122": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42124": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "42248": {
+      "description": "Erhöht den durch Zauber verursachten Schaden um bis zu $s1 für $d."
+    },
+    "42249": {
+      "description": "Erhöht den durch Zauber verursachten Schaden um bis zu $s1 für $d."
+    },
+    "42250": {
+      "description": "Erhöht den durch Zauber verursachten Schaden um bis zu $s1 für $d."
+    },
+    "42251": {
+      "description": "Erhöht den durch Zauber verursachten Schaden um bis zu $s1 für $d."
+    },
+    "42814": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "43455": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "43710": {
+      "description": "Erhöht die durch Zauber verursachte Heilung um bis zu $s1 und den durch Zauber verursachten Schaden um bis zu $s2 für $d."
+    },
+    "43712": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s2 für $d."
+    },
+    "44075": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "44751": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "44979": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "45044": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "45478": {
+      "description": "Erhöht die Heilung um bis zu $s1 und den Zauberschaden um bis zu $s2 für $d."
+    },
+    "45479": {
+      "description": "Erhöht den Zauberschaden und die Heilung um bis zu $s2 für $d."
+    },
+    "46632": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "46783": {
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1 für $d."
+    },
+    "59285": {
+      "description": "Intelligenz um 42 erhöht",
+      "aura description": "Intelligenz um 42 erhöht"
+    },
+    "81000": {
+      "name": "Heilung +13, Zauberschaden +5",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81001": {
+      "name": "Heilung +15, Zauberschaden +5",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81002": {
+      "name": "Heilung +18, Zauberschaden +6",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81003": {
+      "name": "Heilung +20, Zauberschaden +7",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81004": {
+      "name": "Heilung +22, Zauberschaden +8",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81005": {
+      "name": "Heilung +24, Zauberschaden +8",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81006": {
+      "name": "Heilung +26, Zauberschaden +9",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81007": {
+      "name": "Heilung +29, Zauberschaden +10",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81008": {
+      "name": "Heilung +31, Zauberschaden +11",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81009": {
+      "name": "Heilung +32, Zauberschaden +11",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81010": {
+      "name": "Heilung +33, Zauberschaden +11",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81011": {
+      "name": "Heilung +35, Zauberschaden +12",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81012": {
+      "name": "Heilung +37, Zauberschaden +13",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81013": {
+      "name": "Heilung +39, Zauberschaden +13",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81014": {
+      "name": "Heilung +40, Zauberschaden +14",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81015": {
+      "name": "Heilung +42, Zauberschaden +14",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81016": {
+      "name": "Heilung +44, Zauberschaden +15",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81017": {
+      "name": "Heilung +46, Zauberschaden +16",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81018": {
+      "name": "Heilung +48, Zauberschaden +16",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81019": {
+      "name": "Heilung +49, Zauberschaden +17",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81020": {
+      "name": "Heilung +51, Zauberschaden +17",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81021": {
+      "name": "Heilung +53, Zauberschaden +18",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81022": {
+      "name": "Heilung +55, Zauberschaden +19",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81023": {
+      "name": "Heilung +56, Zauberschaden +19",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81024": {
+      "name": "Heilung +57, Zauberschaden +19",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81025": {
+      "name": "Heilung +59, Zauberschaden +20",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81026": {
+      "name": "Heilung +61, Zauberschaden +21",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81027": {
+      "name": "Heilung +62, Zauberschaden +21",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81028": {
+      "name": "Heilung +64, Zauberschaden +22",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81029": {
+      "name": "Heilung +66, Zauberschaden +22",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81030": {
+      "name": "Heilung +68, Zauberschaden +23",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81031": {
+      "name": "Heilung +70, Zauberschaden +24",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81032": {
+      "name": "Heilung +73, Zauberschaden +25",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81033": {
+      "name": "Heilung +75, Zauberschaden +25",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81034": {
+      "name": "Heilung +77, Zauberschaden +26",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81035": {
+      "name": "Heilung +79, Zauberschaden +27",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81036": {
+      "name": "Heilung +81, Zauberschaden +27",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81037": {
+      "name": "Heilung +84, Zauberschaden +28",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81038": {
+      "name": "Heilung +86, Zauberschaden +29",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81039": {
+      "name": "Heilung +88, Zauberschaden +30",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81040": {
+      "name": "Heilung +90, Zauberschaden +30",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81041": {
+      "name": "Zaubermacht +48",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81042": {
+      "name": "Heilung +92, Zauberschaden +31",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81043": {
+      "name": "Heilung +94, Zauberschaden +32",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81044": {
+      "name": "Heilung +95, Zauberschaden +32",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81045": {
+      "name": "Heilung +97, Zauberschaden +33",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81046": {
+      "name": "Heilung +99, Zauberschaden +33",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81047": {
+      "name": "Heilung +101, Zauberschaden +34",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81048": {
+      "name": "Heilung +103, Zauberschaden +35",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81049": {
+      "name": "Heilung +105, Zauberschaden +35",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81050": {
+      "name": "Heilung +106, Zauberschaden +36",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81051": {
+      "name": "Heilung +108, Zauberschaden +36",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81052": {
+      "name": "Heilung +109, Zauberschaden +37",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81053": {
+      "name": "Heilung +110, Zauberschaden +37",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81054": {
+      "name": "Heilung +118, Zauberschaden +37",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81055": {
+      "name": "Heilung +114, Zauberschaden +38",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81056": {
+      "name": "Heilung +115, Zauberschaden +39",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81057": {
+      "name": "Heilung +117, Zauberschaden +39",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81058": {
+      "name": "Heilung +119, Zauberschaden +40",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81059": {
+      "name": "Heilung +121, Zauberschaden +41",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81060": {
+      "name": "Heilung +122, Zauberschaden +41",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81061": {
+      "name": "Heilung +128, Zauberschaden +43",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81062": {
+      "name": "Zaubermacht +70",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81063": {
+      "name": "Heilung +134, Zauberschaden +45",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81064": {
+      "name": "Heilung +137, Zauberschaden +46",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81065": {
+      "name": "Heilung +139, Zauberschaden +46",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81066": {
+      "name": "Heilung +141, Zauberschaden +47",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81067": {
+      "name": "Heilung +143, Zauberschaden +48",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81068": {
+      "name": "Heilung +152, Zauberschaden +51",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81069": {
+      "name": "Zaubermacht +82",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81070": {
+      "name": "Heilung +165, Zauberschaden +55",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81071": {
+      "name": "Heilung +179, Zauberschaden +60",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81072": {
+      "name": "Heilung +194, Zauberschaden +65",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81073": {
+      "name": "Zaubermacht +104",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81074": {
+      "name": "Heilung +115",
+      "description": "Erhöht die durch Zauber und Effekte verursachte Heilung um bis zu $s1."
+    },
+    "81075": {
+      "name": "Heilung +227, Zauberschaden +76",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81076": {
+      "name": "Heilung +228, Zauberschaden +76",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81077": {
+      "name": "Heilung +299, Zauberschaden +100",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81078": {
+      "name": "Heilung +317, Zauberschaden +106",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81079": {
+      "name": "Heilung +348, Zauberschaden +116",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81080": {
+      "name": "Heilung +364, Zauberschaden +122",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81081": {
+      "name": "Heilung +375, Zauberschaden +125",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81082": {
+      "name": "Heilung +382, Zauberschaden +128",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81083": {
+      "name": "Heilung +407, Zauberschaden +136",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81084": {
+      "name": "Heilung +415, Zauberschaden +138",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81085": {
+      "name": "Heilung +423, Zauberschaden +141",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81086": {
+      "name": "Heilung +431, Zauberschaden +144",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81087": {
+      "name": "Zaubermacht +232",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81088": {
+      "name": "Heilung +443, Zauberschaden +148",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81089": {
+      "name": "Heilung +464, Zauberschaden +155",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81090": {
+      "name": "Zaubermacht +252",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81091": {
+      "name": "Heilung +486, Zauberschaden +162",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81092": {
+      "name": "Heilung +500, Zauberschaden +167",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81093": {
+      "name": "Heilung +550, Zauberschaden +183",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81094": {
+      "name": "Zaubermacht +19",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81095": {
+      "name": "Zaubermacht +21",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81096": {
+      "name": "Zaubermacht +22",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81097": {
+      "name": "Zaubermacht +25",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81098": {
+      "name": "Zaubermacht +26",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81099": {
+      "name": "Zaubermacht +27",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81100": {
+      "name": "Zaubermacht +29",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81101": {
+      "name": "Zaubermacht +32",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81102": {
+      "name": "Zaubermacht +33",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81103": {
+      "name": "Zaubermacht +34",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81104": {
+      "name": "Zaubermacht +35",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81105": {
+      "name": "Zaubermacht +36",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81106": {
+      "name": "Zaubermacht +37",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81107": {
+      "name": "Zaubermacht +39",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81108": {
+      "name": "Zaubermacht +41",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81109": {
+      "name": "Zaubermacht +43",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81110": {
+      "name": "Zaubermacht +44",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81111": {
+      "name": "Zaubermacht +46",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81112": {
+      "name": "Zaubermacht +49",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81113": {
+      "name": "Zaubermacht +51",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81114": {
+      "name": "Zaubermacht +53",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81115": {
+      "name": "Zaubermacht +54",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81116": {
+      "name": "Zaubermacht +55",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81117": {
+      "name": "Zaubermacht +56",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81118": {
+      "name": "Zaubermacht +57",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81119": {
+      "name": "Zaubermacht +58",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81120": {
+      "name": "Zaubermacht +59",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81121": {
+      "name": "Zaubermacht +60",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81122": {
+      "name": "Zaubermacht +61",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81123": {
+      "name": "Zaubermacht +62",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81124": {
+      "name": "Zaubermacht +64",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81125": {
+      "name": "Zaubermacht +65",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81126": {
+      "name": "Zaubermacht +66",
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "81127": {
+      "name": "Zaubermacht +67",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81128": {
+      "name": "Zaubermacht +68",
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "81129": {
+      "name": "Zaubermacht +74",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81130": {
+      "name": "Zaubermacht +76",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81131": {
+      "name": "Zaubermacht +80",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81132": {
+      "name": "Zaubermacht +85",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81133": {
+      "name": "Zaubermacht +88",
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "81134": {
+      "name": "Zaubermacht +132",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81135": {
+      "name": "Zaubermacht +292",
+      "description": "Erhöht den durch magische Zauber und Effekte verursachten Schaden und die verursachte Heilung um bis zu $s1."
+    },
+    "81136": {
+      "name": "Heilung +160, Zauberschaden +54",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81137": {
+      "name": "Heilung +161, Zauberschaden +54",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    },
+    "81138": {
+      "name": "Zaubermacht +106",
+      "description": "Erhöht die Zaubermacht um $s1."
+    },
+    "81139": {
+      "name": "Heilung +600, Zauberschaden +200",
+      "description": "Erhöht die durch magische Zauber und Effekte verursachte Heilung um bis zu $s1 und den verursachten Schaden um bis zu $s2."
+    }
+  },
+  "Achievement.dbc": {
+    "533": {
+      "name": "Naxxramas (Stufe 60)",
+      "description": "Besiegt die klassische Version von Kel'Thuzad auf Stufe 60."
+    }
+  },
+  "SkillLine.dbc": {
+    "40": {
+      "name": "Gifte"
+    }
+  },
+  "SpellItemEnchantment.dbc": {
+    "2307": {
+      "name": "+2 Heilung"
+    },
+    "2308": {
+      "name": "+4 Heilung"
+    },
+    "2309": {
+      "name": "+7 Heilung"
+    },
+    "2310": {
+      "name": "+8 Heilung"
+    },
+    "2311": {
+      "name": "+9 Heilung"
+    },
+    "2312": {
+      "name": "+11 Heilung"
+    },
+    "2313": {
+      "name": "+12 Heilung"
+    },
+    "2314": {
+      "name": "+13 Heilung"
+    },
+    "2315": {
+      "name": "+18 Heilung"
+    },
+    "2316": {
+      "name": "+19 Heilung"
+    },
+    "2317": {
+      "name": "+20 Heilung"
+    },
+    "2318": {
+      "name": "+22 Heilung"
+    },
+    "2319": {
+      "name": "+23 Heilung"
+    },
+    "2320": {
+      "name": "+24 Heilung"
+    },
+    "2321": {
+      "name": "+26 Heilung"
+    },
+    "2322": {
+      "name": "+29 Heilung"
+    },
+    "2323": {
+      "name": "+31 Heilung"
+    },
+    "2324": {
+      "name": "+33 Heilung"
+    },
+    "2325": {
+      "name": "+34 Heilung"
+    },
+    "2326": {
+      "name": "+35 Heilung"
+    },
+    "2327": {
+      "name": "+38 Heilung"
+    },
+    "2328": {
+      "name": "+40 Heilung"
+    },
+    "2329": {
+      "name": "+42 Heilung"
+    },
+    "2330": {
+      "name": "+43 Heilung"
+    },
+    "2331": {
+      "name": "+44 Heilung"
+    },
+    "2332": {
+      "name": "+46 Heilung"
+    },
+    "2333": {
+      "name": "+48 Heilung"
+    },
+    "2334": {
+      "name": "+51 Heilung"
+    },
+    "2335": {
+      "name": "+53 Heilung"
+    },
+    "2336": {
+      "name": "+54 Heilung"
+    },
+    "2337": {
+      "name": "+55 Heilung"
+    },
+    "2338": {
+      "name": "+57 Heilung"
+    },
+    "2339": {
+      "name": "+59 Heilung"
+    },
+    "2340": {
+      "name": "+62 Heilung"
+    },
+    "2341": {
+      "name": "+64 Heilung"
+    },
+    "2342": {
+      "name": "+66 Heilung"
+    },
+    "2343": {
+      "name": "+81 Heilung"
+    },
+    "2344": {
+      "name": "+70 Heilung"
+    },
+    "2504": {
+      "name": "+30 Zauberschaden"
+    },
+    "2505": {
+      "name": "+55 Heilung"
+    },
+    "2544": {
+      "name": "+8 Heilung"
+    },
+    "2566": {
+      "name": "+24 Heilung"
+    },
+    "2584": {
+      "name": "+10 Verteidigungswertung, +10 Ausdauer und +24 Heilung"
+    },
+    "2590": {
+      "name": "+4 Mana alle 5 Sek., +10 Ausdauer und +24 Heilung"
+    },
+    "2591": {
+      "name": "+10 Intelligenz, +10 Ausdauer und +24 Heilung"
+    },
+    "2604": {
+      "name": "+33 Heilung"
+    },
+    "2617": {
+      "name": "+30 Heilung"
+    },
+    "2623": {
+      "name": "Schwaches Zauberöl"
+    },
+    "2626": {
+      "name": "Geringes Zauberöl"
+    },
+    "2627": {
+      "name": "Zauberöl"
+    },
+    "2628": {
+      "name": "Hervorragendes Zauberöl"
+    },
+    "2629": {
+      "name": "Hervorragendes Manaöl"
+    },
+    "2669": {
+      "name": "+40 Zaubermacht"
+    },
+    "2678": {
+      "name": "Überragendes Zauberöl"
+    },
+    "2715": {
+      "name": "+31 Heilung und 5 Mana alle 5 Sek."
+    },
+    "2745": {
+      "name": "+46 Heilung und +15 Ausdauer"
+    },
+    "2746": {
+      "name": "+66 Heilung und +20 Ausdauer"
+    },
+    "2928": {
+      "name": "+12 Zaubermacht"
+    },
+    "2930": {
+      "name": "+20 Heilung"
+    },
+    "2979": {
+      "name": "+29 Heilung"
+    },
+    "2980": {
+      "name": "+33 Heilung und +4 Mana alle 5 Sek."
+    },
+    "3001": {
+      "name": "+35 Heilung und 7 Mana alle 5 Sek."
+    },
+    "3592": {
+      "name": "+60 Zauberschaden gegen Untote"
+    },
+    "3846": {
+      "name": "+81 Heilung und +27 Zauberschaden"
+    },
+    "4001": {
+      "name": "+30 Heilung und +10 Zauberschaden"
+    },
+    "4003": {
+      "name": "+35 Heilung und +12 Zauberschaden"
+    }
+  }
+}
