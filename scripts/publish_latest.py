@@ -180,11 +180,21 @@ class GitHubClient:
             self._request("PATCH", f"/git/refs/tags/{quote(tag, safe='')}", {"sha": sha, "force": True})
 
     def delete_tag(self, tag: str) -> None:
+        # GitHub does not create the temporary ref when creating a draft.
+        # DELETE for that absent ref returns 422 rather than the usual 404.
+        if self.tag_sha(tag) is None:
+            return
         try:
             self._request("DELETE", f"/git/refs/tags/{quote(tag, safe='')}")
         except APIError as error:
-            if error.status != 404:
-                raise
+            if error.status == 404:
+                return
+            # A ref can disappear between the existence check and deletion.
+            # Confirm absence before accepting 422; other validation failures
+            # (for example, a protected ref) must still fail publication.
+            if error.status == 422 and self.tag_sha(tag) is None:
+                return
+            raise
 
     def promote_release(self, release_id: int, sha: str, notes: str) -> dict[str, Any]:
         return self._request("PATCH", f"/releases/{release_id}", {
