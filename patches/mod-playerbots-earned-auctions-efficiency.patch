@@ -1,0 +1,314 @@
+diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
+--- a/src/Bot/EarnedAuction.cpp
++++ b/src/Bot/EarnedAuction.cpp
+@@ -12,6 +12,7 @@
+ #include <memory>
+ #include <string>
+ #include <unordered_set>
++#include <utility>
+ #include <vector>
+ 
+ #include "AuctionHouseMgr.h"
+@@ -64,7 +65,113 @@
+     return value->Get();
+ }
+ 
+-bool NeededForProgression(PlayerbotAI* ai, Item* item)
++// A decision inspects several bag items without changing quests or learned spells.
++// Build their protection sets lazily once for that decision, never across ticks,
++// players or map/world threads. Inventory-dependent pet-food reserves remain live.
++class ProgressionSupplies
++{
++public:
++    explicit ProgressionSupplies(Player* player) : _bot(player) {}
++
++    bool NeededForQuest(Item* item)
++    {
++        // Resolve this item's create-item effects at most once, and only when
++        // an active item objective makes them relevant.
++        bool effectsLoaded = false;
++        std::vector<uint32> createdItems;
++        auto needed = [&]()
++        {
++            if (_questItems.contains(item->GetEntry()))
++                return true;
++            if (_questObjectives.empty())
++                return false;
++            if (!effectsLoaded)
++            {
++                effectsLoaded = true;
++                for (auto const& spell : item->GetTemplate()->Spells)
++                {
++                    SpellInfo const* info = spell.SpellId > 0 ? sSpellMgr->GetSpellInfo(spell.SpellId) : nullptr;
++                    if (!info)
++                        continue;
++                    for (auto const& effect : info->Effects)
++                        if (effect.Effect == SPELL_EFFECT_CREATE_ITEM && effect.ItemType)
++                            createdItems.push_back(effect.ItemType);
++                }
++            }
++            return std::any_of(createdItems.begin(), createdItems.end(),
++                               [&](uint32 created) { return _questObjectives.contains(created); });
++        };
++        if (needed())
++            return true;
++        // Resume after the quests already inspected by a previous item. Stop on
++        // an early match rather than building the rest of an unneeded snapshot.
++        while (_questSlot < MAX_QUEST_LOG_SIZE)
++        {
++            uint32 const id = _bot->GetQuestSlotQuestId(_questSlot++);
++            Quest const* quest = id ? sObjectMgr->GetQuestTemplate(id) : nullptr;
++            if (!quest)
++                continue;
++            if (uint32 const source = quest->GetSrcItemId())
++                _questItems.insert(source);
++            for (uint32 required : quest->RequiredItemId)
++                if (required)
++                {
++                    _questItems.insert(required);
++                    _questObjectives.insert(required);
++                }
++            for (uint32 source : quest->ItemDrop)
++                if (source)
++                    _questItems.insert(source);
++            if (needed())
++                return true;
++        }
++        return false;
++    }
++
++    bool IsReagent(uint32 itemId)
++    {
++        if (_reagents.contains(itemId))
++            return true;
++        if (_reagentsLoaded)
++            return false;
++        auto const& spells = _bot->GetSpellMap();
++        if (!_reagentsStarted)
++        {
++            _reagentsStarted = true;
++            _reagentCursor = spells.cbegin();
++        }
++        // Never list _reagents required by a currently learned active spell.
++        // An early match is cached without scanning later unrelated spells.
++        while (_reagentCursor != spells.cend())
++        {
++            auto const& [spellId, spell] = *_reagentCursor++;
++            if (spell->State == PLAYERSPELL_REMOVED || !spell->Active)
++                continue;
++            SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
++            if (!info || info->IsPassive())
++                continue;
++            for (uint8 reagent = 0; reagent < MAX_SPELL_REAGENTS; ++reagent)
++                if (info->Reagent[reagent] > 0)
++                    _reagents.insert(uint32(info->Reagent[reagent]));
++            if (_reagents.contains(itemId))
++                return true;
++        }
++        _reagentsLoaded = true;
++        return false;
++    }
++
++private:
++    Player* _bot;
++    uint8 _questSlot = 0;
++    bool _reagentsStarted = false;
++    bool _reagentsLoaded = false;
++    decltype(std::declval<Player const&>().GetSpellMap().cbegin()) _reagentCursor;
++    std::unordered_set<uint32> _questItems;
++    std::unordered_set<uint32> _questObjectives;
++    std::unordered_set<uint32> _reagents;
++};
++
++bool NeededForProgression(PlayerbotAI* ai, Item* item, ProgressionSupplies& supplies)
+ {
+     ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
+     if (!proto)
+@@ -75,31 +182,8 @@
+     // The upstream usage predicate asks whether more quest loot is needed;
+     // after collecting enough it can classify the completed objective as AH
+     // surplus. Keep active objectives and their source items until turn-in.
+-    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+-    {
+-        Quest const* quest = sObjectMgr->GetQuestTemplate(bot->GetQuestSlotQuestId(slot));
+-        if (!quest)
+-            continue;
+-        if (quest->GetSrcItemId() == item->GetEntry())
+-            return true;
+-        for (uint32 required : quest->RequiredItemId)
+-            if (required == item->GetEntry())
+-                return true;
+-        for (uint32 source : quest->ItemDrop)
+-            if (source == item->GetEntry())
+-                return true;
+-        for (auto const& spell : proto->Spells)
+-        {
+-            SpellInfo const* info = spell.SpellId > 0 ? sSpellMgr->GetSpellInfo(spell.SpellId) : nullptr;
+-            if (!info)
+-                continue;
+-            for (auto const& effect : info->Effects)
+-                if (effect.Effect == SPELL_EFFECT_CREATE_ITEM)
+-                    for (uint32 required : quest->RequiredItemId)
+-                        if (required && required == effect.ItemType)
+-                            return true;
+-        }
+-    }
++    if (supplies.NeededForQuest(item))
++        return true;
+     // Keep the last pet-food supply, even when the generic usage classifier
+     // regards it as a food the hunter no longer needs for themself.
+     if (Pet* pet = bot->GetPet())
+@@ -107,34 +191,28 @@
+             std::uint64_t(bot->GetItemCount(item->GetEntry(), false)) < std::uint64_t(item->GetCount()) + 20)
+             return true;
+ 
+-    // Never list reagents required by a currently learned spell. Skill/quest,
+-    // equipment and personal consumable reserves are excluded by ITEM_USAGE_AH.
+-    for (auto const& [spellId, spell] : bot->GetSpellMap())
+-    {
+-        if (spell->State == PLAYERSPELL_REMOVED || !spell->Active)
+-            continue;
+-        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+-        if (!info || info->IsPassive())
+-            continue;
+-        for (uint8 reagent = 0; reagent < MAX_SPELL_REAGENTS; ++reagent)
+-            if (info->Reagent[reagent] > 0 && uint32(info->Reagent[reagent]) == item->GetEntry())
+-                return true;
+-    }
+-    return false;
+-}
+-
+-bool TradableSurplus(PlayerbotAI* ai, Item* item, ItemUsage usage, bool checkProgression = true)
+-{
+-    if (!item || usage != ITEM_USAGE_AH || item->IsEquipped() || item->IsInTrade() || !item->CanBeTraded() ||
+-        item->IsNotEmptyBag() || item->IsSoulBound() || item->GetOwnerGUID() != ai->GetBot()->GetGUID() ||
+-        !item->GetCount() || item->GetUInt32Value(ITEM_FIELD_DURATION))
++    return supplies.IsReagent(item->GetEntry());
++}
++
++bool CanList(PlayerbotAI* ai, Item* item)
++{
++    if (!item || item->IsEquipped() || item->IsInTrade() || !item->CanBeTraded() || item->IsNotEmptyBag() ||
++        item->IsSoulBound() || item->GetOwnerGUID() != ai->GetBot()->GetGUID() || !item->GetCount() ||
++        item->GetUInt32Value(ITEM_FIELD_DURATION))
+         return false;
+     ItemTemplate const* proto = item->GetTemplate();
+     if (!proto || !proto->SellPrice || proto->Quality < ITEM_QUALITY_NORMAL || proto->Class == ITEM_CLASS_QUEST ||
+         proto->Class == ITEM_CLASS_KEY || proto->HasFlag(ITEM_FLAG_CONJURED) || proto->Bonding == BIND_QUEST_ITEM)
+         return false;
+ 
+-    return !checkProgression || !NeededForProgression(ai, item);
++    return true;
++}
++
++bool TradableSurplus(PlayerbotAI* ai, Item* item, ProgressionSupplies& supplies)
++{
++    // Item usage can inspect equipment, skills and inventories. Reject items that
++    // cannot be listed before evaluating it.
++    return CanList(ai, item) && Usage(ai, item) == ITEM_USAGE_AH && !NeededForProgression(ai, item, supplies);
+ }
+ 
+ uint32 FreeBudget(PlayerbotAI* ai, NeedMoneyFor category)
+@@ -329,13 +407,14 @@
+     AuctionHouseEntry const* entry = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(auctioneer->GetFaction());
+     if (!entry)
+         return false;
++    ProgressionSupplies supplies(ai->GetBot());
+     for (ObjectGuid guid : BagItems(ai->GetBot()))
+     {
+         if (listed >= MaxSalesPerVisit || listings >= MaxListings)
+             break;
+         Player* bot = ai->GetBot();
+         Item* item = bot->GetItemByGuid(guid);
+-        if (!item || !TradableSurplus(ai, item, Usage(ai, item)))
++        if (!TradableSurplus(ai, item, supplies))
+             continue;
+         uint32 const count = item->GetCount();
+         ItemTemplate const* proto = item->GetTemplate();
+@@ -471,34 +550,16 @@
+     ObjectGuid targetGuid;
+     bool isMailbox;
+ };
+-}  // namespace
+-
+-bool IsEnabled(PlayerbotAI* ai)
+-{
+-    return ai && sPlayerbotAIConfig.naturalProgression && sPlayerbotAIConfig.earnedAuctions && ai->GetBot() &&
+-           sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();
+-}
+-
+-bool HasSurplus(PlayerbotAI* ai)
+-{
+-    if (!IsEnabled(ai))
+-        return false;
+-    for (ObjectGuid guid : BagItems(ai->GetBot()))
+-        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
+-            if (TradableSurplus(ai, item, Usage(ai, item)))
+-                return true;
+-    return false;
+-}
+-
+-bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage)
++
++bool ShouldReserve(PlayerbotAI* ai, Item* item, ItemUsage usage, ProgressionSupplies& supplies)
+ {
+     if (!ai || !ai->GetBot() || !sPlayerbotAIConfig.naturalProgression || !item)
+         return false;
+     // These are progression supplies rather than market surplus. Keep them
+     // even when earned trading is disabled or emergency vendoring is needed.
+-    if (NeededForProgression(ai, item))
++    if (NeededForProgression(ai, item, supplies))
+         return true;
+-    if (!IsEnabled(ai) || !TradableSurplus(ai, item, usage, false))
++    if (!IsEnabled(ai) || usage != ITEM_USAGE_AH || !CanList(ai, item))
+         return false;
+     // Broke bots and full bags may vendor surplus rather than stalling ordinary
+     // leveling. There is no gold grant to pay auction deposits.
+@@ -518,15 +579,42 @@
+     return FreeBudget(ai, NeedMoneyFor::anything) >= static_cast<uint32>(deposit);
+ }
+ 
+-bool HasVendorSurplus(PlayerbotAI* ai)
+-{
+-    if (!ai || !ai->GetBot())
+-        return false;
++}  // namespace
++
++bool IsEnabled(PlayerbotAI* ai)
++{
++    return ai && sPlayerbotAIConfig.naturalProgression && sPlayerbotAIConfig.earnedAuctions && ai->GetBot() &&
++           sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();
++}
++
++bool HasSurplus(PlayerbotAI* ai)
++{
++    if (!IsEnabled(ai))
++        return false;
++    ProgressionSupplies supplies(ai->GetBot());
+     for (ObjectGuid guid : BagItems(ai->GetBot()))
+         if (Item* item = ai->GetBot()->GetItemByGuid(guid))
++            if (TradableSurplus(ai, item, supplies))
++                return true;
++    return false;
++}
++
++bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage)
++{
++    ProgressionSupplies supplies(ai ? ai->GetBot() : nullptr);
++    return ShouldReserve(ai, item, usage, supplies);
++}
++
++bool HasVendorSurplus(PlayerbotAI* ai)
++{
++    if (!ai || !ai->GetBot())
++        return false;
++    ProgressionSupplies supplies(ai->GetBot());
++    for (ObjectGuid guid : BagItems(ai->GetBot()))
++        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
+         {
+             ItemUsage const usage = Usage(ai, item);
+-            if ((usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH) && !ShouldReserveForAuction(ai, item, usage))
++            if ((usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH) && !ShouldReserve(ai, item, usage, supplies))
+                 return true;
+         }
+     return false;

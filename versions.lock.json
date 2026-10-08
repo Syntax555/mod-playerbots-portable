@@ -30,6 +30,7 @@
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
+        "patches/mod-playerbots-earned-auctions-efficiency.patch",
         "patches/mod-playerbots-era-talents.patch",
         "patches/mod-playerbots-earned-era-battlegrounds.patch"
       ]
@@ -90,7 +91,9 @@
       "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8",
       "patches": [
         "patches/mod-era-talents-earned-progression.patch",
-        "patches/mod-era-talents-client-locales.patch"
+        "patches/mod-era-talents-client-locales.patch",
+        "patches/mod-era-talents-german-addon.patch",
+        "patches/mod-era-talents-german-text.patch"
       ]
     }
   ],

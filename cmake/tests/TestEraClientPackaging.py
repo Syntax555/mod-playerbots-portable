@@ -140,6 +140,36 @@ def record(spell, name_offset=0, localized_fields=None):
 
 
 class ClientDbcTests(unittest.TestCase):
+    def test_german_helpers_match_authored_translations_and_keep_fallback_locales(self):
+        offsets, strings = {}, b"\0"
+        values = ("EraTalents Gen 1234abcd", "Arcane Power", "Arkane Macht",
+                  "Rank 1", "Rang 1", "Damage increased by 30%.", "Schaden um 30% erhöht.")
+        for value in values:
+            offsets[value] = len(strings)
+            strings += value.encode("utf-8") + b"\0"
+        fields, expected = {}, [0] * 234
+        for field, english, german in ((136, "Arcane Power", "Arkane Macht"),
+                                       (153, "Rank 1", "Rang 1"),
+                                       (170, "Damage increased by 30%.", "Schaden um 30% erhöht."),
+                                       (187, "Damage increased by 30%.", "Schaden um 30% erhöht.")):
+            fields[field] = [offsets[english]] * 16
+            fields[field][3] = offsets[german]
+            for locale in range(16):
+                expected[field + locale] = german if locale == 3 else english
+        base = dbc([record(10)], strings)
+        helper = record(932760, localized_fields=fields)
+        sentinel = record(932999, offsets[values[0]])
+        merged = dbc([record(10), helper, sentinel], strings)
+        PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932760, 932999}, {932760: expected})
+        for label, field in PACKAGE.SPELL_LOCALIZED_FIELDS.items():
+            with self.subTest(label=label):
+                broken = bytearray(helper)
+                # A lost German translation must fail even with a correct marker.
+                struct.pack_into("<I", broken, (field + 3) * 4, fields[field][0])
+                changed = dbc([record(10), bytes(broken), sentinel], strings)
+                with self.assertRaisesRegex(ValueError, "localized spell.*locale slot 3"):
+                    PACKAGE.verify_merged_spell(base, changed, "1234abcd", {932760, 932999}, {932760: expected})
+
     def test_preserves_ip_records_and_reads_generation(self):
         base = dbc([record(10)])
         merged = dbc([record(10), record(932999, 1)], b"\0EraTalents Gen 1234abcd\0")

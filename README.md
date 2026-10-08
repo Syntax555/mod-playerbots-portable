@@ -10,7 +10,7 @@ A portable **Windows x64** server for World of Warcraft 3.3.5a, built on [Azerot
 ## Features
 
 - **Earned progression:** players and bots complete their own content milestones through Vanilla, The Burning Crusade and Wrath of the Lich King.
-- **Historical talents:** Vanilla and TBC talent trees follow each character's earned era, with native Wrath trees after the Wrath unlock.
+- **Historical talents:** Vanilla and TBC talent trees follow each character's earned era, with German and English talent/spell text and native Wrath trees after the Wrath unlock.
 - **Level 1 bots:** bots earn their levels, equipment and gold. Resident bots remain in selected level brackets after reaching them through gameplay.
 - **An earned economy:** bots sell surplus owned loot and buy with their own gold, using normal auction fees and mailbox delivery. A fresh market grows as bots acquire tradable items.
 - **Companions and battlegrounds:** bots can join parties, while eligible bots fill real players' battleground queues. AutoBalance adjusts instance difficulty to the party size.

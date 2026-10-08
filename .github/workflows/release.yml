@@ -93,7 +93,7 @@ jobs:
         if: steps.features.outputs.enabled == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y build-essential cmake p7zip-full python3-venv
+          sudo apt-get install --no-install-recommends -y build-essential cmake p7zip-full python3-venv lua5.1
           python3 -m venv "$RUNNER_TEMP/era-client-python"
           "$RUNNER_TEMP/era-client-python/bin/python" -m pip install 'PyYAML==6.0.3'
           echo "$RUNNER_TEMP/era-client-python/bin" >> "$GITHUB_PATH"
@@ -103,6 +103,20 @@ jobs:
         run: |
           git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
+
+      - name: Test historical German text and addon behavior
+        if: steps.features.outputs.enabled == 'true'
+        run: |
+          python3 - <<'PYTHON'
+          import json, pathlib, subprocess, sys
+          root = pathlib.Path.cwd()
+          lock = json.loads((root / 'versions.lock.json').read_text())
+          core = root / '.module-cache/prepared-core' if lock['core'].get('patches') else root / lock['core']['source']
+          module = core / 'modules/mod-era-talents'
+          subprocess.run([sys.executable, str(module / 'tools/test_era_locales.py')], cwd=module, check=True)
+          for fixture in sorted((module / 'client-addon/EraTalents').glob('test_*.lua')):
+              subprocess.run(['lua5.1', str(fixture)], cwd=module, check=True)
+          PYTHON
 
       - name: Build merged IP and historical talent client ZIP
         if: steps.features.outputs.enabled == 'true'

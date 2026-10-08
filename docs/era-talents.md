@@ -50,8 +50,19 @@ The result should contain `EraTalents Gen` and the package generation. If the
 addon reports a stale generation, install the matching addon/MPQ pair and fully
 restart the client.
 
-The marker supports every client locale. Custom historical spell names and
-tooltips use the authored English text across locales; they are not translated.
+The marker supports every client locale.
+
+### Client language
+
+German (`deDE`) clients automatically use German talent names, rank descriptions,
+tree labels and addon messages. The matching MPQ also includes German names,
+spellbook descriptions and aura text for the custom historical spells. Keep
+your German client; no language setting or additional translation pack is needed.
+
+English clients retain English text. Other client locales use the authored
+English fallback. Translation follows the historical effects and rank values;
+it does not substitute descriptions from a different expansion. Other game
+and module text follows the translations available in those components.
 
 ## Points, training, respecs and glyphs
 

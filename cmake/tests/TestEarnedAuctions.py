@@ -179,8 +179,9 @@ struct SpellInfo
 struct SpellMgr
 {
     std::map<uint32, SpellInfo> spells;
+    mutable unsigned lookups = 0;
     SpellInfo const* GetSpellInfo(uint32 id) const
-    { auto it = spells.find(id); return it == spells.end() ? nullptr : &it->second; }
+    { ++lookups; auto it = spells.find(id); return it == spells.end() ? nullptr : &it->second; }
 } spellMgr;
 auto* sSpellMgr = &spellMgr;
 struct Quest
@@ -192,8 +193,9 @@ struct Quest
 struct ObjectMgr
 {
     std::map<uint32, Quest> quests;
+    mutable unsigned lookups = 0;
     Quest const* GetQuestTemplate(uint32 id) const
-    { auto it = quests.find(id); return it == quests.end() ? nullptr : &it->second; }
+    { ++lookups; auto it = quests.find(id); return it == quests.end() ? nullptr : &it->second; }
 } objectMgr;
 auto* sObjectMgr = &objectMgr;
 template<class T> struct Value { T value{}; void Reset() {} T Get() const { return value; } };
@@ -202,12 +204,13 @@ struct AiObjectContext
     Value<bool> canMove{true}; Value<uint8> bagSpace{0}; Value<uint32> budget{10000}, supplies{0};
     std::map<std::string, Value<ItemUsage>> usage;
     std::string lastQualifier;
+    unsigned usageLookups = 0;
     template<class T, class Q = std::string> Value<T>* GetValue(std::string const& name, Q qualifier = {})
     {
         if constexpr (std::is_same_v<T, bool>) return &canMove;
         else if constexpr (std::is_same_v<T, uint8>) return &bagSpace;
         else if constexpr (std::is_same_v<T, uint32>) return name == "money needed for" ? &supplies : &budget;
-        else { lastQualifier = qualifier; return &usage[qualifier]; }
+        else { ++usageLookups; lastQualifier = qualifier; return &usage[qualifier]; }
     }
 };
 struct Player;
@@ -469,6 +472,7 @@ struct Scenario
         bot.guid = {nextBot++}; connected.clear(); connected[bot.guid] = &bot;
         auctionMgr.house.auctions.clear(); auctionMgr.items.clear(); characterCache.accounts.clear();
         allocatedItems.clear(); objectMgr.quests.clear(); spellMgr.spells.clear();
+        objectMgr.lookups = 0; spellMgr.lookups = 0;
         sPlayerbotAIConfig = {}; world.rate = 1; now += 400;
         auto& processor = PlayerbotWorldThreadProcessor::instance(); processor.queued.clear(); processor.accept = true;
     }
@@ -630,6 +634,16 @@ void ServiceTests()
         spell.State = PLAYERSPELL_REMOVED; assert(HasSurplus(&s.bot.ai));
         s.bot.spells.clear(); Pet pet; item.proto.petFood = true; s.bot.pet = &pet; assert(!HasSurplus(&s.bot.ai));
     }
+    for (int excluded = 0; excluded < 4; ++excluded)
+    {
+        Scenario s; Item& item = s.BagItem(); PlayerSpell spell; s.bot.spells[99] = &spell;
+        spellMgr.spells[99].Reagent[0] = int(item.GetEntry());
+        if (excluded == 0) spell.State = PLAYERSPELL_REMOVED;
+        if (excluded == 1) spell.Active = false;
+        if (excluded == 2) spellMgr.spells[99].passive = true;
+        if (excluded == 3) spellMgr.spells.clear();
+        assert(HasSurplus(&s.bot.ai));
+    }
     for (int retained = 0; retained < 4; ++retained)
     {
         Scenario s; Item& item = s.BagItem(100, 20); s.bot.quests[0] = 5;
@@ -775,7 +789,114 @@ void ServiceTests()
         assert(first.size() == MaxMarketScan && second.size() == MaxMarketScan && first != second);
         assert(std::unordered_set<uint32>(first.begin(), first.end()).size() == MaxMarketScan);
     }
-    std::cout << "Earned auctions: production policy/service, conserved inventory/gold, safe receipts, queued revalidation and travel selection passed\n";
+    {
+        // Single-item reservations and a batch sharing the same first objective
+        // preserve early returns instead of eagerly scanning every quest.
+        Scenario s;
+        for (uint32 id = 1; id <= MAX_QUEST_LOG_SIZE; ++id)
+        {
+            s.bot.quests[id - 1] = id;
+            objectMgr.quests[id].RequiredItemId[0] = 100 + id;
+        }
+        Item& first = s.BagItem(101);
+        assert(ShouldReserveForAuction(&s.bot.ai, &first, ITEM_USAGE_AH));
+        assert(objectMgr.lookups == 1 && !spellMgr.lookups);
+        for (uint32 id = 0; id < 15; ++id) s.BagItem(101);
+        objectMgr.lookups = 0;
+        assert(!HasSurplus(&s.bot.ai));
+        assert(objectMgr.lookups == 1 && !spellMgr.lookups);
+        // The next decision must resume for an item protected by a later quest.
+        first.proto.ItemId = 125; s.SetUsage(first, ITEM_USAGE_AH);
+        objectMgr.lookups = 0;
+        assert(!HasSurplus(&s.bot.ai));
+        assert(objectMgr.lookups == MAX_QUEST_LOG_SIZE && !spellMgr.lookups);
+    }
+    {
+        Scenario s; PlayerSpell learned;
+        for (uint32 id = 1; id <= 300; ++id)
+        {
+            s.bot.spells[id] = &learned;
+            spellMgr.spells[id].Reagent[0] = id == 1 ? 100 : id == 300 ? 101 : 999;
+        }
+        Item& first = s.BagItem(100);
+        assert(ShouldReserveForAuction(&s.bot.ai, &first, ITEM_USAGE_AH));
+        assert(spellMgr.lookups == 1);
+        for (uint32 id = 0; id < 15; ++id) s.BagItem(100);
+        spellMgr.lookups = 0;
+        assert(!HasSurplus(&s.bot.ai));
+        assert(spellMgr.lookups == 1);
+        first.proto.ItemId = 101; s.SetUsage(first, ITEM_USAGE_AH);
+        spellMgr.lookups = 0;
+        assert(!HasSurplus(&s.bot.ai));
+        assert(spellMgr.lookups == 300);
+    }
+    {
+        // Full-bag decisions should inspect static quest/spell requirements once,
+        // including objectives that are already complete but not turned in.
+        Scenario s; PlayerSpell learned;
+        for (uint32 id = 1; id <= 300; ++id)
+        {
+            s.bot.spells[id] = &learned;
+            spellMgr.spells[id].Reagent[0] = id == 300 ? 100 : 0;
+        }
+        for (uint32 id = 1; id <= MAX_QUEST_LOG_SIZE; ++id)
+        {
+            s.bot.quests[id - 1] = id;
+            objectMgr.quests[id].RequiredItemId[0] = 500 + id;
+        }
+        for (uint32 id = 0; id < 16; ++id) s.BagItem(100);
+        assert(!HasSurplus(&s.bot.ai));
+        std::cout << "Full-bag protection lookups: quests=" << objectMgr.lookups
+                  << ", spells=" << spellMgr.lookups << ", item usage="
+                  << s.bot.ai.context.usageLookups << '\n';
+        assert(objectMgr.lookups == MAX_QUEST_LOG_SIZE && spellMgr.lookups == 300);
+        assert(s.bot.ai.context.usageLookups == 16);
+        objectMgr.lookups = 0; spellMgr.lookups = 0;
+        assert(!HasVendorSurplus(&s.bot.ai));
+        assert(objectMgr.lookups == MAX_QUEST_LOG_SIZE && spellMgr.lookups == 300);
+        // A later decision sees changed quests, active spells and their reagents.
+        s.bot.spells.erase(300);
+        assert(HasSurplus(&s.bot.ai));
+        objectMgr.quests[1].RequiredItemId[0] = 100;
+        assert(!HasSurplus(&s.bot.ai));
+        objectMgr.quests[1].RequiredItemId[0] = 501;
+        assert(HasSurplus(&s.bot.ai));
+        s.bot.spells[300] = &learned;
+        assert(!HasSurplus(&s.bot.ai));
+    }
+    {
+        // Failed core sales leave every item in place. Even this full traversal
+        // must not rescan the character's spellbook once for each attempt.
+        Scenario s; PlayerSpell learned;
+        for (uint32 id = 1; id <= 300; ++id)
+        {
+            s.bot.spells[id] = &learned;
+            spellMgr.spells[id].Reagent[0] = 999;
+        }
+        for (uint32 id = 0; id < 16; ++id) s.BagItem(100);
+        s.bot.session.rejectSell = true;
+        assert(!s.Visit());
+        assert(spellMgr.lookups == 300 && s.bot.session.sells == 16);
+        assert(s.bot.inventory.size() == 16 && s.bot.money == 10000);
+    }
+    {
+        // Items that cannot be listed need no equipment/skill usage evaluation.
+        Scenario s;
+        for (uint32 id = 0; id < 16; ++id) s.BagItem(100).bound = true;
+        assert(!HasSurplus(&s.bot.ai));
+        assert(!s.Visit());
+        assert(!s.bot.ai.context.usageLookups && !objectMgr.lookups && !spellMgr.lookups);
+    }
+    {
+        // Selling one stack changes the live pet-food reserve for the next stack.
+        Scenario s; Pet pet; s.bot.pet = &pet;
+        Item& first = s.BagItem(100, 20); first.proto.petFood = true;
+        Item& second = s.BagItem(100, 20); second.proto.petFood = true;
+        assert(s.Visit()); assert(s.bot.session.sells == 1);
+        assert(!s.bot.GetItemByGuid(first.guid) && s.bot.GetItemByGuid(second.guid) == &second);
+    }
+    assert(!ShouldReserveForAuction(nullptr, nullptr, ITEM_USAGE_AH));
+    std::cout << "Earned auctions: production policy/service, conserved inventory/gold, safe receipts, queued revalidation, travel selection and bounded protection scans passed\n";
 }
 int main() { PolicyTests(); TravelTests(); ServiceTests(); }
 '''
