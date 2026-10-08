@@ -15,7 +15,7 @@ defaults for future comparisons.
 `configs/.portable-profiles.json` records the managed baseline for future
 updates; keep it with the active configs when backing up or moving a realm.
 Server binaries and SQL update through the launcher's normal startup check.
-See the [update guide](updating.md) for older installations and offline startup.
+See the [update guide](updating.md) for manual installation and offline startup.
 
 ## Progression and character creation
 
@@ -140,9 +140,9 @@ policies and release tooling. Full compilation verifies integration. These
 checks do not establish perfect live tactics, market activity, historical class
 balance or a fixed 2,500-bot performance target.
 
-Existing-realm upgrades preserve prior levels, tiers, items and gold. They cannot
-retroactively prove those possessions were earned. Use a fresh database when
-a level-1 earned history for every character is required. See
-[upgrade behavior](changing-expansions.md#updating-an-existing-realm),
+Updates preserve levels, tiers, items and gold. These values alone do not prove
+an earned progression history. Use a fresh database when a level-1 earned
+history for every character is required. See
+[realm updates](changing-expansions.md#updating-an-existing-realm),
 [dependencies](module-versions.md) and
 [building](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md).

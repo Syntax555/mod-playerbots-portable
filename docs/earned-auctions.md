@@ -58,7 +58,7 @@ If bags are full, attachments remain in mail until space is available. Money can
 be collected with full bags. A receipt is deleted only after its money and all
 attachments have been retrieved successfully.
 
-Natural mode blocks legacy bot mail-send and mail-management shortcuts even if
+Natural mode blocks bot mail-send and mail-management shortcuts even if
 `AiPlayerbot.BotSendMailEnabled` is re-enabled. Earned auction collection has
 its own ordinary mailbox path. Human mail remains available.
 
@@ -91,16 +91,14 @@ not configure earned Playerbots trading.
 
 ## Updates and market limits
 
-Normal `startup.exe` launches update server files and merge configuration defaults
-automatically. Custom auction settings are preserved; new defaults replace only
-values that still match their previous managed defaults. Changed configs receive
-backups, and existing databases and characters remain intact. An older launcher
-needs one manual server-ZIP upgrade first; see the [update guide](updating.md).
+Server updates preserve custom auction settings, databases and characters. See
+the [update guide](updating.md) for automatic updates, manual installation and
+configuration backups.
 
-Existing items and money are retained. There is no provenance ledger to separate
-previously generated possessions from earned ones on an older realm. A fresh
-natural-progression realm starts with normal character-creation items and no
-auction-stock grants.
+Items and money are preserved. Their stored data does not distinguish generated
+possessions from earned ones.
+A fresh natural-progression realm starts with normal character-creation items
+and no auction-stock grants.
 
 A fresh market can remain sparse while bots level, earn loot and gold, and
 reach a town. Sellers need deposits and buyers need useful affordable listings.

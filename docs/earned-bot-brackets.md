@@ -50,10 +50,9 @@ Restart or use the administrator `.reload config` command. Invalid syntax logs
 an error and disables earned caps. Changing order or percentages can reassign
 some bots; retain the order when preserving residents.
 
-Normal startup preserves a customized bracket distribution while merging new
-defaults for values that still match their previous managed defaults. Changed
-configs receive backups. Server behavior updates automatically; older launchers
-need one manual server-ZIP upgrade first. See the [update guide](updating.md).
+Server updates preserve a customized bracket distribution. See the
+[update guide](updating.md) for automatic updates, manual installation and
+configuration backups.
 
 ## Waiting for battlegrounds
 

@@ -117,25 +117,20 @@ with owned items, earned gold and ordinary fees.
 
 ## Updating an existing realm
 
-Back up databases and configurations before migration. Start `startup.exe`
-normally to install server updates, merge configuration defaults and apply SQL
-migrations. An older launcher without the updater needs one manual installation
-of the latest server ZIP first; see the [update guide](updating.md).
-
-The selected realm ceiling and custom settings are preserved. New defaults
-replace only values that still match their previous managed defaults, with
-backups before changes. To deliberately remove a shared Vanilla/TBC ceiling,
-run `startup.exe --set-expansion individual` with initialized configs and stopped
+See the [update guide](updating.md) for automatic server updates, manual
+installation and backups. Updates preserve the selected realm ceiling and custom
+settings. To remove a shared Vanilla/TBC ceiling, run
+`startup.exe --set-expansion individual` with initialized configs and stopped
 servers, then start normally.
 
 Install the matching `EraTalents-client-latest.zip` in each player's client with
 WoW fully closed. The server updater does not install client files. See
-[talent migration](era-talents.md#updating-an-existing-realm).
+[talent handling](era-talents.md#updating-an-existing-realm).
 
-Existing levels, stored tiers, inventory and gold are retained. An update cannot
-certify that earlier grants were earned, and missing durable milestone credit
-may require another eligible kill. A fresh database establishes the level-1,
-tier-0 policy from character creation.
+Updates preserve levels, stored tiers, inventory and gold. These values alone
+do not prove an earned progression history. Missing durable milestone credit
+may require an eligible kill. A fresh database establishes the level-1, tier-0
+policy from character creation.
 
 ## Optional realm ceilings
 
@@ -150,8 +145,7 @@ shared ceilings while retaining each character's earned requirements:
 | `wotlk` | 80 | None |
 
 `individual` requires level 80 for new dual-spec purchases. The `wotlk` option
-permits dual spec from 40. Existing choices survive profile updates; an upgrade
-does not automatically open an established realm.
+permits dual spec from 40. The selected mode is preserved across updates.
 
 Phase changes require initialized configs and stopped servers. The launcher
 validates linked changes, creates `.backup.*` copies and rolls back failed

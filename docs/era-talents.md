@@ -28,8 +28,8 @@ modify WoW client folders.
 1. Close WoW completely. Use client 3.3.5a, build 12340.
 2. Replace `Interface/AddOns/EraTalents/` with the combined package's folder.
    The final path must be `Interface/AddOns/EraTalents/EraTalents.toc`.
-3. Copy `Data/patch-V.mpq` into the client's `Data/` folder, replacing a previous
-   IP `patch-V.mpq`.
+3. Copy `Data/patch-V.mpq` into the client's `Data/` folder, replacing that file
+   if present.
 4. Restart WoW, enable EraTalents in the AddOns menu and open the normal talent
    window. Native Wrath talents return when that character earns tier 13.
 
@@ -70,7 +70,7 @@ The server validates talent purchases against earned era, level-earned budget,
 row depth, rank and prerequisites. Native Wrath purchases are blocked while a
 historical tree is active. Bots add points to their existing build and use the
 full native tree after earning Wrath. `AiPlayerbot.LimitTalentsExpansion = 0`
-keeps an older level-based factory limit from restricting that allocation.
+disables the level-based factory limit for that allocation.
 
 Historical trainer spells require ordinary paid purchases with gold, level and
 prerequisite checks. Talent and class-quest spells require their earned sources.
@@ -115,14 +115,12 @@ supported conversion.
 
 ## Updating an existing realm
 
-Back up databases and configs, then start `startup.exe` normally. The launcher
-updates server files, merges configuration defaults and applies bundled SQL
-during startup. Older launchers need one manual server-ZIP upgrade first; see
-the [update guide](updating.md). Custom settings and the selected realm ceiling
-are preserved, with backups before managed configuration changes.
+See the [update guide](updating.md) for automatic server updates, manual
+installation and backups. Custom settings and the selected realm ceiling are
+preserved, with backups before managed configuration changes.
 
 Install the matching client package for each player with WoW fully closed. To
-deliberately remove an existing shared Vanilla/TBC ceiling, run
+remove a shared Vanilla/TBC ceiling, run
 `startup.exe --set-expansion individual` with initialized configs and stopped
 servers, then start normally.
 
@@ -131,9 +129,10 @@ character's earned era and makes its earned points available in that tree.
 Valid custom allocations persist on relog. Owned glyphs remain stored. Broad
 upstream spellbook cleanup SQL is not applied.
 
-Levels, highest stored tiers, inventory and gold are retained. An update cannot
-prove old grants were earned; missing durable boss credit may require another
-eligible kill. A fresh realm establishes the creation policy from the start.
+Levels, highest stored tiers, inventory and gold are preserved. These values
+alone do not prove an earned progression history. Missing durable boss credit
+may require an eligible kill. A fresh realm starts ordinary characters at level
+1, tier 0.
 
 GM/console diagnostics `.eratalents status` and `.eratalents doctor` inspect an
 online character. Administrative learn/reset commands require GM privileges.

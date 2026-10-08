@@ -26,7 +26,7 @@ The [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releas
 | [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional interface for managing your bot companions. |
 | [SHA-256 checksums](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt) | Verify the packages and update manifest. |
 
-Install the matching server and EraTalents client pack. Client addons and the MPQ are separate downloads; the server bundle contains no client addons.
+Install the server bundle and matching EraTalents client pack. MultiBot is an optional separate download.
 
 ## Requirements
 
@@ -35,11 +35,11 @@ Install the matching server and EraTalents client pack. Client addons and the MP
 - Internet access for automatic server updates and the first-run server-data download.
 - Sufficient CPU, memory and storage for your selected bot population. The default target is **2,500 bots while a real player is connected**; capacity depends on your hardware and active content.
 
-The launcher and server executables are unsigned. Smart App Control can block them; archive checksums do not provide a trusted Windows code signature.
+The executables are unsigned and may be blocked by Windows Smart App Control.
 
-## Get started
+## Installation
 
-1. Extract the server bundle and run `startup.exe`. It checks for server updates, downloads missing DBC/maps/vmaps/mmaps, initializes the database and applies server SQL. Initial setup and bot creation can take considerable time.
+1. Extract the server bundle and run `startup.exe`. The launcher checks for updates, downloads required server data and initializes the realm automatically. Allow time for initial setup and bot creation.
 2. Create a player account in the worldserver console:
 
    ```text
@@ -53,28 +53,20 @@ The launcher and server executables are unsigned. Smart App Control can block th
    Data/patch-V.mpq
    ```
 
-   Replace an existing Individual Progression `patch-V.mpq` with the matching merged file. Both the addon and MPQ are required; `/reload` cannot load an MPQ.
+   Use both the addon and the client pack's `patch-V.mpq`. Install with WoW fully closed.
 4. Set the client's realmlist to `set realmlist 127.0.0.1`, restart WoW and log in.
 
 Services bind locally by default. Use an ordinary player account for progression. See [EraTalents installation](docs/era-talents.md#install-the-matching-client-files) for client checks and [configuration](docs/vanilla-config-audit.md) to customize the realm.
 
 ### Optional MultiBot interface
 
-Close WoW and extract the separate addon ZIP's `MultiBot` folder into `Interface/AddOns/`. Its final path must be `Interface/AddOns/MultiBot/MultiBot.toc`.
+With WoW closed, remove `Interface/AddOns/MultiBot/` if present, then extract the separate ZIP's `MultiBot` folder into `Interface/AddOns/`. The final path is `Interface/AddOns/MultiBot/MultiBot.toc`. Restart WoW, enable the addon and open it with `/multibot`, `/mbot` or `/mb`.
 
-When updating, remove the old client `MultiBot` folder before copying the new one. Restart WoW, enable the addon and open it with `/multibot`, `/mbot` or `/mb`. The interface uses [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) with the bundled bridge; server progression rules also apply to addon requests.
+## Updates
 
-## Updating an existing realm
+Start `startup.exe` normally to check [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), download changed server files and restart after verified installation. SQL migrations and configuration updates run automatically. Characters, databases, downloaded map data, custom settings and the selected realm mode are preserved.
 
-Start `startup.exe` normally. It checks [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), downloads only changed managed server files, verifies their SHA-256 hashes and restarts after installation. Database SQL and configuration updates run during normal startup. If the update check or download fails, the installed version remains available.
-
-An older launcher without automatic updates needs **one manual installation of the latest server ZIP** with all services stopped. Back up your databases and configuration first; see the [update guide](docs/updating.md) for the procedure and `--no-update` option.
-
-Characters, databases, downloaded map data and custom configuration are preserved. New defaults replace only settings that still match their previous managed defaults, with backups before changes. The selected realm ceiling remains in place; use `startup.exe --set-expansion individual` with the servers stopped only when choosing to remove it.
-
-Install matching EraTalents client files for each player with WoW closed. The server updater does not modify WoW client folders or install client packages.
-
-Existing possessions retain their history; an update cannot establish that older equipment or gold was earned. See [realm migration](docs/changing-expansions.md#updating-an-existing-realm) and [talent migration](docs/era-talents.md#updating-an-existing-realm) before changing an established realm's progression rules.
+See the [update guide](docs/updating.md) for manual installation, backups, offline startup and recovery. Install matching client packages for each player with WoW closed.
 
 ## Included modules
 
@@ -94,9 +86,7 @@ Existing possessions retain their history; an update cannot establish that older
 
 The server uses the Wrath core and client. Historical trees use **Vanilla 1.12.1** and **TBC Classic 2.5.4** data; TBC is not an exact original 2.4.3 simulation. Selected class spells, riding prices and battleground rules follow the earned era, while other world prices, combat formulas and systems retain core behavior.
 
-Bots fill Warsong Gulch, Arathi Basin and Alterac Valley, then unlock Eye of the Storm with TBC and Isle of Conquest with Wrath. Bot Strand of the Ancients, random battleground and arena queues are disabled. Humans unlock those activities through progression; TBC arenas are skirmishes only, and rated arenas require earned Wrath and level 80. Matches still need enough eligible participants.
-
-Bot questing, navigation and encounter support varies by content. Bots can get stuck or lack supplies, and some upstream encounter scripts retain special movement or combat shortcuts. Historical balance and completion of every raid are not guaranteed. See [supported scope and configuration](docs/vanilla-config-audit.md#supported-scope) for the current limits.
+Battleground and arena access follows earned progression; see [PvP rules](docs/earned-bot-brackets.md). Bot questing, navigation and encounter support varies by content, and some upstream encounters use movement or combat shortcuts. Existing inventories and gold are preserved without verifying their origin. See [supported scope](docs/vanilla-config-audit.md#supported-scope) for gameplay limits.
 
 ## Documentation
 
@@ -107,7 +97,7 @@ Bot questing, navigation and encounter support varies by content. Bots can get s
 | [Bot brackets](docs/earned-bot-brackets.md) | Resident levels, population and battleground eligibility. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
 | [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |
-| [Updates](docs/updating.md) | Automatic server updates, older-launcher migration and preserved data. |
+| [Updates](docs/updating.md) | Automatic updates, manual installation, backups and recovery. |
 | [Source versions](docs/module-versions.md) | Pinned dependencies and reproducible adaptations. |
 | [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build requirements and package generation. |
 
