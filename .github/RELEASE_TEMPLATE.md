@@ -9,9 +9,9 @@ Prebuilt Windows x64 server for **WoW 3.3.5a (build 12340)**, with Playerbots an
 
 Set the client realmlist to `set realmlist 127.0.0.1`. Create your account in the worldserver console with `account create <username> <password>`.
 
-`startup.exe` checks Latest before starting services, downloads only changed server files, verifies their hashes and restarts after installation. Configuration defaults merge automatically while preserving custom values, characters, databases, downloaded maps and the selected expansion mode. `UPDATE_MANIFEST.json` supplies the launcher's file inventory.
+`startup.exe` checks Latest before starting services, downloads changed server files, verifies their hashes and restarts after installation. Configuration defaults merge automatically while preserving custom values, characters, databases, downloaded maps and the selected realm mode.
 
-An older launcher requires one manual upgrade: back up databases and configurations, stop all services, extract the server ZIP into the existing folder and start normally. See the [update guide]({source_url}/docs/updating.md). Install matching client files separately with WoW closed.
+See the [update guide]({source_url}/docs/updating.md) for manual installation, backups and recovery. Install matching client files separately with WoW closed.
 
 First startup requires Internet access and can take time while preparing data and the bot population. The executables are unsigned; Windows Smart App Control can block them.
 

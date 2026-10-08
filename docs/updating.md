@@ -28,24 +28,24 @@ startup preserves all existing values, adds only missing managed settings and
 records the bundled defaults for future comparisons. See the
 [configuration reference](vanilla-config-audit.md).
 
-## Install the updater on an older realm
+## Manual installation
 
-A launcher without automatic updates needs one manual upgrade:
+To install or replace the server files manually:
 
-1. Back up the databases and `configs/`, then stop the launcher, database and
-   servers completely.
+1. Choose a writable server folder. For an existing realm, back up the databases
+   and `configs/`, then stop the launcher, database and servers completely.
 2. Download the latest
    [server ZIP](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip)
    and verify it against
    [SHA256SUMS.txt](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt).
-3. Extract the ZIP into the existing server folder, replacing bundled files.
-   Keep the existing configurations, database data directories and downloaded
+3. Extract the ZIP into the server folder, replacing bundled files. Preserve an
+   existing realm's configurations, database data directories and downloaded
    server data.
-4. Run `startup.exe` normally. Subsequent server updates happen at startup.
+4. Run `startup.exe` normally. The launcher manages setup and automatic server updates.
 
 The selected expansion ceiling is preserved. To deliberately remove a shared
 Vanilla/TBC ceiling, use `startup.exe --set-expansion individual` with initialized
-configs and stopped servers. See [realm migration](changing-expansions.md#updating-an-existing-realm).
+configs and stopped servers. See [realm updates](changing-expansions.md#updating-an-existing-realm).
 
 ## Client packages
 
