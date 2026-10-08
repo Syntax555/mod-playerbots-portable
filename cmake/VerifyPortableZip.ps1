@@ -34,7 +34,8 @@ try {
             throw "Unexpected source/debug/installer file in portable ZIP: $name"
         }
         if ($name -match '^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$' -or
-            $name -match '^mysql/(include|docs)(/|$)|^mysql/bin/(?!mysqld[.]exe$|mysql[.]exe$|mysqladmin[.]exe$)[^/]+[.]exe$') {
+            $name -match '^mysql/(include|docs)(/|$)|^mysql/bin/(?!mysqld[.]exe$|mysql[.]exe$|mysqladmin[.]exe$)[^/]+[.]exe$' -or
+            $name -match '^(dbimport|map_extractor|vmap4_extractor|vmap4_assembler|mmaps_generator)[.]exe$|^mmaps-config[.]yaml$|^(configs/)?dbimport[.]conf[.]dist$') {
             throw "Redundant development/client file in portable ZIP: $name"
         }
         if ($name -match '^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$') {
@@ -60,7 +61,6 @@ try {
     $lock = Get-Content (Join-Path $RepositoryRoot 'versions.lock.json') -Raw | ConvertFrom-Json
     $required = @(
         'startup.exe', 'authserver.exe', 'worldserver.exe',
-        'map_extractor.exe', 'vmap4_extractor.exe', 'vmap4_assembler.exe', 'mmaps_generator.exe', 'dbimport.exe',
         'mysql/bin/mysqld.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqladmin.exe',
         'libmysql.dll', 'libcrypto-3-x64.dll', 'libssl-3-x64.dll',
         'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
