@@ -157,29 +157,8 @@ func migrateConfigProfiles(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if originalState == nil {
-		// Older releases exported their recommended profiles to defaults/.
-		// Import only those known files; existing keys with no proven baseline
-		// remain untouched on the first migration.
-		for name := range current {
-			path := filepath.Join(root, "defaults", name)
-			if err := requireRegularConfigPath(root, path); err != nil {
-				return nil, err
-			}
-			content, err := os.ReadFile(path)
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			profile, err := mergeConfigProfile(string(content), phase.profile(name))
-			if err != nil {
-				return nil, fmt.Errorf("read legacy recommended profile %s: %w", name, err)
-			}
-			previous.Profiles[name] = profile
-		}
-	}
+	// Exported profiles from older bundles may have been edited. Without our
+	// saved baseline, preserve every existing value and only add missing keys.
 	names := make([]string, 0, len(current))
 	for name := range current {
 		names = append(names, name)

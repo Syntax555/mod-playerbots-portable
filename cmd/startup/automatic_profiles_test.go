@@ -55,7 +55,7 @@ func profileFixture(t *testing.T, root, relative, content string) string {
 	return path
 }
 
-func TestAutomaticProfilesImportLegacyDefaultsAndKeepCustomData(t *testing.T) {
+func TestAutomaticProfilesIgnoreEditedLegacyDefaultsAndKeepCustomData(t *testing.T) {
 	root := t.TempDir()
 	phase, _ := parseRealmPhase("individual")
 	profiles, err := currentManagedProfiles(phase)
@@ -69,6 +69,8 @@ func TestAutomaticProfilesImportLegacyDefaultsAndKeepCustomData(t *testing.T) {
 	}
 	profileFixture(t, root, "defaults/playerbots.conf", previous)
 	previous = strings.Replace(previous, "AiPlayerbot.RandomBotEmote = 0", "AiPlayerbot.RandomBotEmote = 1", 1)
+	previous = strings.ReplaceAll(previous, "\r\n", "\n")
+	previous = strings.Replace(previous, "AiPlayerbot.Enabled = 1\n", "", 1)
 	original := "# custom comment\n" + previous + "\nPlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\nCustom.Bot = 42\n"
 	original = strings.ReplaceAll(strings.ReplaceAll(original, "\r\n", "\n"), "\n", "\r\n")
 	bots := profileFixture(t, root, "configs/modules/playerbots.conf", original)
@@ -90,7 +92,7 @@ func TestAutomaticProfilesImportLegacyDefaultsAndKeepCustomData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"AiPlayerbot.RandomBotJoinBG = 1\r\n", "AiPlayerbot.RandomBotEmote = 1\r\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\r\n", "Custom.Bot = 42\r\n"} {
+	for _, expected := range []string{"AiPlayerbot.RandomBotJoinBG = 0\r\n", "AiPlayerbot.RandomBotEmote = 1\r\n", "AiPlayerbot.Enabled = 1\r\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\r\n", "Custom.Bot = 42\r\n"} {
 		if !strings.Contains(string(updated), expected) {
 			t.Fatalf("missing managed or custom setting %q", expected)
 		}
