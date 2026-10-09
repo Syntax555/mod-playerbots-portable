@@ -1,0 +1,55 @@
+diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
+index 3d8c800..89f386b 100644
+--- a/src/MultiBotBridge.cpp
++++ b/src/MultiBotBridge.cpp
+@@ -5,7 +5,6 @@
+ #include "Creature.h"
+ #include "DatabaseEnv.h"
+ #include "DBCStores.h"
+-#include "BudgetValues.h"
+ #include "ChatHelper.h"
+ #include "GameObject.h"
+ #include "Group.h"
+@@ -4606,18 +4605,11 @@ uint32 GetBotTrainerFreeMoney(Player* bot)
+     if (!bot)
+         return 0;
+ 
+-    PlayerbotAI* const botAI = GetBotAI(bot);
+-    if (!botAI)
+-        return bot->GetMoney();
+-
+-    if (botAI->HasCheat(BotCheatMask::gold))
++    if (!sPlayerbotAIConfig.naturalProgression && BotHasGoldCheat(bot))
+         return std::numeric_limits<uint32>::max();
+ 
+-    AiObjectContext* const context = botAI->GetAiObjectContext();
+-    if (!context)
+-        return bot->GetMoney();
+-
+-    return AI_VALUE2(uint32, "free money for", static_cast<uint32>(NeedMoneyFor::spells));
++    // An explicit trainer request spends the current wallet, not the autonomous AI budget.
++    return bot->GetMoney();
+ }
+ 
+ Creature* GetSelectedTrainer(Player* requester, uint32 expectedEntry, std::string& reason)
+@@ -4657,9 +4649,7 @@ std::vector<TrainerSpellEntryData> BuildTrainerSpellEntries(Player* bot, Creatur
+     if (!trainer || !trainer->IsTrainerValidForPlayer(bot))
+         return entries;
+ 
+-    float const reputationDiscount = bot->GetReputationPriceDiscount(trainerCreature);
+     uint32 const freeMoney = GetBotTrainerFreeMoney(bot);
+-    bool const hasGoldCheat = BotHasGoldCheat(bot);
+ 
+     for (auto const& spell : trainer->GetSpells())
+     {
+@@ -4673,8 +4663,8 @@ std::vector<TrainerSpellEntryData> BuildTrainerSpellEntries(Player* bot, Creatur
+ 
+         TrainerSpellEntryData entry;
+         entry.spellId = trainerSpell->SpellId;
+-        entry.cost = static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount));
+-        entry.canAfford = hasGoldCheat || freeMoney >= entry.cost;
++        entry.cost = trainer->GetSpellCost(bot, trainerCreature, trainerSpell);
++        entry.canAfford = freeMoney >= entry.cost;
+         entries.push_back(entry);
+     }
+ 

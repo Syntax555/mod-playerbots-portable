@@ -40,6 +40,9 @@ no client addons. Local addon patches display gold, silver and copper and guard
 options-panel initialization with its existing fallback interface. Its
 `SOURCE_MANIFEST.json` records the upstream revision and those patch hashes.
 
+In natural mode, Bridge trainer requests use the bot's current money for explicit
+purchases and the core's trainer pricing and paid purchase path.
+
 ## Licenses
 
 Dependencies retain their own license terms and per-file notices. The locked
