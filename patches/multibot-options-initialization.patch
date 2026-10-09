@@ -1,0 +1,391 @@
+diff --git a/UI/MultiBotOptions.lua b/UI/MultiBotOptions.lua
+--- a/UI/MultiBotOptions.lua
++++ b/UI/MultiBotOptions.lua
+@@ -153,9 +153,8 @@
+ 
+ local function buildLegacyOptionsContent(panel)
+   if panel._legacyInitialized then return end
+-  panel._legacyInitialized = true
+-
+   local scrollFrame = CreateFrame("ScrollFrame", PANEL_NAME .. "ScrollFrame", panel, "UIPanelScrollFrameTemplate")
++  panel._legacyScrollFrame = scrollFrame
+   scrollFrame:SetPoint("TOPLEFT", 3, -4)
+   scrollFrame:SetPoint("BOTTOMRIGHT", -27, 4)
+ 
+@@ -522,6 +521,7 @@
+ 
+   scrollChild.s_stats._refresh(); scrollChild.s_talent._refresh(); scrollChild.s_invite._refresh(); scrollChild.s_sort._refresh()
+   scrollChild.s_thr_rate._refresh(); scrollChild.s_thr_burst._refresh()
++  panel._legacyInitialized = true
+ end
+ 
+ function MultiBot.BuildOptionsPanel()
+@@ -531,30 +531,16 @@
+   panel.name = optL("tips.sliders.frametitle")
+   panel:Hide()
+ 
+-  panel:SetScript("OnShow", function(self)
+-    if self._initialized then return end
+-    self._initialized = true
+-
+-    local AceGUI = getAceGUI()
+-    if not AceGUI then
+-      debugCall("AceGUILoadState", "LibStub returned nil for AceGUI-3.0")
+-      debugCall("OptionsPath", "legacy", "LibStub('AceGUI-3.0') not available")
+-      buildLegacyOptionsContent(self)
+-      return
+-    end
+-
+-    local probeOk, probeWidget = pcall(AceGUI.Create, AceGUI, "Label")
+-    if not probeOk or not probeWidget then
+-      debugCall("AceGUILoadState", "AceGUI:Create('Label') failed: " .. tostring(probeWidget))
+-      debugCall("OptionsPath", "legacy", "AceGUI widget creation failed")
+-      buildLegacyOptionsContent(self)
+-      return
+-    end
+-    AceGUI:Release(probeWidget)
+-    --debugAceGUILoadState("AceGUI widget probe succeeded")
+-    --debugOptionsPath("AceGUI", "widget probe succeeded")
+-
+-    local root = AceGUI:Create("SimpleGroup")
++  local function buildAceContent(self, AceGUI, created, useLegacy)
++    local function createWidget(widgetType)
++      local widget = AceGUI:Create(widgetType)
++      assert(widget, "AceGUI widget unavailable: " .. widgetType)
++      created[widget] = true
++      return widget
++    end
++
++    local root = createWidget("SimpleGroup")
++    self._aceRoot = root
+     root:SetFullWidth(true)
+     root:SetFullHeight(true)
+     root:SetLayout("Fill")
+@@ -562,7 +548,6 @@
+     root.frame:ClearAllPoints()
+     root.frame:SetPoint("TOPLEFT", 8, -8)
+     root.frame:SetPoint("BOTTOMRIGHT", -8, 8)
+-    self._aceRoot = root
+ 
+     local selectedOwnerKey = nil
+     local strataLevels = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "TOOLTIP" }
+@@ -572,7 +557,7 @@
+     local layoutOwnerLabel = optL("options.layout.owner_import")
+ 
+     local function addTabScroll(tabGroup)
+-      local scroll = AceGUI:Create("ScrollFrame")
++      local scroll = createWidget("ScrollFrame")
+       scroll:SetLayout("List")
+       tabGroup:AddChild(scroll)
+       return scroll
+@@ -582,17 +567,17 @@
+       local scroll = addTabScroll(tabGroup)
+       local minimapConfig = MultiBot.GetMinimapConfig and MultiBot.GetMinimapConfig() or { hide = false }
+ 
+-      local explainer = AceGUI:Create("Label")
++      local explainer = createWidget("Label")
+       explainer:SetFullWidth(true)
+       explainer:SetText(minimapHelpText)
+       scroll:AddChild(explainer)
+ 
+-      local explainerSpacer = AceGUI:Create("Label")
++      local explainerSpacer = createWidget("Label")
+       explainerSpacer:SetFullWidth(true)
+       explainerSpacer:SetText(" ")
+       scroll:AddChild(explainerSpacer)
+ 
+-      local chkMinimapHide = AceGUI:Create("CheckBox")
++      local chkMinimapHide = createWidget("CheckBox")
+       chkMinimapHide:SetLabel(optL("info.buttonoptionshide"))
+       chkMinimapHide:SetValue(minimapConfig.hide and true or false)
+       chkMinimapHide:SetFullWidth(true)
+@@ -621,7 +606,7 @@
+       local mainBarAutoHideDelay = MultiBot.GetMainBarAutoHideDelay and MultiBot.GetMainBarAutoHideDelay() or 60
+       local lootMasterUIEnabled = MultiBot.GetLootMasterUIEnabled and MultiBot.GetLootMasterUIEnabled() or true
+ 
+-      local chkMainBarMoveLocked = AceGUI:Create("CheckBox")
++      local chkMainBarMoveLocked = createWidget("CheckBox")
+       chkMainBarMoveLocked:SetLabel(mainBarMoveLockLabel)
+       if chkMainBarMoveLocked.SetDescription then
+         chkMainBarMoveLocked:SetDescription(mainBarMoveLockDesc)
+@@ -636,7 +621,7 @@
+       scroll:AddChild(chkMainBarMoveLocked)
+       panel.chkMainBarMoveLocked = chkMainBarMoveLocked
+ 
+-      local chkDisableAutoCollapse = AceGUI:Create("CheckBox")
++      local chkDisableAutoCollapse = createWidget("CheckBox")
+       chkDisableAutoCollapse:SetLabel(optL("options.layout.disable_autocollapse"))
+       if chkDisableAutoCollapse.SetDescription then
+         chkDisableAutoCollapse:SetDescription(optL("options.layout.disable_autocollapse_desc"))
+@@ -651,7 +636,7 @@
+       scroll:AddChild(chkDisableAutoCollapse)
+       panel.chkDisableAutoCollapse = chkDisableAutoCollapse
+ 
+-      local chkLootMasterUI = AceGUI:Create("CheckBox")
++      local chkLootMasterUI = createWidget("CheckBox")
+       chkLootMasterUI:SetLabel(optLF("options.lootmaster.enable", "Enable Advanced loot window"))
+       if chkLootMasterUI.SetDescription then
+         chkLootMasterUI:SetDescription(optLF("options.lootmaster.enable_desc", "Automatically shows the MultiBot loot master window during looting."))
+@@ -670,7 +655,7 @@
+       scroll:AddChild(chkLootMasterUI)
+       panel.chkLootMasterUI = chkLootMasterUI
+ 
+-      local autoHideDelaySlider = AceGUI:Create("Slider")
++      local autoHideDelaySlider = createWidget("Slider")
+       autoHideDelaySlider:SetLabel(optL("options.layout.mainbar_autohide_delay"))
+       autoHideDelaySlider:SetSliderValues(5, 600, 1)
+       autoHideDelaySlider:SetValue(mainBarAutoHideDelay)
+@@ -693,7 +678,7 @@
+         end
+       end
+ 
+-      local chkMainBarAutoHide = AceGUI:Create("CheckBox")
++      local chkMainBarAutoHide = createWidget("CheckBox")
+       chkMainBarAutoHide:SetLabel(optL("options.layout.mainbar_autohide"))
+       if chkMainBarAutoHide.SetDescription then
+         chkMainBarAutoHide:SetDescription(optL("options.layout.mainbar_autohide_desc"))
+@@ -714,17 +699,17 @@
+       scroll:AddChild(autoHideDelaySlider)
+       panel.autoHideDelaySlider = autoHideDelaySlider
+ 
+-      local ownerTitle = AceGUI:Create("Label")
++      local ownerTitle = createWidget("Label")
+       ownerTitle:SetFullWidth(true)
+       ownerTitle:SetText(layoutOwnerLabel)
+       scroll:AddChild(ownerTitle)
+ 
+-      local ownerTopSpacer = AceGUI:Create("Label")
++      local ownerTopSpacer = createWidget("Label")
+       ownerTopSpacer:SetFullWidth(true)
+       ownerTopSpacer:SetText(" ")
+       scroll:AddChild(ownerTopSpacer)
+ 
+-      local ownerDropDown = AceGUI:Create("Dropdown")
++      local ownerDropDown = createWidget("Dropdown")
+       ownerDropDown:SetLabel(" ")
+       ownerDropDown:SetWidth(320)
+       ownerDropDown:SetCallback("OnValueChanged", function(_, _, value)
+@@ -752,16 +737,16 @@
+       refreshOwnerList()
+       scroll:AddChild(ownerDropDown)
+ 
+-      local ownerBottomSpacer = AceGUI:Create("Label")
++      local ownerBottomSpacer = createWidget("Label")
+       ownerBottomSpacer:SetFullWidth(true)
+       ownerBottomSpacer:SetText(" ")
+       scroll:AddChild(ownerBottomSpacer)
+ 
+-      local layoutActions = AceGUI:Create("SimpleGroup")
++      local layoutActions = createWidget("SimpleGroup")
+       layoutActions:SetLayout("Flow")
+       layoutActions:SetFullWidth(true)
+ 
+-      local exportBtn = AceGUI:Create("Button")
++      local exportBtn = createWidget("Button")
+       exportBtn:SetText(optL("options.layout.export"))
+       exportBtn:SetWidth(150)
+       exportBtn:SetCallback("OnClick", function()
+@@ -779,7 +764,7 @@
+       end)
+       layoutActions:AddChild(exportBtn)
+ 
+-      local importBtn = AceGUI:Create("Button")
++      local importBtn = createWidget("Button")
+       importBtn:SetText(optL("options.layout.import"))
+       importBtn:SetWidth(150)
+       importBtn:SetCallback("OnClick", function()
+@@ -800,7 +785,7 @@
+       end)
+       layoutActions:AddChild(importBtn)
+ 
+-      local deleteBtn = AceGUI:Create("Button")
++      local deleteBtn = createWidget("Button")
+       deleteBtn:SetText(optL("options.layout.delete"))
+       deleteBtn:SetWidth(150)
+       deleteBtn:SetCallback("OnClick", function()
+@@ -828,7 +813,7 @@
+       end)
+       layoutActions:AddChild(deleteBtn)
+ 
+-      local refreshBtn = AceGUI:Create("Button")
++      local refreshBtn = createWidget("Button")
+       refreshBtn:SetText(optL("options.layout.refresh"))
+       refreshBtn:SetWidth(150)
+       refreshBtn:SetCallback("OnClick", function()
+@@ -839,7 +824,7 @@
+       end)
+       layoutActions:AddChild(refreshBtn)
+ 
+-      local resetBtn = AceGUI:Create("Button")
++      local resetBtn = createWidget("Button")
+       resetBtn:SetText(optL("options.layout.reset"))
+       resetBtn:SetWidth(150)
+       resetBtn:SetCallback("OnClick", function()
+@@ -865,17 +850,17 @@
+ 
+     local function buildStrataTab(tabGroup)
+       local scroll = addTabScroll(tabGroup)
+-      local strataTitle = AceGUI:Create("Label")
++      local strataTitle = createWidget("Label")
+       strataTitle:SetFullWidth(true)
+       strataTitle:SetText(MultiBot.L("options.frame_strata"))
+       scroll:AddChild(strataTitle)
+ 
+-      local strataSpacer = AceGUI:Create("Label")
++      local strataSpacer = createWidget("Label")
+       strataSpacer:SetFullWidth(true)
+       strataSpacer:SetText(" ")
+       scroll:AddChild(strataSpacer)
+ 
+-      local strata = AceGUI:Create("Dropdown")
++      local strata = createWidget("Dropdown")
+       strata:SetLabel(" ")
+       strata:SetWidth(240)
+       local strataList = {}
+@@ -898,12 +883,12 @@
+     local function buildIntervalsTab(tabGroup)
+       local scroll = addTabScroll(tabGroup)
+ 
+-      local sub = AceGUI:Create("Label")
++      local sub = createWidget("Label")
+       sub:SetText(optL("tips.sliders.actionsinter"))
+       sub:SetFullWidth(true)
+       scroll:AddChild(sub)
+ 
+-      local intervalsTopSpacer = AceGUI:Create("Label")
++      local intervalsTopSpacer = createWidget("Label")
+       intervalsTopSpacer:SetFullWidth(true)
+       intervalsTopSpacer:SetText(" ")
+       scroll:AddChild(intervalsTopSpacer)
+@@ -911,7 +896,7 @@
+       local sliderRefs = {}
+ 
+       local function buildTimerSlider(key, label, minV, maxV, step)
+-        local slider = AceGUI:Create("Slider")
++        local slider = createWidget("Slider")
+         slider:SetFullWidth(true)
+         slider:SetSliderValues(minV, maxV, step)
+         slider:SetLabel(label)
+@@ -934,7 +919,7 @@
+       local function buildThrottleSlider(key, label, minV, maxV, step)
+         local getValue = (key == "thr_rate") and MultiBot.GetThrottleRate or MultiBot.GetThrottleBurst
+         local setValue = (key == "thr_rate") and MultiBot.SetThrottleRate or MultiBot.SetThrottleBurst
+-        local slider = AceGUI:Create("Slider")
++        local slider = createWidget("Slider")
+         slider:SetFullWidth(true)
+         slider:SetSliderValues(minV, maxV, step)
+         slider:SetLabel(label)
+@@ -961,7 +946,7 @@
+       local s_thr_rate = buildThrottleSlider("thr_rate", optL("tips.sliders.messpersec"), 1, 20, 1)
+       local s_thr_burst = buildThrottleSlider("thr_burst", optL("tips.sliders.maxburst"), 1, 50, 1)
+ 
+-      local btn = AceGUI:Create("Button")
++      local btn = createWidget("Button")
+       btn:SetText(optL("tips.sliders.rstbutn"))
+       btn:SetWidth(180)
+       btn:SetCallback("OnClick", function()
+@@ -976,7 +961,7 @@
+         end
+       end)
+ 
+-      local resetTopSpacer = AceGUI:Create("Label")
++      local resetTopSpacer = createWidget("Label")
+       resetTopSpacer:SetFullWidth(true)
+       resetTopSpacer:SetText(" ")
+       scroll:AddChild(resetTopSpacer)
+@@ -991,7 +976,7 @@
+       s_thr_burst._refresh()
+     end
+ 
+-    local tabGroup = AceGUI:Create("TabGroup")
++    local tabGroup = createWidget("TabGroup")
+     tabGroup:SetLayout("Fill")
+     tabGroup:SetTabs({
+       { text = optL("options.tabs.minimap"), value = "minimap" },
+@@ -999,7 +984,7 @@
+       { text = optL("options.tabs.strata"), value = "strata" },
+       { text = optL("options.tabs.intervals"), value = "intervals" },
+     })
+-    tabGroup:SetCallback("OnGroupSelected", function(widget, _, group)
++    local function buildTab(widget, group)
+       widget:ReleaseChildren()
+       if group == "minimap" then
+         buildMinimapTab(widget)
+@@ -1010,9 +995,77 @@
+       elseif group == "intervals" then
+         buildIntervalsTab(widget)
+       end
++    end
++    tabGroup:SetCallback("OnGroupSelected", function(widget, _, group)
++      local ok, err = pcall(buildTab, widget, group)
++      if not ok then
++        useLegacy(err)
++      else
++        for child in pairs(created) do created[child] = nil end
++      end
+     end)
+     root:AddChild(tabGroup)
+     tabGroup:SelectTab("minimap")
++  end
++
++  local function initializePanel(self)
++    local AceGUI = getAceGUI()
++    local created = {}
++    local function useLegacy(reason)
++      pcall(debugCall, "OptionsPath", "legacy", reason)
++      local released = {}
++      local function markTree(widget)
++        if not widget or released[widget] then return end
++        released[widget] = true
++        for _, child in ipairs(widget.children or {}) do markTree(child) end
++      end
++      local function release(widget)
++        if not widget or released[widget] then return end
++        markTree(widget)
++        pcall(AceGUI.Release, AceGUI, widget)
++      end
++      if AceGUI then
++        release(self._aceRoot)
++        for widget in pairs(created) do release(widget) end
++      end
++      self._aceRoot = nil
++      for widget in pairs(created) do created[widget] = nil end
++
++      local ok, err = pcall(buildLegacyOptionsContent, self)
++      self._initialized = ok
++      if not ok then
++        if self._legacyScrollFrame then self._legacyScrollFrame:Hide() end
++        self._legacyInitialized = nil
++        if geterrorhandler then pcall(function() geterrorhandler()(err) end) end
++      end
++    end
++
++    if not AceGUI then
++      pcall(debugCall, "AceGUILoadState", "LibStub returned nil for AceGUI-3.0")
++      useLegacy("LibStub('AceGUI-3.0') not available")
++    else
++      local ok, err = pcall(function()
++        local probe = AceGUI:Create("Label")
++        assert(probe, "AceGUI Label widget unavailable")
++        created[probe] = true
++        AceGUI:Release(probe)
++        created[probe] = nil
++        buildAceContent(self, AceGUI, created, useLegacy)
++      end)
++      if not ok then useLegacy(err) end
++      self._initialized = self._aceRoot ~= nil or self._legacyInitialized == true
++    end
++  end
++
++  panel:SetScript("OnShow", function(self)
++    if self._initialized or self._initializing then return end
++    self._initializing = true
++    local ok, err = pcall(initializePanel, self)
++    self._initializing = nil
++    if not ok then
++      self._initialized = nil
++      if geterrorhandler then pcall(function() geterrorhandler()(err) end) end
++    end
+   end)
+ 
+   if type(InterfaceOptions_AddCategory) == "function" then

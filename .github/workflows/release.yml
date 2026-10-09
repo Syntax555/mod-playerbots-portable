@@ -70,12 +70,13 @@ jobs:
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
 
-      - name: Check earned bot progression against pinned sources
+      - name: Check earned bot progression and flight learning against pinned sources
         if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
         run: |
           git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
           python3 cmake/tests/TestEarnedProgression.py
+          python3 cmake/tests/TestMasterFlightLearning.py
 
   era_client:
     name: Build and verify historical client patch
@@ -139,6 +140,10 @@ jobs:
       - name: Test MultiBot inventory money display
         if: steps.features.outputs.enabled == 'true'
         run: python3 cmake/tests/TestMultiBotInventoryMoney.py
+
+      - name: Test MultiBot options initialization
+        if: steps.features.outputs.enabled == 'true'
+        run: python3 cmake/tests/TestMultiBotOptions.py
 
       - name: Build merged IP and historical talent client ZIP
         if: steps.features.outputs.enabled == 'true'

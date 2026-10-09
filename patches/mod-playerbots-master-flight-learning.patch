@@ -1,0 +1,294 @@
+diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
+--- a/conf/playerbots.conf.dist
++++ b/conf/playerbots.conf.dist
+@@ -700,6 +700,11 @@
+ # FLIGHTPATH
+ #
+ 
++# Learn the current flight point when a real player master speaks to the flight master.
++# Each bot must be alive and able to interact with that same NPC normally.
++# Does not unlock other routes or start a flight. Default: 0
++AiPlayerbot.LearnFlightPathsWithMaster = 0
++
+ # Min random delay before the 1st follower bot clicks the flight-master (ms)
+ AiPlayerbot.BotTaxiDelayMinMs = 350
+ 
+diff --git a/src/Ai/Base/Actions/LearnTaxiAction.cpp b/src/Ai/Base/Actions/LearnTaxiAction.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/Ai/Base/Actions/LearnTaxiAction.cpp
+@@ -0,0 +1,49 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#include "LearnTaxiAction.h"
++
++#include "Event.h"
++#include "PlayerbotAIConfig.h"
++#include "Playerbots.h"
++#include "WorldPacket.h"
++
++bool LearnTaxiAction::isUseful()
++{
++    return sPlayerbotAIConfig.LearnFlightPathsWithMaster && IsRealPlayer(GetMaster()) && bot->IsAlive() &&
++           !bot->IsInFlight();
++}
++
++bool LearnTaxiAction::Execute(Event event)
++{
++    Player* master = GetMaster();
++    if (!sPlayerbotAIConfig.LearnFlightPathsWithMaster || !IsRealPlayer(master) || !bot->IsAlive())
++        return false;
++
++    if (!master->IsInWorld() || !bot->IsInWorld() || master->GetMap() != bot->GetMap() || master->IsBeingTeleported() ||
++        bot->IsBeingTeleported() || !master->IsAlive())
++        return false;
++
++    WorldPacket& packet = event.getPacket();
++    if ((packet.GetOpcode() != CMSG_GOSSIP_HELLO && packet.GetOpcode() != CMSG_TAXIQUERYAVAILABLENODES) ||
++        packet.size() != 2 * sizeof(uint64))
++        return false;
++
++    ObjectGuid flightMasterGuid;
++    ObjectGuid packetMasterGuid;
++    packet.rpos(0);
++    packet >> flightMasterGuid >> packetMasterGuid;
++    if (packetMasterGuid != master->GetGUID())
++        return false;
++
++    Creature* flightMaster = master->GetNPCIfCanInteractWith(flightMasterGuid, UNIT_NPC_FLAG_FLIGHTMASTER);
++    if (!flightMaster || !flightMaster->IsAlive() ||
++        bot->GetNPCIfCanInteractWith(flightMasterGuid, UNIT_NPC_FLAG_FLIGHTMASTER) != flightMaster)
++        return false;
++
++    bot->GetSession()->SendLearnNewTaxiNode(flightMaster);
++    return true;
++}
+diff --git a/src/Ai/Base/Actions/LearnTaxiAction.h b/src/Ai/Base/Actions/LearnTaxiAction.h
+new file mode 100644
+--- /dev/null
++++ b/src/Ai/Base/Actions/LearnTaxiAction.h
+@@ -0,0 +1,21 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_LEARNTAXIACTION_H
++#define PLAYERBOTS_LEARNTAXIACTION_H
++
++#include "Action.h"
++
++class LearnTaxiAction : public Action
++{
++public:
++    LearnTaxiAction(PlayerbotAI* botAI) : Action(botAI, "learn taxi") {}
++
++    bool isUseful() override;
++    bool Execute(Event event) override;
++};
++
++#endif
+diff --git a/src/Ai/Base/Strategy/WorldPacketHandlerStrategy.cpp b/src/Ai/Base/Strategy/WorldPacketHandlerStrategy.cpp
+--- a/src/Ai/Base/Strategy/WorldPacketHandlerStrategy.cpp
++++ b/src/Ai/Base/Strategy/WorldPacketHandlerStrategy.cpp
+@@ -33,6 +33,7 @@
+     triggers.push_back(new TriggerNode("activate taxi", { NextAction("remember taxi", relevance),
+                                                                           NextAction("taxi", relevance) }));
+     triggers.push_back(new TriggerNode("taxi done", { NextAction("taxi", relevance) }));
++    triggers.push_back(new TriggerNode("learn taxi", {NextAction("learn taxi", relevance)}));
+     triggers.push_back(new TriggerNode("trade status", { NextAction("accept trade", relevance), NextAction("equip upgrades packet action", relevance) }));
+     triggers.push_back(new TriggerNode("trade status extended", { NextAction("trade status extended", relevance) }));
+     triggers.push_back(new TriggerNode("area trigger", { NextAction("reach area trigger", relevance) }));
+diff --git a/src/Ai/Base/WorldPacketActionContext.h b/src/Ai/Base/WorldPacketActionContext.h
+--- a/src/Ai/Base/WorldPacketActionContext.h
++++ b/src/Ai/Base/WorldPacketActionContext.h
+@@ -21,6 +21,7 @@
+ #include "GuildAcceptAction.h"
+ #include "GuildCreateActions.h"
+ #include "InventoryChangeFailureAction.h"
++#include "LearnTaxiAction.h"
+ #include "LeaveGroupAction.h"
+ #include "LfgActions.h"
+ #include "LootAction.h"
+@@ -69,6 +70,7 @@
+         creators["reach area trigger"] = &WorldPacketActionContext::reach_area_trigger;
+         creators["check mount state"] = &WorldPacketActionContext::check_mount_state;
+         creators["remember taxi"] = &WorldPacketActionContext::remember_taxi;
++        creators["learn taxi"] = &WorldPacketActionContext::learn_taxi;
+         creators["accept trade"] = &WorldPacketActionContext::accept_trade;
+         creators["trade status extended"] = &WorldPacketActionContext::trade_status_extended;
+         creators["store loot"] = &WorldPacketActionContext::store_loot;
+@@ -133,6 +135,7 @@
+     static Action* accept_trade(PlayerbotAI* botAI) { return new TradeStatusAction(botAI); }
+     static Action* trade_status_extended(PlayerbotAI* botAI) { return new TradeStatusExtendedAction(botAI); }
+     static Action* remember_taxi(PlayerbotAI* botAI) { return new RememberTaxiAction(botAI); }
++    static Action* learn_taxi(PlayerbotAI* botAI) { return new LearnTaxiAction(botAI); }
+     static Action* check_mount_state(PlayerbotAI* botAI) { return new CheckMountStateAction(botAI); }
+     static Action* area_trigger(PlayerbotAI* botAI) { return new AreaTriggerAction(botAI); }
+     static Action* reach_area_trigger(PlayerbotAI* botAI) { return new ReachAreaTriggerAction(botAI); }
+diff --git a/src/Ai/Base/WorldPacketTriggerContext.h b/src/Ai/Base/WorldPacketTriggerContext.h
+--- a/src/Ai/Base/WorldPacketTriggerContext.h
++++ b/src/Ai/Base/WorldPacketTriggerContext.h
+@@ -30,6 +30,7 @@
+         creators["within area trigger"] = &WorldPacketTriggerContext::within_area_trigger;
+         creators["check mount state"] = &WorldPacketTriggerContext::check_mount_state;
+         creators["activate taxi"] = &WorldPacketTriggerContext::taxi;
++        creators["learn taxi"] = &WorldPacketTriggerContext::learn_taxi;
+         creators["trade status"] = &WorldPacketTriggerContext::trade_status;
+         creators["trade status extended"] = &WorldPacketTriggerContext::trade_status_extended;
+         creators["loot response"] = &WorldPacketTriggerContext::loot_response;
+@@ -119,6 +120,7 @@
+     static Trigger* within_area_trigger(PlayerbotAI* botAI) { return new WithinAreaTrigger(botAI); }
+     static Trigger* resurrect_request(PlayerbotAI* botAI) { return new WorldPacketTrigger(botAI, "resurrect request"); }
+     static Trigger* gossip_hello(PlayerbotAI* botAI) { return new WorldPacketTrigger(botAI, "gossip hello"); }
++    static Trigger* learn_taxi(PlayerbotAI* botAI) { return new WorldPacketTrigger(botAI, "learn taxi"); }
+     static Trigger* group_invite(PlayerbotAI* botAI) { return new WorldPacketTrigger(botAI, "group invite"); }
+     static Trigger* group_set_leader(PlayerbotAI* botAI) { return new WorldPacketTrigger(botAI, "group set leader"); }
+     static Trigger* no_money(PlayerbotAI* botAI) { return new WorldPacketTrigger(botAI, "not enough money"); }
+diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
+--- a/src/Bot/PlayerbotAI.cpp
++++ b/src/Bot/PlayerbotAI.cpp
+@@ -173,6 +173,8 @@
+     masterIncomingPacketHandlers.AddHandler(CMSG_AREATRIGGER, "area trigger");
+     // masterIncomingPacketHandlers.AddHandler(CMSG_GAMEOBJ_USE, "use game object");
+     // masterIncomingPacketHandlers.AddHandler(CMSG_LOOT_ROLL, "loot roll");
++    _masterTaxiPacketHandlers.emplace(CMSG_GOSSIP_HELLO, "learn taxi");
++    _masterTaxiPacketHandlers.emplace(CMSG_TAXIQUERYAVAILABLENODES, "learn taxi");
+     masterIncomingPacketHandlers.AddHandler(CMSG_GOSSIP_HELLO, "gossip hello");
+     masterIncomingPacketHandlers.AddHandler(CMSG_QUESTGIVER_HELLO, "gossip hello");
+     masterIncomingPacketHandlers.AddHandler(CMSG_ACTIVATETAXI, "activate taxi");
+@@ -560,6 +562,18 @@
+ 
+     botOutgoingPacketHandlers.Handle(helper);
+     masterIncomingPacketHandlers.Handle(helper);
++    if (_masterTaxiPacketPending.load())
++    {
++        std::optional<WorldPacket> taxiPacket;
++        {
++            std::lock_guard<std::mutex> lock(_masterTaxiPacketMutex);
++            taxiPacket = std::move(_pendingMasterTaxiPacket);
++            _pendingMasterTaxiPacket.reset();
++            _masterTaxiPacketPending.store(false);
++        }
++        if (taxiPacket && sPlayerbotAIConfig.LearnFlightPathsWithMaster)
++            helper.HandlePacket(_masterTaxiPacketHandlers, *taxiPacket);
++    }
+     masterOutgoingPacketHandlers.Handle(helper);
+ 
+     DoNextAction(minimal);
+@@ -1432,9 +1446,20 @@
+     return sPlayerbotAIConfig.reactDelay;
+ }
+ 
+-void PlayerbotAI::HandleMasterIncomingPacket(WorldPacket const& packet)
++void PlayerbotAI::HandleMasterIncomingPacket(WorldPacket const& packet, Player* packetMaster)
+ {
+     masterIncomingPacketHandlers.AddPacket(packet);
++    if (!sPlayerbotAIConfig.LearnFlightPathsWithMaster || !IsRealPlayer(packetMaster) || packetMaster != GetMaster() ||
++        packet.size() != sizeof(uint64) ||
++        (packet.GetOpcode() != CMSG_GOSSIP_HELLO && packet.GetOpcode() != CMSG_TAXIQUERYAVAILABLENODES))
++        return;
++
++    // Retain the sender's GUID so a queued click cannot follow a change of master.
++    WorldPacket learnPacket(packet);
++    learnPacket << packetMaster->GetGUID();
++    std::lock_guard<std::mutex> lock(_masterTaxiPacketMutex);
++    _pendingMasterTaxiPacket = std::move(learnPacket);
++    _masterTaxiPacketPending.store(true);
+ }
+ 
+ void PlayerbotAI::HandleMasterOutgoingPacket(WorldPacket const& packet)
+diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
+--- a/src/Bot/PlayerbotAI.h
++++ b/src/Bot/PlayerbotAI.h
+@@ -6,6 +6,11 @@
+ 
+ #ifndef PLAYERBOTS_PLAYERBOTAI_H
+ #define PLAYERBOTS_PLAYERBOTAI_H
++
++#include <atomic>
++#include <mutex>
++#include <optional>
++#include <stack>
+ 
+ #include "Chat.h"
+ #include "ChatFilter.h"
+@@ -23,7 +28,6 @@
+ #include "SpellAuras.h"
+ #include "Util.h"
+ #include "WorldPacket.h"
+-#include <stack>
+ 
+ class AiObjectContext;
+ class Creature;
+@@ -397,7 +401,7 @@
+     void HandleCommand(uint32 type, std::string const text, Player* fromPlayer);
+     void QueueChatResponse(const ChatQueuedReply reply);
+     void HandleBotOutgoingPacket(WorldPacket const& packet);
+-    void HandleMasterIncomingPacket(WorldPacket const& packet);
++    void HandleMasterIncomingPacket(WorldPacket const& packet, Player* packetMaster = nullptr);
+     void HandleMasterOutgoingPacket(WorldPacket const& packet);
+     void HandleTeleportAck();
+     void ChangeEngine(BotState type);
+@@ -615,6 +619,11 @@
+     void AddTimedEvent(std::function<void()> callback, uint32 delayMs);
+ 
+ private:
++    std::map<uint16, std::string> _masterTaxiPacketHandlers;
++    std::optional<WorldPacket> _pendingMasterTaxiPacket;
++    std::mutex _masterTaxiPacketMutex;
++    std::atomic_bool _masterTaxiPacketPending = false;
++
+     static void _fillGearScoreData(Player* player, Item* item, std::vector<uint32>* gearScore, uint32& twoHandScore,
+                                    bool mixed = false);
+     bool IsTellAllowed(PlayerbotSecurityLevel securityLevel = PLAYERBOT_SECURITY_ALLOW_ALL);
+diff --git a/src/Bot/PlayerbotMgr.cpp b/src/Bot/PlayerbotMgr.cpp
+--- a/src/Bot/PlayerbotMgr.cpp
++++ b/src/Bot/PlayerbotMgr.cpp
+@@ -1646,7 +1646,7 @@
+             continue;
+         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+         if (botAI)
+-            botAI->HandleMasterIncomingPacket(packet);
++            botAI->HandleMasterIncomingPacket(packet, GetMaster());
+     }
+ 
+     for (PlayerBotMap::const_iterator it = sRandomPlayerbotMgr.GetPlayerBotsBegin();
+@@ -1655,7 +1655,7 @@
+         Player* const bot = it->second;
+         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+         if (botAI && botAI->GetMaster() == GetMaster())
+-            botAI->HandleMasterIncomingPacket(packet);
++            botAI->HandleMasterIncomingPacket(packet, GetMaster());
+     }
+ 
+     switch (packet.GetOpcode())
+diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
+--- a/src/PlayerbotAIConfig.cpp
++++ b/src/PlayerbotAIConfig.cpp
+@@ -479,6 +479,8 @@
+     useFastGroundMountAtMinLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.UseFastGroundMountAtMinLevel", 40);
+     useFlyMountAtMinLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.UseFlyMountAtMinLevel", 60);
+     useFastFlyMountAtMinLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.UseFastFlyMountAtMinLevel", 70);
++
++    LearnFlightPathsWithMaster = sConfigMgr->GetOption<bool>("AiPlayerbot.LearnFlightPathsWithMaster", false);
+ 
+     // stagger bot flightpath takeoff
+     botTaxiDelayMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiDelayMinMs", 350);
+diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
+--- a/src/PlayerbotAIConfig.h
++++ b/src/PlayerbotAIConfig.h
+@@ -466,6 +466,8 @@
+     uint32 useFlyMountAtMinLevel;
+     uint32 useFastFlyMountAtMinLevel;
+ 
++    bool LearnFlightPathsWithMaster = false;
++
+     // stagger flightpath takeoff
+     uint32 botTaxiDelayMin;
+     uint32 botTaxiDelayMax;

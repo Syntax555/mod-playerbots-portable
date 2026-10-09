@@ -36,7 +36,9 @@ updater does not modify client files. See [client setup](era-talents.md).
 
 MultiBot Chatless installs as `Interface/AddOns/MultiBot/`, with `MultiBot.toc`.
 The separate addon ZIP contains the prepared addon; the server package contains
-no client addons.
+no client addons. Local addon patches display gold, silver and copper and guard
+options-panel initialization with its existing fallback interface. Its
+`SOURCE_MANIFEST.json` records the upstream revision and those patch hashes.
 
 ## Licenses
 

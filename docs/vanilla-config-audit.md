@@ -58,6 +58,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Level, quest and leader-progress synchronization | Disabled |
 | Routine free talent resets / spell grants | Disabled |
 | Ordinary paid training and earned talent allocation | Enabled |
+| Learn visited flight points when the player master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
 | Automatic use of earned loot upgrades | Enabled |
 | Teleport recovery and free summon support | Disabled |
 | Earned auction trading | Enabled; ordinary auctioneer/mailbox access |
@@ -69,6 +70,12 @@ activity as tick time rises, while nearby/grouped bots and combat stay active.
 A target of 2,500 requires substantial server resources and does not imply every
 bot is available in every level, faction or era. Lower
 `AiPlayerbot.MinRandomBots` and `AiPlayerbot.MaxRandomBots` to fit the host.
+
+`AiPlayerbot.LearnFlightPathsWithMaster = 1` lets controlled altbots and recruited
+random bots learn the flight point you visit when you speak to its flight master.
+Both characters must be alive and able to interact with the same NPC in normal
+range. Reopen the conversation after a following bot catches up. Learning a
+point does not start a flight; ordinary route availability still applies.
 
 See [earned bot brackets and PvP](earned-bot-brackets.md) and
 [earned auction trading](earned-auctions.md) for their settings and limits.
