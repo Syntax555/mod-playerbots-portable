@@ -64,6 +64,8 @@ With WoW closed, remove `Interface/AddOns/MultiBot/` if present, then extract th
 
 Open its settings with `/mbopt` or **Interface → AddOns → MultiBot**. The settings cover the minimap button, layout, frame layering and update intervals.
 
+See [client addons](docs/addons.md) for optional Questie, GearScore and guide addons, installation requirements and compatibility checks.
+
 ## Updates
 
 Start `startup.exe` normally to check [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), download changed server files and restart after verified installation. SQL migrations and configuration updates run automatically. Characters, databases, downloaded map data, custom settings and the selected realm mode are preserved.
@@ -96,6 +98,7 @@ Battleground and arena access follows earned progression; see [PvP rules](docs/e
 | --- | --- |
 | [Progression](docs/changing-expansions.md) | Content milestones, expansion modes and realm migration. |
 | [EraTalents](docs/era-talents.md) | Client installation, training, talents and compatibility. |
+| [Client addons](docs/addons.md) | Curated upstream downloads, client versions and Lua diagnostics. |
 | [Bot brackets](docs/earned-bot-brackets.md) | Resident levels, population and battleground eligibility. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
 | [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |

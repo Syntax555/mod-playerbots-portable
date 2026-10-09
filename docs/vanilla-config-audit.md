@@ -58,7 +58,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Level, quest and leader-progress synchronization | Disabled |
 | Routine free talent resets / spell grants | Disabled |
 | Ordinary paid training and earned talent allocation | Enabled |
-| Learn visited flight points when the player master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
+| Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
 | Automatic use of earned loot upgrades | Enabled |
 | Teleport recovery and free summon support | Disabled |
 | Earned auction trading | Enabled; ordinary auctioneer/mailbox access |
@@ -73,6 +73,7 @@ bot is available in every level, faction or era. Lower
 
 `AiPlayerbot.LearnFlightPathsWithMaster = 1` lets controlled altbots and recruited
 random bots learn the flight point you visit when you speak to its flight master.
+This also works while SelfBot is enabled on your character.
 Both characters must be alive and able to interact with the same NPC in normal
 range. Reopen the conversation after a following bot catches up. Learning a
 point does not start a flight; ordinary route availability still applies.
@@ -149,6 +150,13 @@ Source fixtures, launcher checks and package verification cover the implemented
 policies and release tooling. Full compilation verifies integration. These
 checks do not establish perfect live tactics, market activity, historical class
 balance or a fixed 2,500-bot performance target.
+
+Quest availability uses shared AzerothCore data with selected corrections.
+Progression gates do not provide three complete historical quest databases.
+Quest 287, **Frostmane Hold**, does not require quest 420; its ordinary level and
+faction checks remain, and follow-up quest 291 still requires completing 287.
+Quest addons can retain different prerequisites in their static databases;
+see [client addon compatibility](addons.md).
 
 Updates preserve levels, tiers, items and gold. These values alone do not prove
 an earned progression history. Use a fresh database when a level-1 earned

@@ -70,7 +70,7 @@ jobs:
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
 
-      - name: Check earned bot progression and flight learning against pinned sources
+      - name: Check gameplay rules against pinned sources
         if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
         run: |
           git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
@@ -78,6 +78,8 @@ jobs:
           python3 cmake/tests/TestEarnedProgression.py
           python3 cmake/tests/TestMasterFlightLearning.py
           python3 cmake/tests/TestMultiBotTrainerMoney.py
+          python3 cmake/tests/TestFormationMovement.py
+          python3 cmake/tests/TestFrostmaneHold.py
 
   era_client:
     name: Build and verify historical client patch
@@ -149,6 +151,10 @@ jobs:
       - name: Build merged IP and historical talent client ZIP
         if: steps.features.outputs.enabled == 'true'
         run: cmake "-DPACKAGE_VERSION=$PACKAGE_VERSION" -P cmake/PackageEraClient.cmake
+
+      - name: Test historical spell groups against native stacking rules
+        if: steps.features.outputs.enabled == 'true'
+        run: python3 cmake/tests/TestEraSpellGroups.py
 
       - name: Upload verified historical client ZIP
         if: steps.features.outputs.enabled == 'true'
