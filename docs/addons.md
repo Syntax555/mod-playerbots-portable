@@ -29,12 +29,13 @@ requires in-game testing.
 | Addon | Source and installation | Progression limits |
 | --- | --- | --- |
 | Questie-335 | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335). Install as `Interface/AddOns/Questie-335/Questie-335.toc`; do not rename the TOC. Bundled libraries and German localization are included. | Its quest data follows standard AzerothCore. Individual Progression and custom quest rules can change availability beyond its static database. |
-| GearScore2 | [Upstream download page](https://www.curseforge.com/wow/addons/gearscore2). Choose a **3.3.5a** file and check its `.toc` for `30300`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
+| GearScore2 | [cozawariat/gearscore2](https://github.com/cozawariat/gearscore2), the 3.3.5a project with interface `30300`. Install as `Interface/AddOns/GearScore2/GearScore2.toc`; open settings with `/gs2`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
 | Zygor Guides Viewer Remaster | [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK). Install only its `ZygorGuidesViewerRM/` addon folder. | Guide routes and the bundled Wrath Talent Advisor do not follow each character's EraTalents trees or content gates. Prefer Questie for quest information during historical progression unless the guide's talent compatibility has been verified. |
 
-The server offers **Frostmane Hold** (quest 287) without quest 420. Questie-335's
-standard AzerothCore database still assumes quest 420 and may hide the available
-quest; check the NPC directly.
+Quest addons use their own databases. Server rules and each character's
+progression determine quest availability; map markers can differ when addon
+data does not match. See [server adaptations](adaptations.md) for the
+distribution's gameplay changes.
 
 Zygor's bundled Talent Advisor replaces the global `LearnTalent` function and
 the Blizzard talent learn-button handler. Its **Enable Talent Advisor** checkbox

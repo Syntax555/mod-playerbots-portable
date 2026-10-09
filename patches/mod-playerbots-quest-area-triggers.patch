@@ -1,0 +1,84 @@
+diff --git a/src/Ai/Base/Actions/AreaTriggerAction.cpp b/src/Ai/Base/Actions/AreaTriggerAction.cpp
+--- a/src/Ai/Base/Actions/AreaTriggerAction.cpp
++++ b/src/Ai/Base/Actions/AreaTriggerAction.cpp
+@@ -27,6 +27,20 @@
+ 
+     if (!sObjectMgr->GetAreaTriggerTeleport(triggerId))
+     {
++        uint32 questId = sObjectMgr->GetQuestForAreaTrigger(triggerId);
++        if (questId && bot->GetQuestStatus(questId) == QUEST_STATUS_INCOMPLETE)
++        {
++            if (!bot->IsAlive() || bot->IsInFlight() || bot->GetMapId() != at->map)
++                return false;
++
++            // Followers can enter a quest trigger after the master's client packet arrives.
++            if (!bot->IsInAreaTriggerRadius(at))
++            {
++                context->GetValue<LastMovement&>("last area trigger")->Get().lastAreaTrigger = triggerId;
++                return true;
++            }
++        }
++
+         WorldPacket p1(CMSG_AREATRIGGER);
+         p1 << triggerId;
+         p1.rpos(0);
+@@ -66,19 +80,35 @@
+     LastMovement& movement = context->GetValue<LastMovement&>("last area trigger")->Get();
+ 
+     uint32 triggerId = movement.lastAreaTrigger;
++    AreaTrigger const* at = sObjectMgr->GetAreaTrigger(triggerId);
++    if (!at)
++    {
++        movement.lastAreaTrigger = 0;
++        return false;
++    }
++
++    bool isTeleport = sObjectMgr->GetAreaTriggerTeleport(triggerId) != nullptr;
++    if (!isTeleport)
++    {
++        uint32 questId = sObjectMgr->GetQuestForAreaTrigger(triggerId);
++        if (!questId || bot->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE || !bot->IsAlive() ||
++            bot->IsInFlight() || bot->GetMapId() != at->map)
++        {
++            movement.lastAreaTrigger = 0;
++            return false;
++        }
++
++        if (!bot->IsInAreaTriggerRadius(at))
++            return false;
++    }
++
+     movement.lastAreaTrigger = 0;
+-
+-    if (!sObjectMgr->GetAreaTrigger(triggerId))
+-        return false;
+-
+-    if (!sObjectMgr->GetAreaTriggerTeleport(triggerId))
+-        return true;
+-
+     WorldPacket p(CMSG_AREATRIGGER);
+     p << triggerId;
+     p.rpos(0);
+     bot->GetSession()->HandleAreaTriggerOpcode(p);
+ 
+-    botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
++    if (isTeleport)
++        botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
+     return true;
+ }
+diff --git a/src/Ai/Base/Trigger/WithinAreaTrigger.cpp b/src/Ai/Base/Trigger/WithinAreaTrigger.cpp
+--- a/src/Ai/Base/Trigger/WithinAreaTrigger.cpp
++++ b/src/Ai/Base/Trigger/WithinAreaTrigger.cpp
+@@ -19,7 +19,11 @@
+         return false;
+ 
+     if (!sObjectMgr->GetAreaTriggerTeleport(movement.lastAreaTrigger))
+-        return false;
++    {
++        uint32 questId = sObjectMgr->GetQuestForAreaTrigger(movement.lastAreaTrigger);
++        return questId && bot->GetQuestStatus(questId) == QUEST_STATUS_INCOMPLETE && bot->IsAlive() &&
++               !bot->IsInFlight() && bot->IsInAreaTriggerRadius(at);
++    }
+ 
+     return IsPointInAreaTriggerZone(at, bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(),
+                                     0.5f);

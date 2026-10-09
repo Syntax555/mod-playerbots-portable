@@ -60,6 +60,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Ordinary paid training and earned talent allocation | Enabled |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
 | Automatic use of earned loot upgrades | Enabled |
+| Equipment upgrades / other useful group loot | Need / Greed, subject to native loot eligibility |
 | Teleport recovery and free summon support | Disabled |
 | Earned auction trading | Enabled; ordinary auctioneer/mailbox access |
 | Unsolicited broadcasts and random emotes | Disabled |
@@ -77,6 +78,20 @@ This also works while SelfBot is enabled on your character.
 Both characters must be alive and able to interact with the same NPC in normal
 range. Reopen the conversation after a following bot catches up. Learning a
 point does not start a flight; ordinary route availability still applies.
+
+Bots use the same roll policy with ordinary players and SelfBot masters.
+`AiPlayerbot.LootNeedRollLevel = 2` permits Need for appropriate equipment
+upgrades; `AiPlayerbot.LootGreedRollLevel = 1` permits Greed for other items the
+AI classifies as useful or sellable. Group roll masks and native Need Before
+Greed restrictions apply. Unsupported or unwanted items can still be passed.
+Existing roll settings are preserved during updates; edit these two keys in
+`configs/modules/playerbots.conf` with the servers stopped to adopt this policy
+on an established realm.
+
+For quest areas visited by the master, following bots receive exploration
+credit when they enter the actual trigger with the quest active. Credit uses
+the native quest handler and each bot's position. Other objectives remain
+required; this does not supply routes for every exploration quest.
 
 See [earned bot brackets and PvP](earned-bot-brackets.md) and
 [earned auction trading](earned-auctions.md) for their settings and limits.
@@ -153,10 +168,9 @@ balance or a fixed 2,500-bot performance target.
 
 Quest availability uses shared AzerothCore data with selected corrections.
 Progression gates do not provide three complete historical quest databases.
-Quest 287, **Frostmane Hold**, does not require quest 420; its ordinary level and
-faction checks remain, and follow-up quest 291 still requires completing 287.
 Quest addons can retain different prerequisites in their static databases;
-see [client addon compatibility](addons.md).
+see [client addon compatibility](addons.md) and the
+[adaptation reference](adaptations.md#world-data).
 
 Updates preserve levels, tiers, items and gold. These values alone do not prove
 an earned progression history. Use a fresh database when a level-1 earned

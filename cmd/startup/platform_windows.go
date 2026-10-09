@@ -3,6 +3,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
 	"syscall"
 	"unsafe"
@@ -12,6 +14,33 @@ func configureConsoleProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
 	}
+}
+
+func enableConsoleInterrupt() error {
+	// CREATE_NEW_PROCESS_GROUP disables Ctrl+C, including for a launcher
+	// restarted by the update helper. Registering a Go signal handler does
+	// not clear that inherited flag. Only the normal launcher enables it;
+	// the atomic update helper remains protected from interruption.
+	setConsoleCtrlHandler := kernel32.NewProc("SetConsoleCtrlHandler")
+	ret, _, err := setConsoleCtrlHandler.Call(0, 0)
+	if ret == 0 {
+		return fmt.Errorf("SetConsoleCtrlHandler: %w", err)
+	}
+	return nil
+}
+
+func interruptConsoleProcess(process *os.Process) error {
+	if process == nil || process.Pid <= 0 {
+		return os.ErrProcessDone
+	}
+	// CTRL_BREAK reaches only this owned process group; CTRL_C cannot be
+	// directed at one group. AzerothCore handles SIGBREAK as a normal stop.
+	generateConsoleCtrlEvent := kernel32.NewProc("GenerateConsoleCtrlEvent")
+	ret, _, err := generateConsoleCtrlEvent.Call(syscall.CTRL_BREAK_EVENT, uintptr(process.Pid))
+	if ret == 0 {
+		return fmt.Errorf("GenerateConsoleCtrlEvent: %w", err)
+	}
+	return nil
 }
 
 func isProcessAlive(pid int) (bool, uint32) {

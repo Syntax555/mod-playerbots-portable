@@ -10,6 +10,21 @@ The launcher stages the update, replaces managed server files and restarts itsel
 SQL migrations run during normal database/server startup, without resetting the
 existing databases. New configuration defaults are merged automatically.
 
+## Progress and shutdown
+
+The console reports file checks, download, verification and installation as
+separate stages. Counters and progress bars use checked files, unpacked download
+bytes or installed files, depending on the stage. Metadata requests and other
+operations without a known total show activity and elapsed time. Redirected
+output uses readable status lines and periodic activity messages.
+
+Press **Ctrl+C** in the launcher console to stop the realm. The launcher asks its
+authserver and worldserver to stop, waits for them to finish and then shuts down
+its database. Processes that exceed the shutdown timeout are terminated; allow
+the ordinary shutdown to finish so character saves can complete. During the
+short update replacement step, let the helper finish or recover the transaction
+before moving or changing files.
+
 ## What is preserved
 
 - Accounts, characters, inventories, money and existing databases.
@@ -27,6 +42,20 @@ files receive adjacent `.backup.*` copies. Without a saved baseline, the first
 startup preserves all existing values, adds only missing managed settings and
 records the bundled defaults for future comparisons. See the
 [configuration reference](vanilla-config-audit.md).
+
+## Moving the server folder
+
+Stop the realm completely, then move the entire server folder to a writable
+location. Include `configs/` and its `.portable-profiles.json` baseline, the
+database data directories, downloaded server data and bundled `src/` SQL tree.
+Start `startup.exe` from the new location.
+
+Generated SQL source paths are relative to the server's working directory. On
+startup, the launcher also repairs a missing absolute `SourceDirectory` left by
+its earlier path format when the complete bundled SQL tree is present. It saves
+adjacent configuration backups before changing those paths. Valid custom source
+directories are preserved. For a custom directory that has also moved, adjust
+`SourceDirectory` in the active authserver/worldserver configs yourself.
 
 ## Manual installation
 

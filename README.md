@@ -68,7 +68,7 @@ See [client addons](docs/addons.md) for optional Questie, GearScore and guide ad
 
 ## Updates
 
-Start `startup.exe` normally to check [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), download changed server files and restart after verified installation. SQL migrations and configuration updates run automatically. Characters, databases, downloaded map data, custom settings and the selected realm mode are preserved.
+Start `startup.exe` normally to check [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), download changed server files and restart after verified installation. The console shows progress during file checks, downloads, verification and installation. SQL migrations and configuration updates run automatically. Characters, databases, downloaded map data, custom settings and the selected realm mode are preserved.
 
 See the [update guide](docs/updating.md) for manual installation, backups, offline startup and recovery. Install matching client packages for each player with WoW closed.
 
@@ -102,6 +102,7 @@ Battleground and arena access follows earned progression; see [PvP rules](docs/e
 | [Bot brackets](docs/earned-bot-brackets.md) | Resident levels, population and battleground eligibility. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
 | [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |
+| [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |
 | [Updates](docs/updating.md) | Automatic updates, manual installation, backups and recovery. |
 | [Source versions](docs/module-versions.md) | Pinned dependencies and reproducible adaptations. |
 | [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build requirements and package generation. |
