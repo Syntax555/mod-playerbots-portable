@@ -133,7 +133,10 @@ func TestPortableUpdateDownloadsOnlyChangedFilesAndPreservesUsers(t *testing.T) 
 	}
 	archive, manifest := updateTestArchive(t, files, "./")
 	server, served, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, []string{"--skip-sql"}, server.Client(), server.URL)
+	output := new(updateProgressTestOutput)
+	progress := newPortableUpdateProgress(context.Background(), output, false, 5*time.Second)
+	t.Cleanup(progress.close)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, []string{"--skip-sql"}, server.Client(), server.URL, progress)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,8 +148,18 @@ func TestPortableUpdateDownloadsOnlyChangedFilesAndPreservesUsers(t *testing.T) 
 			t.Fatal("unchanged runtime file was staged")
 		}
 	}
-	if err := applyPortableUpdate(root, plan); err != nil {
+	if err := applyPortableUpdate(root, plan, progress); err != nil {
 		t.Fatal(err)
+	}
+	progress.close()
+	log := output.String()
+	for _, phase := range []string{"Comparing installed files", "Downloading, extracting and verifying changed files", "Verifying staged update files", "Installing verified files"} {
+		if !strings.Contains(log, "Update: "+phase+": [####################] 100%") {
+			t.Fatalf("verified update phase %q never completed:\n%s", phase, log)
+		}
+	}
+	if strings.ContainsAny(log, "\r\x1b") || !strings.Contains(log, "MiB unpacked") {
+		t.Fatalf("redirected update output is not readable or correctly labelled:\n%s", log)
 	}
 	for name, content := range files {
 		got, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
@@ -169,6 +182,71 @@ func TestPortableUpdateDownloadsOnlyChangedFilesAndPreservesUsers(t *testing.T) 
 	}
 }
 
+func TestPortableUpdateCancellationAfterVerifiedStaging(t *testing.T) {
+	for _, mode := range []string{"interrupt", "deadline"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			oldIdentity, err := json.Marshal(portableReleaseIdentity{Schema: 1, Revision: strings.Repeat("a", 40), Package: portableUpdatePackage, Version: "latest"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			installed := map[string][]byte{
+				"startup.exe":               []byte("working installed launcher"),
+				"portable-release.json":     oldIdentity,
+				"configs/worldserver.conf":  []byte("custom settings"),
+				"mysql/data/characters.ibd": []byte("saved characters"),
+				"data/dbc/Spell.dbc":        []byte("client data"),
+			}
+			_, previous := updateTestArchive(t, map[string][]byte{
+				"startup.exe": installed["startup.exe"], "portable-release.json": oldIdentity,
+			}, "")
+			previous.Revision = strings.Repeat("a", 40)
+			installed[portableUpdateDirectory+"/installed.json"], err = json.Marshal(previous)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for path, content := range installed {
+				updateTestWrite(t, root, path, content)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+			server, _, _ := updateTestRangeServer(t, archive)
+			plan, err := stagePortableUpdate(ctx, root, manifest, nil, server.Client(), server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			journal, err := readPortableUpdatePlan(root)
+			if err != nil || journal.Phase != "staged" || plan.Phase != "staged" || ctx.Err() != nil {
+				t.Fatalf("update did not finish verified staging before cancellation: plan=%v err=%v", journal, err)
+			}
+			want := error(context.Canceled)
+			if mode == "interrupt" {
+				cancel()
+			} else {
+				var cancelDeadline context.CancelFunc
+				ctx, cancelDeadline = context.WithDeadline(ctx, time.Now().Add(-time.Second))
+				defer cancelDeadline()
+				want = context.DeadlineExceeded
+			}
+			if err := handoffPortableUpdate(ctx, root, plan); !errors.Is(err, want) {
+				t.Fatalf("cancelled staged update was handed to its helper: %v", err)
+			}
+			for path, original := range installed {
+				actual, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+				if err != nil || !bytes.Equal(actual, original) {
+					t.Fatalf("cancellation changed installed/user file %s: %v", path, err)
+				}
+			}
+			for _, child := range []string{"journal.json", "stage", "backup", "owner.json", "helper.exe"} {
+				if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, child)); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("cancelled completed staging left %s: %v", child, err)
+				}
+			}
+		})
+	}
+}
+
 func TestPortableUpdateFailedDigestNeverChangesInstalledFiles(t *testing.T) {
 	root := t.TempDir()
 	old := []byte("old working launcher")
@@ -180,8 +258,17 @@ func TestPortableUpdateFailedDigestNeverChangesInstalledFiles(t *testing.T) {
 		}
 	}
 	server, _, _ := updateTestRangeServer(t, archive)
-	if _, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL); err == nil || !strings.Contains(err.Error(), "verification") {
+	output := new(updateProgressTestOutput)
+	progress := newPortableUpdateProgress(context.Background(), output, false, 5*time.Second)
+	t.Cleanup(progress.close)
+	if _, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, progress); err == nil || !strings.Contains(err.Error(), "verification") {
 		t.Fatalf("corrupt download accepted: %v", err)
+	}
+	progress.close()
+	log := output.String()
+	transfer := log[strings.Index(log, "Update: Downloading, extracting and verifying changed files"):]
+	if strings.Contains(transfer, "100%") || !strings.Contains(transfer, "99%") {
+		t.Fatalf("a failed SHA256 verification was shown as complete:\n%s", transfer)
 	}
 	got, _ := os.ReadFile(filepath.Join(root, "startup.exe"))
 	if !bytes.Equal(got, old) {
@@ -577,6 +664,14 @@ func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
 		digest, hashErr := hashUpdateFile(filepath.Join(root, "startup.exe"), int64(len(launcherBytes)))
 		content, _ := os.ReadFile(filepath.Join(root, "helper-test.log"))
 		if hashErr == nil && digest == updateTestDigest(launcherBytes) && bytes.Contains(content, []byte("Restarting the launcher")) && bytes.Contains(content, restartEvidence) {
+			for _, phase := range []string{"Verifying staged update files", "Installing verified files"} {
+				if !bytes.Contains(content, []byte("Update: "+phase+": [####################] 100%")) {
+					t.Fatalf("actual updater helper omitted completed %s progress:\n%s", phase, content)
+				}
+			}
+			if bytes.ContainsAny(content, "\r\x1b") {
+				t.Fatalf("updater helper used console controls in redirected output:\n%s", content)
+			}
 			if _, err := os.Stat(filepath.Join(root, "parent-was-running")); err != nil {
 				t.Fatal("parent handshake marker missing")
 			}
@@ -608,7 +703,7 @@ func TestPortableUpdateHelperParentChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := launchPortableUpdateHelper(root, plan); err != nil {
+	if err := handoffPortableUpdate(context.Background(), root, plan); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(150 * time.Millisecond)

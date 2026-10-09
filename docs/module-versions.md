@@ -4,6 +4,7 @@
 and ordered local patches. The release packages include this manifest and
 component source/license notices. An upstream commit alone does not identify
 the adapted build; local patch hashes are also part of its identity.
+See [server adaptations](adaptations.md) for the behavior of the local changes.
 
 | Component | Upstream repository | Locked revision | Role |
 | --- | --- | --- | --- |

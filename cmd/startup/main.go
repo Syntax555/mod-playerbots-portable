@@ -65,10 +65,14 @@ type ProcessSupervisor struct {
 	startFunc    func() (*exec.Cmd, error)
 	restartDelay time.Duration
 
-	mu         sync.Mutex
-	currentCmd *exec.Cmd
-	stopped    bool
-	doneChan   chan struct{}
+	mu              sync.Mutex
+	currentCmd      *exec.Cmd
+	interruptTarget *os.Process
+	stopRequested   bool
+	killRequested   bool
+	interruptedCmd  *exec.Cmd
+	stopped         bool
+	doneChan        chan struct{}
 }
 
 func newProcessSupervisor(name string, startFunc func() (*exec.Cmd, error), restartDelay time.Duration) *ProcessSupervisor {
@@ -83,13 +87,49 @@ func newProcessSupervisor(name string, startFunc func() (*exec.Cmd, error), rest
 func (ps *ProcessSupervisor) SetCurrentCmd(cmd *exec.Cmd) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+	ps.setCurrentCmdLocked(cmd)
+}
+
+func (ps *ProcessSupervisor) setCurrentCmdLocked(cmd *exec.Cmd) {
+	if ps.currentCmd == cmd {
+		return
+	}
+	if ps.interruptTarget != nil {
+		_ = ps.interruptTarget.Release()
+		ps.interruptTarget = nil
+	}
 	ps.currentCmd = cmd
+	if cmd != nil && cmd.Process != nil {
+		// Keep an independent Windows process handle until Wait completes. This
+		// prevents a completed child's PID from being reused during dispatch.
+		ps.interruptTarget, _ = os.FindProcess(cmd.Process.Pid)
+	}
 }
 
 func (ps *ProcessSupervisor) GetCurrentCmd() *exec.Cmd {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	return ps.currentCmd
+}
+
+func (ps *ProcessSupervisor) IsRunning() bool {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	if ps.currentCmd == nil || ps.interruptTarget == nil {
+		return false
+	}
+	alive, _ := isProcessAlive(ps.interruptTarget.Pid)
+	return alive
+}
+
+func (ps *ProcessSupervisor) RetainCurrentProcess() *os.Process {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	if ps.interruptTarget == nil {
+		return nil
+	}
+	process, _ := os.FindProcess(ps.interruptTarget.Pid)
+	return process
 }
 
 func (ps *ProcessSupervisor) MarkStopped() {
@@ -101,6 +141,7 @@ func (ps *ProcessSupervisor) MarkStopped() {
 func (ps *ProcessSupervisor) Kill() {
 	ps.mu.Lock()
 	ps.stopped = true
+	ps.killRequested = true
 	cmd := ps.currentCmd
 	ps.mu.Unlock()
 
@@ -115,7 +156,7 @@ func (ps *ProcessSupervisor) Stop() {
 }
 
 func (ps *ProcessSupervisor) StopAndWait(gracePeriod time.Duration) {
-	ps.MarkStopped()
+	ps.requestGracefulStop()
 
 	select {
 	case <-ps.doneChan:
@@ -124,6 +165,22 @@ func (ps *ProcessSupervisor) StopAndWait(gracePeriod time.Duration) {
 		fmt.Printf("%s did not stop within %v, killing process...\n", ps.name, gracePeriod)
 		ps.Kill()
 		<-ps.doneChan
+	}
+}
+
+func (ps *ProcessSupervisor) requestGracefulStop() {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.stopped = true
+	ps.stopRequested = true
+	cmd := ps.currentCmd
+	if cmd == nil || cmd.Process == nil || ps.interruptTarget == nil || ps.interruptedCmd == cmd {
+		return
+	}
+	ps.interruptedCmd = cmd
+	fmt.Printf("Requesting graceful shutdown of %s (PID: %d)...\n", ps.name, cmd.Process.Pid)
+	if err := interruptConsoleProcess(ps.interruptTarget); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		fmt.Fprintf(os.Stderr, "Could not signal %s; waiting for its shutdown grace period: %v\n", ps.name, err)
 	}
 }
 
@@ -170,20 +227,21 @@ func (ps *ProcessSupervisor) Run(ctx context.Context, initialCmd *exec.Cmd, wg *
 		}
 
 		ps.mu.Lock()
-		if ps.stopped || ctx.Err() != nil {
-			ps.mu.Unlock()
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-			return
-		}
-		ps.currentCmd = cmd
+		ps.setCurrentCmdLocked(cmd)
+		stopRequested := ps.stopRequested
+		killRequested := ps.killRequested
+		cancelledWithoutStop := ctx.Err() != nil && !ps.stopped
 		ps.mu.Unlock()
+		if killRequested || cancelledWithoutStop {
+			ps.Kill()
+		} else if stopRequested {
+			ps.requestGracefulStop()
+		}
 
 		err := cmd.Wait()
 
 		ps.mu.Lock()
-		ps.currentCmd = nil
+		ps.setCurrentCmdLocked(nil)
 		stopped := ps.stopped
 		ps.mu.Unlock()
 
@@ -858,16 +916,27 @@ func waitForMySQLReady(ctx context.Context, cmd *exec.Cmd, binaries *mysqlBinari
 				continue
 			}
 			conn.Close()
+			if cmd == nil || cmd.Process == nil {
+				return errors.New("MySQL readiness requires an owned server process")
+			}
+			owned, err := ownsMySQLListener(port, cmd.Process)
+			if err != nil {
+				return fmt.Errorf("cannot verify MySQL listener ownership: %w", err)
+			}
+			if !owned {
+				continue
+			}
 
 			// Check via mysqladmin ping
 			args := []string{
+				"--connect-timeout=5",
 				"-u", "root",
 				"-h", "127.0.0.1",
 				"-P", fmt.Sprintf("%d", port),
 				"--protocol=tcp",
 				"ping",
 			}
-			pingCmd := exec.Command(binaries.mysqladmin, args...)
+			pingCmd := exec.CommandContext(waitCtx, binaries.mysqladmin, args...)
 			if err := pingCmd.Run(); err == nil {
 				fmt.Println("MySQL server is online and ready.")
 				return nil
@@ -962,6 +1031,7 @@ func startServerProcess(name, exePath, workDir string, stdin *os.File) (*exec.Cm
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
+	configureConsoleProcess(cmd)
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start %s: %w", name, err)
@@ -976,12 +1046,27 @@ func stopProcess(name string, cmd *exec.Cmd) {
 		return
 	}
 
-	fmt.Printf("Stopping %s (PID: %d)...\n", name, cmd.Process.Pid)
-	_ = cmd.Process.Kill()
+	ps := newProcessSupervisor(name, nil, 0)
+	go ps.Run(context.Background(), cmd, nil)
+	ps.StopAndWait(10 * time.Second)
 }
 
-func shutdownMySQL(binaries *mysqlBinaries, port int) error {
+func shutdownMySQL(binaries *mysqlBinaries, port int, process *os.Process) error {
+	owned, err := ownsMySQLListener(port, process)
+	if err != nil {
+		return fmt.Errorf("cannot verify MySQL listener ownership: %w", err)
+	}
+	if !owned {
+		return errors.New("MySQL port is not owned by the launched process; administrative shutdown skipped")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return runMySQLShutdown(ctx, binaries, port)
+}
+
+func runMySQLShutdown(ctx context.Context, binaries *mysqlBinaries, port int) error {
 	args := []string{
+		"--connect-timeout=5",
 		"-u", "root",
 		"-h", "127.0.0.1",
 		"-P", fmt.Sprintf("%d", port),
@@ -989,7 +1074,7 @@ func shutdownMySQL(binaries *mysqlBinaries, port int) error {
 		"shutdown",
 	}
 
-	shutdownCmd := exec.Command(binaries.mysqladmin, args...)
+	shutdownCmd := exec.CommandContext(ctx, binaries.mysqladmin, args...)
 	shutdownCmd.Stdout = os.Stdout
 	shutdownCmd.Stderr = os.Stderr
 	if err := shutdownCmd.Run(); err != nil {
@@ -1000,20 +1085,18 @@ func shutdownMySQL(binaries *mysqlBinaries, port int) error {
 }
 
 func shutdownMySQLAndWait(binaries *mysqlBinaries, port int, cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil || cmd.ProcessState != nil {
+		return nil
+	}
 	fmt.Println("Shutting down MySQL server...")
 
-	args := []string{
-		"-u", "root",
-		"-h", "127.0.0.1",
-		"-P", fmt.Sprintf("%d", port),
-		"--protocol=tcp",
-		"shutdown",
+	// A failed launch can leave another MySQL instance listening on this
+	// port. Send an administrative command only while our child is alive.
+	if alive, _ := isProcessAlive(cmd.Process.Pid); alive {
+		if err := shutdownMySQL(binaries, port, cmd.Process); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		}
 	}
-
-	shutdownCmd := exec.Command(binaries.mysqladmin, args...)
-	shutdownCmd.Stdout = os.Stdout
-	shutdownCmd.Stderr = os.Stderr
-	_ = shutdownCmd.Run()
 
 	done := make(chan error, 1)
 	go func() {
@@ -1343,10 +1426,7 @@ func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, 
 		}
 	}
 
-	srcDirForConf := "src"
-	if srcDirAbs := filepath.Join(baseDir, "src"); dirExists(srcDirAbs) {
-		srcDirForConf = filepath.ToSlash(srcDirAbs)
-	}
+	srcDirForConf := portableSourceDirectory(baseDir, workDir)
 
 	dataDirForConf := "data"
 	baseDataDir := filepath.Join(baseDir, "data")
@@ -1476,6 +1556,10 @@ func main() {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+	if err := enableConsoleInterrupt(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not enable Ctrl+C handling: %v\n", err)
+	}
 
 	go func() {
 		select {
@@ -1494,6 +1578,10 @@ func main() {
 				return
 			}
 		}
+	}
+	if rootCtx.Err() != nil {
+		fmt.Println("Startup canceled.")
+		return
 	}
 
 	binaries, err := findMySQLBinaries(opts.mysqlDir)
@@ -1540,6 +1628,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: stop the realm before updating configuration: %v\n", err)
 		os.Exit(1)
 	}
+	pathBackups, err := relocatePortableSourcePaths(baseDir, workDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating portable SQL paths: %v\n", err)
+		os.Exit(1)
+	}
+	for _, backup := range pathBackups {
+		fmt.Printf("SQL path updated; previous settings saved to %s\n", backup)
+	}
 	backups, err := migrateConfigProfiles(workDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error updating configuration defaults: %v\n", err)
@@ -1560,6 +1656,10 @@ func main() {
 	}
 
 	cnfFile := findMySQLConfigFile(opts.mysqlCnf, opts.mysqlDir, baseDir, workDir)
+	if rootCtx.Err() != nil {
+		fmt.Println("Startup canceled.")
+		return
+	}
 
 	// 1. Initialize data directory if needed
 	if !isDataDirInitialized(opts.dataDir) {
@@ -1569,6 +1669,10 @@ func main() {
 		}
 	} else {
 		fmt.Printf("MySQL data directory already initialized at %s\n", opts.dataDir)
+	}
+	if rootCtx.Err() != nil {
+		fmt.Println("Startup canceled.")
+		return
 	}
 
 	// 2. Start MySQL Server
@@ -1675,45 +1779,12 @@ func main() {
 	fmt.Println("========================================================")
 
 	<-rootCtx.Done()
-	fmt.Println("\nShutting down authserver and worldserver first...")
-
-	// 1. Mark supervisors stopped and wait for authserver and worldserver to stop completely
-	authSupervisor.MarkStopped()
-	worldSupervisor.MarkStopped()
-
-	var gameWg sync.WaitGroup
-	gameWg.Add(2)
-
-	go func() {
-		defer gameWg.Done()
-		authSupervisor.StopAndWait(60 * time.Second)
-	}()
-
-	go func() {
-		defer gameWg.Done()
-		worldSupervisor.StopAndWait(60 * time.Second)
-	}()
-
-	gameWg.Wait()
-	fmt.Println("Authserver and worldserver stopped successfully.")
-
-	// 2. Last, shut down mysqld after authserver and worldserver are down
-	fmt.Println("Shutting down MySQL server...")
-	mysqlSupervisor.MarkStopped()
-	supervisorCancel()
-
-	if err := shutdownMySQL(binaries, opts.port); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
-	}
-
-	select {
-	case <-mysqlSupervisor.doneChan:
-		fmt.Println("MySQL server stopped cleanly.")
-	case <-time.After(30 * time.Second):
-		fmt.Println("MySQL did not stop within 30s, terminating process...")
-		mysqlSupervisor.Kill()
-		<-mysqlSupervisor.doneChan
-	}
-
-	fmt.Println("All servers stopped cleanly.")
+	shutdownRealmProcesses(authSupervisor, worldSupervisor, mysqlSupervisor, supervisorCancel, func() error {
+		process := mysqlSupervisor.RetainCurrentProcess()
+		if process == nil {
+			return nil
+		}
+		defer process.Release()
+		return shutdownMySQL(binaries, opts.port, process)
+	})
 }

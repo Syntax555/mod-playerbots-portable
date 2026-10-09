@@ -34,7 +34,9 @@
         "patches/mod-playerbots-earned-auctions-efficiency.patch",
         "patches/mod-playerbots-era-talents.patch",
         "patches/mod-playerbots-earned-era-battlegrounds.patch",
-        "patches/mod-playerbots-master-flight-learning.patch"
+        "patches/mod-playerbots-master-flight-learning.patch",
+        "patches/mod-playerbots-quest-area-triggers.patch",
+        "patches/mod-playerbots-loot-roll-policy.patch"
       ]
     },
     {

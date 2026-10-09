@@ -106,14 +106,25 @@ func checkPortableUpdate(ctx context.Context, root string, args []string) (bool,
 	if err != nil {
 		return false, fmt.Errorf("read installed version: %w", err)
 	}
+	progress := startPortableUpdateProgress(ctx)
+	defer progress.close()
+	progress.begin("Checking release metadata", "", 0, 0)
 	checkCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	manifest, err := fetchUpdateManifest(checkCtx, portableUpdateHTTPClient(), portableUpdateManifestURL)
 	cancel()
 	if err != nil {
 		return false, err
 	}
+	progress.finish()
 	if manifest.Revision == identity.Revision {
-		return false, rememberPortableUpdateBaseline(root, manifest)
+		progress.begin("Recording verified inventory", "", 0, 0)
+		if err := rememberPortableUpdateBaseline(root, manifest); err != nil {
+			return false, err
+		}
+		progress.finish()
+		progress.close()
+		fmt.Println("Installed release is up to date.")
+		return false, nil
 	}
 	if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
 		return false, err
@@ -121,16 +132,31 @@ func checkPortableUpdate(ctx context.Context, root string, args []string) (bool,
 	updateCtx, cancelUpdate := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancelUpdate()
 	assetURL := strings.TrimSuffix(portableUpdateManifestURL, "UPDATE_MANIFEST.json") + manifest.Package
-	plan, err := stagePortableUpdate(updateCtx, root, manifest, args, portableUpdateHTTPClient(), assetURL)
+	plan, err := stagePortableUpdate(updateCtx, root, manifest, args, portableUpdateHTTPClient(), assetURL, progress)
 	if err != nil {
 		return false, err
 	}
-	if err := launchPortableUpdateHelper(root, plan); err != nil {
-		_ = discardStagedUpdate(root)
+	progress.begin("Starting verified updater", "", 0, 0)
+	if err := handoffPortableUpdate(updateCtx, root, plan); err != nil {
 		return false, err
 	}
+	progress.finish()
+	progress.close()
 	fmt.Printf("Installing verified update (%d changed files). The launcher will restart automatically.\n", len(plan.Operations))
 	return true, nil
+}
+
+// Cancellation before the helper handoff keeps the installed release.
+// Local identity checks and journal writes can finish after the last HTTP read,
+// so a successful staging result does not imply that its context is still live.
+func handoffPortableUpdate(ctx context.Context, root string, plan *portableUpdatePlan) error {
+	if err := ctx.Err(); err != nil {
+		return errors.Join(err, discardStagedUpdate(root))
+	}
+	if err := launchPortableUpdateHelper(root, plan); err != nil {
+		return errors.Join(err, discardStagedUpdate(root))
+	}
+	return nil
 }
 
 // A fresh installation already has the current revision, but it still needs
@@ -188,7 +214,8 @@ func acquirePortableUpdateOwner(root string) (string, error) {
 	return stateDir, nil
 }
 
-func stagePortableUpdate(ctx context.Context, root string, manifest portableUpdateManifest, args []string, client *http.Client, assetURL string) (plan *portableUpdatePlan, err error) {
+func stagePortableUpdate(ctx context.Context, root string, manifest portableUpdateManifest, args []string, client *http.Client, assetURL string, reporters ...*portableUpdateProgress) (plan *portableUpdatePlan, err error) {
+	progress := optionalUpdateProgress(reporters)
 	if err := validateUpdateManifest(manifest); err != nil {
 		return nil, err
 	}
@@ -215,6 +242,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 		return nil, err
 	}
 	plan = &portableUpdatePlan{Schema: 1, Phase: "staging", ParentPID: os.Getpid(), Token: hex.EncodeToString(tokenBytes), Args: append([]string{}, args...), Manifest: manifest}
+	progress.begin("Comparing installed files", "files", int64(len(manifest.Files)), 0)
 	for _, f := range manifest.Files {
 		target, pathErr := safeUpdateTarget(root, f.Path)
 		if pathErr != nil {
@@ -241,17 +269,21 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 			}
 			plan.Operations = append(plan.Operations, op)
 		}
+		progress.add(1)
 	}
+	progress.finish()
 	// Removal is restricted to files recorded by a previous verified update and
 	// still byte-identical. First migration deliberately keeps unknown files.
 	previous, previousErr := readInstalledUpdateManifest(root)
 	if previousErr == nil {
+		progress.begin("Checking obsolete package files", "files", int64(len(previous.Files)), 0)
 		currentPaths := make(map[string]bool, len(manifest.Files))
 		for _, f := range manifest.Files {
 			currentPaths[strings.ToLower(f.Path)] = true
 		}
 		for _, old := range previous.Files {
 			if currentPaths[strings.ToLower(old.Path)] || protectedUpdatePath(old.Path) {
+				progress.add(1)
 				continue
 			}
 			target, pathErr := safeUpdateTarget(root, old.Path)
@@ -262,7 +294,9 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 			if digest, hashErr := hashUpdateFile(target, old.Size); hashErr == nil && digest == old.SHA256 {
 				plan.Operations = append(plan.Operations, portableUpdateOperation{File: old, HadOriginal: true, OriginalSize: old.Size, OriginalSHA256: old.SHA256, Remove: true})
 			}
+			progress.add(1)
 		}
+		progress.finish()
 	} else if !errors.Is(previousErr, os.ErrNotExist) {
 		err = previousErr
 		return nil, err
@@ -271,6 +305,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 		plan.Operations[i].Stage = fmt.Sprintf("stage/%06d", i)
 		plan.Operations[i].Backup = fmt.Sprintf("backup/%06d", i)
 	}
+	progress.begin("Reading update ZIP index", "", 0, 0)
 	if err = writePortableUpdatePlan(root, plan); err != nil {
 		return nil, err
 	}
@@ -282,6 +317,15 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 	if err != nil {
 		return nil, err
 	}
+	progress.finish()
+	var changedBytes, changedFiles int64
+	for _, op := range plan.Operations {
+		if !op.Remove {
+			changedBytes += op.File.Size
+			changedFiles++
+		}
+	}
+	progress.begin("Downloading, extracting and verifying changed files", "bytes", changedBytes, changedFiles)
 	for i := range plan.Operations {
 		op := &plan.Operations[i]
 		if op.Remove {
@@ -300,7 +344,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 			return nil, err
 		}
 		hash := sha256.New()
-		written, copyErr := io.Copy(io.MultiWriter(stage, hash), io.LimitReader(input, op.File.Size+1))
+		written, copyErr := io.Copy(updateProgressWriter{output: io.MultiWriter(stage, hash), progress: progress}, io.LimitReader(input, op.File.Size+1))
 		inputErr := input.Close()
 		syncErr := stage.Sync()
 		closeErr := stage.Close()
@@ -313,6 +357,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 			}
 			return nil, err
 		}
+		progress.verifiedFile()
 	}
 	identityPath := filepath.Join(root, "portable-release.json")
 	for _, op := range plan.Operations {
@@ -333,6 +378,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 	if err = writePortableUpdatePlan(root, plan); err != nil {
 		return nil, err
 	}
+	progress.finish()
 	return plan, nil
 }
 

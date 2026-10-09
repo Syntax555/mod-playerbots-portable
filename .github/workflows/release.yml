@@ -77,6 +77,8 @@ jobs:
           cmake -P cmake/PrepareModules.cmake
           python3 cmake/tests/TestEarnedProgression.py
           python3 cmake/tests/TestMasterFlightLearning.py
+          python3 cmake/tests/TestBotQuestAreaTriggers.py
+          python3 cmake/tests/TestLootRollPolicy.py
           python3 cmake/tests/TestMultiBotTrainerMoney.py
           python3 cmake/tests/TestFormationMovement.py
           python3 cmake/tests/TestFrostmaneHold.py

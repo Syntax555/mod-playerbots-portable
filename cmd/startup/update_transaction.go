@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -222,7 +223,8 @@ func recoverPortableUpdate(root string) error {
 	return discardStagedUpdate(root)
 }
 
-func validateStagedUpdate(root string, plan *portableUpdatePlan) error {
+func validateStagedUpdate(root string, plan *portableUpdatePlan, reporters ...*portableUpdateProgress) error {
+	progress := optionalUpdateProgress(reporters)
 	for _, op := range plan.Operations {
 		target, err := safeUpdateTarget(root, op.File.Path)
 		if err != nil {
@@ -234,6 +236,7 @@ func validateStagedUpdate(root string, plan *portableUpdatePlan) error {
 			}
 		}
 		if op.Remove {
+			progress.add(1)
 			continue
 		}
 		stage, err := safeUpdateChild(root, portableUpdateDirectory+"/"+op.Stage)
@@ -244,17 +247,22 @@ func validateStagedUpdate(root string, plan *portableUpdatePlan) error {
 		if err != nil || digest != op.File.SHA256 {
 			return fmt.Errorf("staged update verification failed: %s", op.File.Path)
 		}
+		progress.add(1)
 	}
 	return nil
 }
 
-func applyPortableUpdate(root string, plan *portableUpdatePlan) error {
+func applyPortableUpdate(root string, plan *portableUpdatePlan, reporters ...*portableUpdateProgress) error {
+	progress := optionalUpdateProgress(reporters)
 	if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
 		return err
 	}
-	if err := validateStagedUpdate(root, plan); err != nil {
+	progress.begin("Verifying staged update files", "files", int64(len(plan.Operations)), 0)
+	if err := validateStagedUpdate(root, plan, progress); err != nil {
 		return err
 	}
+	progress.finish()
+	progress.begin("Installing verified files", "files", int64(len(plan.Operations)), 0)
 	plan.Phase = "applying"
 	if err := writePortableUpdatePlan(root, plan); err != nil {
 		return err
@@ -319,12 +327,17 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan) error {
 		if err := writePortableUpdatePlan(root, plan); err != nil {
 			return rollbackUpdateAfterError(root, plan, err)
 		}
+		progress.add(1)
 	}
 	plan.Phase = "committed"
 	if err := writePortableUpdatePlan(root, plan); err != nil {
 		return rollbackUpdateAfterError(root, plan, err)
 	}
-	return finishPortableUpdate(root, plan)
+	if err := finishPortableUpdate(root, plan); err != nil {
+		return err
+	}
+	progress.finish()
+	return nil
 }
 
 func rollbackUpdateAfterError(root string, plan *portableUpdatePlan, cause error) error {
@@ -441,9 +454,12 @@ func runPortableUpdateHelper(args []string) (bool, error) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if err := applyPortableUpdate(root, plan); err != nil {
+	progress := startPortableUpdateProgress(context.Background())
+	defer progress.close()
+	if err := applyPortableUpdate(root, plan, progress); err != nil {
 		return true, err
 	}
+	progress.close()
 	fmt.Println("Update complete. Restarting the launcher.")
 	cmd := exec.Command(filepath.Join(root, "startup.exe"), plan.Args...)
 	cmd.Dir = root
