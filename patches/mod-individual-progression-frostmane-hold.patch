@@ -1,0 +1,9 @@
+diff --git a/data/sql/world/updates/2026_10_09_00_frostmane_hold.sql b/data/sql/world/updates/2026_10_09_00_frostmane_hold.sql
+new file mode 100644
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_09_00_frostmane_hold.sql
+@@ -0,0 +1,4 @@
++-- Frostmane Hold is available without Senir's Observations in Blizzard Classic and Wrath Classic.
++-- Sources: https://github.com/Questie/Questie/pull/4602 and https://github.com/Questie/Questie/issues/5063
++-- Preserve other quests, follow-up requirements and customized prerequisites.
++UPDATE `quest_template_addon` SET `PrevQuestID` = 0 WHERE `ID` = 287 AND `PrevQuestID` = 420;

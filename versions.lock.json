@@ -18,7 +18,8 @@
       "patches/azerothcore-earned-era-arena-matching.patch",
       "patches/azerothcore-earned-era-pvp-rules.patch",
       "patches/azerothcore-windows-resource-includes.patch",
-      "patches/azerothcore-windows-compile-parallelism.patch"
+      "patches/azerothcore-windows-compile-parallelism.patch",
+      "patches/azerothcore-formation-minimum-velocity.patch"
     ]
   },
   "modules": [
@@ -48,7 +49,8 @@
       "patches": [
         "patches/mod-individual-progression-empty-account-filters.patch",
         "patches/mod-individual-progression-earned-milestones.patch",
-        "patches/mod-individual-progression-earned-battlegrounds.patch"
+        "patches/mod-individual-progression-earned-battlegrounds.patch",
+        "patches/mod-individual-progression-frostmane-hold.patch"
       ]
     },
     {
@@ -95,7 +97,8 @@
         "patches/mod-era-talents-earned-progression.patch",
         "patches/mod-era-talents-client-locales.patch",
         "patches/mod-era-talents-german-addon.patch",
-        "patches/mod-era-talents-german-text.patch"
+        "patches/mod-era-talents-german-text.patch",
+        "patches/mod-era-talents-spell-groups.patch"
       ]
     }
   ],

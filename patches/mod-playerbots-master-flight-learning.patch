@@ -5,7 +5,7 @@ diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
  # FLIGHTPATH
  #
  
-+# Learn the current flight point when a real player master speaks to the flight master.
++# Learn the current flight point when a client-controlled master speaks to the flight master.
 +# Each bot must be alive and able to interact with that same NPC normally.
 +# Does not unlock other routes or start a flight. Default: 0
 +AiPlayerbot.LearnFlightPathsWithMaster = 0
@@ -33,14 +33,14 @@ new file mode 100644
 +
 +bool LearnTaxiAction::isUseful()
 +{
-+    return sPlayerbotAIConfig.LearnFlightPathsWithMaster && IsRealPlayer(GetMaster()) && bot->IsAlive() &&
++    return sPlayerbotAIConfig.LearnFlightPathsWithMaster && botAI->HasGameClientMaster() && bot->IsAlive() &&
 +           !bot->IsInFlight();
 +}
 +
 +bool LearnTaxiAction::Execute(Event event)
 +{
 +    Player* master = GetMaster();
-+    if (!sPlayerbotAIConfig.LearnFlightPathsWithMaster || !IsRealPlayer(master) || !bot->IsAlive())
++    if (!sPlayerbotAIConfig.LearnFlightPathsWithMaster || !botAI->HasGameClientMaster() || !bot->IsAlive())
 +        return false;
 +
 +    if (!master->IsInWorld() || !bot->IsInWorld() || master->GetMap() != bot->GetMap() || master->IsBeingTeleported() ||
@@ -189,7 +189,7 @@ diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
 +void PlayerbotAI::HandleMasterIncomingPacket(WorldPacket const& packet, Player* packetMaster)
  {
      masterIncomingPacketHandlers.AddPacket(packet);
-+    if (!sPlayerbotAIConfig.LearnFlightPathsWithMaster || !IsRealPlayer(packetMaster) || packetMaster != GetMaster() ||
++    if (!sPlayerbotAIConfig.LearnFlightPathsWithMaster || !HasGameClientMaster() || packetMaster != GetMaster() ||
 +        packet.size() != sizeof(uint64) ||
 +        (packet.GetOpcode() != CMSG_GOSSIP_HELLO && packet.GetOpcode() != CMSG_TAXIQUERYAVAILABLENODES))
 +        return;

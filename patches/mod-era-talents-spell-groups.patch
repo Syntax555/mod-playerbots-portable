@@ -1,0 +1,23 @@
+diff --git a/data/sql/world/updates/2026_10_09_00_era_spell_group_contracts.sql b/data/sql/world/updates/2026_10_09_00_era_spell_group_contracts.sql
+new file mode 100644
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_09_00_era_spell_group_contracts.sql
+@@ -0,0 +1,18 @@
++-- Spell groups list chain roots; higher ranks resolve through spell_ranks.
++-- Remove redundant ranks; Sanctuary retains its valid chain-root membership.
++DELETE FROM `spell_group` WHERE `id` = 1007 AND `spell_id` IN (932661, 932662, 932664, 946136);
++DELETE FROM `spell_group` WHERE `id` = 1060 AND `spell_id` IN (932301, 932302, 932303);
++
++-- Rule 3 aggregates a shared aura type. Historical effects that differ from
++-- the WotLK group do not inherit that group's same-effect restriction.
++-- Improved Faerie Fire adds melee/ranged hit (184/185), not armor/spell hit.
++DELETE FROM `spell_group` WHERE `id` = 1016 AND `spell_id` = 946277;
++-- Era Fire Vulnerability increases fire damage taken (87), not spell crit (179).
++DELETE FROM `spell_group` WHERE `id` = 1037 AND `spell_id` IN (932763, 948860);
++-- Vanilla Scorpid Sting reduces stats (29), not hit chance (54).
++DELETE FROM `spell_group` WHERE `id` = 1060 AND `spell_id` = 932300;
++-- TBC Tree of Life grants flat healing taken (115), not a percentage (118).
++DELETE FROM `spell_group` WHERE `id` = 1094 AND `spell_id` = 946266;
++-- Vanilla Power Infusion grants damage/healing, not haste. Its valid
++-- Arcane Power exclusion in group 1123 remains in place.
++DELETE FROM `spell_group` WHERE `id` = 1122 AND `spell_id` = 920920;

@@ -203,6 +203,7 @@ struct PlayerbotAIConfig { bool LearnFlightPathsWithMaster = false; };
 inline PlayerbotAIConfig playerbotAIConfig;
 #define sPlayerbotAIConfig playerbotAIConfig
 bool IsRealPlayer(Player* player);
+bool IsSelfBot(Player* player);
 
 PACKET_HELPER
 
@@ -219,6 +220,7 @@ PENDING_FIELDS
         REGISTRATIONS
     }
     Player* GetMaster() { return master; }
+    bool HasGameClientMaster();
     void HandleMasterIncomingPacket(WorldPacket const& packet, Player* packetMaster = nullptr);
     void DeliverTaxiPacket(ExternalEventHelper& helper);
 };
@@ -322,12 +324,16 @@ struct Scenario
     Creature flightMaster;
     Creature otherFlightMaster;
     PlayerbotAI ai;
+    std::unique_ptr<PlayerbotAI> selfMasterAI;
     PlayerbotMgr manager;
     AiObjectContext context;
     ExternalEventHelper helper;
     LearnTaxiAction action;
-    Scenario() : ai(&bot, &master), manager(&master), context(&ai), helper(&context), action(&ai)
+    explicit Scenario(bool selfBotMaster = false)
+        : ai(&bot, &master), manager(&master), context(&ai), helper(&context), action(&ai)
     {
+        if (selfBotMaster)
+            selfMasterAI = std::make_unique<PlayerbotAI>(&master, &master);
         master.guid.Set(0x1122334455667788ULL);
         bot.guid.Set(200);
         flightMaster.guid.Set(0xF130000011003344ULL);
@@ -374,51 +380,55 @@ struct Scenario
 
 int main()
 {
-    // Real GUID/packet encoding and both native click opcodes, for both factions.
+    // Real-client and SelfBot masters support both native click opcodes and factions.
     for (uint16 opcode : {uint16(CMSG_GOSSIP_HELLO), uint16(CMSG_TAXIQUERYAVAILABLENODES)})
         for (uint32 team : {0u, 1u})
-        {
-            Scenario s;
-            s.bot.team = team;
-            auto packet = s.Click(opcode);
-            assert(packet.contents()[0] == 0x44 && packet.contents()[7] == 0xF1);
-            s.manager.HandleMasterIncomingPacket(packet);
-            assert(s.ai._masterTaxiPacketPending.load());
-            assert(s.ai._pendingMasterTaxiPacket->size() == 16);
-            assert(s.ai._pendingMasterTaxiPacket->contents()[8] == 0x88);
-            assert(s.ai._pendingMasterTaxiPacket->contents()[15] == 0x11);
-            assert(s.Deliver());
-            assert(!s.ai._masterTaxiPacketPending.load() && !s.ai._pendingMasterTaxiPacket);
-            uint32 node = s.flightMaster.node[team];
-            assert(s.bot.m_taxi.IsTaximaskNodeKnown(node));
-            assert(!s.bot.m_taxi.IsTaximaskNodeKnown(18));
-            assert(scriptManager.learned.size() == 1 && scriptManager.learned[0].second == node);
-            assert(!s.master.m_taxi.IsTaximaskNodeKnown(node));
-            assert(s.bot.session.sent.size() == 2);
-            assert(s.bot.session.sent[0].GetOpcode() == SMSG_NEW_TAXI_PATH);
-            assert(s.ClickAndLearn(opcode));
-            assert(scriptManager.learned.size() == 1 && s.bot.session.sent.size() == 2);
-            assert(s.bot.money == 123456 && !s.bot.inFlight);
-        }
+            for (bool selfBotMaster : {false, true})
+            {
+                Scenario s(selfBotMaster);
+                assert(IsRealPlayer(&s.master) == !selfBotMaster);
+                assert(IsSelfBot(&s.master) == selfBotMaster && s.ai.HasGameClientMaster());
+                s.bot.team = team;
+                auto packet = s.Click(opcode);
+                assert(packet.contents()[0] == 0x44 && packet.contents()[7] == 0xF1);
+                s.manager.HandleMasterIncomingPacket(packet);
+                assert(s.ai._masterTaxiPacketPending.load());
+                assert(s.ai._pendingMasterTaxiPacket->size() == 16);
+                assert(s.ai._pendingMasterTaxiPacket->contents()[8] == 0x88);
+                assert(s.ai._pendingMasterTaxiPacket->contents()[15] == 0x11);
+                assert(s.Deliver());
+                assert(!s.ai._masterTaxiPacketPending.load() && !s.ai._pendingMasterTaxiPacket);
+                uint32 node = s.flightMaster.node[team];
+                assert(s.bot.m_taxi.IsTaximaskNodeKnown(node));
+                assert(!s.bot.m_taxi.IsTaximaskNodeKnown(18));
+                assert(scriptManager.learned.size() == 1 && scriptManager.learned[0].second == node);
+                assert(!s.master.m_taxi.IsTaximaskNodeKnown(node));
+                assert(s.bot.session.sent.size() == 2);
+                assert(s.bot.session.sent[0].GetOpcode() == SMSG_NEW_TAXI_PATH);
+                assert(s.ClickAndLearn(opcode));
+                assert(scriptManager.learned.size() == 1 && s.bot.session.sent.size() == 2);
+                assert(s.bot.money == 123456 && !s.bot.inFlight);
+            }
 
     // Core guards independently reject impossible interaction for either party.
-    for (bool masterSide : {false, true})
-        for (int condition = 0; condition < 8; ++condition)
-        {
-            Scenario s;
-            Player& player = masterSide ? s.master : s.bot;
-            if (condition == 0) player.mapId = 1;
-            if (condition == 1) player.x = INTERACTION_DISTANCE + 0.01f;
-            if (condition == 2) player.alive = false;
-            if (condition == 3) player.inWorld = false;
-            if (condition == 4) player.inFlight = true;
-            if (condition == 5) s.flightMaster.reaction = REP_UNFRIENDLY;
-            if (condition == 6) player.beingTeleported = true;
-            if (condition == 7) player.instanceId = 1;
-            assert(!s.ClickAndLearn());
-            s.Unchanged();
-            assert(player.inFlight == (condition == 4));
-        }
+    for (bool selfBotMaster : {false, true})
+        for (bool masterSide : {false, true})
+            for (int condition = 0; condition < 8; ++condition)
+            {
+                Scenario s(selfBotMaster);
+                Player& player = masterSide ? s.master : s.bot;
+                if (condition == 0) player.mapId = 1;
+                if (condition == 1) player.x = INTERACTION_DISTANCE + 0.01f;
+                if (condition == 2) player.alive = false;
+                if (condition == 3) player.inWorld = false;
+                if (condition == 4) player.inFlight = true;
+                if (condition == 5) s.flightMaster.reaction = REP_UNFRIENDLY;
+                if (condition == 6) player.beingTeleported = true;
+                if (condition == 7) player.instanceId = 1;
+                assert(!s.ClickAndLearn());
+                s.Unchanged();
+                assert(player.inFlight == (condition == 4));
+            }
     {
         Scenario s;
         s.bot.x = INTERACTION_DISTANCE;
@@ -501,23 +511,34 @@ int main()
     }
 
     // Packet identity is retained across ticks; no learning from another master.
-    {
-        Scenario s;
-        s.manager.HandleMasterIncomingPacket(s.Click());
-        Player replacement;
-        replacement.guid.Set(999);
-        s.ai.master = &replacement;
-        assert(!s.Deliver());
-        s.Unchanged();
-    }
-    {
-        Scenario s;
-        Player impostor;
-        impostor.guid.Set(999);
-        s.ai.HandleMasterIncomingPacket(s.Click(), &impostor);
-        assert(!s.ai._pendingMasterTaxiPacket && !s.Deliver());
-        s.Unchanged();
-    }
+    for (bool selfBotMaster : {false, true})
+        for (bool replacementSelfBot : {false, true})
+        {
+            Scenario s(selfBotMaster);
+            s.manager.HandleMasterIncomingPacket(s.Click());
+            Player replacement;
+            replacement.guid.Set(999);
+            std::unique_ptr<PlayerbotAI> replacementAI;
+            if (replacementSelfBot)
+                replacementAI = std::make_unique<PlayerbotAI>(&replacement, &replacement);
+            s.ai.master = &replacement;
+            assert(s.ai.HasGameClientMaster());
+            assert(!s.Deliver());
+            s.Unchanged();
+        }
+    for (bool selfBotMaster : {false, true})
+        for (bool impostorSelfBot : {false, true})
+        {
+            Scenario s(selfBotMaster);
+            Player impostor;
+            impostor.guid.Set(999);
+            std::unique_ptr<PlayerbotAI> impostorAI;
+            if (impostorSelfBot)
+                impostorAI = std::make_unique<PlayerbotAI>(&impostor, &impostor);
+            s.ai.HandleMasterIncomingPacket(s.Click(), &impostor);
+            assert(!s.ai._pendingMasterTaxiPacket && !s.Deliver());
+            s.Unchanged();
+        }
     {
         Scenario s;
         s.ai.HandleMasterIncomingPacket(s.Click());
@@ -528,7 +549,17 @@ int main()
         Scenario s;
         Player masterBot;
         PlayerbotAI masterAI(&s.master, &masterBot);
+        assert(!IsRealPlayer(&s.master) && !IsSelfBot(&s.master) && !s.ai.HasGameClientMaster());
         assert(!s.ClickAndLearn());
+        s.Unchanged();
+    }
+    {
+        Scenario s(true);
+        s.manager.HandleMasterIncomingPacket(s.Click());
+        Player masterBot;
+        s.selfMasterAI->master = &masterBot;
+        assert(!s.ai.HasGameClientMaster());
+        assert(!s.Deliver());
         s.Unchanged();
     }
 
@@ -642,7 +673,7 @@ int main()
         }
         assert(learn && gossip && taxi);
     }
-    std::cout << "Follower flight-point learning: native packets, interaction guards, ownership, coalescing and idempotence passed\n";
+    std::cout << "Follower flight-point learning: native packets, real/SelfBot masters, interaction guards, ownership, coalescing and idempotence passed\n";
 }
 '''
 
@@ -654,6 +685,8 @@ production = '\n'.join([
     function(player, 'Creature* Player::GetNPCIfCanInteractWith'),
     function(taxi, 'bool WorldSession::SendLearnNewTaxiNode'),
     function(ai, 'bool IsRealPlayer(Player* player)'),
+    function(ai, 'bool IsSelfBot(Player* player)'),
+    function(ai, 'bool PlayerbotAI::HasGameClientMaster()'),
     function(ai, 'void PacketHandlingHelper::AddHandler'),
     function(ai, 'void PacketHandlingHelper::Handle('),
     function(ai, 'void PacketHandlingHelper::AddPacket'),
