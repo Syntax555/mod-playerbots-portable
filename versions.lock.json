@@ -32,7 +32,8 @@
         "patches/mod-playerbots-earned-auctions.patch",
         "patches/mod-playerbots-earned-auctions-efficiency.patch",
         "patches/mod-playerbots-era-talents.patch",
-        "patches/mod-playerbots-earned-era-battlegrounds.patch"
+        "patches/mod-playerbots-earned-era-battlegrounds.patch",
+        "patches/mod-playerbots-master-flight-learning.patch"
       ]
     },
     {
@@ -107,7 +108,8 @@
       "toc": "MultiBot.toc",
       "license": "LICENSE",
       "patches": [
-        "patches/multibot-inventory-money.patch"
+        "patches/multibot-inventory-money.patch",
+        "patches/multibot-options-initialization.patch"
       ]
     },
     {

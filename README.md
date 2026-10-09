@@ -62,6 +62,8 @@ Services bind locally by default. Use an ordinary player account for progression
 
 With WoW closed, remove `Interface/AddOns/MultiBot/` if present, then extract the separate ZIP's `MultiBot` folder into `Interface/AddOns/`. The final path is `Interface/AddOns/MultiBot/MultiBot.toc`. Restart WoW, enable the addon and open it with `/multibot`, `/mbot` or `/mb`.
 
+Open its settings with `/mbopt` or **Interface → AddOns → MultiBot**. The settings cover the minimap button, layout, frame layering and update intervals.
+
 ## Updates
 
 Start `startup.exe` normally to check [Latest](https://github.com/Syntax555/mod-playerbots-portable/releases/latest), download changed server files and restart after verified installation. SQL migrations and configuration updates run automatically. Characters, databases, downloaded map data, custom settings and the selected realm mode are preserved.
