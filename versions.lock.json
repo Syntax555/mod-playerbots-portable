@@ -75,7 +75,8 @@
       "revision": "1da05982e478cb00e0b6c87314afe7e0e9653ffb",
       "patches": [
         "patches/mod-multibot-bridge-natural-progression.patch",
-        "patches/mod-multibot-bridge-era-talents.patch"
+        "patches/mod-multibot-bridge-era-talents.patch",
+        "patches/mod-multibot-bridge-trainer-money.patch"
       ]
     },
     {

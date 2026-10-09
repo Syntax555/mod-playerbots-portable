@@ -104,6 +104,9 @@ Players and bots must still loot the corpse; drop rolls, ordinary equipment loot
 quest prerequisites and earned progression remain in place.
 
 MultiBot trainer actions require ordinary NPC range and paid core transactions.
+In natural mode, explicit purchases use the bot's current money and the core's
+trainer price, including reputation discounts. Autonomous bot spending retains
+its AI budget.
 Personal bank actions require banker range and validated storage operations.
 Free preset talent writes, SelfBot autogear and maintenance grants are blocked
 in natural mode. Token checks do not waive NPC exchange reputation, materials or

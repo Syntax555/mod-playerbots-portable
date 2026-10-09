@@ -77,6 +77,7 @@ jobs:
           cmake -P cmake/PrepareModules.cmake
           python3 cmake/tests/TestEarnedProgression.py
           python3 cmake/tests/TestMasterFlightLearning.py
+          python3 cmake/tests/TestMultiBotTrainerMoney.py
 
   era_client:
     name: Build and verify historical client patch
