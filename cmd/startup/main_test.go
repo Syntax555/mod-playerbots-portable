@@ -494,8 +494,8 @@ MyCustomOption = 42
 	if !strings.Contains(playerbotsConf, "Playerbots.Updates.EnableDatabases = 1") {
 		t.Errorf("playerbots.conf missing content: %s", playerbotsConf)
 	}
-	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 0") {
-		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 0: %s", playerbotsConf)
+	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 1") {
+		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 1: %s", playerbotsConf)
 	}
 	for _, setting := range []string{"AiPlayerbot.MinRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.NaturalProgression = 1", "AiPlayerbot.RandombotStartingLevel = 1"} {
 		if !strings.Contains(playerbotsConf, setting) {

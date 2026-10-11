@@ -51,8 +51,9 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | --- | --- |
 | Natural progression | Enabled |
 | Fresh bot level / XP rate | 1 / 1.0 |
-| Online population target | 2,500, including without a real player session |
-| Disable bots without a real player | Disabled; set `AiPlayerbot.DisabledWithoutRealPlayer = 1` to restrict activity to real-player sessions |
+| Online population target | 2,500 while at least one real player session is connected |
+| Disable bots without a real player | Enabled; `AiPlayerbot.DisabledWithoutRealPlayer = 1` |
+| Login / logout delay | 30 seconds after a real session connects / 60 seconds after the last session ends |
 | Resident earned caps | About 5% each at 19, 29, 39, 49, 59, 69 and 79 |
 | Free factory equipment, money and supplies | Disabled |
 | Level, quest and leader-progress synchronization | Disabled |
@@ -66,7 +67,21 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Unsolicited broadcasts and random emotes | Disabled |
 | Nearby greetings | Real players only |
 
-The population logs in gradually. Smart activity scaling reduces distant solo
+The population logs in gradually while at least one real player session is
+connected. A human character with SelfBot enabled still counts as a real session;
+headless bot sessions do not. The native presence check includes connected
+players at character selection or in the login queue. Closing the client or
+disconnecting ends the session; logging back to character selection alone does
+not. After the last real session ends, random bots log out after the configured
+60-second delay.
+
+To require player presence in an existing customized installation, set
+`AiPlayerbot.DisabledWithoutRealPlayer = 1` in
+`configs/modules/playerbots.conf` with the server stopped. Managed defaults
+update automatically; an explicit custom value of `0` remains an administrator's
+choice.
+
+Smart activity scaling reduces distant solo
 activity as tick time rises, while nearby/grouped bots and combat stay active.
 A target of 2,500 requires substantial server resources and does not imply every
 bot is available in every level, faction or era. Lower
