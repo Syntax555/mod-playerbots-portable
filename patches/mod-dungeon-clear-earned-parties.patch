@@ -514,6 +514,29 @@ index 8ad3b6e..b29e812 100644
              if (!item)
              {
                  bot->AddItem(step.itemId, 1);
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp b/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
+index 25266a7..8f06e51 100755
+--- a/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "StridedPathfinder.h"
++#include "DcEarnedPlay.h"
+ 
+ #include <algorithm>
+ #include <cmath>
+@@ -134,6 +135,10 @@ namespace
+         gen.CalculatePath(cx, cy, cz, px, py, pz, /*forceDest*/ false);
+         outType = gen.GetPathType();
+ 
++        // An unloaded distant tile can produce a straight no-mmap shortcut.
++        // Earned walking must try the existing nearer stride tiers instead.
++        if (DcEarnedPlay::Active() && !DcEarnedPlay::UsesRealPath(gen))
++            return false;
+         if (PathTypeIsBogusChunk(outType))
+             return false;
+ 
 diff --git a/src/BgQueueFill/DcBgQueueFillManager.cpp b/src/BgQueueFill/DcBgQueueFillManager.cpp
 index aaef5a2..d66011b 100644
 --- a/src/BgQueueFill/DcBgQueueFillManager.cpp
@@ -918,10 +941,10 @@ index 12ebee8..b8138ce 100644
  
 diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
 new file mode 100644
-index 0000000..3bd74d4
+index 0000000..cc213cf
 --- /dev/null
 +++ b/src/EarnedDungeonParties.cpp
-@@ -0,0 +1,675 @@
+@@ -0,0 +1,748 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "EarnedDungeonParties.h"
 +#include "DcEarnedEvents.h"
@@ -931,6 +954,7 @@ index 0000000..3bd74d4
 +#include "DcStrategyGate.h"
 +#include "Ai/Dungeon/DungeonClear/Action/DcActionShared.h"
 +#include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
++#include "Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h"
 +#include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
 +#include "Config.h"
 +#include "DBCStores.h"
@@ -990,6 +1014,15 @@ index 0000000..3bd74d4
 +    size_t nextRoute = 0;
 +    thread_local bool internalStart = false;
 +    enum class Phase { Entering, Running, Returning };
++    // Only retain the module's corridor while its previous emitted endpoint
++    // was physically reached. Combat displacement or a new portal invalidates it.
++    struct WalkState
++    {
++        uint32 map = 0, instance = 0, trigger = 0;
++        Movement::PointsArray corridor;
++        size_t next = 0;
++        G3D::Vector3 expected;
++    };
 +    struct Party
 +    {
 +        Route route;
@@ -998,6 +1031,7 @@ index 0000000..3bd74d4
 +        std::array<std::map<std::string, bool>, 5> strategies;
 +        std::array<bool, 5> changedNavigation{};
 +        std::array<bool, 5> invited{};
++        std::array<WalkState, 5> walks;
 +        uint32 started = 0, stalledSince = 0;
 +        Phase phase = Phase::Entering;
 +    };
@@ -1075,22 +1109,82 @@ index 0000000..3bd74d4
 +        return true;
 +    }
 +
-+    bool Walk(Player* player, uint32 trigger)
++    bool Walk(Player* player, uint32 trigger, WalkState& state)
 +    {
 +        AreaTrigger const* at = sObjectMgr->GetAreaTrigger(trigger);
 +        if (!at || at->map != player->GetMapId())
 +            return false;
 +        if (NativeDoor(player, trigger))
++        {
++            state = {};
 +            return true;
++        }
 +        if (player->IsInCombat() || player->IsNonMeleeSpellCast(true) ||
-+            !GET_PLAYERBOT_AI(player)->CanMove())
++            !GET_PLAYERBOT_AI(player)->CanMove() || player->isMoving())
 +            return true;
-+        if (player->isMoving())
-+            return true;
-+        PathGenerator path(player);
-+        if (!path.CalculatePath(at->x, at->y, at->z, false) || !DcEarnedPlay::UsesRealPath(path))
++        G3D::Vector3 const origin(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
++        if (!std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z))
 +            return false;
-+        Movement::PointsArray points = path.GetPath();
++        if (state.corridor.empty() || state.next == state.corridor.size() ||
++            state.map != player->GetMapId() || state.instance != player->GetInstanceId() ||
++            state.trigger != trigger || (state.expected - origin).magnitude() > 0.05f)
++        {
++            state = {};
++            // Reuse Dungeon Clear's long-range/strided navmesh planner. A zero
++            // boss entry bypasses its registered anchors and scripted shortcuts.
++            auto const route = ChunkedPathfinder::Build(player, player->GetMapId(), 0,
++                                                       at->x, at->y, at->z, 4);
++            if (!route.reachable || route.startFarFromPoly)
++                return false;
++            for (auto const& segment : route.segments)
++            {
++                if (segment.anchored || segment.jumpDown || segment.jumpGap || segment.doorGoEntry)
++                    return false;
++                if (segment.polyline.size() > 4096 - state.corridor.size())
++                    return false;
++                state.corridor.insert(state.corridor.end(), segment.polyline.begin(), segment.polyline.end());
++            }
++            // The module can report arrival within eight yards without a
++            // corridor. Finish the last yards with the core's real path; only
++            // NativeDoor may decide that the portal was physically reached.
++            if (state.corridor.empty() && route.complete && player->GetExactDist(at->x, at->y, at->z) <= 8.0f)
++            {
++                PathGenerator path(player);
++                if (!path.CalculatePath(at->x, at->y, at->z, false) || !DcEarnedPlay::UsesRealPath(path))
++                    return false;
++                state.corridor = path.GetPath();
++            }
++            if (state.corridor.empty() || state.corridor.size() > 4096 ||
++                std::any_of(state.corridor.begin(), state.corridor.end(), [](auto const& p)
++                { return !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z); }))
++                return false;
++            state.map = player->GetMapId();
++            state.instance = player->GetInstanceId();
++            state.trigger = trigger;
++        }
++        // Emit actual corridor points in short windows, never endpoint chords.
++        // A partial upstream route may advance safely and be rebuilt at its end.
++        Movement::PointsArray points{origin};
++        size_t next = state.next;
++        float distance = 0.0f;
++        while (next < state.corridor.size() && points.size() < 32)
++        {
++            auto const& point = state.corridor[next];
++            float const leg = (point - points.back()).magnitude();
++            if (distance + leg > 80.0f)
++                break;
++            ++next;
++            if (leg <= 0.05f)
++                continue;
++            points.push_back(point);
++            distance += leg;
++        }
++        // Reachability flags also cover no-mmap shortcuts upstream. Independently
++        // raycast every emitted leg, including cached legs, before raw movement.
++        if (!DcEarnedPlay::RealSpline(player, points))
++            return false;
++        state.next = next;
++        state.expected = points.back();
 +        player->GetMotionMaster()->MoveSplinePath(&points, FORCED_MOVEMENT_NONE);
 +        return true;
 +    }
@@ -1249,8 +1343,9 @@ index 0000000..3bd74d4
 +                         party.group.ToString(), party.route.map, instance);
 +            }
 +            else
-+                for (Player* member : members)
-+                    if (!member->IsBeingTeleported() && member->GetMapId() == party.route.continent && !Walk(member, party.route.entrance))
++                for (size_t i = 0; i < members.size(); ++i)
++                    if (!members[i]->IsBeingTeleported() && members[i]->GetMapId() == party.route.continent &&
++                        !Walk(members[i], party.route.entrance, party.walks[i]))
 +                    {
 +                        Stop(party, "no real navigation-mesh path to the entrance; autonomous run stopped");
 +                        return false;
@@ -1294,8 +1389,9 @@ index 0000000..3bd74d4
 +                Stop(party, "party left through the native exit; normal autonomous play resumed");
 +                return false;
 +            }
-+            for (Player* member : members)
-+                if (!member->IsBeingTeleported() && member->GetMapId() == party.route.map && !Walk(member, party.route.exit))
++            for (size_t i = 0; i < members.size(); ++i)
++                if (!members[i]->IsBeingTeleported() && members[i]->GetMapId() == party.route.map &&
++                    !Walk(members[i], party.route.exit, party.walks[i]))
 +                {
 +                    Stop(party, "no real navigation-mesh path to the exit; autonomous run stopped");
 +                    return false;
