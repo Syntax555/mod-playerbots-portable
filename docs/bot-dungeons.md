@@ -19,9 +19,12 @@ real route. The coordinator does not summon distant bots or generate equipment,
 money, keys, attunements or missing group members. A large bot population does
 not guarantee that a suitable party will be available near either entrance.
 
-Other instances and raids retain the Playerbots module's encounter support for
-player-led groups. Autonomous routing is limited to the instances listed above;
-it does not guarantee completion of every encounter or quest.
+With natural progression enabled, Dungeon Clear permits only these two normal
+instances, including manually started runs. Other dungeons, heroic instances
+and raids retain the Playerbots module's encounter support for player-led
+groups, but Dungeon Clear does not start there. See the [development TODO](todo.md)
+for broader integration work. Complete runs have not been verified in-game;
+automated checks cover selected handlers rather than every encounter or quest.
 
 ## Travel and encounters
 

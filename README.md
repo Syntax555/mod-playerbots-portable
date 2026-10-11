@@ -110,6 +110,7 @@ Battleground and arena access follows earned progression; see [PvP rules](docs/e
 | [Bot dungeons](docs/bot-dungeons.md) | Autonomous parties, supported instances and travel requirements. |
 | [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |
 | [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |
+| [Development TODO](docs/todo.md) | Current implementation limits, planned integration and gameplay validation. |
 | [Updates](docs/updating.md) | Automatic updates, manual installation, backups and recovery. |
 | [Source versions](docs/module-versions.md) | Pinned dependencies and reproducible adaptations. |
 | [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build requirements and package generation. |
