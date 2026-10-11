@@ -45,7 +45,7 @@ func TestMySQLProcessTreeProbe(t *testing.T) {
 		}
 		defer listener.Close()
 		port := listener.Addr().(*net.TCPAddr).Port
-		if err := os.WriteFile(os.Getenv("PORTABLE_MYSQL_TREE_PORT"), []byte(strconv.Itoa(port)), 0600); err != nil {
+		if err := writeProbeFile(os.Getenv("PORTABLE_MYSQL_TREE_PORT"), []byte(strconv.Itoa(port))); err != nil {
 			os.Exit(85)
 		}
 		time.Sleep(30 * time.Second)
@@ -74,7 +74,7 @@ func TestMySQLProcessTreeProbe(t *testing.T) {
 	}
 	content, _ := json.Marshal(mysqlTreeProbeRecord{PID: cmd.Process.Pid})
 	path := filepath.Join(os.Getenv("PORTABLE_MYSQL_TREE_DIR"), fmt.Sprintf("child-of-%d.json", os.Getpid()))
-	if err := os.WriteFile(path, content, 0600); err != nil {
+	if err := writeProbeFile(path, content); err != nil {
 		_ = cmd.Process.Kill()
 		os.Exit(83)
 	}

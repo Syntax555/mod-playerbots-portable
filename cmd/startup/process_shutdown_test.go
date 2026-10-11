@@ -53,7 +53,7 @@ func TestShutdownSignalChild(t *testing.T) {
 		defer listener.Close()
 		ready = strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
 	}
-	if err := os.WriteFile(os.Getenv("PORTABLE_SHUTDOWN_READY"), []byte(ready), 0600); err != nil {
+	if err := writeProbeFile(os.Getenv("PORTABLE_SHUTDOWN_READY"), []byte(ready)); err != nil {
 		os.Exit(92)
 	}
 	timeout := time.NewTimer(30 * time.Second)
@@ -96,6 +96,16 @@ func startShutdownChild(t *testing.T, mode, gate string) (*exec.Cmd, string, str
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	return cmd, ready, stopped
+}
+
+// Test parents read a probe file as soon as it exists, and os.WriteFile creates
+// the file before writing it. Publish the complete content with a rename.
+func writeProbeFile(path string, content []byte) error {
+	temporary := path + ".partial"
+	if err := os.WriteFile(temporary, content, 0600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, path)
 }
 
 func waitForShutdownFile(t *testing.T, path string) {
