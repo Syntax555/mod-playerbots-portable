@@ -123,7 +123,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | World Buff Bots | Timed Vanilla events for eligible Vanilla-progress characters; native TBC events unchanged |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | AH Bot Plus | Seller, buyer and generated stock disabled |
-| Dungeon Clear | Autonomous parties for audited Vanilla dungeons and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
+| Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
 | Raid Clear | Molten Core, Blackwing Lair and Zul'Gurub mechanics; cloak and device shortcuts disabled |
 | Token Turn-in | Read-only checks available; shortcut redemption blocked in natural mode |
 
@@ -138,8 +138,9 @@ Wrath. Bots can accompany a player through real instances without a dungeon
 simulator. `AiPlayerbot.ApplyInstanceStrategies = 1` enables these tactics;
 navigation and boss coverage vary by encounter. Automatic Dungeon Finder
 joining is disabled. Autonomous five-bot parties can walk to and attempt
-normal Vanilla dungeons, and a player's group can run Dungeon Clear in any
-instance it entered; see [bot dungeons and raids](bot-dungeons.md) for scope and
+normal Vanilla, TBC and Wrath dungeons in their own earned era. A player's group
+can run Dungeon Clear in any instance it entered; see
+[bot dungeons and raids](bot-dungeons.md) for scope and
 configuration. A large bot population does not require a dungeon simulator or
 establish that every instance can be cleared autonomously.
 

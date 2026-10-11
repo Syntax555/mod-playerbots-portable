@@ -216,6 +216,100 @@ func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 	}
 }
 
+func TestAutomaticDungeonRoutesPreserveCustomSelection(t *testing.T) {
+	const key = "DungeonClear.AutonomousParties.Dungeons"
+	const previousRoutes = `"4,1,6,8,10,12,16,14,18,165,163,164,20,22,24,272,26,273,28,30,276,34,32,36,2,38,40,274"`
+	for _, ending := range []string{"\n", "\r\n"} {
+		endingName := "LF"
+		if ending == "\r\n" {
+			endingName = "CRLF"
+		}
+		for _, test := range []struct {
+			name      string
+			selection string
+			tracked   bool
+			managed   bool
+		}{
+			{name: "managed Vanilla default", selection: previousRoutes, tracked: true, managed: true},
+			{name: "custom dungeon selection", selection: `"4,12"`, tracked: true},
+			{name: "existing untracked selection", selection: `"4,12"`},
+		} {
+			t.Run(test.name+"/"+endingName, func(t *testing.T) {
+				root := t.TempDir()
+				phase, _ := parseRealmPhase("individual")
+				profiles, err := currentManagedProfiles(phase)
+				if err != nil {
+					t.Fatal(err)
+				}
+				current := strings.ReplaceAll(profiles["mod_dungeon_clear.conf"], "\r\n", "\n")
+				newRoutes, ok := configValue(current, key)
+				if !ok || newRoutes == previousRoutes {
+					t.Fatal("expanded dungeon routes are missing from the managed profile")
+				}
+				previous := strings.Replace(current, key+" = "+newRoutes, key+" = "+previousRoutes, 1)
+				original := strings.Replace(previous, key+" = "+previousRoutes, key+" = "+test.selection, 1)
+				original = strings.Replace(original, "DungeonClear.AutonomousParties.Enable = 1", "DungeonClear.AutonomousParties.Enable = 0", 1)
+				original = strings.Replace(original, "DungeonClear.AutonomousParties.MaxConcurrent = 2", "DungeonClear.AutonomousParties.MaxConcurrent = 1", 1)
+				original += "\nCustom.Dungeon = 42\n"
+				original = strings.ReplaceAll(original, "\n", ending)
+				path := profileFixture(t, root, "configs/modules/mod_dungeon_clear.conf", original)
+				characters := profileFixture(t, root, "mysql/data/characters.ibd", "existing characters")
+				if test.tracked {
+					state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"mod_dungeon_clear.conf": previous}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					profileFixture(t, root, "configs/"+automaticProfileState, string(state))
+				}
+				backups, err := migrateConfigProfiles(root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var configBackups []string
+				for _, backup := range backups {
+					if strings.HasPrefix(backup, path+".backup.") {
+						configBackups = append(configBackups, backup)
+					}
+				}
+				updated, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := test.selection
+				if test.managed {
+					want = newRoutes
+					if len(configBackups) != 1 {
+						t.Fatalf("expected one config backup, got %v", configBackups)
+					}
+					backup, err := os.ReadFile(configBackups[0])
+					if err != nil || string(backup) != original {
+						t.Fatalf("original configuration was not preserved exactly: %v", err)
+					}
+				} else if len(configBackups) != 0 || string(updated) != original {
+					t.Fatal("custom or untracked dungeon selection was modified")
+				}
+				if value, _ := configValue(string(updated), key); value != want {
+					t.Fatalf("dungeon selection = %q, want %q", value, want)
+				}
+				for _, retained := range []string{"DungeonClear.AutonomousParties.Enable = 0", "DungeonClear.AutonomousParties.MaxConcurrent = 1", "Custom.Dungeon = 42"} {
+					if !strings.Contains(string(updated), retained+ending) {
+						t.Fatalf("lost custom setting %q", retained)
+					}
+				}
+				if ending == "\r\n" && strings.Contains(strings.ReplaceAll(string(updated), "\r\n", ""), "\n") {
+					t.Fatal("migration changed Windows line endings")
+				}
+				if content, err := os.ReadFile(characters); err != nil || string(content) != "existing characters" {
+					t.Fatalf("character data changed: %v", err)
+				}
+				if second, err := migrateConfigProfiles(root); err != nil || len(second) != 0 {
+					t.Fatalf("second startup changed unchanged configuration: %v, %v", second, err)
+				}
+			})
+		}
+	}
+}
+
 func TestAutomaticProfilesInvalidStateAbortsBeforeWriting(t *testing.T) {
 	for _, content := range []string{`{"schema":2,"profiles":{}}`, `{"schema":1,"profiles":{"../escape.conf":"Value = 1"}}`, "{} trailing"} {
 		t.Run(content, func(t *testing.T) {

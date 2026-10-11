@@ -7,7 +7,7 @@ source implementation; planned work is not a claim of release support.
 
 | Area | Implementation and limits |
 | --- | --- |
-| Autonomous dungeons | Five nearby random bots of one faction form a party and walk to a normal Vanilla dungeon within its level band. Wailing Caverns, the Deadmines, Uldaman, Zul'Farrak and Blackrock Depths are not enabled because a required objective uses a scripted shortcut. |
+| Autonomous dungeons | Five nearby random bots of one faction and earned era form a party and walk to an audited normal Vanilla, TBC or Wrath dungeon within its level band. Required events and encounter controllers that need unsupported actions prevent automatic recruitment for that map. |
 | Player-led clears | A real player's group can run Dungeon Clear in any dungeon or raid it entered. Events run only through ordinary actions; an event that needs a shortcut stalls for the player. |
 | Raids | Raid Clear adds Molten Core, Blackwing Lair and Zul'Gurub mechanics to player-led raids. Autonomous raid recruitment and travel are not implemented. AutoBalance scales raids to the group size. |
 | Historical class quests | Selected priest families are restored. Other classes retain the core and Individual Progression implementations. |
@@ -25,8 +25,11 @@ and [server adaptations](adaptations.md) for current behavior.
   Uldaman (the altars through the player interaction), Zul'Farrak (waking
   Witch Doctor Zum'rah as a player does) and Blackrock Depths (the Ring of Law
   through its arena trigger).
-- [ ] Extend autonomous parties to TBC and Wrath dungeons for bots with the
-  matching earned era, using the same route discovery and event audit.
+- [ ] Expand the audited TBC and Wrath routes by providing ordinary player
+  actions for currently refused event controllers, escorts, vehicle sequences
+  and locked objectives. Verify complete runs before advertising completion.
+- [ ] Evaluate heroic autonomous parties separately, including earned access,
+  keys, gear suitability and heroic-only encounter mechanics.
 
 ## Raid integration
 
@@ -46,8 +49,9 @@ and [server adaptations](adaptations.md) for current behavior.
 
 ## Gameplay validation
 
-- [ ] Verify complete runs in-game for each enabled Vanilla dungeon: walking to
-  the entrance, combat, loot rolls, quest objectives, wipes and normal recovery.
+- [ ] Verify complete runs in-game for each enabled Vanilla, TBC and Wrath
+  dungeon: walking to the entrance, combat, loot rolls, quest objectives, wipes
+  and normal recovery.
   Remove a failing dungeon from the default list until it is fixed. Confirm bot
   logout after the last real player session ends.
 - [ ] Verify player-led Molten Core, Blackwing Lair and Zul'Gurub raids with

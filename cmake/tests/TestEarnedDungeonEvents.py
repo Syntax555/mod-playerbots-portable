@@ -30,6 +30,14 @@ def stubs(core, dc):
     registry = (dc/'Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h').read_text()
     flags = {name: re.search(name + r'\s*=\s*(0x[0-9A-Fa-f]+)', shared).group(1)
              for name in ('GO_FLAG_LOCKED', 'GO_FLAG_INTERACT_COND', 'GO_FLAG_NOT_SELECTABLE')}
+    event_flags = ''.join(re.search(r'bool\s+' + name + r'\{(?:true|false)\};', registry).group(0)
+                          for name in ('required', 'ownsThePull', 'stepsOwnMovement'))
+    tables = (dc/'Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h').read_text()
+    trial = tables[tables.index('namespace DcTrialOfTheChampion'):]
+    trial_progress = '\n'.join('constexpr uint32 TRIAL_' + name + '=' +
+                               re.search(name + r'\s*=\s*(\d+)', trial).group(1) + ';'
+                               for name in ('DATA_INSTANCE_PROGRESS', 'PROGRESS_CHAMPIONS_DEAD',
+                                            'PROGRESS_ARGENT_CHALLENGE_DIED', 'PROGRESS_FINISHED'))
     # Real lock and step vocabularies: a new upstream step kind is refused until audited.
     return '''#pragma once
 #include <cstdint>
@@ -44,11 +52,12 @@ using uint8=uint8_t;using uint32=uint32_t;using int32=int32_t;
         block(registry, 'enum class EventStepKind : uint8') + f'''
 constexpr uint32 GO_FLAG_LOCKED={flags['GO_FLAG_LOCKED']},GO_FLAG_INTERACT_COND={flags['GO_FLAG_INTERACT_COND']},GO_FLAG_NOT_SELECTABLE={flags['GO_FLAG_NOT_SELECTABLE']};
 constexpr uint8 DUNGEON_DIFFICULTY_NORMAL=0;
-struct EventStep{{EventStepKind kind{{EventStepKind::Wait}};uint32 goEntry=0,itemId=0,hookId=0;}};
+{trial_progress}
+struct EventStep{{EventStepKind kind{{EventStepKind::Wait}};uint32 goEntry=0,itemId=0,hookId=0;int32 instanceDataId=-1;uint32 instanceDataMin=0;}};
 enum class DcDifficultyGate:uint8{{Any,NormalOnly,HeroicOnly}};
 struct DcDiffKey{{bool isRaid=false;uint8 difficulty=0;bool IsHeroic()const{{return difficulty>0;}}}};
 inline bool DcGateMatches(DcDifficultyGate gate,DcDiffKey key){{return gate==DcDifficultyGate::Any||(gate==DcDifficultyGate::NormalOnly)!=key.IsHeroic();}}
-struct DungeonEvent{{uint32 mapId=0,id=0;std::string name;DcDifficultyGate gate{{DcDifficultyGate::Any}};std::vector<EventStep> steps;bool required=true;}};
+struct DungeonEvent{{uint32 mapId=0,id=0;std::string name;DcDifficultyGate gate{{DcDifficultyGate::Any}};std::vector<EventStep> steps;{event_flags}}};
 struct DungeonBossInfo{{std::string name;uint32 onArriveHook=0,eventId=0;}};
 std::map<uint32,std::vector<DungeonBossInfo>> bosses;std::map<std::pair<uint32,uint32>,DungeonEvent> events;std::map<uint32,std::vector<DungeonEvent>> conditional;
 struct BossSpawnIndex{{static std::vector<DungeonBossInfo> const& Get(uint32 map,uint8){{return bosses[map];}}}};
@@ -68,6 +77,7 @@ HARNESS = r'''
 #include <cassert>
 #include <iostream>
 EventStep step(EventStepKind kind,uint32 go=0,uint32 item=0,uint32 hook=0){EventStep s;s.kind=kind;s.goEntry=go;s.itemId=item;s.hookId=hook;return s;}
+EventStep progress_gate(int32 data,uint32 minimum){EventStep s=step(EventStepKind::MoveTo);s.instanceDataId=data;s.instanceDataMin=minimum;return s;}
 LockEntry lock(uint32 id,std::vector<std::pair<uint32,uint32>> cases){LockEntry l{id,{},{},{}};for(size_t i=0;i<cases.size();++i){l.Type[i]=cases[i].first;l.Index[i]=cases[i].second;}return l;}
 DungeonEvent event(std::string name,std::vector<EventStep> steps,bool required=true,DcDifficultyGate gate=DcDifficultyGate::Any){DungeonEvent ev;ev.name=name;ev.steps=steps;ev.required=required;ev.gate=gate;return ev;}
 bool audited(uint32 map){std::string reason;bool ok=DcEarnedEvents::MapAudited(map,reason);assert(ok==reason.empty());return ok;}
@@ -102,7 +112,28 @@ int main(){
  bosses[6]={{"Missing",0,9}};assert(!audited(6));
  conditional[7]={event("Room aggro",{step(EventStepKind::KillCreature)}),event("Drop",{step(EventStepKind::Jump)},false)};assert(audited(7));
  conditional[7].push_back(event("Wake",{step(EventStepKind::Custom)}));assert(!audited(7));
- std::cout<<"Earned dungeon events: ordinary steps, native locks and keys, required/optional/heroic objectives, hooks and conditional events audited\n";
+ // Trial of the Champion: required objectives only wait for instance progress.
+ // Its optional controller performs the gossip/joust transitions those waits
+ // depend on. An unsupported controller must reject automatic recruitment.
+ bosses[650]={{"The Grand Champions",0,1},{"The Argent Challenge",0,2},{"The Black Knight",0,3}};
+ events[{650,1}]=event("The Grand Champions",{step(EventStepKind::MoveTo),progress_gate(TRIAL_DATA_INSTANCE_PROGRESS,TRIAL_PROGRESS_CHAMPIONS_DEAD)});
+ events[{650,2}]=event("The Argent Challenge",{step(EventStepKind::MoveTo),progress_gate(TRIAL_DATA_INSTANCE_PROGRESS,TRIAL_PROGRESS_ARGENT_CHALLENGE_DIED)});
+ events[{650,3}]=event("The Black Knight",{step(EventStepKind::MoveTo),progress_gate(TRIAL_DATA_INSTANCE_PROGRESS,TRIAL_PROGRESS_FINISHED)});
+ conditional[650]={event("The Champion's Arena",{step(EventStepKind::Custom)},false)};
+ assert(audited(650)); // an optional noncontroller may still be skipped
+ auto& controller=conditional[650].front();
+ controller.ownsThePull=true;assert(!audited(650));
+ controller.ownsThePull=false;controller.stepsOwnMovement=true;assert(!audited(650));
+ controller.ownsThePull=true;assert(!audited(650));
+ std::string reason;assert(!DcEarnedEvents::MapAudited(650,reason));assert(reason.find("The Champion's Arena")!=std::string::npos);
+ controller.steps={step(EventStepKind::Gossip),step(EventStepKind::MoveTo)};assert(audited(650));
+ controller.steps={step(EventStepKind::Custom)};controller.gate=DcDifficultyGate::HeroicOnly;assert(audited(650));
+ // Drak'Tharon's optional Novos movement controller needs the same audit even
+ // though it does not own the pull. Optional unrelated hooks remain skippable.
+ conditional[600]={event("Novos: hold the camp",{step(EventStepKind::Custom)},false)};
+ conditional[600].front().stepsOwnMovement=true;assert(!audited(600));
+ conditional[601]={event("Hadronox: web the doors",{step(EventStepKind::Custom)},false)};assert(audited(601));
+ std::cout<<"Earned dungeon events: ordinary steps, native locks and keys, required/optional/heroic objectives, hooks and essential optional encounter controllers audited\n";
 }
 '''
 
@@ -122,6 +153,11 @@ def native_contracts(core, dc):
     assert 'return ev.required ? EventDriveOutcome::Stalled : EventDriveOutcome::Skipped;' in advance
     hop = function(executor, 'void HopTo(Player* bot, float x, float y, float z)')
     assert hop.index('DcEarnedPlay::ReachableLeg(bot, x, y, z)') < hop.index('MovePoint(')
+    trial = (dc/'Ai/Dungeon/DungeonClear/Data/Events/TrialOfTheChampionEvents.cpp').read_text()
+    trial_events = function(trial, 'void RegisterTrialOfTheChampionEvents(')
+    assert trial_events.count('.MoveToHoldUntilInstanceData(') == 3
+    controller = trial_events[trial_events.index('"The Champion\'s Arena"'):]
+    assert all(flag in controller for flag in ('.Optional()', '.OwnsThePull()', '.StepsOwnMovement()', '.Custom('))
     print('Native event contracts: lock-free use opcode, core lock rules, refused-step outcomes and real-path hops verified')
 
 
@@ -170,7 +206,9 @@ def main():
             ('quest-conditional interaction', '(go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot))', 'false'),
             ('granted quest item accepted', '|| step.kind == EventStepKind::UseItem || step.itemId', ''),
             ('legacy objective hook', 'else if (info.onArriveHook)', 'else if (false)'),
-            ('conditional events skipped', 'if (ev->required && !StepsAudited(*ev, reason))', 'if (false)'),
+            ('conditional events skipped', 'if ((ev->required || ev->ownsThePull || ev->stepsOwnMovement) && !StepsAudited(*ev, reason))', 'if (false)'),
+            ('optional pull controller skipped', 'ev->required || ev->ownsThePull || ev->stepsOwnMovement', 'ev->required || ev->stepsOwnMovement'),
+            ('optional movement controller skipped', 'ev->required || ev->ownsThePull || ev->stepsOwnMovement', 'ev->required || ev->ownsThePull'),
         ]
         for label, old, new in mutations:
             mutated = original.replace(old, new)
