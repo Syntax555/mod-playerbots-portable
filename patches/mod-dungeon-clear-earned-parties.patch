@@ -1,19 +1,26 @@
 diff --git a/conf/mod_dungeon_clear.conf.dist b/conf/mod_dungeon_clear.conf.dist
-index a02ebcc..c2cf6da 100644
+index a02ebcc..ff47bf4 100644
 --- a/conf/mod_dungeon_clear.conf.dist
 +++ b/conf/mod_dungeon_clear.conf.dist
-@@ -2034,3 +2034,11 @@ DungeonClear.BgQueueFill.GearQuality = 0
+@@ -2034,3 +2034,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
  #
  
  DungeonClear.BgQueueFill.LogoutOnRelease = 1
 +
 +# Earned parties use only existing nearby random bots and real native paths.
-+# Supported: normal Ragefire Chasm (Horde,15-18), Stockades (Alliance,24-28).
 +# Requires AiPlayerbot.NaturalProgression and the strict default IP chain.
 +# Groups consist of one tank, one healer, three damage dealers. No transport,
 +# equipment, currency, consumable or quest rewards are created by this feature.
 +DungeonClear.AutonomousParties.Enable = 0
 +DungeonClear.AutonomousParties.MaxConcurrent = 2
++
++# Normal Vanilla dungeons by Dungeon Finder id. Entrance and exit portals,
++# level band and capital faction come from the world data. A dungeon whose
++# required Dungeon Clear objectives need a scripted shortcut, a quest item or a
++# key is skipped and logged. Bot levels follow the dungeon's recommended band,
++# extended upward by LevelSpread (0-10) within its entry range and level 60.
++DungeonClear.AutonomousParties.Dungeons = "4,12"
++DungeonClear.AutonomousParties.LevelSpread = 3
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
 index 980fa32..61981c2 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
@@ -105,7 +112,7 @@ index 4ebe94b..62e7601 100644
              return false;
          // No navmesh to land on: on a map the core runs without pathfinding
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-index d42fa42..93ec0bb 100644
+index d42fa42..858c857 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 @@ -3,6 +3,7 @@
@@ -116,7 +123,45 @@ index d42fa42..93ec0bb 100644
  #include "DungeonClearActions.h"
  #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
  
-@@ -2531,6 +2532,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
+@@ -2072,7 +2073,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+             // its attackers + self-heal gossip + watchdog) the whole way to the
+             // final boss. DriveEscortCreature returns false only once that boss
+             // exists, so we fall through to Drive and the completion gate latches.
+-            else if (step.kind == EventStepKind::EscortCreature)
++            // Natural progression never drives these shortcut steps: RunStep
++            // fails them, which skips an optional event and stalls a required one.
++            else if (step.kind == EventStepKind::EscortCreature && !DcEarnedPlay::Active())
+             {
+                 if (DriveEscortCreature(step, prog))
+                     return true;
+@@ -2083,7 +2086,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+             // tick and pin the leader on the lip (the prior attempts' failure).
+             // DriveDropInHole returns false once landed, so we fall through to
+             // Drive and RunStep's gate pulls the followers down + latches Done.
+-            else if (step.kind == EventStepKind::DropInHole)
++            else if (step.kind == EventStepKind::DropInHole && !DcEarnedPlay::Active())
+             {
+                 if (DriveDropInHole(step))
+                     return true;
+@@ -2093,7 +2096,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+             // approach every tick and the tank can't thread a house doorway to a
+             // barrel inside (it stalls "close but not inside"). Returns false once in
+             // cast range, so we fall through to Drive and RunStep fires the GO.
+-            else if (step.kind == EventStepKind::UseItemOnGO)
++            else if (step.kind == EventStepKind::UseItemOnGO && !DcEarnedPlay::Active())
+             {
+                 // Recover between barrels. DriveUseItemOnGO owns the tick at
+                 // DcRel::AtObjective (30) — above the NeedsRest triggers (26.5) —
+@@ -2129,7 +2132,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+             // step timeout. Recover between crates for the same reason the barrels
+             // do: this rung sits above NeedsRest (26.5), the five crates are 330yd
+             // apart end to end, and the party has the whole intro RP ahead of it.
+-            else if (step.kind == EventStepKind::UseItemAt)
++            else if (step.kind == EventStepKind::UseItemAt && !DcEarnedPlay::Active())
+             {
+                 switch (EventRestDecision())
+                 {
+@@ -2531,6 +2534,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
  
  bool DungeonClearBreakStuckCombatAction::Execute(Event /*event*/)
  {
@@ -191,7 +236,7 @@ index 5863371..0bfd101 100644
                  {
                      // Land him a few yards off the anchor on the tank's side rather
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
-index 59f79af..4065e4c 100755
+index 59f79af..f7b267f 100755
 --- a/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
 @@ -4,6 +4,8 @@
@@ -212,14 +257,16 @@ index 59f79af..4065e4c 100755
          Player* owner = const_cast<Event&>(event).getOwner();
          if (!owner)
              return false;
-@@ -305,6 +309,13 @@ bool DcOnAction::Execute(Event event)
+@@ -305,6 +309,15 @@ bool DcOnAction::Execute(Event event)
          return false;
      }
  
-+    if (DcEarnedPlay::Active() && (!DcEarnedPlay::SupportedMap(bot->GetMapId()) ||
-+        bot->GetMap()->IsRaid() || bot->GetMap()->IsHeroic()))
++    // A real player in the group may lead a clear wherever the party entered
++    // through the native portal checks. Autonomous parties use audited routes.
++    if (DcEarnedPlay::Active() && EarnedDungeonParties::AuthorizeInternalStart(bot, event) &&
++        !EarnedDungeonParties::RouteEnabled(bot->GetMapId()))
 +    {
-+        DcRefuse(botAI, bot, "Earned dungeon clear supports normal Ragefire Chasm and Stockades; this route is not enabled.");
++        DcRefuse(botAI, bot, "This instance is not an enabled autonomous earned route.");
 +        return false;
 +    }
 +
@@ -247,6 +294,29 @@ index 97f5205..b97418d 100644
          return false;  // never auto-release; bot stays a corpse until rezzed
  
      return AutoReleaseSpiritAction::isUseful();
+diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
+index 14ce525..dc0a73b 100644
+--- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "ObjectiveHookRegistry.h"
+ 
+ #include <atomic>
+@@ -887,6 +888,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
+ {
+     if (hookId == 0)
+         return ObjectiveArriveResult::Done;
++    // Hooks script shortcuts (granted items, faction swaps, forced damage and
++    // object states). Natural progression leaves such objectives to players.
++    if (DcEarnedPlay::Active())
++        return ObjectiveArriveResult::Blocked;
+ 
+     auto const& hooks = Hooks();
+     auto it = hooks.find(hookId);
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
 index c254542..866fbdf 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
@@ -375,26 +445,75 @@ index 74b95dd..3e78cf8 100644
  
      bool Evaluate(Player* bot)
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-index 8ad3b6e..a5fbc5f 100644
+index 8ad3b6e..b29e812 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
   * and/or modify it under version 3 of the License, or (at your option), any later version.
   */
  
++#include "DcEarnedEvents.h"
 +#include "DcEarnedPlay.h"
  #include "DungeonEventExecutor.h"
  
  #include <algorithm>
-@@ -489,7 +490,7 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
-                                          EventStep const& step, DungeonEventProgress& prog,
-                                          uint32 nowMs)
+@@ -174,6 +176,10 @@ namespace
+     {
+         if (bot->isMoving())
+             return;
++        // Earned parties walk only where the navigation mesh has a real route;
++        // the step then times out like any other unreachable interaction.
++        if (DcEarnedPlay::Active() && !DcEarnedPlay::ReachableLeg(bot, x, y, z))
++            return;
+         bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
+                                           /*generatePath*/ true, false);
+     }
+@@ -491,6 +497,10 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  {
--    if (!bot)
-+    if (!bot || DcEarnedPlay::Active())
+     if (!bot)
          return StepResult::Blocked;
++    // Natural progression performs only what an ordinary player could do here.
++    // A refused step fails: optional events are skipped, required ones stall.
++    if (DcEarnedPlay::Active() && !DcEarnedEvents::StepAllowed(step))
++        return StepResult::Failed;
  
      switch (step.kind)
+     {
+@@ -646,6 +656,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+                           bot->GetName(), go->GetGUID().ToString(), go->GetName());
+                 return StepResult::Running;
+             }
++            // Earned parties click like a client: their own key or none, within
++            // native interaction range, through the session's opcode handlers.
++            if (DcEarnedPlay::Active())
++            {
++                if ((step.itemId && !bot->HasItemCount(step.itemId, 1)) || !DcEarnedEvents::CanOpen(bot, go))
++                    return StepResult::Failed;
++                if (!go->IsWithinDistInMap(bot, step.reportUse ? INTERACTION_DISTANCE : go->GetInteractionDistance()))
++                {
++                    HopTo(bot, go->GetPositionX(), go->GetPositionY(), go->GetPositionZ());
++                    return StepResult::Running;
++                }
++                WorldPacket packet(step.reportUse ? CMSG_GAMEOBJ_REPORT_USE : CMSG_GAMEOBJ_USE, 8);
++                packet << go->GetGUID();
++                if (step.reportUse)
++                    bot->GetSession()->HandleGameobjectReportUse(packet);
++                else
++                    bot->GetSession()->HandleGameObjectUseOpcode(packet);
++                return StepResult::Done;
++            }
+             // A GO script that gates on a carried key item refuses a click from an
+             // empty bag without a word the headless harness can see (Karazhan's
+             // Blackened Urn under mod-individual-progression). Grant it first.
+@@ -1115,6 +1144,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+             if (step.itemId == 0)
+                 return StepResult::Done;
+             Item* item = bot->GetItemByEntry(step.itemId);
++            if (!item && DcEarnedPlay::Active())
++                return StepResult::Failed;  // only an item the bot earned itself
+             if (!item)
+             {
+                 bot->AddItem(step.itemId, 1);
 diff --git a/src/BgQueueFill/DcBgQueueFillManager.cpp b/src/BgQueueFill/DcBgQueueFillManager.cpp
 index aaef5a2..d66011b 100644
 --- a/src/BgQueueFill/DcBgQueueFillManager.cpp
@@ -425,12 +544,177 @@ index aaef5a2..d66011b 100644
  
      // Once, the first tick the feature is on — the playerbots config is
      // certainly loaded by then, which it may not be at script registration.
+diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
+new file mode 100644
+index 0000000..97ed0df
+--- /dev/null
++++ b/src/DcEarnedEvents.cpp
+@@ -0,0 +1,122 @@
++/*
++ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
++ * version 3 or (at your option) any later version.
++ */
++#include "DcEarnedEvents.h"
++
++#include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
++#include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcDifficulty.h"
++#include "DBCStores.h"
++#include "GameObject.h"
++#include "ObjectMgr.h"
++#include "Player.h"
++#include "SharedDefines.h"
++
++namespace
++{
++    enum class Opening { Closed, Click, Key };
++
++    // How a player opens a lock: a profession-free "open" lock is a plain
++    // click, an item lock needs the key itself. Picking locks is a rogue spell
++    // the event step does not cast, so it never counts here.
++    Opening LockOpening(uint32 lockId, Player* bot)
++    {
++        if (!lockId)
++            return Opening::Click;
++        LockEntry const* lock = sLockStore.LookupEntry(lockId);
++        if (!lock)
++            return Opening::Closed;
++        bool click = false;
++        for (uint8 i = 0; i < MAX_LOCK_CASE; ++i)
++        {
++            if (lock->Type[i] == LOCK_KEY_ITEM && lock->Index[i] && bot && bot->HasItemCount(lock->Index[i], 1))
++                return Opening::Key;
++            if (lock->Type[i] == LOCK_KEY_SKILL && SkillByLockType(LockType(lock->Index[i])) == SKILL_NONE)
++                click = true;
++        }
++        return click ? Opening::Click : Opening::Closed;
++    }
++
++    bool StepsAudited(DungeonEvent const& ev, std::string& reason)
++    {
++        for (EventStep const& step : ev.steps)
++        {
++            if (!DcEarnedEvents::StepAllowed(step) || step.kind == EventStepKind::UseItem || step.itemId)
++            {
++                reason = "event '" + ev.name + "' requires a scripted shortcut or a quest item";
++                return false;
++            }
++            if (step.kind != EventStepKind::UseGameObject)
++                continue;
++            GameObjectTemplate const* go = sObjectMgr->GetGameObjectTemplate(step.goEntry);
++            if (!go || LockOpening(go->GetLockId(), nullptr) != Opening::Click)
++            {
++                reason = "event '" + ev.name + "' requires a key or locked object";
++                return false;
++            }
++        }
++        return true;
++    }
++}
++
++namespace DcEarnedEvents
++{
++    bool StepAllowed(EventStep const& step)
++    {
++        switch (step.kind)
++        {
++            case EventStepKind::MoveTo:
++                return step.hookId == 0;
++            case EventStepKind::UseGameObject:
++            case EventStepKind::Gossip:
++            case EventStepKind::WaitForSpawn:
++            case EventStepKind::WaitForGameObjectState:
++            case EventStepKind::KillCreature:
++            case EventStepKind::ClearRadius:
++            case EventStepKind::Wait:
++            case EventStepKind::UseItem:
++                return true;
++            default:
++                return false;
++        }
++    }
++
++    bool CanOpen(Player* bot, GameObject* go)
++    {
++        if (!bot || !go || go->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE) ||
++            (go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot)))
++            return false;
++        Opening const opening = LockOpening(go->GetGOInfo()->GetLockId(), bot);
++        // A locked object opens only through its key, never by a click.
++        return go->HasGameObjectFlag(GO_FLAG_LOCKED) ? opening == Opening::Key : opening != Opening::Closed;
++    }
++
++    bool MapAudited(uint32 mapId, std::string& reason)
++    {
++        DcDiffKey const normal{false, DUNGEON_DIFFICULTY_NORMAL};
++        for (DungeonBossInfo const& info : BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL))
++        {
++            if (info.eventId)
++            {
++                DungeonEvent const* ev = DungeonEventRegistry::Find(mapId, info.eventId);
++                if (!ev)
++                {
++                    reason = "objective '" + info.name + "' has no event data";
++                    return false;
++                }
++                if (ev->required && DcGateMatches(ev->gate, normal) && !StepsAudited(*ev, reason))
++                    return false;
++            }
++            else if (info.onArriveHook)
++            {
++                reason = "objective '" + info.name + "' requires a scripted hook";
++                return false;
++            }
++        }
++        for (DungeonEvent const* ev : DungeonEventRegistry::Conditional(mapId, normal))
++            if (ev->required && !StepsAudited(*ev, reason))
++                return false;
++        return true;
++    }
++}
+diff --git a/src/DcEarnedEvents.h b/src/DcEarnedEvents.h
+new file mode 100644
+index 0000000..e4d6ecb
+--- /dev/null
++++ b/src/DcEarnedEvents.h
+@@ -0,0 +1,31 @@
++/*
++ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
++ * version 3 or (at your option) any later version.
++ */
++#ifndef DC_EARNED_EVENTS_H
++#define DC_EARNED_EVENTS_H
++#include "Define.h"
++#include <string>
++
++class GameObject;
++class Player;
++struct EventStep;
++
++// Scripted dungeon events under natural progression: only the actions an
++// ordinary player could perform at that spot. Shortcuts the upstream event
++// vocabulary uses (jumps across missing mesh, party teleports, granted quest
++// items, triggered spells, escort speed overrides, custom hooks) are refused.
++namespace DcEarnedEvents
++{
++    // Step kinds an earned party may run. Runtime checks still apply: real
++    // paths, owned items and the object's own lock.
++    bool StepAllowed(EventStep const& step);
++    // The object can be opened by a click now: no lock, an open lock without a
++    // profession, or a key item the bot carries. Lockpicking, spell locks and
++    // conditional interaction stay with players.
++    bool CanOpen(Player* bot, GameObject* go);
++    // Every required objective of the normal five-player map consists of
++    // ordinary steps. Autonomous parties start only on audited maps.
++    bool MapAudited(uint32 mapId, std::string& reason);
++}
++#endif
 diff --git a/src/DcEarnedPlay.h b/src/DcEarnedPlay.h
 new file mode 100644
-index 0000000..5c5038a
+index 0000000..f711d9e
 --- /dev/null
 +++ b/src/DcEarnedPlay.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,53 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -444,8 +728,6 @@ index 0000000..5c5038a
 +namespace DcEarnedPlay
 +{
 +    inline bool Active() { return sPlayerbotAIConfig.naturalProgression; }
-+    // Audited keyless, normal five-player instances without event shortcuts.
-+    inline bool SupportedMap(uint32 map) { return map == 34 || map == 389; }
 +    inline bool UsesRealPath(PathGenerator const& path)
 +    {
 +        auto const type = path.GetPathType();
@@ -486,29 +768,47 @@ index 0000000..5c5038a
 +    }
 +}
 +#endif
-diff --git a/src/DcStrategyGate.cpp b/src/DcStrategyGate.cpp
-index cd67f82..3085126 100644
---- a/src/DcStrategyGate.cpp
-+++ b/src/DcStrategyGate.cpp
-@@ -4,6 +4,7 @@
-  */
- 
- #include "DcStrategyGate.h"
-+#include "DcEarnedPlay.h"
- #include "DcModuleEnable.h"
- #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
- 
-@@ -75,7 +76,9 @@ namespace DcStrategyGate
-             return;  // real player (no bot AI) — nothing to gate
- 
-         Map* map = bot->GetMap();
--        bool const inDungeon = map && map->IsDungeon();
-+        bool const inDungeon = map && map->IsDungeon() &&
-+            (!DcEarnedPlay::Active() || (DcEarnedPlay::SupportedMap(map->GetId()) &&
-+                                       !map->IsRaid() && !map->IsHeroic()));
- 
-         bool const hasNon = botAI->HasStrategy(kNonCombat, BOT_STATE_NON_COMBAT);
-         bool const hasCmb = botAI->HasStrategy(kCombat, BOT_STATE_COMBAT);
+diff --git a/src/DcEarnedProgression.cpp b/src/DcEarnedProgression.cpp
+new file mode 100644
+index 0000000..606a1ba
+--- /dev/null
++++ b/src/DcEarnedProgression.cpp
+@@ -0,0 +1,17 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#include "DcEarnedProgression.h"
++#include "IndividualProgression.h"
++
++namespace DcEarnedProgression
++{
++    bool StrictDefault()
++    {
++        return sIndividualProgression->IsStrictDefaultProgression();
++    }
++
++    // The character's own rewarded progression markers decide its earned era.
++    bool BeforeTbc(Player* player)
++    {
++        return sIndividualProgression->GetPlayerProgressionFromQuests(player) < PROGRESSION_PRE_TBC;
++    }
++}
+diff --git a/src/DcEarnedProgression.h b/src/DcEarnedProgression.h
+new file mode 100644
+index 0000000..f7c75da
+--- /dev/null
++++ b/src/DcEarnedProgression.h
+@@ -0,0 +1,12 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#ifndef DC_EARNED_PROGRESSION_H
++#define DC_EARNED_PROGRESSION_H
++class Player;
++// IndividualProgression.h and PlayerbotAI.h both declare an unscoped GENERAL
++// enumerator, so the coordinator reads earned progression through this unit.
++namespace DcEarnedProgression
++{
++    bool StrictDefault();
++    bool BeforeTbc(Player* player);
++}
++#endif
 diff --git a/src/DungeonClearModule.cpp b/src/DungeonClearModule.cpp
 index 5699606..56fe6fd 100644
 --- a/src/DungeonClearModule.cpp
@@ -608,13 +908,15 @@ index 12ebee8..b8138ce 100644
  
 diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
 new file mode 100644
-index 0000000..5602da7
+index 0000000..a322e5a
 --- /dev/null
 +++ b/src/EarnedDungeonParties.cpp
-@@ -0,0 +1,509 @@
+@@ -0,0 +1,672 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "EarnedDungeonParties.h"
++#include "DcEarnedEvents.h"
 +#include "DcEarnedPlay.h"
++#include "DcEarnedProgression.h"
 +#include "DcModuleEnable.h"
 +#include "DcStrategyGate.h"
 +#include "Ai/Dungeon/DungeonClear/Action/DcActionShared.h"
@@ -625,9 +927,9 @@ index 0000000..5602da7
 +#include "Event.h"
 +#include "Group.h"
 +#include "GroupMgr.h"
-+#include "IndividualProgression.h"
 +#include "Log.h"
 +#include "LFGMgr.h"
++#include "MapMgr.h"
 +#include "MotionMaster.h"
 +#include "ObjectAccessor.h"
 +#include "ObjectMgr.h"
@@ -640,42 +942,50 @@ index 0000000..5602da7
 +#include <array>
 +#include <map>
 +#include <shared_mutex>
++#include <cctype>
++#include <cmath>
 +#include <cstdlib>
 +#include <utility>
++#include <optional>
 +#include <set>
++#include <sstream>
 +#include <string>
 +#include <vector>
 +
 +namespace
 +{
++    // Built from the Dungeon Finder, area trigger and area data of the world:
++    // the dungeon's own entrance and exit portals, its target level band and,
++    // for portals inside a capital, that capital's faction.
 +    struct Route
 +    {
-+        uint32 map, continent, entrance, exit;
++        uint32 dungeon, map, continent, entrance, exit;
 +        TeamId team;
 +        uint8 minLevel, maxLevel;
 +    };
-+    constexpr std::array<Route, 2> routes{{
-+        {389, 1, 2230, 2226, TEAM_HORDE, 15, 18},
-+        {34, 0, 101, 503, TEAM_ALLIANCE, 24, 28},
-+    }};
++    std::vector<Route> routes;
 +    constexpr uint32 walkTimeout = 10 * MINUTE * IN_MILLISECONDS;
 +    constexpr uint32 runTimeout = 90 * MINUTE * IN_MILLISECONDS;
++    constexpr uint32 stallTimeout = 5 * MINUTE * IN_MILLISECONDS;
 +    constexpr uint32 retryDelay = 15 * MINUTE * IN_MILLISECONDS;
 +    constexpr float recruitRange = 60.0f;
 +    constexpr float startRange = 1000.0f;
-+    bool enabled = false;
-+    uint32 maxConcurrent = 2, accumulator = 0, recruitAccumulator = 0;
++    constexpr uint8 vanillaLevelCap = 60;
++    bool enabled = false, routesDirty = true;
++    std::string configuredDungeons;
++    uint32 maxConcurrent = 2, levelSpread = 3, accumulator = 0, recruitAccumulator = 0;
++    size_t nextRoute = 0;
 +    thread_local bool internalStart = false;
 +    enum class Phase { Entering, Running, Returning };
 +    struct Party
 +    {
-+        Route const* route;
++        Route route;
 +        std::array<ObjectGuid, 5> members;
 +        ObjectGuid group;
 +        std::array<std::map<std::string, bool>, 5> strategies;
 +        std::array<bool, 5> changedNavigation{};
 +        std::array<bool, 5> invited{};
-+        uint32 started = 0;
++        uint32 started = 0, stalledSince = 0;
 +        Phase phase = Phase::Entering;
 +    };
 +    std::vector<Party> parties;
@@ -690,14 +1000,14 @@ index 0000000..5602da7
 +    bool Eligible(Player* player, Route const& route, Player* leader = nullptr)
 +    {
 +        if (!player || !player->IsInWorld() || !player->GetSession() || !player->IsAlive() || player->IsGameMaster() ||
-+            player->GetTeamId() != route.team || player->GetLevel() < route.minLevel ||
-+            player->GetLevel() > (leader ? 60 : route.maxLevel) || player->InBattleground() ||
++            (route.team != TEAM_NEUTRAL && player->GetTeamId() != route.team) || player->GetLevel() < route.minLevel ||
++            player->GetLevel() > (leader ? vanillaLevelCap : route.maxLevel) || player->InBattleground() ||
 +            player->InBattlegroundQueue() || !player->GetSession()->IsHeadless() ||
 +            sLFGMgr->GetState(player->GetGUID()) != lfg::LFG_STATE_NONE ||
 +            !sPlayerbotAIConfig.IsInRandomAccountList(player->GetSession()->GetAccountId()) ||
 +            player->IsBeingTeleported() || player->IsInFlight() || player->GetVehicle() || player->GetTransport() ||
 +            player->GetSession()->PlayerLoading() ||
-+            sIndividualProgression->GetPlayerProgressionFromQuests(player) >= PROGRESSION_PRE_TBC)
++            !DcEarnedProgression::BeforeTbc(player))
 +            return false;
 +        PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
 +        if (!ai || ai->HasGameClientMaster() ||
@@ -787,7 +1097,7 @@ index 0000000..5602da7
 +                if (std::find(party.members.begin(), party.members.end(), slot.guid) == party.members.end() ||
 +                    (member && !Owned(member, leader)))
 +                    ownedGroup = false;
-+                if (!member || member->GetMapId() != party.route->continent || member->IsBeingTeleported())
++                if (!member || member->GetMapId() != party.route.continent || member->IsBeingTeleported())
 +                    allOutside = false;
 +            }
 +        // A group claimed by a player or extended with another member is no
@@ -863,14 +1173,14 @@ index 0000000..5602da7
 +                allOutside = false;
 +                continue;
 +            }
-+            if (!Eligible(member, *party.route, leader) || member->GetGroup() != group)
++            if (!Eligible(member, party.route, leader) || member->GetGroup() != group)
 +            {
 +                Stop(party, "member died, changed control or lost eligibility; no resurrection or relocation granted");
 +                return false;
 +            }
 +            members[i] = member;
 +            ++roles[Role(member)];
-+            if (member->GetMapId() == party.route->map)
++            if (member->GetMapId() == party.route.map)
 +            {
 +                if (instance && instance != member->GetInstanceId())
 +                {
@@ -880,7 +1190,7 @@ index 0000000..5602da7
 +                instance = member->GetInstanceId();
 +                allOutside = false;
 +            }
-+            else if (member->GetMapId() == party.route->continent)
++            else if (member->GetMapId() == party.route.continent)
 +                allInside = false;
 +            else
 +            {
@@ -923,11 +1233,11 @@ index 0000000..5602da7
 +                party.phase = Phase::Running;
 +                party.started = getMSTime();
 +                LOG_INFO("playerbots.dungeonclear", "Earned dungeon party {} started real map {} instance {}",
-+                         party.group.ToString(), party.route->map, instance);
++                         party.group.ToString(), party.route.map, instance);
 +            }
 +            else
 +                for (Player* member : members)
-+                    if (!member->IsBeingTeleported() && member->GetMapId() == party.route->continent && !Walk(member, party.route->entrance))
++                    if (!member->IsBeingTeleported() && member->GetMapId() == party.route.continent && !Walk(member, party.route.entrance))
 +                    {
 +                        Stop(party, "no real navigation-mesh path to the entrance; autonomous run stopped");
 +                        return false;
@@ -941,10 +1251,21 @@ index 0000000..5602da7
 +                return false;
 +            }
 +            auto* context = GET_PLAYERBOT_AI(leader)->GetAiObjectContext();
-+            if (context->GetValue<std::string&>(DcKey::StallReason)->Get().find(
-+                    "No real navigation-mesh route") == 0)
++            std::string const& stall = context->GetValue<std::string&>(DcKey::StallReason)->Get();
++            if (stall.find("No real navigation-mesh route") == 0)
 +            {
 +                Stop(party, "no real navigation-mesh route inside the dungeon; autonomous run stopped");
++                return false;
++            }
++            // Events left to players, closed doors and unreachable objectives
++            // stall the clear. Nobody resolves them for an autonomous party.
++            if (stall.empty())
++                party.stalledSince = 0;
++            else if (!party.stalledSince)
++                party.stalledSince = getMSTime() | 1;
++            else if (getMSTimeDiff(party.stalledSince, getMSTime()) > stallTimeout)
++            {
++                Stop(party, "dungeon clear stalled on an objective earned parties cannot perform; autonomous run stopped");
 +                return false;
 +            }
 +            if (!DcRun::Of(GET_PLAYERBOT_AI(leader)).enabled)
@@ -961,13 +1282,143 @@ index 0000000..5602da7
 +                return false;
 +            }
 +            for (Player* member : members)
-+                if (!member->IsBeingTeleported() && member->GetMapId() == party.route->map && !Walk(member, party.route->exit))
++                if (!member->IsBeingTeleported() && member->GetMapId() == party.route.map && !Walk(member, party.route.exit))
 +                {
 +                    Stop(party, "no real navigation-mesh path to the exit; autonomous run stopped");
 +                    return false;
 +                }
 +        }
 +        return true;
++    }
++
++    std::vector<uint32> DungeonIds(std::string const& text)
++    {
++        std::vector<uint32> ids;
++        std::stringstream stream(text);
++        for (std::string token; std::getline(stream, token, ',');)
++        {
++            std::erase_if(token, [](unsigned char c) { return std::isspace(c); });
++            if (!token.empty() && token.size() < 10 &&
++                std::all_of(token.begin(), token.end(), [](unsigned char c) { return std::isdigit(c); }))
++                ids.push_back(uint32(std::stoul(token)));
++        }
++        return ids;
++    }
++
++    float Distance(float ax, float ay, float az, float bx, float by, float bz)
++    {
++        return std::sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by) + (az - bz) * (az - bz));
++    }
++
++    std::optional<Route> Discover(uint32 id, std::string& reason)
++    {
++        LFGDungeonEntry const* dungeon = sLFGDungeonStore.LookupEntry(id);
++        MapEntry const* instance = dungeon ? sMapStore.LookupEntry(dungeon->MapID) : nullptr;
++        if (!dungeon || !instance)
++        {
++            reason = "unknown Dungeon Finder id";
++            return std::nullopt;
++        }
++        if (dungeon->TypeID != lfg::LFG_TYPE_DUNGEON || dungeon->ExpansionLevel != 0 ||
++            dungeon->Difficulty != DUNGEON_DIFFICULTY_NORMAL || (dungeon->Flags & lfg::LFG_FLAG_SEASONAL) ||
++            !instance->IsNonRaidDungeon())
++        {
++            reason = "not a normal Vanilla five-player dungeon";
++            return std::nullopt;
++        }
++        if (!DcEarnedEvents::MapAudited(dungeon->MapID, reason))
++            return std::nullopt;
++        Route route{id, dungeon->MapID, 0, 0, 0, TEAM_NEUTRAL, 0, 0};
++        // Wings sharing one map (Scarlet Monastery, Dire Maul) each use the
++        // outdoor portal arriving closest to the wing's own starting point.
++        lfg::LFGDungeonData const* start = sLFGMgr->GetLFGDungeon(id);
++        AreaTriggerTeleport const* arrival = nullptr;
++        float best = 0.0f;
++        for (auto const& [trigger, teleport] : sObjectMgr->GetAllAreaTriggerTeleports())
++        {
++            AreaTrigger const* portal = sObjectMgr->GetAreaTrigger(trigger);
++            MapEntry const* outside = portal ? sMapStore.LookupEntry(portal->map) : nullptr;
++            if (teleport.target_mapId != route.map || !outside || !outside->IsContinent())
++                continue;
++            float const distance = start ? Distance(teleport.target_X, teleport.target_Y, teleport.target_Z,
++                                                    start->x, start->y, start->z) : 0.0f;
++            if (!arrival || distance < best)
++            {
++                arrival = &teleport;
++                best = distance;
++                route.entrance = trigger;
++                route.continent = portal->map;
++            }
++        }
++        if (!arrival)
++        {
++            reason = "no outdoor entrance portal";
++            return std::nullopt;
++        }
++        // Leave through the exit portal nearest to where the party arrived.
++        bool exitFound = false;
++        for (auto const& [trigger, teleport] : sObjectMgr->GetAllAreaTriggerTeleports())
++        {
++            AreaTrigger const* portal = sObjectMgr->GetAreaTrigger(trigger);
++            if (!portal || portal->map != route.map || teleport.target_mapId != route.continent)
++                continue;
++            float const distance = Distance(portal->x, portal->y, portal->z,
++                                            arrival->target_X, arrival->target_Y, arrival->target_Z);
++            if (!exitFound || distance < best)
++            {
++                exitFound = true;
++                best = distance;
++                route.exit = trigger;
++            }
++        }
++        if (!exitFound)
++        {
++            reason = "no exit portal to the entrance continent";
++            return std::nullopt;
++        }
++        // A portal inside a capital (Ragefire Chasm, the Stockade) is reached
++        // only by that capital's faction.
++        AreaTrigger const* entrance = sObjectMgr->GetAreaTrigger(route.entrance);
++        AreaTableEntry const* zone = sAreaTableStore.LookupEntry(
++            sMapMgr->GetZoneId(PHASEMASK_NORMAL, entrance->map, entrance->x, entrance->y, entrance->z));
++        if (zone && (zone->flags & AREA_FLAG_CAPITAL))
++            route.team = (zone->team & AREATEAM_ALLY) ? TEAM_ALLIANCE :
++                         (zone->team & AREATEAM_HORDE) ? TEAM_HORDE : TEAM_NEUTRAL;
++        // The dungeon's recommended band, widened by the configured spread and
++        // kept within its native entry levels and the Vanilla level cap.
++        uint32 const low = std::max(dungeon->MinLevel,
++                                    dungeon->TargetLevelMin ? dungeon->TargetLevelMin : dungeon->TargetLevel);
++        uint32 const target = std::max(dungeon->TargetLevelMax ? dungeon->TargetLevelMax : dungeon->TargetLevel, low);
++        uint32 const high = std::min<uint32>({dungeon->MaxLevel, target + levelSpread, vanillaLevelCap});
++        if (!low || low > high)
++        {
++            reason = "no level band within the Vanilla level cap";
++            return std::nullopt;
++        }
++        route.minLevel = uint8(low);
++        route.maxLevel = uint8(high);
++        return route;
++    }
++
++    void BuildRoutes()
++    {
++        routesDirty = false;
++        routes.clear();
++        nextRoute = 0;
++        for (uint32 id : DungeonIds(configuredDungeons))
++        {
++            if (std::any_of(routes.begin(), routes.end(), [id](Route const& route) { return route.dungeon == id; }))
++                continue;
++            std::string reason;
++            if (std::optional<Route> route = Discover(id, reason))
++            {
++                routes.push_back(*route);
++                LOG_INFO("playerbots.dungeonclear", "Earned dungeon route {} enabled: map {}, levels {}-{}, portals {}/{}",
++                         id, route->map, route->minLevel, route->maxLevel, route->entrance, route->exit);
++            }
++            else
++                LOG_INFO("playerbots.dungeonclear", "Earned dungeon route {} not enabled: {}", id, reason);
++        }
 +    }
 +
 +    bool Recruit(Route const& route, std::vector<Player*> const& online)
@@ -1009,7 +1460,7 @@ index 0000000..5602da7
 +            for (Candidate const& possible : candidates)
 +            {
 +                Player* candidate = possible.player;
-+                if (candidate == tank || candidate->GetMap() != tank->GetMap() ||
++                if (candidate == tank || candidate->GetMap() != tank->GetMap() || candidate->GetTeamId() != tank->GetTeamId() ||
 +                    candidate->GetExactDist(tank) > std::min(recruitRange, sPlayerbotAIConfig.sightDistance) ||
 +                    std::abs(int(candidate->GetLevel()) - int(tank->GetLevel())) > 2)
 +                    continue;
@@ -1022,7 +1473,7 @@ index 0000000..5602da7
 +            if (!picked[1] || damage != picked.size())
 +                continue;
 +            Party party;
-+            party.route = &route;
++            party.route = route;
 +            party.started = getMSTime();
 +            for (size_t i = 0; i < picked.size(); ++i)
 +            {
@@ -1080,6 +1531,15 @@ index 0000000..5602da7
 +    {
 +        enabled = sConfigMgr->GetOption<bool>("DungeonClear.AutonomousParties.Enable", false);
 +        maxConcurrent = std::clamp(sConfigMgr->GetOption<uint32>("DungeonClear.AutonomousParties.MaxConcurrent", 2), 1u, 8u);
++        configuredDungeons = sConfigMgr->GetOption<std::string>("DungeonClear.AutonomousParties.Dungeons", "4,12");
++        levelSpread = std::min(sConfigMgr->GetOption<uint32>("DungeonClear.AutonomousParties.LevelSpread", 3), 10u);
++        // World data is not loaded during startup configuration; resolve the
++        // routes on the next world tick. Running parties keep their copy.
++        routesDirty = true;
++    }
++    bool RouteEnabled(uint32 mapId)
++    {
++        return std::any_of(routes.begin(), routes.end(), [mapId](Route const& route) { return route.map == mapId; });
 +    }
 +    bool AuthorizeInternalStart(Player* bot, Event const& event)
 +    {
@@ -1095,7 +1555,7 @@ index 0000000..5602da7
 +            return;
 +        accumulator = 0;
 +        if (!enabled || !DcModule::IsEnabled() || !DcEarnedPlay::Active() ||
-+            !sIndividualProgression->IsStrictDefaultProgression())
++            !DcEarnedProgression::StrictDefault())
 +        {
 +            for (Party& party : parties)
 +                Stop(party, "autonomous earned parties disabled");
@@ -1103,7 +1563,9 @@ index 0000000..5602da7
 +            return;
 +        }
 +        std::erase_if(parties, [](Party& party) { return !TickParty(party); });
-+        if (recruitAccumulator < 30000 || parties.size() >= maxConcurrent)
++        if (routesDirty)
++            BuildRoutes();
++        if (recruitAccumulator < 30000 || parties.size() >= maxConcurrent || routes.empty())
 +            return;
 +        recruitAccumulator = 0;
 +        // The world-thread hook runs outside map updates. Player pointers are
@@ -1114,19 +1576,20 @@ index 0000000..5602da7
 +            for (auto const& [guid, player] : ObjectAccessor::GetPlayers())
 +                online.push_back(player);
 +        }
-+        for (Route const& route : routes)
-+            if (parties.size() < maxConcurrent)
-+                Recruit(route, online);
++        // Rotate the first route so every enabled dungeon gets recruitment turns.
++        for (size_t i = 0; i < routes.size() && parties.size() < maxConcurrent; ++i)
++            Recruit(routes[(nextRoute + i) % routes.size()], online);
++        nextRoute = (nextRoute + 1) % routes.size();
 +        uint32 const now = getMSTime();
 +        std::erase_if(retryAfter, [now](auto const& pair) { return getMSTimeDiff(pair.second, now) >= retryDelay; });
 +    }
 +}
 diff --git a/src/EarnedDungeonParties.h b/src/EarnedDungeonParties.h
 new file mode 100644
-index 0000000..8b52fac
+index 0000000..d595cd8
 --- /dev/null
 +++ b/src/EarnedDungeonParties.h
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,14 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#ifndef EARNED_DUNGEON_PARTIES_H
 +#define EARNED_DUNGEON_PARTIES_H
@@ -1138,6 +1601,7 @@ index 0000000..8b52fac
 +    void LoadConfig();
 +    void Update(uint32 diff);
 +    bool AuthorizeInternalStart(Player* bot, Event const& event);
++    bool RouteEnabled(uint32 mapId);
 +}
 +#endif
 diff --git a/src/TestRun/DcTestRunManager.cpp b/src/TestRun/DcTestRunManager.cpp

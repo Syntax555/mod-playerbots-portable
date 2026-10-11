@@ -72,6 +72,14 @@
       ]
     },
     {
+      "name": "mod-raid-clear",
+      "url": "https://github.com/buildthehomelab/wow-mod-raid-clear.git",
+      "revision": "6bf9d66876b5555f165002f4a329e89384556163",
+      "patches": [
+        "patches/mod-raid-clear-natural-progression.patch"
+      ]
+    },
+    {
       "name": "mod-quest-loot-party",
       "url": "https://github.com/pangolp/mod-quest-loot-party.git",
       "revision": "6f073c1bef1bba1aa73787d1e30db7429f2b1c7b"

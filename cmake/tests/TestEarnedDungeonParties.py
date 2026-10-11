@@ -21,17 +21,18 @@ STUBS = r'''
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <type_traits>
 #include <vector>
 using uint8=uint8_t;using uint32=uint32_t;using int32=int32_t;
 constexpr uint32 MINUTE=60,IN_MILLISECONDS=1000,CMSG_AREATRIGGER=1,FORCED_MOVEMENT_NONE=0,MOTION_SLOT_ACTIVE=1,ESCORT_MOTION_TYPE=2,FOLLOW_MOTION_TYPE=3;
-enum TeamId:uint8{TEAM_ALLIANCE=0,TEAM_HORDE=1};
+enum TeamId:uint8{TEAM_ALLIANCE=0,TEAM_HORDE=1,TEAM_NEUTRAL=2};
 struct ObjectGuid{uint32 id=0;bool operator<(ObjectGuid r)const{return id<r.id;}bool operator==(ObjectGuid r)const{return id==r.id;}bool operator!=(ObjectGuid r)const{return id!=r.id;}std::string ToString()const{return std::to_string(id);}bool IsEmpty()const{return id==0;}uint32 GetCounter()const{return id;}static const ObjectGuid Empty;};const ObjectGuid ObjectGuid::Empty{};
 struct Vec{float x=0,y=0,z=0;Vec operator-(Vec b)const{return {x-b.x,y-b.y,z-b.z};}float magnitude()const{return std::sqrt(x*x+y*y+z*z);}float GetPositionX()const{return x;}float GetPositionY()const{return y;}float GetPositionZ()const{return z;}};
 using Position=Vec;
 namespace Movement{using PointsArray=std::vector<Vec>;}
 enum PathType{PATHFIND_BLANK=0,PATHFIND_NORMAL=1,PATHFIND_SHORTCUT=2,PATHFIND_INCOMPLETE=4,PATHFIND_NOPATH=8,PATHFIND_NOT_USING_PATH=16,PATHFIND_SHORT=32,PATHFIND_FARFROMPOLY_START=64,PATHFIND_FARFROMPOLY_END=128,PATHFIND_FARFROMPOLY=192};
 class Player;class PlayerbotAI;class Group;
-struct AreaTriggerTeleport{uint32 target_mapId;};
+struct AreaTriggerTeleport{uint32 target_mapId;float target_X=0,target_Y=0,target_Z=0;};
 struct AreaTrigger{uint32 entry=0,map=0;float x=0,y=0,z=0,radius=2;};
 struct Map{uint32 id=0,instance=0;bool heroic=false;bool IsRaid()const{return false;}bool IsHeroic()const{return heroic;}uint32 GetId()const{return id;}};
 std::map<std::pair<uint32,uint32>,Map> maps;
@@ -62,14 +63,22 @@ void Session::HandleGroupInviteOpcode(WorldPacket& packet){Player* candidate=nul
 bool PlayerbotAI::CanMove(){return !bot->rooted;}
 bool PlayerbotAI::IsTank(Player* p,bool bySpec){return p->role==0&&(!bySpec||!p->temporaryForm);}bool PlayerbotAI::IsHeal(Player* p,bool){return p->role==1;}
 bool PlayerbotAI::DoSpecificAction(std::string name,Event,bool){if(name=="accept invitation"){if(!accept||!bot->invite)return false;Group* g=bot->invite;if(g->players.empty()){g->players.push_back(g->leader);g->leader->group=g;g->leader->invite=nullptr;}g->players.push_back(bot);bot->group=g;bot->invite=nullptr;master=g->leader;strategies={"follow","new rpg","grind","bg"};return true;}if(name=="dc on"){++started;if(!start)return false;run.enabled=true;return true;}return false;}
-struct ObjectMgr{std::map<uint32,AreaTrigger> triggers;AreaTrigger const* GetAreaTrigger(uint32 id){auto it=triggers.find(id);return it==triggers.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> targets;AreaTriggerTeleport const* GetAreaTriggerTeleport(uint32 id){auto it=targets.find(id);return it==targets.end()?nullptr:&it->second;}};
+struct ObjectMgr{std::map<uint32,AreaTrigger> triggers;AreaTrigger const* GetAreaTrigger(uint32 id){auto it=triggers.find(id);return it==triggers.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> targets;AreaTriggerTeleport const* GetAreaTriggerTeleport(uint32 id){auto it=targets.find(id);return it==targets.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> const& GetAllAreaTriggerTeleports(){return targets;}};
 ObjectMgr objectMgr;ObjectMgr* sObjectMgr=&objectMgr;
-void Session::HandleAreaTriggerOpcode(WorldPacket& packet){auto* at=sObjectMgr->GetAreaTrigger(packet.id);assert(at&&owner->IsInAreaTriggerRadius(at));++owner->doorCalls;if(owner->doorRefused)return;uint32 target=packet.id==101?34:packet.id==2230?389:packet.id==503?0:1;uint32 instance=(target==34||target==389)?owner->group->guid.id:0;auto& destination=maps[{target,instance}];destination={target,instance,false};owner->map=&destination;auto* exit=sObjectMgr->GetAreaTrigger(packet.id==101?503:packet.id==2230?2226:packet.id==503?101:2230);owner->position={exit->x+20,exit->y,exit->z};if(owner->pendingDoor){owner->transfer=true;owner->world=false;}owner->moving=false;}
+void Session::HandleAreaTriggerOpcode(WorldPacket& packet){auto* at=sObjectMgr->GetAreaTrigger(packet.id);assert(at&&owner->IsInAreaTriggerRadius(at));++owner->doorCalls;if(owner->doorRefused)return;uint32 origin=owner->GetMapId(),target=sObjectMgr->GetAreaTriggerTeleport(packet.id)->target_mapId;uint32 instance=target>1?owner->group->guid.id:0;auto& destination=maps[{target,instance}];destination={target,instance,false};owner->map=&destination;AreaTrigger const* exit=nullptr;for(auto const& [id,tp]:sObjectMgr->GetAllAreaTriggerTeleports())if(tp.target_mapId==origin&&sObjectMgr->GetAreaTrigger(id)->map==target)exit=sObjectMgr->GetAreaTrigger(id);owner->position={exit->x+20,exit->y,exit->z};if(owner->pendingDoor){owner->transfer=true;owner->world=false;}owner->moving=false;}
 uint32 fakeNow=0;uint32 getMSTime(){return fakeNow;}uint32 getMSTimeDiff(uint32 a,uint32 b){return b-a;}
 struct PlayerbotAIConfig{bool naturalProgression=true;float sightDistance=45.0f;std::set<uint32> random{1};bool IsInRandomAccountList(uint32 id){return random.count(id);}};PlayerbotAIConfig sPlayerbotAIConfig;
 struct IndividualProgression{bool enabled=true,strict=true;bool IsStrictDefaultProgression(){return enabled&&strict;}uint8 GetPlayerProgressionFromQuests(Player* p){return p->tier;}};IndividualProgression ip;IndividualProgression* sIndividualProgression=&ip;constexpr uint8 PROGRESSION_PRE_TBC=8;
-struct Config{std::map<std::string,uint32> settings{{"DungeonClear.AutonomousParties.Enable",1},{"DungeonClear.AutonomousParties.MaxConcurrent",2}};template<class T>T GetOption(char const* name,T def){auto it=settings.find(name);return it==settings.end()?def:static_cast<T>(it->second);}};Config config;Config* sConfigMgr=&config;
-namespace lfg{constexpr uint8 LFG_STATE_NONE=0;}struct LFGMgr{uint8 GetState(ObjectGuid guid){return ObjectAccessor::FindConnectedPlayer(guid)->rdf;}};LFGMgr lfgManager;LFGMgr* sLFGMgr=&lfgManager;
+namespace DcEarnedProgression{bool StrictDefault(){return sIndividualProgression->IsStrictDefaultProgression();}bool BeforeTbc(Player* p){return sIndividualProgression->GetPlayerProgressionFromQuests(p)<PROGRESSION_PRE_TBC;}}
+struct Config{std::map<std::string,uint32> settings{{"DungeonClear.AutonomousParties.Enable",1},{"DungeonClear.AutonomousParties.MaxConcurrent",2}};std::map<std::string,std::string> strings;template<class T>T GetOption(char const* name,T def){if constexpr(std::is_same_v<T,std::string>){auto it=strings.find(name);return it==strings.end()?def:it->second;}else{auto it=settings.find(name);return it==settings.end()?def:static_cast<T>(it->second);}}};Config config;Config* sConfigMgr=&config;
+namespace lfg{constexpr uint8 LFG_STATE_NONE=0;constexpr uint32 LFG_TYPE_DUNGEON=1,LFG_FLAG_SEASONAL=4;struct LFGDungeonData{float x=0,y=0,z=0;};}struct LFGMgr{std::map<uint32,lfg::LFGDungeonData> starts;uint8 GetState(ObjectGuid guid){return ObjectAccessor::FindConnectedPlayer(guid)->rdf;}lfg::LFGDungeonData const* GetLFGDungeon(uint32 id){auto it=starts.find(id);return it==starts.end()?nullptr:&it->second;}};
+// World data doubles: Dungeon Finder rows, maps, capital zones and the zone of a position.
+template<class T>struct Store{std::map<uint32,T> rows;T const* LookupEntry(uint32 id){auto it=rows.find(id);return it==rows.end()?nullptr:&it->second;}};
+struct LFGDungeonEntry{uint32 ID,MinLevel,MaxLevel,TargetLevel,TargetLevelMin,TargetLevelMax,MapID,Difficulty,Flags,TypeID,ExpansionLevel;};Store<LFGDungeonEntry> sLFGDungeonStore;
+struct MapEntry{uint32 id;bool instance,continent;bool IsNonRaidDungeon()const{return instance;}bool IsContinent()const{return continent;}};Store<MapEntry> sMapStore;
+struct AreaTableEntry{uint32 ID,flags,team;};Store<AreaTableEntry> sAreaTableStore;constexpr uint32 AREA_FLAG_CAPITAL=0x100,AREATEAM_ALLY=2,AREATEAM_HORDE=4,PHASEMASK_NORMAL=1,DUNGEON_DIFFICULTY_NORMAL=0;
+struct MapMgr{std::map<std::pair<uint32,int>,uint32> zones;uint32 GetZoneId(uint32,uint32 map,float x,float,float){auto it=zones.find({map,int(x)/100});return it==zones.end()?0:it->second;}};MapMgr mapMgr;MapMgr* sMapMgr=&mapMgr;
+namespace DcEarnedEvents{std::set<uint32> unaudited;bool MapAudited(uint32 map,std::string& reason){if(!unaudited.count(map))return true;reason="fixture objective requires a shortcut";return false;}}LFGMgr lfgManager;LFGMgr* sLFGMgr=&lfgManager;
 uint32 fakePathType=PATHFIND_NORMAL;bool fakePathBuild=true,fakeRaycastBlocked=false;
 class PathGenerator{
  Player* owner;Movement::PointsArray points;Vec actualEnd;bool raycast=false;
@@ -101,7 +110,13 @@ HARNESS = r'''
 #include "NativeProductionMethods.h"
 #include <iostream>
 std::vector<std::unique_ptr<Player>> actors;
-void reset(){parties.clear();retryAfter.clear();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;sPlayerbotAIConfig.sightDistance=45.0f;ip.enabled=true;ip.strict=true;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;EarnedDungeonParties::LoadConfig();objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34}},{503,{0}},{2230,{389}},{2226,{1}}};}
+void reset(){parties.clear();retryAfter.clear();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;sPlayerbotAIConfig.sightDistance=45.0f;ip.enabled=true;ip.strict=true;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
+ // Dungeon Finder rows: Ragefire Chasm 15-21 (target 15-16), Stockade 20-30 (target 22-25).
+ sLFGDungeonStore.rows={{4,{4,15,21,16,15,16,389,0,3,1,0}},{12,{12,20,30,24,22,25,34,0,3,1,0}}};lfgManager.starts={{4,{10,0,0}},{12,{10,0,0}}};
+ sMapStore.rows={{0,{0,false,true}},{1,{1,false,true}},{34,{34,true,false}},{389,{389,true,false}}};
+ sAreaTableStore.rows={{1519,{1519,0x100,AREATEAM_ALLY}},{1637,{1637,0x100,AREATEAM_HORDE}},{40,{40,0,AREATEAM_ALLY}},{17,{17,0,AREATEAM_HORDE}}};mapMgr.zones={{{0,0},1519},{{1,0},1637}};
+ DcEarnedEvents::unaudited.clear();EarnedDungeonParties::LoadConfig();}
+Route const* route(uint32 dungeon){for(auto const& r:routes)if(r.dungeon==dungeon)return &r;return nullptr;}
 Player* add(uint32 id,uint8 role,TeamId team=TEAM_ALLIANCE,uint8 level=25){actors.push_back(std::make_unique<Player>(id));auto* p=actors.back().get();p->role=role;p->team=team;p->level=level;auto& map=maps[{team==TEAM_ALLIANCE?0u:1u,0}];map={team==TEAM_ALLIANCE?0u:1u,0,false};p->map=&map;p->position={100+float(id%5),0,0};online[p->guid]=p;return p;}
 void five(uint32 first=1,TeamId team=TEAM_ALLIANCE,uint8 level=25){add(first,0,team,level);add(first+1,1,team,level);for(uint32 i=2;i<5;++i)add(first+i,2,team,level);}
 void tick(int count=1){for(int i=0;i<count;++i){fakeNow+=1000;EarnedDungeonParties::Update(1000);}}
@@ -114,7 +129,7 @@ int main(){
  actors[4]->transfer=false;actors[4]->world=true;actors[4]->pendingDoor=false;tick();assert(actors[0]->ai.started==1&&actors[0]->ai.run.enabled);for(auto& p:actors)assert(p->doorCalls==1&&p->ai.reconciled==1);unchanged();
  actors[0]->ai.run.enabled=false;tick();tick();walkToPortal(false);tick();tick();assert(parties.empty());for(auto& p:actors)assert(!p->group&&!p->ai.master&&p->doorCalls==2&&p->ai.HasStrategy("new rpg",0));unchanged();
  // Only eligible nearby earned random bots form a 1/1/3 party.
- for(int bad=0;bad<22;++bad){reset();five();Player* p=actors[4].get();switch(bad){case 0:p->session.headless=false;break;case 1:p->ai.humanMaster=true;break;case 2:p->ai.master=actors[3].get();break;case 3:p->tier=8;break;case 4:p->alive=false;break;case 5:p->gm=true;break;case 6:p->level=23;break;case 7:p->level=29;break;case 8:p->position.x=200;break;case 9:p->combat=true;break;case 10:p->session.account=900;break;case 11:p->rdf=2;break;case 12:p->team=TEAM_HORDE;break;case 13:p->role=1;break;case 14:p->world=false;break;case 15:p->vehicle=true;break;case 16:p->transport=true;break;case 17:p->transfer=true;break;case 18:p->flying=true;break;case 19:p->queue=true;break;case 20:p->session.loading=true;break;case 21:p->bg=true;break;}tick(30);assert(parties.empty());unchanged();}
+ for(int bad=0;bad<22;++bad){reset();five();Player* p=actors[4].get();switch(bad){case 0:p->session.headless=false;break;case 1:p->ai.humanMaster=true;break;case 2:p->ai.master=actors[3].get();break;case 3:p->tier=8;break;case 4:p->alive=false;break;case 5:p->gm=true;break;case 6:p->level=21;break;case 7:p->level=29;break;case 8:p->position.x=200;break;case 9:p->combat=true;break;case 10:p->session.account=900;break;case 11:p->rdf=2;break;case 12:p->team=TEAM_HORDE;break;case 13:p->role=1;break;case 14:p->world=false;break;case 15:p->vehicle=true;break;case 16:p->transport=true;break;case 17:p->transfer=true;break;case 18:p->flying=true;break;case 19:p->queue=true;break;case 20:p->session.loading=true;break;case 21:p->bg=true;break;}tick(30);assert(parties.empty());unchanged();}
  // Normal invitation security remains authoritative, and failed setup does not force add members.
  reset();five();actors[2]->ai.accept=false;tick(30);assert(parties.empty());for(auto& p:actors)assert(!p->group&&!p->invite);unchanged();
  // No navigation data/straight shortcut/snap across missing mesh can transport a party.
@@ -176,7 +191,39 @@ int main(){
  fakePathType=PATHFIND_NORMAL;DcLeaderSignal::SetLeaderDazeImmunity(walker,true);assert(walker->dazed&&walker->immunityGrants==0&&walker->dazeRemoved==0);
  DungeonClearBetterLootRollAction loot;loot.bot=walker;walker->session.headless=false;assert(loot.isUseful()&&loot.usefulCalls==1);
  sPlayerbotAIConfig.naturalProgression=false;assert(!loot.isUseful());walker->session.headless=true;DcLeaderSignal::SetLeaderDazeImmunity(walker,true);assert(walker->immunityGrants==1&&walker->dazeRemoved==1);
- reset();std::cout<<"Earned dungeon production coordinator: recruitment, real-path gates, portal pending ACK, complete parties, native exits, ownership, wipes, timeouts and concurrency passed\n";
+
+ // Routes come from the world data: portals, Dungeon Finder target bands widened by the
+ // spread within entry levels and level 60, and the capital faction of the entrance.
+ reset();tick();assert(routes.size()==2);
+ {auto* rfc=route(4);auto* sw=route(12);assert(rfc&&rfc->map==389&&rfc->continent==1&&rfc->entrance==2230&&rfc->exit==2226&&rfc->team==TEAM_HORDE&&rfc->minLevel==15&&rfc->maxLevel==19);
+  assert(sw&&sw->map==34&&sw->continent==0&&sw->entrance==101&&sw->exit==503&&sw->team==TEAM_ALLIANCE&&sw->minLevel==22&&sw->maxLevel==28);
+  assert(EarnedDungeonParties::RouteEnabled(389)&&EarnedDungeonParties::RouteEnabled(34)&&!EarnedDungeonParties::RouteEnabled(36));}
+ for(uint8 level:{22,28}){reset();five(1,TEAM_ALLIANCE,level);tick(30);assert(parties.size()==1);unchanged();}
+ for(uint8 level:{21,29}){reset();five(1,TEAM_ALLIANCE,level);tick(30);assert(parties.empty());unchanged();}
+ reset();config.settings["DungeonClear.AutonomousParties.LevelSpread"]=0;EarnedDungeonParties::LoadConfig();tick();assert(route(4)->maxLevel==16&&route(12)->maxLevel==25);
+ reset();config.settings["DungeonClear.AutonomousParties.LevelSpread"]=99;EarnedDungeonParties::LoadConfig();tick();assert(route(4)->maxLevel==21&&route(12)->maxLevel==30);
+ // A level-60 dungeon never admits a band above the Vanilla cap.
+ reset();sLFGDungeonStore.rows[40]={40,55,65,60,0,0,329,0,3,1,0};sMapStore.rows[329]={329,true,false};objectMgr.triggers[2216]={2216,0,1000,0,0,2};objectMgr.triggers[2221]={2221,329,10,0,0,2};objectMgr.targets[2216]={329,10,0,0};objectMgr.targets[2221]={0};config.strings["DungeonClear.AutonomousParties.Dungeons"]="40";EarnedDungeonParties::LoadConfig();tick();assert(route(40)&&route(40)->minLevel==60&&route(40)->maxLevel==60&&route(40)->team==TEAM_NEUTRAL);
+ // Unknown, non-Vanilla, raid or seasonal rows, duplicates and unaudited maps stay disabled.
+ reset();sLFGDungeonStore.rows[77]={77,58,68,62,61,63,543,0,3,1,1};sLFGDungeonStore.rows[78]={78,15,21,16,15,16,389,0,7,1,0};sLFGDungeonStore.rows[79]={79,60,83,60,60,63,409,0,0,2,0};
+ config.strings["DungeonClear.AutonomousParties.Dungeons"]=" 4, 999,77,78,79,4,x,12";EarnedDungeonParties::LoadConfig();DcEarnedEvents::unaudited.insert(34);tick();assert(routes.size()==1&&route(4)&&!route(12)&&!EarnedDungeonParties::RouteEnabled(34));
+ five();five(6,TEAM_HORDE,17);tick(30);assert(parties.size()==1&&parties[0].route.map==389);unchanged();
+ // A dungeon outside the capitals admits either faction, but never a mixed party.
+ auto neutral=[]{sLFGDungeonStore.rows[16]={16,22,32,26,24,27,47,0,3,1,0};sMapStore.rows[47]={47,true,false};objectMgr.triggers[244]={244,1,500,0,0,2};objectMgr.triggers[242]={242,47,10,0,0,2};objectMgr.targets[244]={47,10,0,0};objectMgr.targets[242]={1};mapMgr.zones[{1,5}]=17;lfgManager.starts[16]={10,0,0};config.strings["DungeonClear.AutonomousParties.Dungeons"]="16";EarnedDungeonParties::LoadConfig();};
+ auto onBarrens=[](uint32 first,TeamId team){for(uint32 id=first;id<first+5;++id){auto* p=online[ObjectGuid{id}];auto& map=maps[{1,0}];map={1,0,false};p->map=&map;p->team=team;p->position={500+float(id%5),0,0};}};
+ reset();neutral();five(1,TEAM_ALLIANCE,25);onBarrens(1,TEAM_ALLIANCE);tick(30);assert(route(16)->team==TEAM_NEUTRAL&&parties.size()==1);unchanged();
+ reset();neutral();five(1,TEAM_HORDE,25);onBarrens(1,TEAM_HORDE);tick(30);assert(parties.size()==1);unchanged();
+ reset();neutral();five(1,TEAM_ALLIANCE,25);onBarrens(1,TEAM_ALLIANCE);actors[1]->team=TEAM_HORDE;tick(30);assert(parties.empty());unchanged();
+ // Wings sharing a map use the portal arriving nearest their own start and its nearest exit.
+ reset();sLFGDungeonStore.rows[18]={18,27,37,31,29,32,189,0,3,1,0};sLFGDungeonStore.rows[165]={165,30,40,34,32,35,189,0,3,1,0};sMapStore.rows[189]={189,true,false};
+ lfgManager.starts[18]={100,0,0};lfgManager.starts[165]={900,0,0};objectMgr.triggers[45]={45,0,600,0,0,2};objectMgr.triggers[614]={614,0,610,0,0,2};objectMgr.targets[45]={189,105,0,0};objectMgr.targets[614]={189,905,0,0};
+ objectMgr.triggers[602]={602,189,100,0,0,2};objectMgr.triggers[608]={608,189,900,0,0,2};objectMgr.targets[602]={0};objectMgr.targets[608]={0};mapMgr.zones[{0,6}]=40;
+ config.strings["DungeonClear.AutonomousParties.Dungeons"]="18,165";EarnedDungeonParties::LoadConfig();tick();assert(route(18)->entrance==45&&route(18)->exit==602&&route(165)->entrance==614&&route(165)->exit==608&&route(18)->team==TEAM_NEUTRAL);
+ // Recruitment rotates through the enabled routes rather than always serving the first.
+ reset();config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=1;EarnedDungeonParties::LoadConfig();five(1,TEAM_ALLIANCE,25);five(6,TEAM_HORDE,17);tick(30);assert(parties.size()==1);uint32 firstMap=parties[0].route.map;parties[0].members={};parties.clear();for(auto& p:actors){p->group=nullptr;p->invite=nullptr;}retryAfter.clear();tick(30);assert(parties.size()==1&&parties[0].route.map!=firstMap);
+ // A clear stalled on an objective nobody performs ends after five minutes; progress resets it.
+ reset();five();tick(30);walkToPortal(true);tick();tick();assert(actors[0]->ai.run.enabled);actors[0]->ai.context.stall.str="I can't progress the event at Fixture on my own.";tick(200);actors[0]->ai.context.stall.str.clear();tick();actors[0]->ai.context.stall.str="Way blocked";tick(300);assert(parties.size()==1);tick(2);assert(parties.empty()&&!actors[0]->ai.run.enabled);for(auto& p:actors)assert(p->group);unchanged();
+ reset();std::cout<<"Earned dungeon production coordinator: recruitment, real-path gates, data-driven routes, capital factions, wings, level bands, portal pending ACK, complete parties, native exits, ownership, wipes, stalls, timeouts and concurrency passed\n";
 }
 '''
 
@@ -208,11 +255,17 @@ def native_contracts(core, source):
     assert '_useRaycast' in path and 'PATHFIND_INCOMPLETE' in path
     coordinator=(source/'EarnedDungeonParties.cpp').read_text()
     assert 'std::shared_lock<std::shared_mutex>' in coordinator and 'GetMemberSlots()' in coordinator
+    # Individual Progression stays out of the coordinator's translation unit
+    # (its GENERAL rank collides with playerbots' chat channel enumerator).
+    assert '#include "IndividualProgression.h"' not in coordinator
+    bridge=(source/'DcEarnedProgression.cpp').read_text()
+    assert 'GetPlayerProgressionFromQuests(player) < PROGRESSION_PRE_TBC' in bridge and 'IsStrictDefaultProgression()' in bridge
     # Production shortcut gates remain enforced even if an existing config
     # enables a provisioning/recovery option in the portable earned profile.
     gated={
       'Util/DcDungeonAccess.cpp': ('std::string GrantEntry(', '!bot || DcEarnedPlay::Active()'),
-      'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp': ('StepResult DungeonEventExecutor::RunStep(', '!bot || DcEarnedPlay::Active()'),
+      'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp': ('StepResult DungeonEventExecutor::RunStep(', 'if (DcEarnedPlay::Active() && !DcEarnedEvents::StepAllowed(step))\n        return StepResult::Failed;'),
+      'Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp': ('ObjectiveArriveResult ObjectiveHookRegistry::Run(', 'if (DcEarnedPlay::Active())\n        return ObjectiveArriveResult::Blocked;'),
       'Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp': ('bool RegroupAtEntrance(', 'if (DcEarnedPlay::Active())'),
       'Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp': ('bool TryFarFromPolyRecovery(', 'if (DcEarnedPlay::Active())'),
       'Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp': ('void Update(', 'if (DcEarnedPlay::Active())'),
@@ -221,7 +274,16 @@ def native_contracts(core, source):
     }
     for path,(signature,gate) in gated.items():
         assert gate in function((source/path).read_text(),signature), path
-    print('Native dungeon contracts: joined map workers, invitation security/reset, summon refusal, group ownership and production shortcut gates verified')
+    # Earned events click through the client opcodes with the bot's own key and
+    # never receive a granted quest item; shortcut drivers are not reached.
+    run_step=function((source/'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp').read_text(),'StepResult DungeonEventExecutor::RunStep(')
+    earned_use=run_step[run_step.index('            if (DcEarnedPlay::Active())\n            {'):run_step.index('// A GO script that gates on a carried key item')]
+    assert 'DcEarnedEvents::CanOpen(bot, go)' in earned_use and 'HandleGameObjectUseOpcode(packet)' in earned_use and 'AddItem' not in earned_use
+    assert 'if (!item && DcEarnedPlay::Active())\n                return StepResult::Failed;' in run_step
+    engage=(source/'Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp').read_text()
+    for kind in ('EscortCreature','DropInHole','UseItemOnGO','UseItemAt'):
+        assert f'step.kind == EventStepKind::{kind} && !DcEarnedPlay::Active()' in engage, kind
+    print('Native dungeon contracts: joined map workers, invitation security/reset, summon refusal, group ownership, event shortcut and production shortcut gates verified')
 
 
 def main():
@@ -240,10 +302,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix='earned-dungeons-') as temp:
         work=Path(temp)
         (work/'NativeStubs.h').write_text(STUBS)
-        headers=('Define.h','PlayerbotAIConfig.h','PathGenerator.h','Player.h','DcModuleEnable.h','DcStrategyGate.h','Ai/Dungeon/DungeonClear/Action/DcActionShared.h','Ai/Dungeon/DungeonClear/Util/DcRun.h','Ai/Dungeon/DungeonClear/DcValueKeys.h','Config.h','DBCStores.h','Event.h','Group.h','GroupMgr.h','IndividualProgression.h','Log.h','LFGMgr.h','MotionMaster.h','ObjectAccessor.h','ObjectMgr.h','Playerbots.h','PlayerbotAI.h','Timer.h','WorldPacket.h','WorldSession.h')
+        headers=('Define.h','MapMgr.h','PlayerbotAIConfig.h','PathGenerator.h','Player.h','DcModuleEnable.h','DcStrategyGate.h','Ai/Dungeon/DungeonClear/Action/DcActionShared.h','Ai/Dungeon/DungeonClear/Util/DcRun.h','Ai/Dungeon/DungeonClear/DcValueKeys.h','Config.h','DBCStores.h','Event.h','Group.h','GroupMgr.h','IndividualProgression.h','Log.h','LFGMgr.h','MotionMaster.h','ObjectAccessor.h','ObjectMgr.h','Playerbots.h','PlayerbotAI.h','Timer.h','WorldPacket.h','WorldSession.h')
         for name in headers:
             path=work/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('#include "NativeStubs.h"\n')
-        for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedPlay.h'):
+        for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedPlay.h','DcEarnedEvents.h','DcEarnedProgression.h'):
             shutil.copyfile(source/name,work/name)
         methods=function((source/'Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp').read_text(),'void DcLeaderSignal::SetLeaderDazeImmunity(')+'\n'+function((source/'Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp').read_text(),'bool DungeonClearBetterLootRollAction::isUseful(')
         follow=function((source/'Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp').read_text(),'bool DungeonClearFollowTankAction::Execute(')
@@ -261,10 +323,15 @@ def main():
         mutations=[
             ('missing navmesh guard','DcEarnedPlay.h','auto const type = path.GetPathType();','return true;\n        auto const type = path.GetPathType();'),
             ('raw wall-crossing spline','DcEarnedPlay.h','leg.SetUseRaycast(true);','leg.SetUseRaycast(false);'),
-            ('member era bypass','EarnedDungeonParties.cpp','sIndividualProgression->GetPlayerProgressionFromQuests(player) >= PROGRESSION_PRE_TBC','false'),
+            ('member era bypass','EarnedDungeonParties.cpp','!DcEarnedProgression::BeforeTbc(player)','false'),
             ('partial-party start','EarnedDungeonParties.cpp','if (allInside)','if (true)'),
             ('lost group ownership','EarnedDungeonParties.cpp','if (group && !ownedGroup)','if (false)'),
             ('premature navigation takeover','EarnedDungeonParties.cpp','members[i] = member;\n            ++roles[Role(member)];','members[i] = member;\n            HoldNavigation(member);\n            ++roles[Role(member)];'),
+            ('mixed-faction party','EarnedDungeonParties.cpp','candidate->GetMap() != tank->GetMap() || candidate->GetTeamId() != tank->GetTeamId() ||','candidate->GetMap() != tank->GetMap() ||'),
+            ('capital faction ignored','EarnedDungeonParties.cpp','if (zone && (zone->flags & AREA_FLAG_CAPITAL))','if (false)'),
+            ('unaudited dungeon route','EarnedDungeonParties.cpp','if (!DcEarnedEvents::MapAudited(dungeon->MapID, reason))','if (false)'),
+            ('band above the Vanilla cap','EarnedDungeonParties.cpp','target + levelSpread, vanillaLevelCap}','target + levelSpread, 255u}'),
+            ('endless stalled run','EarnedDungeonParties.cpp','else if (getMSTimeDiff(party.stalledSince, getMSTime()) > stallTimeout)','else if (false)'),
             ('uncontrolled persistent follower path','NativeProductionMethods.h','if (DcEarnedPlay::Active())','if (false)'),
             ('free daze immunity','NativeProductionMethods.h','if (apply && !DcEarnedPlay::Active())','if (apply)'),
         ]
