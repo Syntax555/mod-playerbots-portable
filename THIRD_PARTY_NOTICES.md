@@ -33,6 +33,7 @@ applicable.
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | MIT root license; source also includes GPL and AGPL notices. | `licenses/mod-individual-progression/LICENSE`, `licenses/GPL-2.0.txt`, `licenses/AGPL-3.0.txt` |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | GPL-2.0-or-later source notice. | `licenses/mod-ah-bot-plus/NOTICE.txt`, `licenses/GPL-2.0.txt` |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | AGPL-3.0-or-later upstream license declaration. | `licenses/mod-dungeon-clear/LICENSE`, `licenses/AGPL-3.0.txt` |
+| [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | MIT upstream license text. | `licenses/mod-raid-clear/LICENSE` |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | AGPL version 3 license text and source notice. | `licenses/mod-quest-loot-party/LICENSE`, `licenses/AGPL-3.0.txt` |
 | [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | AGPL version 3 declaration in the upstream README. | `licenses/mod-world-buff-bots/NOTICE.txt`, `licenses/AGPL-3.0.txt` |
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | AGPL version 3 upstream license text. | `licenses/mod-lfg-progression/LICENSE`, `licenses/AGPL-3.0.txt` |

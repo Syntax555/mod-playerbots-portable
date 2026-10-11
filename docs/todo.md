@@ -7,34 +7,53 @@ source implementation; planned work is not a claim of release support.
 
 | Area | Implementation and limits |
 | --- | --- |
-| Autonomous dungeons | Five nearby random bots can form a party and walk to Ragefire Chasm or the Stockade. Combat and navigation use Dungeon Clear and Playerbots. |
-| Dungeon Clear access | With natural progression enabled, the integration permits only those two normal instances, including manually started runs. Other dungeons, heroic instances and raids are blocked for Dungeon Clear. |
-| Raid parties | Automatic recruitment and travel for raid groups are not implemented. Player-led groups retain ordinary Playerbots encounter support. |
+| Autonomous dungeons | Five nearby random bots of one faction form a party and walk to a normal Vanilla dungeon within its level band. Wailing Caverns, the Deadmines, Uldaman, Zul'Farrak and Blackrock Depths are not enabled because a required objective uses a scripted shortcut. |
+| Player-led clears | A real player's group can run Dungeon Clear in any dungeon or raid it entered. Events run only through ordinary actions; an event that needs a shortcut stalls for the player. |
+| Raids | Raid Clear adds Molten Core, Blackwing Lair and Zul'Gurub mechanics to player-led raids. Autonomous raid recruitment and travel are not implemented. AutoBalance scales raids to the group size. |
 | Historical class quests | Selected priest families are restored. Other classes retain the core and Individual Progression implementations. |
-| Validation | Selected native handlers and package contracts have automated checks. Complete live dungeon runs and all historical class quests have not been verified. |
+| Validation | The party coordinator, the event audit and selected native handlers have automated checks. Complete live dungeon and raid runs and all historical class quests have not been verified. |
 
-## Dungeon and raid integration
+See [bot dungeons and raids](bot-dungeons.md), [class quests](class-quests.md)
+and [server adaptations](adaptations.md) for current behavior.
 
-- [ ] Separate autonomous route availability from Dungeon Clear access so its
-  existing supported content can be used with earned progression and ordinary
-  gameplay rules.
-- [ ] Extend party selection and physical travel to eligible upstream-supported
-  dungeons across Vanilla, TBC and Wrath. Reuse Dungeon Clear's encounter engine;
-  retain each bot's own equipment, progress and entry requirements.
-- [ ] Add raid recruitment and travel with the appropriate group sizes,
-  attunements and instance lockouts. Verify which upstream raid encounters work
-  under the same gameplay rules before advertising support.
+## Dungeon integration
+
+- [ ] Earned replacements for the refused Dungeon Clear events so the remaining
+  Vanilla dungeons can be enabled: Wailing Caverns (Serpentis and lower-cavern
+  drops over real paths, the Disciple of Naralex escort without speed
+  overrides), the Deadmines (Defias Cannon with gunpowder the party carries),
+  Uldaman (the altars through the player interaction), Zul'Farrak (waking
+  Witch Doctor Zum'rah as a player does) and Blackrock Depths (the Ring of Law
+  through its arena trigger).
+- [ ] Extend autonomous parties to TBC and Wrath dungeons for bots with the
+  matching earned era, using the same route discovery and event audit.
+
+## Raid integration
+
+- [ ] Autonomous raid recruitment and travel: 10-, 20- and 40-player groups
+  with tank and healer quotas, recruited nearby and walking to the entrance.
+  Optimal Bot Raid's role quotas are a reference; its teleports, level
+  relaxation and factory refresh are not compatible with earned play.
+- [ ] Bots earn raid attunements and keys through their own quest progress
+  (Drakefire Amulet, Blackhand's Command, Naxxramas) and respect instance
+  lockouts.
+- [ ] Molten Core rune dousing with Aqual Quintessence earned by a bot.
+- [ ] Raid Clear coverage for Onyxia, the Ahn'Qiraj raids and Naxxramas as
+  upstream adds them; verify each raid before relying on it.
+- [ ] Optional original raid difficulty: disable AutoBalance for 20- and
+  40-player raids (`AutoBalance.Enable.20M`, `AutoBalance.Enable.40M`) once
+  full bot raids are available, keeping party scaling for dungeons.
 
 ## Gameplay validation
 
-- [ ] Verify complete dungeon and raid runs in-game: walking to the entrance,
-  combat, loot rolls, quest objectives, wipes and normal recovery. Confirm bot
+- [ ] Verify complete runs in-game for each enabled Vanilla dungeon: walking to
+  the entrance, combat, loot rolls, quest objectives, wipes and normal recovery.
+  Remove a failing dungeon from the default list until it is fixed. Confirm bot
   logout after the last real player session ends.
+- [ ] Verify player-led Molten Core, Blackwing Lair and Zul'Gurub raids with
+  Raid Clear, including the Suppression Room without the raid cheat.
 - [ ] Audit historical class quests beyond the restored priest families across
   Vanilla, TBC and Wrath, including teacher availability, objectives, rewards
   and paid training. Apply targeted fixes for confirmed discrepancies.
 - [ ] Record verified content and remaining limits in the public guides,
   including matching EraTalents and MultiBot inspection behavior.
-
-See [bot dungeons](bot-dungeons.md), [class quests](class-quests.md) and
-[server adaptations](adaptations.md) for current behavior.

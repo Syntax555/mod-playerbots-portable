@@ -127,6 +127,11 @@ try {
         }
         $textSources['docs/bot-dungeons.md'] = 'docs/bot-dungeons.md'
     }
+    if (@($lock.modules | Where-Object { $_.name -eq 'mod-raid-clear' }).Count -gt 0) {
+        foreach ($name in @('configs/modules/mod_raid_clear.conf.dist', 'licenses/mod-raid-clear/LICENSE')) {
+            if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+        }
+    }
     foreach ($name in $textSources.Keys) {
         $reader = [System.IO.StreamReader]::new($entries[$name].Open())
         try { $packagedText = $reader.ReadToEnd() } finally { $reader.Dispose() }

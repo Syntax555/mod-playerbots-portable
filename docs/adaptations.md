@@ -30,7 +30,9 @@ See [updates, moving the server and recovery](updating.md) for operating steps.
 | Manual training | MultiBot purchases use the bot's current wallet and core trainer pricing, including reputation discounts. NPC access and the paid transaction remain native; autonomous spending keeps its AI budget. Optional preset discovery accepts absent entries without missing-key warnings. |
 | Battlegrounds | Supported queues and matches follow each participant's earned era and level. Ordinary minimum team sizes apply; no automatic equipment or level catch-up is supplied. |
 | World buffs | Simulated Vanilla events check each recipient's own rewarded milestones and native eligibility. TBC buffs retain ordinary quest, world-state and personal progression conditions. |
-| Autonomous dungeons | Suitable nearby random bots form real five-member parties for Ragefire Chasm or the Stockade and walk to the physical portal. Natural progression refuses movement shortcuts and unsupported maps. |
+| Autonomous dungeons | Suitable nearby random bots form real five-member parties for normal Vanilla dungeons whose objectives need no scripted shortcut, and walk to the physical portal. Routes come from the world data. |
+| Player-led clears | A real player's group can run Dungeon Clear in any dungeon or raid it entered. Events run only through ordinary actions; movement, item, key and scripted-event shortcuts are refused. |
+| Raid tactics | Raid Clear adds Molten Core, Blackwing Lair and Zul'Gurub mechanics. Only an equipped Onyxia Scale Cloak protects, and Suppression Devices are disarmed through the rogue's own spell. |
 
 Settings and scope are documented in [configuration](vanilla-config-audit.md),
 [bot brackets and PvP](earned-bot-brackets.md) and
