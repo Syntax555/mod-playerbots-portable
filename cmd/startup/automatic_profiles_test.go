@@ -154,7 +154,8 @@ func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			current := profiles["playerbots.conf"]
+			// Windows checkouts embed CRLF profiles; the fixture uses LF on every platform.
+			current := strings.ReplaceAll(profiles["playerbots.conf"], "\r\n", "\n")
 			if value, ok := configValue(current, "AiPlayerbot.DisabledWithoutRealPlayer"); !ok || value != "1" {
 				t.Fatal("player-presence default is missing from the effective profile")
 			}
