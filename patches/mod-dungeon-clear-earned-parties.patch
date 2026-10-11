@@ -1,5 +1,5 @@
 diff --git a/conf/mod_dungeon_clear.conf.dist b/conf/mod_dungeon_clear.conf.dist
-index a02ebcc..ff47bf4 100644
+index a02ebcc..3da528a 100644
 --- a/conf/mod_dungeon_clear.conf.dist
 +++ b/conf/mod_dungeon_clear.conf.dist
 @@ -2034,3 +2034,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
@@ -14,11 +14,11 @@ index a02ebcc..ff47bf4 100644
 +DungeonClear.AutonomousParties.Enable = 0
 +DungeonClear.AutonomousParties.MaxConcurrent = 2
 +
-+# Normal Vanilla dungeons by Dungeon Finder id. Entrance and exit portals,
++# Normal Vanilla, TBC and Wrath dungeons by Dungeon Finder id. Entrance and exit portals,
 +# level band and capital faction come from the world data. A dungeon whose
 +# required Dungeon Clear objectives need a scripted shortcut, a quest item or a
 +# key is skipped and logged. Bot levels follow the dungeon's recommended band,
-+# extended upward by LevelSpread (0-10) within its entry range and level 60.
++# extended upward by LevelSpread (0-10) within its entry range and its expansion's level cap (60/70/80).
 +DungeonClear.AutonomousParties.Dungeons = "4,12"
 +DungeonClear.AutonomousParties.LevelSpread = 3
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
@@ -546,10 +546,10 @@ index aaef5a2..d66011b 100644
      // certainly loaded by then, which it may not be at script registration.
 diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
 new file mode 100644
-index 0000000..97ed0df
+index 0000000..749bdc4
 --- /dev/null
 +++ b/src/DcEarnedEvents.cpp
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,125 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -667,7 +667,10 @@ index 0000000..97ed0df
 +            }
 +        }
 +        for (DungeonEvent const* ev : DungeonEventRegistry::Conditional(mapId, normal))
-+            if (ev->required && !StepsAudited(*ev, reason))
++            // Optional encounter controllers can still own the only movement,
++            // gossip or pull that advances required progress gates. Refusing
++            // that controller must refuse autonomous recruitment as well.
++            if ((ev->required || ev->ownsThePull || ev->stepsOwnMovement) && !StepsAudited(*ev, reason))
 +                return false;
 +        return true;
 +    }
@@ -770,10 +773,10 @@ index 0000000..f711d9e
 +#endif
 diff --git a/src/DcEarnedProgression.cpp b/src/DcEarnedProgression.cpp
 new file mode 100644
-index 0000000..606a1ba
+index 0000000..b945e3b
 --- /dev/null
 +++ b/src/DcEarnedProgression.cpp
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,22 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "DcEarnedProgression.h"
 +#include "IndividualProgression.h"
@@ -786,27 +789,34 @@ index 0000000..606a1ba
 +    }
 +
 +    // The character's own rewarded progression markers decide its earned era.
-+    bool BeforeTbc(Player* player)
++    uint8 Expansion(Player* player)
 +    {
-+        return sIndividualProgression->GetPlayerProgressionFromQuests(player) < PROGRESSION_PRE_TBC;
++        uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
++        if (stage > PROGRESSION_WOTLK_TIER_5)
++            return 3;
++        if (stage >= PROGRESSION_TBC_TIER_5)
++            return 2;
++        return stage >= PROGRESSION_PRE_TBC ? 1 : 0;
 +    }
 +}
 diff --git a/src/DcEarnedProgression.h b/src/DcEarnedProgression.h
 new file mode 100644
-index 0000000..f7c75da
+index 0000000..04fe3c1
 --- /dev/null
 +++ b/src/DcEarnedProgression.h
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,14 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#ifndef DC_EARNED_PROGRESSION_H
 +#define DC_EARNED_PROGRESSION_H
++#include "Define.h"
 +class Player;
 +// IndividualProgression.h and PlayerbotAI.h both declare an unscoped GENERAL
 +// enumerator, so the coordinator reads earned progression through this unit.
 +namespace DcEarnedProgression
 +{
 +    bool StrictDefault();
-+    bool BeforeTbc(Player* player);
++    // Returns 0 (Vanilla), 1 (TBC), 2 (Wrath), or 3 for an invalid marker stage.
++    uint8 Expansion(Player* player);
 +}
 +#endif
 diff --git a/src/DungeonClearModule.cpp b/src/DungeonClearModule.cpp
@@ -908,10 +918,10 @@ index 12ebee8..b8138ce 100644
  
 diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
 new file mode 100644
-index 0000000..a322e5a
+index 0000000..3bd74d4
 --- /dev/null
 +++ b/src/EarnedDungeonParties.cpp
-@@ -0,0 +1,672 @@
+@@ -0,0 +1,675 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "EarnedDungeonParties.h"
 +#include "DcEarnedEvents.h"
@@ -961,7 +971,7 @@ index 0000000..a322e5a
 +    {
 +        uint32 dungeon, map, continent, entrance, exit;
 +        TeamId team;
-+        uint8 minLevel, maxLevel;
++        uint8 expansion, minLevel, maxLevel;
 +    };
 +    std::vector<Route> routes;
 +    constexpr uint32 walkTimeout = 10 * MINUTE * IN_MILLISECONDS;
@@ -970,7 +980,10 @@ index 0000000..a322e5a
 +    constexpr uint32 retryDelay = 15 * MINUTE * IN_MILLISECONDS;
 +    constexpr float recruitRange = 60.0f;
 +    constexpr float startRange = 1000.0f;
-+    constexpr uint8 vanillaLevelCap = 60;
++    constexpr uint8 ExpansionLevelCap(uint32 expansion)
++    {
++        return expansion == 0 ? 60 : expansion == 1 ? 70 : expansion == 2 ? 80 : 0;
++    }
 +    bool enabled = false, routesDirty = true;
 +    std::string configuredDungeons;
 +    uint32 maxConcurrent = 2, levelSpread = 3, accumulator = 0, recruitAccumulator = 0;
@@ -1001,13 +1014,13 @@ index 0000000..a322e5a
 +    {
 +        if (!player || !player->IsInWorld() || !player->GetSession() || !player->IsAlive() || player->IsGameMaster() ||
 +            (route.team != TEAM_NEUTRAL && player->GetTeamId() != route.team) || player->GetLevel() < route.minLevel ||
-+            player->GetLevel() > (leader ? vanillaLevelCap : route.maxLevel) || player->InBattleground() ||
++            player->GetLevel() > (leader ? ExpansionLevelCap(route.expansion) : route.maxLevel) || player->InBattleground() ||
 +            player->InBattlegroundQueue() || !player->GetSession()->IsHeadless() ||
 +            sLFGMgr->GetState(player->GetGUID()) != lfg::LFG_STATE_NONE ||
 +            !sPlayerbotAIConfig.IsInRandomAccountList(player->GetSession()->GetAccountId()) ||
 +            player->IsBeingTeleported() || player->IsInFlight() || player->GetVehicle() || player->GetTransport() ||
 +            player->GetSession()->PlayerLoading() ||
-+            !DcEarnedProgression::BeforeTbc(player))
++            DcEarnedProgression::Expansion(player) != route.expansion)
 +            return false;
 +        PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
 +        if (!ai || ai->HasGameClientMaster() ||
@@ -1319,16 +1332,16 @@ index 0000000..a322e5a
 +            reason = "unknown Dungeon Finder id";
 +            return std::nullopt;
 +        }
-+        if (dungeon->TypeID != lfg::LFG_TYPE_DUNGEON || dungeon->ExpansionLevel != 0 ||
++        if (dungeon->TypeID != lfg::LFG_TYPE_DUNGEON || dungeon->ExpansionLevel > 2 ||
 +            dungeon->Difficulty != DUNGEON_DIFFICULTY_NORMAL || (dungeon->Flags & lfg::LFG_FLAG_SEASONAL) ||
 +            !instance->IsNonRaidDungeon())
 +        {
-+            reason = "not a normal Vanilla five-player dungeon";
++            reason = "not a normal supported-expansion five-player dungeon";
 +            return std::nullopt;
 +        }
 +        if (!DcEarnedEvents::MapAudited(dungeon->MapID, reason))
 +            return std::nullopt;
-+        Route route{id, dungeon->MapID, 0, 0, 0, TEAM_NEUTRAL, 0, 0};
++        Route route{id, dungeon->MapID, 0, 0, 0, TEAM_NEUTRAL, uint8(dungeon->ExpansionLevel), 0, 0};
 +        // Wings sharing one map (Scarlet Monastery, Dire Maul) each use the
 +        // outdoor portal arriving closest to the wing's own starting point.
 +        lfg::LFGDungeonData const* start = sLFGMgr->GetLFGDungeon(id);
@@ -1385,14 +1398,14 @@ index 0000000..a322e5a
 +            route.team = (zone->team & AREATEAM_ALLY) ? TEAM_ALLIANCE :
 +                         (zone->team & AREATEAM_HORDE) ? TEAM_HORDE : TEAM_NEUTRAL;
 +        // The dungeon's recommended band, widened by the configured spread and
-+        // kept within its native entry levels and the Vanilla level cap.
++        // kept within its native entry levels and its expansion's level cap.
 +        uint32 const low = std::max(dungeon->MinLevel,
 +                                    dungeon->TargetLevelMin ? dungeon->TargetLevelMin : dungeon->TargetLevel);
 +        uint32 const target = std::max(dungeon->TargetLevelMax ? dungeon->TargetLevelMax : dungeon->TargetLevel, low);
-+        uint32 const high = std::min<uint32>({dungeon->MaxLevel, target + levelSpread, vanillaLevelCap});
++        uint32 const high = std::min<uint32>({dungeon->MaxLevel, target + levelSpread, ExpansionLevelCap(route.expansion)});
 +        if (!low || low > high)
 +        {
-+            reason = "no level band within the Vanilla level cap";
++            reason = "no level band within the expansion level cap";
 +            return std::nullopt;
 +        }
 +        route.minLevel = uint8(low);
@@ -1413,8 +1426,8 @@ index 0000000..a322e5a
 +            if (std::optional<Route> route = Discover(id, reason))
 +            {
 +                routes.push_back(*route);
-+                LOG_INFO("playerbots.dungeonclear", "Earned dungeon route {} enabled: map {}, levels {}-{}, portals {}/{}",
-+                         id, route->map, route->minLevel, route->maxLevel, route->entrance, route->exit);
++                LOG_INFO("playerbots.dungeonclear", "Earned dungeon route {} enabled: map {}, expansion {}, levels {}-{}, portals {}/{}",
++                         id, route->map, route->expansion, route->minLevel, route->maxLevel, route->entrance, route->exit);
 +            }
 +            else
 +                LOG_INFO("playerbots.dungeonclear", "Earned dungeon route {} not enabled: {}", id, reason);

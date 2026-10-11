@@ -14,7 +14,7 @@ A portable **Windows x64** server for World of Warcraft 3.3.5a, built on [Azerot
 - **Level 1 bots:** bots earn their levels, equipment and gold. Resident bots remain in selected level brackets after reaching them through gameplay.
 - **An earned economy:** bots sell surplus owned loot and buy with their own gold, using normal auction fees and mailbox delivery. A fresh market grows as bots acquire tradable items.
 - **Companions and battlegrounds:** bots can join parties, while eligible bots fill real players' battleground queues. AutoBalance adjusts instance difficulty to the party size.
-- **Bot dungeons and raids:** suitable nearby bots form groups and walk to most Vanilla dungeons for real combat and loot. Your own bot group can clear any dungeon or raid you entered, with added Molten Core, Blackwing Lair and Zul'Gurub tactics. See [bot dungeons and raids](docs/bot-dungeons.md).
+- **Bot dungeons and raids:** suitable nearby bots form groups for audited normal dungeons in their own earned Vanilla, TBC or Wrath era and walk to the entrance. Your own bot group can use Dungeon Clear in instances you entered, with added Molten Core, Blackwing Lair and Zul'Gurub tactics. See [bot dungeons and raids](docs/bot-dungeons.md).
 - **World buffs:** timed Vanilla town and area events follow each recipient's earned era; TBC buffs use their regular quests and areas.
 
 ## Download
@@ -87,7 +87,7 @@ See the [update guide](docs/updating.md) for manual installation, backups, offli
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Earned-era access guards for the optional Dungeon Finder. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
 | [Token Turn-in](https://github.com/Zerathane/mod-token-turnin) | Token inventory checks; rewards still require the ordinary NPC exchange. |
-| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous Vanilla dungeon parties and player-led clears, with real travel, combat and loot. |
+| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
 | [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | Boss and trash mechanics for bot raids in Molten Core, Blackwing Lair and Zul'Gurub. |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Optional generated market; seller and buyer disabled in the earned economy. |
 
