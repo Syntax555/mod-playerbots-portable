@@ -1,0 +1,1195 @@
+diff --git a/conf/mod_dungeon_clear.conf.dist b/conf/mod_dungeon_clear.conf.dist
+index a02ebcc..c2cf6da 100644
+--- a/conf/mod_dungeon_clear.conf.dist
++++ b/conf/mod_dungeon_clear.conf.dist
+@@ -2034,3 +2034,11 @@ DungeonClear.BgQueueFill.GearQuality = 0
+ #
+ 
+ DungeonClear.BgQueueFill.LogoutOnRelease = 1
++
++# Earned parties use only existing nearby random bots and real native paths.
++# Supported: normal Ragefire Chasm (Horde,15-18), Stockades (Alliance,24-28).
++# Requires AiPlayerbot.NaturalProgression and the strict default IP chain.
++# Groups consist of one tank, one healer, three damage dealers. No transport,
++# equipment, currency, consumable or quest rewards are created by this feature.
++DungeonClear.AutonomousParties.Enable = 0
++DungeonClear.AutonomousParties.MaxConcurrent = 2
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
+index 980fa32..61981c2 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
+@@ -3,6 +3,7 @@
+  */
+ 
+ #include "BetterLootRollAction.h"
++#include "DcEarnedPlay.h"
+ 
+ #include <utility>
+ #include <vector>
+@@ -91,6 +92,8 @@ bool DcLootRoll::IsVotablePendingRoll(Roll const* roll, Player* bot)
+ 
+ bool DungeonClearBetterLootRollAction::isUseful()
+ {
++    if (DcEarnedPlay::Active())
++        return LootRollAction::isUseful();
+     // Only intercept self-bots (master == bot). A bot driven for a separate
+     // human master keeps stock rolling — its vote is its own GUID, no conflict.
+     if (DcPlayerbotCompat::IsSelfBot(bot) && DcSettings::GetBool(bot, "BetterLootRolling"))
+@@ -101,7 +104,7 @@ bool DungeonClearBetterLootRollAction::isUseful()
+ 
+ bool DungeonClearBetterLootRollAction::Execute(Event event)
+ {
+-    if (!DcSettings::GetBool(bot, "BetterLootRolling"))
++    if (DcEarnedPlay::Active() || !DcSettings::GetBool(bot, "BetterLootRolling"))
+         return LootRollAction::Execute(event);
+ 
+     // The self-bot suppression isUseful() already applies, repeated here
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
+index ba95369..8759571 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
+@@ -74,6 +74,7 @@
+ #include "Ai/Dungeon/DungeonClear/Value/DungeonClearStateValues.h"
+ #include "Playerbots.h"
+ #include "DcActionShared.h"
++#include "DcEarnedPlay.h"
+ #include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
+ 
+ namespace DcActionShared
+@@ -752,7 +753,7 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
+                                 bool normal_only, bool exact_waypoint, MovementPriority priority,
+                                 bool lessDelay, bool backwards, bool ignoreEnemyTargets)
+ {
+-    if (!DcMovement::DcMovementAllowed(botAI))
++    if (!DcMovement::DcMovementAllowed(botAI) || (DcEarnedPlay::Active() && !botAI->CanMove()))
+         return false;
+     DcMovement::ResolveEscortConflict(bot);
+ 
+@@ -788,6 +789,17 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
+             destZ = snap.z;
+     }
+ 
++    if (DcEarnedPlay::Active())
++    {
++        if (mapId != bot->GetMapId() || !DcEarnedPlay::ReachableLeg(bot, x, y, destZ))
++        {
++            context->GetValue<std::string&>(DcKey::StallReason)->Get() =
++                "No real navigation-mesh route; earned dungeon clear will not bypass geometry.";
++            return false;
++        }
++        normal_only = true;
++        exact_waypoint = false;
++    }
+     bool const moved = DcRawMoveTo(mapId, x, y, destZ, idle, react, normal_only, exact_waypoint,
+                                    priority, lessDelay, backwards, ignoreEnemyTargets);
+ 
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp
+index 4ebe94b..62e7601 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "DungeonClearActions.h"
++#include "DcEarnedPlay.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+ 
+ #include <algorithm>
+@@ -304,6 +305,8 @@ namespace
+     // the offsets looked recoverable; caller stalls normally.
+     bool TryFarFromPolyRecovery(Player* bot)
+     {
++        if (DcEarnedPlay::Active())
++            return false;
+         if (!bot)
+             return false;
+         // No navmesh to land on: on a map the core runs without pathfinding
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
+index d42fa42..93ec0bb 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "DungeonClearActions.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+ 
+@@ -2531,6 +2532,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
+ 
+ bool DungeonClearBreakStuckCombatAction::Execute(Event /*event*/)
+ {
++    if (DcEarnedPlay::Active())
++    {
++        DisableDungeonClear(RunOwnerAI(bot, botAI), "Unreachable combat; earned dungeon clear stopped without clearing threat.");
++        return true;
++    }
+     // Phantom combat: the trigger has confirmed we've been flagged in combat with
+     // nothing fightable for the full StuckCombatTimeout — no holder that is both
+     // reachable and actually coming for us. Force-clear it exactly as a GM
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
+index 762452d..c1f3486 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "DungeonClearActions.h"
++#include "DcEarnedPlay.h"
+ 
+ #include <algorithm>
+ #include <cmath>
+@@ -763,6 +764,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+                     ++sameMap;
+         followDist = std::max(followDist, DcFormation::RingRadius(sameMap, followDist));
+     }
++    if (DcEarnedPlay::Active())
++    {
++        // A persistent native MoveFollow replans independently and can fall
++        // back to a straight path on missing mesh. Resolve this formation slot
++        // through the earned movement boundary on every issued point move.
++        if (MotionMaster* motion = bot->GetMotionMaster())
++            if (motion->GetMotionSlotType(MOTION_SLOT_ACTIVE) == FOLLOW_MOTION_TYPE)
++                motion->Clear();
++        Position const slot = tank->GetFirstCollisionPosition(followDist, angle);
++        return DcMoveTo(tank->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(),
++                        false, false, /*normal_only*/ true, /*exact_waypoint*/ false);
++    }
+     return Follow(tank, followDist, angle);
+ }
+ 
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcPullActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcPullActions.cpp
+index 5863371..0bfd101 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/DcPullActions.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/DcPullActions.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "DungeonClearActions.h"
+ 
+ #include <algorithm>
+@@ -2195,7 +2196,8 @@ bool DungeonClearPullManeuverAction::Execute(Event /*event*/)
+     // Keep the tank daze-proof for the whole drag. Immunity (set with pull mode)
+     // should stop Daze landing at all; strip it here too as a backstop so a
+     // retreat is never slowed to a crawl by a hit from behind.
+-    bot->RemoveAurasDueToSpell(1604);
++    if (!DcEarnedPlay::Active())
++        bot->RemoveAurasDueToSpell(1604);
+ 
+     // A druid tank must take the run-home hits in bear form, not caster form.
+     // Shapeshift is instant and not interrupted by the drag-back run, so refresh
+@@ -2779,7 +2781,7 @@ bool DungeonClearPullManeuverAction::Execute(Event /*event*/)
+                 // that (summonWhenStuckBelow) — relocating a boss is a big hammer.
+                 BossPullback const* const row =
+                     BossPullbackRegistry::Find(bot->GetMapId(), pulled->GetEntry());
+-                if (row && row->summonWhenStuckBelow && pulled->IsInWater() &&
++                if (!DcEarnedPlay::Active() && row && row->summonWhenStuckBelow && pulled->IsInWater() &&
+                     pulled->GetPositionZ() < camp.GetPositionZ())
+                 {
+                     // Land him a few yards off the anchor on the tank's side rather
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
+index 59f79af..4065e4c 100755
+--- a/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
+@@ -4,6 +4,8 @@
+  */
+ 
+ #include "DungeonClearChatActions.h"
++#include "DcEarnedPlay.h"
++#include "EarnedDungeonParties.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+ 
+ #include <map>
+@@ -61,6 +63,8 @@ namespace
+ 
+     bool IsAuthorized(Player* bot, Event const& event)
+     {
++        if (EarnedDungeonParties::AuthorizeInternalStart(bot, event))
++            return true;
+         Player* owner = const_cast<Event&>(event).getOwner();
+         if (!owner)
+             return false;
+@@ -305,6 +309,13 @@ bool DcOnAction::Execute(Event event)
+         return false;
+     }
+ 
++    if (DcEarnedPlay::Active() && (!DcEarnedPlay::SupportedMap(bot->GetMapId()) ||
++        bot->GetMap()->IsRaid() || bot->GetMap()->IsHeroic()))
++    {
++        DcRefuse(botAI, bot, "Earned dungeon clear supports normal Ragefire Chasm and Stockades; this route is not enabled.");
++        return false;
++    }
++
+     // Wing choice first: on Blackrock Spire it decides which boss list the
+     // emptiness check below (and the whole run) sees.
+     DungeonWing const* runWing = nullptr;
+diff --git a/src/Ai/Dungeon/DungeonClear/Action/StayDeadAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/StayDeadAction.cpp
+index 97f5205..b97418d 100644
+--- a/src/Ai/Dungeon/DungeonClear/Action/StayDeadAction.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Action/StayDeadAction.cpp
+@@ -2,6 +2,7 @@
+  * mod-dungeon-clear — StayDeadAction.cpp
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "StayDeadAction.h"
+ 
+ #include "Map.h"
+@@ -24,7 +25,7 @@ bool DungeonClearStayDeadAction::isUseful()
+     // Read live (not cached) so `.reload config` and per-run overrides both take
+     // effect without a restart. The dead-state "auto release" trigger fires on
+     // the throttled "often" cadence, so the per-call lookup is negligible.
+-    if (DcSettings::GetBool(bot, "PreventBotRelease"))
++    if (!DcEarnedPlay::Active() && DcSettings::GetBool(bot, "PreventBotRelease"))
+         return false;  // never auto-release; bot stays a corpse until rezzed
+ 
+     return AutoReleaseSpiritAction::isUseful();
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
+index c254542..866fbdf 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "DcLeaderSignal.h"
++#include "DcEarnedPlay.h"
+ 
+ #include "DungeonClearUtil.h"   // DC_PULL_* log macros
+ #include "DungeonClearMath.h"
+@@ -1432,7 +1433,7 @@ void DcLeaderSignal::SetLeaderDazeImmunity(Player* leader, bool apply)
+     // creatures apply). spellId 0 = a blanket mechanic block. Pair add/remove
+     // exactly: remove first so a re-apply never stacks duplicate entries.
+     leader->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_DAZE, false);
+-    if (apply)
++    if (apply && !DcEarnedPlay::Active())
+     {
+         leader->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_DAZE, true);
+         // Immunity only blocks FUTURE applications; clear any Daze already on
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
+index e0d355e..8eeedbb 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "Ai/Dungeon/DungeonClear/Util/DcMovement.h"
++#include "DcEarnedPlay.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DcPbCompat.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+ 
+@@ -177,7 +178,7 @@ namespace DcMovement
+         // pause-walks-through-door race class at the mechanism (a mid-tick flip of
+         // "dungeon clear paused" can no longer launch a fresh escort glide) for every
+         // future caller, instead of by hand-pasted convention.
+-        if (!DcMovementAllowed(botAI))
++        if (!DcMovementAllowed(botAI) || (DcEarnedPlay::Active() && !botAI->CanMove()))
+             return false;
+         Player* bot = botAI->GetBot();
+         if (!bot || pts.size() < 2)
+@@ -185,6 +186,12 @@ namespace DcMovement
+         MotionMaster* mm = bot->GetMotionMaster();
+         if (!mm)
+             return false;
++        if (DcEarnedPlay::Active() && !DcEarnedPlay::RealSpline(bot, pts))
++        {
++            botAI->GetAiObjectContext()->GetValue<std::string&>(DcKey::StallReason)->Get() =
++                "No real navigation-mesh route; earned dungeon clear will not bypass geometry.";
++            return false;
++        }
+ 
+         if (bot->IsSitState())
+             bot->SetStandState(UNIT_STAND_STATE_STAND);
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp
+index cfb8ead..6f8d5ee 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "DcRezRecovery.h"
+ 
+ #include "Ai/Dungeon/DungeonClear/Data/DcNeverTargetRegistry.h"
+@@ -502,7 +503,7 @@ namespace DcRezRecovery
+ {
+     bool Enabled(Player* bot)
+     {
+-        return DcSettings::GetBool(bot, "PostCombatRez");
++        return !DcEarnedPlay::Active() && DcSettings::GetBool(bot, "PostCombatRez");
+     }
+ 
+     Plan Evaluate(Player* bot)
+@@ -654,6 +655,8 @@ namespace DcRezRecovery
+ 
+     bool RegroupAtEntrance(Player* bot)
+     {
++        if (DcEarnedPlay::Active())
++            return false;
+         if (!bot)
+             return false;
+         Player* owner = ResolveRunOwner(bot);
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp
+index 6d01e6d..d9d1b7c 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "DcSocialQuarantine.h"
++#include "DcEarnedPlay.h"
+ 
+ #include "Ai/Dungeon/DungeonClear/Data/DcSocialQuarantineRegistry.h"
+ #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
+@@ -86,6 +87,8 @@ namespace DcSocialQuarantine
+ {
+     void Update(Player* bot, AiObjectContext* context)
+     {
++        if (DcEarnedPlay::Active())
++            return;
+         if (!bot || !context)
+             return;
+ 
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp
+index 74b95dd..3e78cf8 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "DcStrandedRecovery.h"
+ 
+ #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+@@ -152,7 +153,7 @@ namespace DcStrandedRecovery
+ {
+     bool Enabled(Player* bot)
+     {
+-        return DcSettings::GetBool(bot, "StrandedRecovery");
++        return !DcEarnedPlay::Active() && DcSettings::GetBool(bot, "StrandedRecovery");
+     }
+ 
+     bool Evaluate(Player* bot)
+diff --git a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
+index 8ad3b6e..a5fbc5f 100644
+--- a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "DungeonEventExecutor.h"
+ 
+ #include <algorithm>
+@@ -489,7 +490,7 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+                                          EventStep const& step, DungeonEventProgress& prog,
+                                          uint32 nowMs)
+ {
+-    if (!bot)
++    if (!bot || DcEarnedPlay::Active())
+         return StepResult::Blocked;
+ 
+     switch (step.kind)
+diff --git a/src/BgQueueFill/DcBgQueueFillManager.cpp b/src/BgQueueFill/DcBgQueueFillManager.cpp
+index aaef5a2..d66011b 100644
+--- a/src/BgQueueFill/DcBgQueueFillManager.cpp
++++ b/src/BgQueueFill/DcBgQueueFillManager.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "BgQueueFill/DcBgQueueFillManager.h"
+ 
+ #include <algorithm>
+@@ -102,7 +103,7 @@ std::string DcBgQueueFillManager::RefuseReason(Player* player, std::uint8_t aren
+     if (transient)
+         *transient = false;
+ 
+-    if (!DcModule::IsEnabled())
++    if (!DcModule::IsEnabled() || DcEarnedPlay::Active())
+         return "module disabled";
+     if (!DcSettings::GetBool(ObjectGuid::Empty, "BgQueueFill.Enable"))
+         return "BgQueueFill.Enable is off";
+@@ -532,7 +533,7 @@ void DcBgQueueFillManager::Tick(std::uint32_t diff)
+     if (_jobs.empty() && _deferred.empty() && _pending.empty() && _configChecked)
+         return;
+ 
+-    bool const on = DcModule::IsEnabled() && DcSettings::GetBool(ObjectGuid::Empty, "BgQueueFill.Enable");
++    bool const on = !DcEarnedPlay::Active() && DcModule::IsEnabled() && DcSettings::GetBool(ObjectGuid::Empty, "BgQueueFill.Enable");
+ 
+     // Once, the first tick the feature is on — the playerbots config is
+     // certainly loaded by then, which it may not be at script registration.
+diff --git a/src/DcEarnedPlay.h b/src/DcEarnedPlay.h
+new file mode 100644
+index 0000000..5c5038a
+--- /dev/null
++++ b/src/DcEarnedPlay.h
+@@ -0,0 +1,55 @@
++/*
++ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
++ * version 3 or (at your option) any later version.
++ */
++#ifndef DC_EARNED_PLAY_H
++#define DC_EARNED_PLAY_H
++#include "PlayerbotAIConfig.h"
++#include "PathGenerator.h"
++#include "Player.h"
++
++namespace DcEarnedPlay
++{
++    inline bool Active() { return sPlayerbotAIConfig.naturalProgression; }
++    // Audited keyless, normal five-player instances without event shortcuts.
++    inline bool SupportedMap(uint32 map) { return map == 34 || map == 389; }
++    inline bool UsesRealPath(PathGenerator const& path)
++    {
++        auto const type = path.GetPathType();
++        return (type & (PATHFIND_NORMAL | PATHFIND_INCOMPLETE | PATHFIND_SHORT)) &&
++               !(type & (PATHFIND_SHORTCUT | PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH |
++                         PATHFIND_FARFROMPOLY)) && path.GetPath().size() >= 2;
++    }
++    inline bool ReachableLeg(Player* bot, float x, float y, float z)
++    {
++        PathGenerator path(bot);
++        return path.CalculatePath(x, y, z, false) && UsesRealPath(path);
++    }
++    inline bool RealSpline(Player* bot, Movement::PointsArray const& points)
++    {
++        if (!bot || points.size() < 2)
++            return false;
++        auto const& first = points.front();
++        float const dx = first.x - bot->GetPositionX();
++        float const dy = first.y - bot->GetPositionY();
++        float const dz = first.z - bot->GetPositionZ();
++        if (dx * dx + dy * dy + dz * dz > 0.0025f)
++            return false;
++        for (size_t i = 1; i < points.size(); ++i)
++        {
++            auto const& a = points[i - 1];
++            auto const& b = points[i];
++            PathGenerator leg(bot);
++            // A detour route does not authorize a raw straight spline through
++            // a wall. Raycast every actual segment, including the first one.
++            leg.SetUseRaycast(true);
++            if (!leg.CalculatePath(a.x, a.y, a.z, b.x, b.y, b.z, false) ||
++                !UsesRealPath(leg) || !(leg.GetPathType() & PATHFIND_NORMAL) ||
++                (leg.GetPathType() & (PATHFIND_INCOMPLETE | PATHFIND_SHORT)) ||
++                (leg.GetPath().back() - b).magnitude() > 0.05f)
++                return false;
++        }
++        return true;
++    }
++}
++#endif
+diff --git a/src/DcStrategyGate.cpp b/src/DcStrategyGate.cpp
+index cd67f82..3085126 100644
+--- a/src/DcStrategyGate.cpp
++++ b/src/DcStrategyGate.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "DcStrategyGate.h"
++#include "DcEarnedPlay.h"
+ #include "DcModuleEnable.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+ 
+@@ -75,7 +76,9 @@ namespace DcStrategyGate
+             return;  // real player (no bot AI) — nothing to gate
+ 
+         Map* map = bot->GetMap();
+-        bool const inDungeon = map && map->IsDungeon();
++        bool const inDungeon = map && map->IsDungeon() &&
++            (!DcEarnedPlay::Active() || (DcEarnedPlay::SupportedMap(map->GetId()) &&
++                                       !map->IsRaid() && !map->IsHeroic()));
+ 
+         bool const hasNon = botAI->HasStrategy(kNonCombat, BOT_STATE_NON_COMBAT);
+         bool const hasCmb = botAI->HasStrategy(kCombat, BOT_STATE_COMBAT);
+diff --git a/src/DungeonClearModule.cpp b/src/DungeonClearModule.cpp
+index 5699606..56fe6fd 100644
+--- a/src/DungeonClearModule.cpp
++++ b/src/DungeonClearModule.cpp
+@@ -50,6 +50,8 @@
+  */
+ 
+ #include "ScriptMgr.h"
++#include "EarnedDungeonParties.h"
++#include "DcEarnedPlay.h"
+ #include "AllCreatureScript.h"
+ #include "Cell.h"
+ #include "CellImpl.h"
+@@ -282,6 +284,7 @@ public:
+     void OnAfterConfigLoad(bool /*reload*/) override
+     {
+         DcSettings::InvalidateConfCache();
++        EarnedDungeonParties::LoadConfig();
+         // The one tunable a reload CANNOT apply: say so rather than leaving an
+         // admin to wonder why the module is still running (or still absent).
+         DcModule::WarnIfConfDiffersFromLatch();
+@@ -528,9 +531,9 @@ public:
+         // provisioning ration ahead of the test harness.
+         DcBgQueueFillManager::Instance().Tick(diff);
+ 
++        EarnedDungeonParties::Update(diff);
+         if (!DcModule::IsEnabled())
+             return;
+-
+         DcFollowerLifecycle::ReapOrphanedFollows();
+         // Authoritative advanced-pull passive teardown: release any follower DC
+         // put passive once its leader is no longer mid-pull (released / dc off /
+@@ -556,7 +559,8 @@ public:
+         // bots on the COMBAT engine, where the clear's non-combat triggers never
+         // get one. Internally throttled and gated on the map having a row, so it
+         // is a handful of integer compares on every other map.
+-        DcCombatPurge::Tick(diff);
++        if (!DcEarnedPlay::Active())
++            DcCombatPurge::Tick(diff);
+ 
+         // `.dc test` harness state machine (spawn -> gear -> group -> teleport
+         // -> dc on -> watchdogs -> record). Cheap no-op while no test run is
+@@ -564,9 +568,12 @@ public:
+         // Headless-driver login poll first (a console start may be waiting on
+         // it), then the plan scheduler (a launch it makes this tick enters the
+         // run manager's tick loop immediately below).
+-        DcTestDriver::Tick();
+-        DcTestPlanManager::Instance().Tick(diff);
+-        DcTestRunManager::Instance().Tick(diff);
++        if (!DcEarnedPlay::Active())
++        {
++            DcTestDriver::Tick();
++            DcTestPlanManager::Instance().Tick(diff);
++            DcTestRunManager::Instance().Tick(diff);
++        }
+ 
+         // Dungeon-gate correctness net: re-assert "DC strategies installed iff in
+         // a dungeon" across all bots on a throttled cadence. The login and
+diff --git a/src/DungeonQueueFill/DcDungeonQueueFillManager.cpp b/src/DungeonQueueFill/DcDungeonQueueFillManager.cpp
+index 12ebee8..b8138ce 100644
+--- a/src/DungeonQueueFill/DcDungeonQueueFillManager.cpp
++++ b/src/DungeonQueueFill/DcDungeonQueueFillManager.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "DungeonQueueFill/DcDungeonQueueFillManager.h"
+ 
+ #include "Group.h"
+@@ -60,7 +61,7 @@ std::string DcDungeonQueueFillManager::RefuseReason(Player* player,
+     if (transient)
+         *transient = false;
+ 
+-    if (!DcModule::IsEnabled())
++    if (!DcModule::IsEnabled() || DcEarnedPlay::Active())
+         return "module disabled";
+     if (!DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable"))
+         return "DungeonQueueFill.Enable is off";
+@@ -357,7 +358,7 @@ void DcDungeonQueueFillManager::Tick(std::uint32_t diff)
+ 
+     // Turning the feature off mid-flight releases what is in flight rather
+     // than stranding logged-in bots in a queue nobody is watching.
+-    if (!DcModule::IsEnabled() ||
++    if (DcEarnedPlay::Active() || !DcModule::IsEnabled() ||
+         !DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable"))
+     {
+         _deferred.clear();
+@@ -379,7 +380,7 @@ void DcDungeonQueueFillManager::Tick(std::uint32_t diff)
+ 
+ std::string DcDungeonQueueFillManager::StatusText() const
+ {
+-    bool const on = DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable");
++    bool const on = !DcEarnedPlay::Active() && DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable");
+     if (!on)
+         return "dungeon queue fill is OFF (DungeonClear.DungeonQueueFill.Enable = 0)";
+ 
+diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
+new file mode 100644
+index 0000000..5602da7
+--- /dev/null
++++ b/src/EarnedDungeonParties.cpp
+@@ -0,0 +1,509 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#include "EarnedDungeonParties.h"
++#include "DcEarnedPlay.h"
++#include "DcModuleEnable.h"
++#include "DcStrategyGate.h"
++#include "Ai/Dungeon/DungeonClear/Action/DcActionShared.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
++#include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
++#include "Config.h"
++#include "DBCStores.h"
++#include "Event.h"
++#include "Group.h"
++#include "GroupMgr.h"
++#include "IndividualProgression.h"
++#include "Log.h"
++#include "LFGMgr.h"
++#include "MotionMaster.h"
++#include "ObjectAccessor.h"
++#include "ObjectMgr.h"
++#include "Playerbots.h"
++#include "PlayerbotAI.h"
++#include "Timer.h"
++#include "WorldPacket.h"
++#include "WorldSession.h"
++#include <algorithm>
++#include <array>
++#include <map>
++#include <shared_mutex>
++#include <cstdlib>
++#include <utility>
++#include <set>
++#include <string>
++#include <vector>
++
++namespace
++{
++    struct Route
++    {
++        uint32 map, continent, entrance, exit;
++        TeamId team;
++        uint8 minLevel, maxLevel;
++    };
++    constexpr std::array<Route, 2> routes{{
++        {389, 1, 2230, 2226, TEAM_HORDE, 15, 18},
++        {34, 0, 101, 503, TEAM_ALLIANCE, 24, 28},
++    }};
++    constexpr uint32 walkTimeout = 10 * MINUTE * IN_MILLISECONDS;
++    constexpr uint32 runTimeout = 90 * MINUTE * IN_MILLISECONDS;
++    constexpr uint32 retryDelay = 15 * MINUTE * IN_MILLISECONDS;
++    constexpr float recruitRange = 60.0f;
++    constexpr float startRange = 1000.0f;
++    bool enabled = false;
++    uint32 maxConcurrent = 2, accumulator = 0, recruitAccumulator = 0;
++    thread_local bool internalStart = false;
++    enum class Phase { Entering, Running, Returning };
++    struct Party
++    {
++        Route const* route;
++        std::array<ObjectGuid, 5> members;
++        ObjectGuid group;
++        std::array<std::map<std::string, bool>, 5> strategies;
++        std::array<bool, 5> changedNavigation{};
++        std::array<bool, 5> invited{};
++        uint32 started = 0;
++        Phase phase = Phase::Entering;
++    };
++    std::vector<Party> parties;
++    std::map<ObjectGuid, uint32> retryAfter;
++    constexpr std::array<char const*, 9> navigation{{
++        "follow", "new rpg", "rpg", "grind", "travel", "move random", "bg", "lfg", "pvp"
++    }};
++
++    // A real player, SelfBot, controlled altbot or other bot master's companion
++    // is never recruited. Account membership identifies autonomous random bots;
++    // the character's own rewarded progression markers decide its earned era.
++    bool Eligible(Player* player, Route const& route, Player* leader = nullptr)
++    {
++        if (!player || !player->IsInWorld() || !player->GetSession() || !player->IsAlive() || player->IsGameMaster() ||
++            player->GetTeamId() != route.team || player->GetLevel() < route.minLevel ||
++            player->GetLevel() > (leader ? 60 : route.maxLevel) || player->InBattleground() ||
++            player->InBattlegroundQueue() || !player->GetSession()->IsHeadless() ||
++            sLFGMgr->GetState(player->GetGUID()) != lfg::LFG_STATE_NONE ||
++            !sPlayerbotAIConfig.IsInRandomAccountList(player->GetSession()->GetAccountId()) ||
++            player->IsBeingTeleported() || player->IsInFlight() || player->GetVehicle() || player->GetTransport() ||
++            player->GetSession()->PlayerLoading() ||
++            sIndividualProgression->GetPlayerProgressionFromQuests(player) >= PROGRESSION_PRE_TBC)
++            return false;
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
++        if (!ai || ai->HasGameClientMaster() ||
++            (ai->GetMaster() && ai->GetMaster() != leader))
++            return false;
++        return true;
++    }
++
++    bool Owned(Player* player, Player* leader)
++    {
++        PlayerbotAI* ai = player ? GET_PLAYERBOT_AI(player) : nullptr;
++        return ai && player->GetSession() && player->GetSession()->IsHeadless() &&
++               sPlayerbotAIConfig.IsInRandomAccountList(player->GetSession()->GetAccountId()) &&
++               !ai->HasGameClientMaster() && (!ai->GetMaster() || ai->GetMaster() == leader);
++    }
++
++    uint8 Role(Player* player, bool bySpec = false)
++    {
++        if (PlayerbotAI::IsTank(player, bySpec))
++            return 0;
++        if (PlayerbotAI::IsHeal(player, bySpec))
++            return 1;
++        return 2;
++    }
++
++    void SaveNavigation(Player* member, std::map<std::string, bool>& saved)
++    {
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(member);
++        for (char const* name : navigation)
++            saved[name] = ai->HasStrategy(name, BOT_STATE_NON_COMBAT);
++    }
++
++    void HoldNavigation(Player* member)
++    {
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(member);
++        for (char const* name : navigation)
++            if (ai->HasStrategy(name, BOT_STATE_NON_COMBAT))
++                ai->ChangeStrategy(std::string("-") + name, BOT_STATE_NON_COMBAT);
++    }
++
++    bool NativeDoor(Player* player, uint32 trigger)
++    {
++        AreaTrigger const* at = sObjectMgr->GetAreaTrigger(trigger);
++        if (!at || at->map != player->GetMapId() ||
++            !player->IsInAreaTriggerRadius(at))
++            return false;
++        WorldPacket packet(CMSG_AREATRIGGER);
++        packet << trigger;
++        // Only a physically reached portal is submitted. The session handler
++        // retains faction, level, expansion, attunement and instance checks.
++        player->GetSession()->HandleAreaTriggerOpcode(packet);
++        return true;
++    }
++
++    bool Walk(Player* player, uint32 trigger)
++    {
++        AreaTrigger const* at = sObjectMgr->GetAreaTrigger(trigger);
++        if (!at || at->map != player->GetMapId())
++            return false;
++        if (NativeDoor(player, trigger))
++            return true;
++        if (player->IsInCombat() || player->IsNonMeleeSpellCast(true) ||
++            !GET_PLAYERBOT_AI(player)->CanMove())
++            return true;
++        if (player->isMoving())
++            return true;
++        PathGenerator path(player);
++        if (!path.CalculatePath(at->x, at->y, at->z, false) || !DcEarnedPlay::UsesRealPath(path))
++            return false;
++        Movement::PointsArray points = path.GetPath();
++        player->GetMotionMaster()->MoveSplinePath(&points, FORCED_MOVEMENT_NONE);
++        return true;
++    }
++
++    void Stop(Party& party, char const* reason)
++    {
++        LOG_INFO("playerbots.dungeonclear", "Earned dungeon party {}: {}",
++                 party.group.ToString(), reason);
++        Player* leader = ObjectAccessor::FindConnectedPlayer(party.members[0]);
++        Group* group = party.group.IsEmpty() ? nullptr : sGroupMgr->GetGroupByGUID(party.group.GetCounter());
++        bool ownedGroup = group && !group->isRaidGroup();
++        bool allOutside = ownedGroup;
++        if (ownedGroup)
++            for (auto const& slot : group->GetMemberSlots())
++            {
++                Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid);
++                if (std::find(party.members.begin(), party.members.end(), slot.guid) == party.members.end() ||
++                    (member && !Owned(member, leader)))
++                    ownedGroup = false;
++                if (!member || member->GetMapId() != party.route->continent || member->IsBeingTeleported())
++                    allOutside = false;
++            }
++        // A group claimed by a player or extended with another member is no
++        // longer ours. Do not disable its tank or restore another owner's AI.
++        if (group && !ownedGroup)
++            return;
++        if (ownedGroup && leader && leader->GetGroup() == group)
++            if (PlayerbotAI* ai = GET_PLAYERBOT_AI(leader))
++                if (DcRun::Of(ai).enabled)
++                    DcActionShared::DisableDungeonClear(ai, reason);
++        for (size_t i = 0; i < party.members.size(); ++i)
++        {
++            retryAfter[party.members[i]] = getMSTime();
++            Player* member = ObjectAccessor::FindConnectedPlayer(party.members[i]);
++            if (!member || !Owned(member, leader))
++                continue;
++            // Failed native invitations own no established party. Cancel only
++            // the invitation sent by this run's original leader. A cancellation
++            // can delete an uncreated group; never retain that pointer.
++            if (party.invited[i])
++                if (Group* invitation = member->GetGroupInvite())
++                    if (invitation->GetLeaderGUID() == party.members[0])
++                        member->UninviteFromGroup();
++            Group* current = member->GetGroup();
++            if (current && current->GetGUID() != party.group)
++                continue;
++            if (party.changedNavigation[i])
++            {
++                if (MotionMaster* motion = member->GetMotionMaster())
++                    if (motion->GetMotionSlotType(MOTION_SLOT_ACTIVE) == ESCORT_MOTION_TYPE)
++                        motion->Clear();
++                member->StopMovingOnCurrentPos();
++                for (auto const& [name, had] : party.strategies[i])
++                    GET_PLAYERBOT_AI(member)->ChangeStrategy(std::string(had ? "+" : "-") + name, BOT_STATE_NON_COMBAT);
++            }
++            if (allOutside || !current)
++            {
++                if (GET_PLAYERBOT_AI(member)->GetMaster() == leader)
++                    GET_PLAYERBOT_AI(member)->SetMaster(nullptr);
++                // Group::RemoveMember can disband/delete the native group.
++                if (Group* removable = allOutside ? member->GetGroup() : nullptr)
++                    if (removable->GetGUID() == party.group)
++                        removable->RemoveMember(member->GetGUID());
++            }
++        }
++        // Inside-instance failures keep their native group. Deliberately
++        // disbanding it would start the core's homebind teleport countdown.
++        // Death, resurrection and the journey out remain normal gameplay.
++    }
++
++    bool TickParty(Party& party)
++    {
++        Player* leader = ObjectAccessor::FindConnectedPlayer(party.members[0]);
++        Group* group = leader ? leader->GetGroup() : nullptr;
++        if (!group || group->GetGUID() != party.group || group->isRaidGroup() || group->GetMembersCount() != 5)
++        {
++            Stop(party, "party changed or member disconnected; autonomous run stopped");
++            return false;
++        }
++        std::array<Player*, 5> members;
++        bool allInside = true, allOutside = true;
++        std::array<uint8, 3> roles{};
++        uint32 instance = 0;
++        for (size_t i = 0; i < members.size(); ++i)
++        {
++            Player* member = ObjectAccessor::FindConnectedPlayer(party.members[i]);
++            if (member && member->IsBeingTeleported() && Owned(member, leader) &&
++                member->GetGroup() == group && party.phase != Phase::Running)
++            {
++                members[i] = member;
++                ++roles[Role(member)];
++                allInside = false;
++                allOutside = false;
++                continue;
++            }
++            if (!Eligible(member, *party.route, leader) || member->GetGroup() != group)
++            {
++                Stop(party, "member died, changed control or lost eligibility; no resurrection or relocation granted");
++                return false;
++            }
++            members[i] = member;
++            ++roles[Role(member)];
++            if (member->GetMapId() == party.route->map)
++            {
++                if (instance && instance != member->GetInstanceId())
++                {
++                    Stop(party, "party entered different instance copies; autonomous run stopped");
++                    return false;
++                }
++                instance = member->GetInstanceId();
++                allOutside = false;
++            }
++            else if (member->GetMapId() == party.route->continent)
++                allInside = false;
++            else
++            {
++                Stop(party, "member left the supported physical route; autonomous run stopped");
++                return false;
++            }
++        }
++        if (roles != std::array<uint8, 3>{1, 1, 3} || Role(leader) != 0)
++        {
++            Stop(party, "tank/healer/damage composition changed; autonomous run stopped");
++            return false;
++        }
++        if (getMSTimeDiff(party.started, getMSTime()) >
++            (party.phase == Phase::Running ? runTimeout : walkTimeout))
++        {
++            Stop(party, "physical route timed out; no pathfinding or encounter shortcut used");
++            return false;
++        }
++        // Validate the whole party before changing any member's navigation;
++        // a later player takeover must not affect the earlier members either.
++        for (Player* member : members)
++            HoldNavigation(member);
++        if (party.phase == Phase::Entering)
++        {
++            if (allInside)
++            {
++                for (Player* member : members)
++                    DcStrategyGate::Reconcile(member);
++                // The TLS authorization can only be entered by this coordinator
++                // in the world thread, never by client chat/addon messages.
++                internalStart = true;
++                bool started = GET_PLAYERBOT_AI(leader)->DoSpecificAction(
++                    "dc on", Event("earned dungeon party", "", leader), true);
++                internalStart = false;
++                if (!started || !DcRun::Of(GET_PLAYERBOT_AI(leader)).enabled)
++                {
++                    Stop(party, "native dungeon-clear start refused");
++                    return false;
++                }
++                party.phase = Phase::Running;
++                party.started = getMSTime();
++                LOG_INFO("playerbots.dungeonclear", "Earned dungeon party {} started real map {} instance {}",
++                         party.group.ToString(), party.route->map, instance);
++            }
++            else
++                for (Player* member : members)
++                    if (!member->IsBeingTeleported() && member->GetMapId() == party.route->continent && !Walk(member, party.route->entrance))
++                    {
++                        Stop(party, "no real navigation-mesh path to the entrance; autonomous run stopped");
++                        return false;
++                    }
++        }
++        else if (party.phase == Phase::Running)
++        {
++            if (!allInside)
++            {
++                Stop(party, "member left the running instance; autonomous run stopped");
++                return false;
++            }
++            auto* context = GET_PLAYERBOT_AI(leader)->GetAiObjectContext();
++            if (context->GetValue<std::string&>(DcKey::StallReason)->Get().find(
++                    "No real navigation-mesh route") == 0)
++            {
++                Stop(party, "no real navigation-mesh route inside the dungeon; autonomous run stopped");
++                return false;
++            }
++            if (!DcRun::Of(GET_PLAYERBOT_AI(leader)).enabled)
++            {
++                party.phase = Phase::Returning;
++                party.started = getMSTime();
++            }
++        }
++        else
++        {
++            if (allOutside)
++            {
++                Stop(party, "party left through the native exit; normal autonomous play resumed");
++                return false;
++            }
++            for (Player* member : members)
++                if (!member->IsBeingTeleported() && member->GetMapId() == party.route->map && !Walk(member, party.route->exit))
++                {
++                    Stop(party, "no real navigation-mesh path to the exit; autonomous run stopped");
++                    return false;
++                }
++        }
++        return true;
++    }
++
++    bool Recruit(Route const& route, std::vector<Player*> const& online)
++    {
++        AreaTrigger const* entrance = sObjectMgr->GetAreaTrigger(route.entrance);
++        AreaTrigger const* exit = sObjectMgr->GetAreaTrigger(route.exit);
++        AreaTriggerTeleport const* entranceTarget = sObjectMgr->GetAreaTriggerTeleport(route.entrance);
++        AreaTriggerTeleport const* exitTarget = sObjectMgr->GetAreaTriggerTeleport(route.exit);
++        if (!entrance || !exit || !entranceTarget || !exitTarget ||
++            entrance->map != route.continent || exit->map != route.map ||
++            entranceTarget->target_mapId != route.map || exitTarget->target_mapId != route.continent)
++            return false;
++        struct Candidate { Player* player; uint8 role; };
++        std::vector<Candidate> candidates;
++        std::array<uint32, 3> available{};
++        for (Player* player : online)
++        {
++            if (!Eligible(player, route) || player->GetGroup() || player->GetGroupInvite() ||
++                player->IsInCombat() || player->GetMapId() != route.continent)
++                continue;
++            auto retry = retryAfter.find(player->GetGUID());
++            if (retry != retryAfter.end() && getMSTimeDiff(retry->second, getMSTime()) < retryDelay)
++                continue;
++            uint8 const role = Role(player, true);
++            candidates.push_back({player, role});
++            ++available[role];
++        }
++        if (!available[0] || !available[1] || available[2] < 3)
++            return false;
++        // Resolve costly native eligibility and role checks once per player;
++        // each tank's locality search then uses only cached roles and distance.
++        for (Candidate const& option : candidates)
++        {
++            Player* tank = option.player;
++            if (option.role != 0 || tank->GetExactDist(entrance->x, entrance->y, entrance->z) > startRange)
++                continue;
++            std::array<Player*, 5> picked{{tank, nullptr, nullptr, nullptr, nullptr}};
++            size_t damage = 2;
++            for (Candidate const& possible : candidates)
++            {
++                Player* candidate = possible.player;
++                if (candidate == tank || candidate->GetMap() != tank->GetMap() ||
++                    candidate->GetExactDist(tank) > std::min(recruitRange, sPlayerbotAIConfig.sightDistance) ||
++                    std::abs(int(candidate->GetLevel()) - int(tank->GetLevel())) > 2)
++                    continue;
++                uint8 const role = possible.role;
++                if (role == 1 && !picked[1])
++                    picked[1] = candidate;
++                else if (role == 2 && damage < picked.size())
++                    picked[damage++] = candidate;
++            }
++            if (!picked[1] || damage != picked.size())
++                continue;
++            Party party;
++            party.route = &route;
++            party.started = getMSTime();
++            for (size_t i = 0; i < picked.size(); ++i)
++            {
++                party.members[i] = picked[i]->GetGUID();
++                // Acceptance resets strategies in playerbots. Preserve the
++                // pre-invitation navigation state rather than those defaults.
++                SaveNavigation(picked[i], party.strategies[i]);
++            }
++            for (size_t i = 1; i < picked.size(); ++i)
++            {
++                WorldPacket invite;
++                invite << picked[i]->GetName() << uint32(0);
++                tank->GetSession()->HandleGroupInviteOpcode(invite);
++                party.invited[0] = true;
++                party.invited[i] = true;
++                if (!picked[i]->GetGroupInvite() ||
++                    picked[i]->GetGroupInvite()->GetLeaderGUID() != tank->GetGUID() ||
++                    !GET_PLAYERBOT_AI(picked[i])->DoSpecificAction("accept invitation", Event("earned dungeon party"), true))
++                {
++                    party.group = tank->GetGroup() ? tank->GetGroup()->GetGUID() : ObjectGuid::Empty;
++                    Stop(party, "normal invitation or acceptance refused; no forced grouping used");
++                    return false;
++                }
++                party.changedNavigation[i] = true;
++            }
++            party.group = tank->GetGroup() ? tank->GetGroup()->GetGUID() : ObjectGuid::Empty;
++            if (!tank->GetGroup() || tank->GetGroup()->isRaidGroup() || tank->GetGroup()->GetMembersCount() != 5)
++            {
++                Stop(party, "native invitations did not establish a complete five-player party");
++                return false;
++            }
++            for (Player* member : picked)
++                if (member->GetGroup() != tank->GetGroup() || !Owned(member, tank))
++                {
++                    Stop(party, "native invitation hooks changed party ownership");
++                    return false;
++                }
++            for (size_t i = 0; i < picked.size(); ++i)
++            {
++                HoldNavigation(picked[i]);
++                party.changedNavigation[i] = true;
++            }
++            LOG_INFO("playerbots.dungeonclear", "Earned dungeon party {} recruited nearby for map {}; walking to native entrance",
++                     party.group.ToString(), route.map);
++            parties.push_back(std::move(party));
++            return true;
++        }
++        return false;
++    }
++}
++
++namespace EarnedDungeonParties
++{
++    void LoadConfig()
++    {
++        enabled = sConfigMgr->GetOption<bool>("DungeonClear.AutonomousParties.Enable", false);
++        maxConcurrent = std::clamp(sConfigMgr->GetOption<uint32>("DungeonClear.AutonomousParties.MaxConcurrent", 2), 1u, 8u);
++    }
++    bool AuthorizeInternalStart(Player* bot, Event const& event)
++    {
++        Event& mutableEvent = const_cast<Event&>(event);
++        return internalStart && mutableEvent.getOwner() == bot &&
++               mutableEvent.GetSource() == "earned dungeon party";
++    }
++    void Update(uint32 diff)
++    {
++        accumulator += std::min(diff, 1000u);
++        recruitAccumulator += std::min(diff, 1000u);
++        if (accumulator < 1000)
++            return;
++        accumulator = 0;
++        if (!enabled || !DcModule::IsEnabled() || !DcEarnedPlay::Active() ||
++            !sIndividualProgression->IsStrictDefaultProgression())
++        {
++            for (Party& party : parties)
++                Stop(party, "autonomous earned parties disabled");
++            parties.clear();
++            return;
++        }
++        std::erase_if(parties, [](Party& party) { return !TickParty(party); });
++        if (recruitAccumulator < 30000 || parties.size() >= maxConcurrent)
++            return;
++        recruitAccumulator = 0;
++        // The world-thread hook runs outside map updates. Player pointers are
++        // only retained for this tick; ongoing parties retain GUIDs instead.
++        std::vector<Player*> online;
++        {
++            std::shared_lock<std::shared_mutex> lock(*HashMapHolder<Player>::GetLock());
++            for (auto const& [guid, player] : ObjectAccessor::GetPlayers())
++                online.push_back(player);
++        }
++        for (Route const& route : routes)
++            if (parties.size() < maxConcurrent)
++                Recruit(route, online);
++        uint32 const now = getMSTime();
++        std::erase_if(retryAfter, [now](auto const& pair) { return getMSTimeDiff(pair.second, now) >= retryDelay; });
++    }
++}
+diff --git a/src/EarnedDungeonParties.h b/src/EarnedDungeonParties.h
+new file mode 100644
+index 0000000..8b52fac
+--- /dev/null
++++ b/src/EarnedDungeonParties.h
+@@ -0,0 +1,13 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#ifndef EARNED_DUNGEON_PARTIES_H
++#define EARNED_DUNGEON_PARTIES_H
++#include "Define.h"
++class Player;
++class Event;
++namespace EarnedDungeonParties
++{
++    void LoadConfig();
++    void Update(uint32 diff);
++    bool AuthorizeInternalStart(Player* bot, Event const& event);
++}
++#endif
+diff --git a/src/TestRun/DcTestRunManager.cpp b/src/TestRun/DcTestRunManager.cpp
+index eaf4b06..fb720b7 100644
+--- a/src/TestRun/DcTestRunManager.cpp
++++ b/src/TestRun/DcTestRunManager.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "TestRun/DcTestRunManager.h"
+ 
+ #include <ctime>
+@@ -61,6 +62,9 @@ bool DcTestRunManager::Start(Player* gm, std::string const& dungeonToken,
+         return false;
+     };
+ 
++    if (DcEarnedPlay::Active())
++        return fail(StartErr::UnknownDungeon, "provisioned test runs are unavailable in natural progression");
++
+     DcTestDungeonRegistry::Row const* row = DcTestDungeonRegistry::Find(dungeonToken);
+     if (!row)
+         return fail(StartErr::UnknownDungeon,
+@@ -139,6 +143,9 @@ bool DcTestRunManager::StartRoster(Player* gm, std::string const& dungeonToken,
+         return false;
+     };
+ 
++    if (DcEarnedPlay::Active())
++        return fail(StartErr::UnknownDungeon, "provisioned test runs are unavailable in natural progression");
++
+     DcTestDungeonRegistry::Row const* row = DcTestDungeonRegistry::Find(dungeonToken);
+     if (!row)
+         return fail(StartErr::UnknownDungeon,
+diff --git a/src/Util/DcDungeonAccess.cpp b/src/Util/DcDungeonAccess.cpp
+index 241e7b4..519a7b4 100644
+--- a/src/Util/DcDungeonAccess.cpp
++++ b/src/Util/DcDungeonAccess.cpp
+@@ -3,6 +3,7 @@
+  * and/or modify it under version 3 of the License, or (at your option), any later version.
+  */
+ 
++#include "DcEarnedPlay.h"
+ #include "Util/DcDungeonAccess.h"
+ 
+ #include "AreaDefines.h"
+@@ -79,7 +80,7 @@ namespace DcDungeonAccess
+ 
+     std::string GrantEntry(Player* bot, std::uint32_t mapId, Difficulty difficulty)
+     {
+-        if (!bot)
++        if (!bot || DcEarnedPlay::Active())
+             return {};
+ 
+         std::string summary;

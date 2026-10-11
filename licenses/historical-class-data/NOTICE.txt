@@ -1,0 +1,108 @@
+Historical class-quest and priest racial data
+
+Source projects and revisions:
+- CMaNGOS classic-db
+  https://github.com/cmangos/classic-db
+  ec4f596146be6467ea93c57397858e329e2db852
+  Full_DB/ClassicDB_1_12_1_z2815.sql.gz:
+  quest_template, creature_questrelation, creature_involvedrelation,
+  npc_trainer and npc_trainer_template records.
+- CMaNGOS tbc-db
+  https://github.com/cmangos/tbc-db
+  ebe51a83b0fde5397f0ecd82a36cb6c40f667d36
+  Full_DB/TBCDB_1.11.0_Vengeance_One_A_Cmangos_Story.sql.gz:
+  npc_trainer and npc_trainer_template records.
+- CMaNGOS mangos-classic
+  https://github.com/cmangos/mangos-classic
+  8ec338a1704e7dcb1c0213eb7ed58f9231ade40f
+  sql/base/dbc/original_data/Spell.sql and native priest spell handling.
+- CMaNGOS mangos-tbc
+  https://github.com/cmangos/mangos-tbc
+  a8ad244bcbce8457a62a1c73aa1f5241850b75ac
+  sql/base/dbc/original_data/Spell.sql and native priest spell handling.
+
+Selected historical quest, trainer, spell, rank and triggered-effect data are
+adapted to the server's per-character progression gates and generated era
+Spell.dbc records. No complete CMaNGOS database or core is distributed here.
+The source revisions and local adaptations are recorded in versions.lock.json
+and in the client package's SOURCE_MANIFEST.json.
+
+Authorship remains with the CMaNGOS Project and the contributors identified in
+each pinned repository's AUTHORS file and commit history. Classic-DB also
+credits the Zero Project team and the MaNGOS Foundation team.
+
+Database license: the classic-db and tbc-db README files declare GPL version 3.
+Their complete, identical LICENSE.md text is preserved in ../GPL-3.0.txt.
+Database AUTHORS and COPYRIGHT.md notices remain applicable to derived data.
+
+Core license: both mangos-classic and mangos-tbc include the GNU GPL version 2
+in LICENSE. Their native source-file headers allow version 2 or any later
+version. The complete GPL version 2 text is included in ../GPL-2.0.txt.
+These terms apply to the respective upstream contributions; the portable
+launcher's MIT license does not relicense them or the full distribution.
+
+Original game data: the upstream projects distinguish their GPL contributions
+from World of Warcraft content and materials, which retain the rights of
+Blizzard and its licensors. The following upstream COPYRIGHT.md notices are
+preserved verbatim. Inclusion is not a grant of rights to the game content.
+
+CMaNGOS classic-db and tbc-db COPYRIGHT.md
+----------------------------------------
+Copyright
+=========
+
+Definition of copyrighted materials
+-----------------------------------
+
+World of Warcraft content and materials are trademarks and copyrights of Blizzard or its licensors. All rights reserved.
+
+All content and materials protected by copyright are here after called Copyrighted Material.
+
+Intended use of copyrighted materials
+-------------------------------------
+
+CMaNGOS project intends to make a Fair Use of the Copyrighted Material as:
+- a non-commercial demo content for its source code
+- a testimony of the Copyrighted Material as it previously was and that is no longer available to public in its current state
+
+All Copyrighted Material contained within the source code cannot be modified, altered, sold, used for commercial purpose or in any way that would infringe copy rights without the authorisation of Blizzard Inc.
+
+Limitations and exceptions to copyright laws and the fair use doctrine can vary depending on national laws.
+
+About CMaNGOS
+-------------
+
+CMaNGOS is an educational, non-commercial and nonprofit project. 
+
+CMaNGOS project is not affiliated with Blizzard or its licensors.
+
+CMaNGOS mangos-classic and mangos-tbc COPYRIGHT.md
+------------------------------------------------
+Copyright
+=========
+
+Definition of copyrighted materials
+-----------------------------------
+
+World of Warcraft® ©2004 Blizzard Entertainment, Inc. All rights reserved.
+World of Warcraft, WoW, Warcraft, The Frozen Throne, The Burning Crusade, Wrath of the Lich King, Cataclysm, Mists of Pandaria, Ashbringer, Dark Portal, Darkmoon Faire, Frostmourne, Onyxia's Lair, Diablo, Hearthstone, Heroes of Azeroth, Reaper of Souls, Starcraft, Battle Net, Blizzcon, Glider, Blizzard and Blizzard Entertainment are trademarks or registered trademarks of Blizzard Entertainment, Inc. in the U.S. and/or other countries.
+
+All content and materials protected by copyright are here after called Copyrighted Material.
+
+Intended use of copyrighted materials
+-------------------------------------
+
+CMaNGOS project intends to make a Fair Use of the Copyrighted Material as:
+- a non-commercial demo content for its source code
+- a testimony of the Copyrighted Material as it previously was and that is no longer available to public in its current state
+
+All Copyrighted Material that may be contained within the source code cannot be modified, altered, sold, used for commercial purpose or in any way that would infringe copy rights without the authorisation of Blizzard Entertainment, Inc.
+
+Limitations and exceptions to copyright laws and the fair use doctrine can vary depending on national laws.
+
+About CMaNGOS
+-------------
+
+CMaNGOS is an educational, non-commercial and non-profit project.
+
+CMaNGOS project is not affiliated with Blizzard Entertainment, Inc or its licensors.

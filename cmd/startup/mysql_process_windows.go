@@ -4,11 +4,15 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -26,10 +30,301 @@ type mysqlProcessEntry struct {
 	Executable      [260]uint16
 }
 
+type mysqlNativeProcess struct {
+	pid     uint32
+	handle  syscall.Handle
+	created uint64
+	image   string
+	parent  uint32
+}
+
+type mysqlProcessTracker struct {
+	mu     sync.Mutex
+	root   *mysqlNativeProcess
+	owned  map[uint32]*mysqlNativeProcess
+	closed bool
+}
+
+var mysqlProcessTrackers = struct {
+	sync.Mutex
+	byPID map[uint32]*mysqlProcessTracker
+}{byPID: make(map[uint32]*mysqlProcessTracker)}
+
+// Capture the original process while exec.Cmd still owns its handle. Retaining
+// this identity through Wait prevents an exited monitor's PID from being reused
+// before its remaining listening children have been cleaned up.
+func trackMySQLProcess(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil || cmd.Process.Pid <= 0 {
+		return errors.New("MySQL tracking requires a started process")
+	}
+	root, err := openMySQLProcess(uint32(cmd.Process.Pid), true)
+	if err != nil {
+		return err
+	}
+	mysqlProcessTrackers.Lock()
+	defer mysqlProcessTrackers.Unlock()
+	if existing := mysqlProcessTrackers.byPID[root.pid]; existing != nil {
+		root.close()
+		return errors.New("MySQL process identity is already tracked")
+	}
+	mysqlProcessTrackers.byPID[root.pid] = &mysqlProcessTracker{
+		root: root, owned: map[uint32]*mysqlNativeProcess{root.pid: root},
+	}
+	return nil
+}
+
+func trackedMySQLProcess(process *os.Process) *mysqlProcessTracker {
+	if process == nil || process.Pid <= 0 {
+		return nil
+	}
+	mysqlProcessTrackers.Lock()
+	defer mysqlProcessTrackers.Unlock()
+	return mysqlProcessTrackers.byPID[uint32(process.Pid)]
+}
+
+func finishMySQLProcess(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	tracker := trackedMySQLProcess(cmd.Process)
+	if tracker == nil {
+		return nil
+	}
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	if tracker.closed {
+		return nil
+	}
+	err := tracker.stopOwnedTreeLocked()
+	tracker.closed = true
+	mysqlProcessTrackers.Lock()
+	delete(mysqlProcessTrackers.byPID, tracker.root.pid)
+	mysqlProcessTrackers.Unlock()
+	for _, process := range tracker.owned {
+		process.close()
+	}
+	return err
+}
+
+func (p *mysqlNativeProcess) close() { _ = syscall.CloseHandle(p.handle) }
+
+func (p *mysqlNativeProcess) alive() bool {
+	status, err := syscall.WaitForSingleObject(p.handle, 0)
+	return err == nil && status == syscall.WAIT_TIMEOUT
+}
+
+func openMySQLProcess(pid uint32, terminate bool) (*mysqlNativeProcess, error) {
+	const processQueryLimitedInformation = 0x1000
+	access := uint32(syscall.SYNCHRONIZE | processQueryLimitedInformation)
+	if terminate {
+		access |= syscall.PROCESS_TERMINATE
+	}
+	handle, err := syscall.OpenProcess(access, false, pid)
+	if err != nil {
+		return nil, fmt.Errorf("OpenProcess(%d): %w", pid, err)
+	}
+	p := &mysqlNativeProcess{pid: pid, handle: handle}
+	var created, exited, kernel, user syscall.Filetime
+	if err := syscall.GetProcessTimes(handle, &created, &exited, &kernel, &user); err != nil {
+		p.close()
+		return nil, fmt.Errorf("GetProcessTimes(%d): %w", pid, err)
+	}
+	p.created = uint64(created.HighDateTime)<<32 | uint64(created.LowDateTime)
+	var image [32768]uint16
+	length := uint32(len(image))
+	ok, _, err := kernel32.NewProc("QueryFullProcessImageNameW").Call(uintptr(handle), 0,
+		uintptr(unsafe.Pointer(&image[0])), uintptr(unsafe.Pointer(&length)))
+	if ok == 0 || length == 0 || length > uint32(len(image)) {
+		p.close()
+		return nil, fmt.Errorf("QueryFullProcessImageNameW(%d): %w", pid, err)
+	}
+	p.image = syscall.UTF16ToString(image[:length])
+	return p, nil
+}
+
+func mysqlProcessParents() (map[uint32]uint32, error) {
+	snapshot, _, err := kernel32.NewProc("CreateToolhelp32Snapshot").Call(0x00000002, 0)
+	if snapshot == ^uintptr(0) {
+		return nil, fmt.Errorf("CreateToolhelp32Snapshot: %w", err)
+	}
+	defer syscall.CloseHandle(syscall.Handle(snapshot))
+	parents := make(map[uint32]uint32)
+	entry := mysqlProcessEntry{Size: uint32(unsafe.Sizeof(mysqlProcessEntry{}))}
+	ok, _, err := kernel32.NewProc("Process32FirstW").Call(snapshot, uintptr(unsafe.Pointer(&entry)))
+	if ok == 0 {
+		return nil, fmt.Errorf("Process32FirstW: %w", err)
+	}
+	for {
+		parents[entry.ProcessID] = entry.ParentProcessID
+		ok, _, err = kernel32.NewProc("Process32NextW").Call(snapshot, uintptr(unsafe.Pointer(&entry)))
+		if ok != 0 {
+			continue
+		}
+		if !errors.Is(err, syscall.ERROR_NO_MORE_FILES) {
+			return nil, fmt.Errorf("Process32NextW: %w", err)
+		}
+		return parents, nil
+	}
+}
+
+// Hold every new ancestor until a second snapshot verifies its actual links.
+// Cleanup can use previously verified, retained ancestors after they exit;
+// readiness callers still require the original monitor to be alive.
+func openOwnedMySQLChain(root *mysqlNativeProcess, pid uint32, parents map[uint32]uint32, known map[uint32]*mysqlNativeProcess, terminate bool) ([]*mysqlNativeProcess, error) {
+	chain := make([]uint32, 0, maxMySQLParentDepth)
+	seen := make(map[uint32]bool)
+	for candidate := pid; candidate != root.pid; {
+		parent, exists := parents[candidate]
+		if retained := known[candidate]; retained != nil {
+			parent, exists = retained.parent, true
+		}
+		if !exists || seen[candidate] || candidate == 0 || len(chain) >= maxMySQLParentDepth-1 {
+			return nil, nil
+		}
+		seen[candidate] = true
+		chain = append(chain, candidate)
+		candidate = parent
+	}
+	if len(chain) == 0 {
+		return nil, nil
+	}
+	identities := map[uint32]mysqlProcessIdentity{
+		root.pid: {created: root.created, sameExecutable: true},
+	}
+	for candidate, p := range known {
+		identities[candidate] = mysqlProcessIdentity{
+			parent: p.parent, created: p.created,
+			sameExecutable: strings.EqualFold(filepath.Clean(root.image), filepath.Clean(p.image)),
+		}
+	}
+	held := make([]*mysqlNativeProcess, 0, len(chain))
+	accepted := false
+	defer func() {
+		if accepted {
+			return
+		}
+		for _, p := range held {
+			p.close()
+		}
+	}()
+	for _, candidate := range chain {
+		if known[candidate] != nil {
+			continue
+		}
+		p, err := openMySQLProcess(candidate, terminate)
+		if err != nil {
+			return nil, err
+		}
+		held = append(held, p)
+		p.parent = parents[candidate]
+		if !p.alive() {
+			return nil, nil
+		}
+		identities[candidate] = mysqlProcessIdentity{
+			parent: p.parent, created: p.created,
+			sameExecutable: strings.EqualFold(filepath.Clean(root.image), filepath.Clean(p.image)),
+		}
+	}
+	// The first snapshot may predate OpenProcess. A dead candidate's PID can
+	// be reused by an unrelated same-path executable in that interval. Take
+	// a fresh snapshot now that every identity is pinned by its open handle.
+	currentParents, err := mysqlProcessParents()
+	if err != nil {
+		return nil, err
+	}
+	for candidate, p := range known {
+		if _, present := currentParents[candidate]; !present && !p.alive() {
+			// An exited, retained process cannot acquire a different parent.
+			// Its original ancestry was verified before this handle was kept.
+			currentParents[candidate] = p.parent
+		}
+	}
+	if !validMySQLProcessChain(root.pid, pid, identities, currentParents) {
+		return nil, nil
+	}
+	for _, p := range held {
+		if !p.alive() {
+			return nil, nil
+		}
+	}
+	accepted = true
+	return held, nil
+}
+
+func ownedMySQLDescendant(root *mysqlNativeProcess, pid uint32, parents map[uint32]uint32, terminate bool) (*mysqlNativeProcess, error) {
+	if !root.alive() {
+		return nil, nil
+	}
+	held, err := openOwnedMySQLChain(root, pid, parents, map[uint32]*mysqlNativeProcess{root.pid: root}, terminate)
+	if len(held) == 0 {
+		return nil, err
+	}
+	for _, ancestor := range held[1:] {
+		ancestor.close()
+	}
+	if !root.alive() || !held[0].alive() {
+		held[0].close()
+		return nil, nil
+	}
+	return held[0], nil
+}
+
 func ownsMySQLListener(port int, process *os.Process) (bool, error) {
 	if process == nil || process.Pid <= 0 || port <= 0 || port > 65535 {
 		return false, nil
 	}
+	if tracker := trackedMySQLProcess(process); tracker != nil {
+		tracker.mu.Lock()
+		defer tracker.mu.Unlock()
+		if tracker.closed || !tracker.root.alive() {
+			return false, nil
+		}
+		pid, err := mysqlListenerPID(port)
+		if err != nil || pid == 0 {
+			return false, err
+		}
+		if known := tracker.owned[pid]; known != nil {
+			return known.alive() && tracker.root.alive(), nil
+		}
+		parents, err := mysqlProcessParents()
+		if err != nil {
+			return false, err
+		}
+		held, err := openOwnedMySQLChain(tracker.root, pid, parents, tracker.owned, true)
+		for _, candidate := range held {
+			tracker.owned[candidate.pid] = candidate
+		}
+		owned := tracker.owned[pid]
+		return owned != nil && owned.alive() && tracker.root.alive(), err
+	}
+	root, err := openMySQLProcess(uint32(process.Pid), false)
+	if err != nil {
+		return false, err
+	}
+	defer root.close()
+	if !root.alive() {
+		return false, nil
+	}
+	pid, err := mysqlListenerPID(port)
+	if err != nil || pid == 0 {
+		return false, err
+	}
+	if pid == root.pid {
+		return root.alive(), nil
+	}
+	parents, err := mysqlProcessParents()
+	if err != nil {
+		return false, err
+	}
+	owned, err := ownedMySQLDescendant(root, pid, parents, false)
+	if owned == nil {
+		return false, err
+	}
+	defer owned.close()
+	return owned.alive() && root.alive(), nil
+}
+
+func mysqlListenerPID(port int) (uint32, error) {
 	getExtendedTCPTable := syscall.NewLazyDLL("iphlpapi.dll").NewProc("GetExtendedTcpTable")
 	const (
 		afInet                   = 2
@@ -39,11 +334,11 @@ func ownsMySQLListener(port int, process *os.Process) (bool, error) {
 	var size uint32
 	status, _, _ := getExtendedTCPTable.Call(0, uintptr(unsafe.Pointer(&size)), 0, afInet, tcpTableOwnerPIDListener, 0)
 	if status != errorInsufficientBuffer {
-		return false, fmt.Errorf("GetExtendedTcpTable size: %w", syscall.Errno(status))
+		return 0, fmt.Errorf("GetExtendedTcpTable size: %w", syscall.Errno(status))
 	}
 	for attempts := 0; attempts < 3; attempts++ {
 		if size < 4 || size > 16<<20 {
-			return false, fmt.Errorf("invalid TCP table size %d", size)
+			return 0, fmt.Errorf("invalid TCP table size %d", size)
 		}
 		buffer := make([]byte, size)
 		status, _, _ = getExtendedTCPTable.Call(uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)), 0, afInet, tcpTableOwnerPIDListener, 0)
@@ -51,109 +346,125 @@ func ownsMySQLListener(port int, process *os.Process) (bool, error) {
 			continue
 		}
 		if status != 0 {
-			return false, fmt.Errorf("GetExtendedTcpTable: %w", syscall.Errno(status))
+			return 0, fmt.Errorf("GetExtendedTcpTable: %w", syscall.Errno(status))
 		}
 		count := binary.LittleEndian.Uint32(buffer[:4])
 		const rowSize = 24
 		if uint64(count)*rowSize+4 > uint64(len(buffer)) {
-			return false, fmt.Errorf("invalid TCP listener count %d", count)
+			return 0, fmt.Errorf("invalid TCP listener count %d", count)
 		}
 		for i := uint32(0); i < count; i++ {
 			row := buffer[4+int(i)*rowSize : 4+int(i+1)*rowSize]
-			if binary.LittleEndian.Uint32(row[:4]) != 2 ||
-				binary.LittleEndian.Uint32(row[4:8]) != 0x0100007f ||
-				binary.BigEndian.Uint16(row[8:10]) != uint16(port) {
-				continue
+			if binary.LittleEndian.Uint32(row[:4]) == 2 &&
+				binary.LittleEndian.Uint32(row[4:8]) == 0x0100007f &&
+				binary.BigEndian.Uint16(row[8:10]) == uint16(port) {
+				return binary.LittleEndian.Uint32(row[20:24]), nil
 			}
-
-			listenerPID := binary.LittleEndian.Uint32(row[20:24])
-			if listenerPID == uint32(process.Pid) {
-				return true, nil
-			}
-			// Windows MySQL can spawn another mysqld.exe process to own the
-			// listener. Only accept it if it descends from the launcher-owned
-			// process AND runs the very same executable.
-			return isOwnedMySQLDescendant(uint32(process.Pid), listenerPID)
 		}
-		return false, nil
+		return 0, nil
 	}
-	return false, fmt.Errorf("TCP table changed repeatedly during ownership check")
+	return 0, fmt.Errorf("TCP table changed repeatedly during ownership check")
 }
 
-func isOwnedMySQLDescendant(launchedPID, listenerPID uint32) (bool, error) {
-	dll := syscall.NewLazyDLL("kernel32.dll")
-	createSnapshot := dll.NewProc("CreateToolhelp32Snapshot")
-	first := dll.NewProc("Process32FirstW")
-	next := dll.NewProc("Process32NextW")
-	closeHandle := dll.NewProc("CloseHandle")
-	const snapshotProcesses = 0x00000002
-
-	snapshot, _, err := createSnapshot.Call(snapshotProcesses, 0)
-	if snapshot == ^uintptr(0) {
-		return false, fmt.Errorf("CreateToolhelp32Snapshot: %w", err)
-	}
-	defer closeHandle.Call(snapshot)
-
-	parents := make(map[uint32]uint32)
-	entry := mysqlProcessEntry{Size: uint32(unsafe.Sizeof(mysqlProcessEntry{}))}
-	ok, _, err := first.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
-	if ok == 0 {
-		return false, fmt.Errorf("Process32FirstW: %w", err)
-	}
-	for ok != 0 {
-		parents[entry.ProcessID] = entry.ParentProcessID
-		ok, _, _ = next.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
-	}
-
-	// Follow a bounded parent chain: never accept unrelated processes or
-	// a stale PID that is no longer present in the snapshot.
-	seen := make(map[uint32]bool)
-	descendant := false
-	for pid := listenerPID; pid != 0 && !seen[pid]; {
-		if pid == launchedPID {
-			descendant = true
-			break
+func (tracker *mysqlProcessTracker) collectOwnedChildrenLocked(parents map[uint32]uint32) (int, error) {
+	added := 0
+	var failures []error
+	for pid := range parents {
+		if tracker.owned[pid] != nil {
+			continue
 		}
-		seen[pid] = true
-		parent, exists := parents[pid]
-		if !exists || parent == pid {
-			break
+		held, err := openOwnedMySQLChain(tracker.root, pid, parents, tracker.owned, true)
+		if err != nil {
+			failures = append(failures, err)
 		}
-		pid = parent
+		for _, process := range held {
+			tracker.owned[process.pid] = process
+			added++
+		}
 	}
-	if !descendant {
-		return false, nil
-	}
-
-	launchedImage, err := mysqlProcessImage(launchedPID)
-	if err != nil {
-		return false, fmt.Errorf("verify launched MySQL executable: %w", err)
-	}
-	listenerImage, err := mysqlProcessImage(listenerPID)
-	if err != nil {
-		return false, fmt.Errorf("verify listening MySQL executable: %w", err)
-	}
-	return strings.EqualFold(filepath.Clean(launchedImage), filepath.Clean(listenerImage)), nil
+	return added, errors.Join(failures...)
 }
 
-func mysqlProcessImage(pid uint32) (string, error) {
-	dll := syscall.NewLazyDLL("kernel32.dll")
-	openProcess := dll.NewProc("OpenProcess")
-	queryImage := dll.NewProc("QueryFullProcessImageNameW")
-	closeHandle := dll.NewProc("CloseHandle")
-	const processQueryLimitedInformation = 0x1000
+// Stop the monitor before its children, then take another fresh snapshot after
+// the stopped processes finish. A child started after the first snapshot is
+// still bound to the original retained monitor or a verified ancestor. Repeating
+// this for newly found children also covers their late descendants. The shared
+// deadline bounds all waits, rather than granting every child a new timeout.
+func (tracker *mysqlProcessTracker) stopOwnedTreeLocked() error {
+	parents, err := mysqlProcessParents()
+	return tracker.stopOwnedTreeFromSnapshotLocked(parents, err)
+}
 
-	handle, _, err := openProcess.Call(processQueryLimitedInformation, 0, uintptr(pid))
-	if handle == 0 {
-		return "", fmt.Errorf("OpenProcess(%d): %w", pid, err)
+func (tracker *mysqlProcessTracker) stopOwnedTreeFromSnapshotLocked(parents map[uint32]uint32, snapshotErr error) error {
+	if tracker.closed {
+		return os.ErrProcessDone
 	}
-	defer closeHandle.Call(handle)
+	var failures []error
+	if snapshotErr != nil {
+		failures = append(failures, snapshotErr)
+	}
+	if _, err := tracker.collectOwnedChildrenLocked(parents); err != nil {
+		failures = append(failures, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for round := 0; round < maxMySQLParentDepth; round++ {
+		// The root is first so an active monitor cannot respawn its listener.
+		ordered := []*mysqlNativeProcess{tracker.root}
+		for pid, process := range tracker.owned {
+			if pid != tracker.root.pid {
+				ordered = append(ordered, process)
+			}
+		}
+		for _, process := range ordered {
+			if process.alive() {
+				if err := syscall.TerminateProcess(process.handle, 1); err != nil {
+					failures = append(failures, fmt.Errorf("terminate owned MySQL process %d: %w", process.pid, err))
+				}
+			}
+		}
+		for _, process := range ordered {
+			remaining := max(time.Until(deadline), 0)
+			status, err := syscall.WaitForSingleObject(process.handle, uint32(remaining.Milliseconds()))
+			if err != nil || status != syscall.WAIT_OBJECT_0 {
+				failures = append(failures, fmt.Errorf("owned MySQL process %d did not finish cleanup (wait=%d): %v", process.pid, status, err))
+			}
+		}
+		parents, err := mysqlProcessParents()
+		if err != nil {
+			failures = append(failures, err)
+		}
+		added, err := tracker.collectOwnedChildrenLocked(parents)
+		if err != nil {
+			failures = append(failures, err)
+		}
+		if added == 0 {
+			return errors.Join(failures...)
+		}
+	}
+	// Even at the bounded ancestry limit, terminate the last collected handles;
+	// exhausting the wait budget must not leave a newly verified child running.
+	for _, process := range tracker.owned {
+		if process.alive() {
+			if err := syscall.TerminateProcess(process.handle, 1); err != nil {
+				failures = append(failures, err)
+			}
+		}
+	}
+	failures = append(failures, errors.New("MySQL descendant cleanup reached its ancestry limit"))
+	return errors.Join(failures...)
+}
 
-	var image [32768]uint16
-	length := uint32(len(image))
-	ok, _, err := queryImage.Call(handle, 0, uintptr(unsafe.Pointer(&image[0])), uintptr(unsafe.Pointer(&length)))
-	if ok == 0 || length == 0 {
-		return "", fmt.Errorf("QueryFullProcessImageNameW(%d): %w", pid, err)
+func killMySQLProcessTree(process *os.Process) error {
+	if process == nil || process.Pid <= 0 {
+		return os.ErrProcessDone
 	}
-	return syscall.UTF16ToString(image[:length]), nil
+	tracker := trackedMySQLProcess(process)
+	if tracker == nil {
+		// Without a start-time identity, only os.Process's original handle is
+		// safe to terminate. Never discover a tree by reopening an unheld PID.
+		return process.Kill()
+	}
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	return tracker.stopOwnedTreeLocked()
 }

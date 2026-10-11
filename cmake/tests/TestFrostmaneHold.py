@@ -1,7 +1,7 @@
 """Validate Frostmane Hold's narrow SQL correction and native quest eligibility.
 
 Execute the delivered SQL directly on a scoped SQLite copy of the locked quest
-data, then compile the core's unchanged eligibility methods against both states.
+data, then compile the core's eligibility methods against both states.
 This fixture does not launch a realm or certify all historical quest variants.
 """
 
@@ -141,6 +141,12 @@ struct DisableMgr
     bool IsDisabledFor(int, uint32, void const*) const { return false; }
 } disableMgr;
 auto* sDisableMgr = &disableMgr;
+struct Player;
+struct ScriptMgr
+{
+    bool OnPlayerCanUseQuest(Player*, Quest const*) const { return true; }
+} scriptMgr;
+auto* sScriptMgr = &scriptMgr;
 struct Player
 {
     uint32 level = 9, raceMask = 1, classMask = 1;

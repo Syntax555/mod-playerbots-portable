@@ -27,8 +27,10 @@ See [updates, moving the server and recovery](updating.md) for operating steps.
 | Flight points | Nearby controlled bots learn the visited point when their player or SelfBot master speaks to its flight master. Both characters must satisfy ordinary interaction checks. |
 | Exploration objectives | A follower can retain the master's quest-area trigger until it enters that area. The native handler validates its own active quest, position and other gates. This provides credit for physical arrival, without completing other objectives. |
 | Group loot | Both roll entry points use the configured policy, reject duplicate votes and respect group masks and native Need Before Greed restrictions. Defaults permit Need for appropriate equipment upgrades and Greed for other useful loot. Item evaluation remains the upstream AI's responsibility. |
-| Manual training | MultiBot purchases use the bot's current wallet and core trainer pricing, including reputation discounts. NPC access and the paid transaction remain native; autonomous spending keeps its AI budget. |
+| Manual training | MultiBot purchases use the bot's current wallet and core trainer pricing, including reputation discounts. NPC access and the paid transaction remain native; autonomous spending keeps its AI budget. Optional preset discovery accepts absent entries without missing-key warnings. |
 | Battlegrounds | Supported queues and matches follow each participant's earned era and level. Ordinary minimum team sizes apply; no automatic equipment or level catch-up is supplied. |
+| World buffs | Simulated Vanilla events check each recipient's own rewarded milestones and native eligibility. TBC buffs retain ordinary quest, world-state and personal progression conditions. |
+| Autonomous dungeons | Suitable nearby random bots form real five-member parties for Ragefire Chasm or the Stockade and walk to the physical portal. Natural progression refuses movement shortcuts and unsupported maps. |
 
 Settings and scope are documented in [configuration](vanilla-config-audit.md),
 [bot brackets and PvP](earned-bot-brackets.md) and
@@ -36,11 +38,19 @@ Settings and scope are documented in [configuration](vanilla-config-audit.md),
 implemented in [area-trigger handling](../patches/mod-playerbots-quest-area-triggers.patch)
 and [roll policy](../patches/mod-playerbots-loot-roll-policy.patch).
 
+See [bot dungeons](bot-dungeons.md) for recruitment, supported instances and
+travel requirements. LFG Progression supplies earned-era access guards for the
+optional Dungeon Finder; it does not navigate or run encounters.
+
+See [world buffs](world-buffs.md) for event timers, recipient conditions and the
+[world-event integration](../patches/mod-world-buff-bots-earned-era.patch).
+
 ## World data
 
 | Adaptation | Scope |
 | --- | --- |
 | Frostmane Hold, quest 287 | The SQL update removes prerequisite 420 only when that is the existing value. Ordinary level/faction checks remain; follow-up quest 291 still requires 287. Existing unrelated custom prerequisites are preserved. |
+| Historical priest quests | Original teacher relations and personal race, level and era gates select historical rank-1 rewards. Later ranks use paid training; native Wrath records are retained. See [class quests](class-quests.md). |
 | EraTalents spell groups | A targeted SQL update removes invalid rank or incompatible aura entries from the custom spell groups. Native rank and aura stacking checks remain in force. |
 | Formation movement | Formation velocity falls back to the creature's native walking speed when the computed movement velocity is effectively zero. Ordinary movement calculations remain in use. |
 
@@ -64,7 +74,9 @@ supported historical rules.
 
 The prepared MultiBot addon displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
-retained. Optional quest, gear and guide addons are linked in
+retained. Its talent button uses native inspection with EraTalents: historical
+trees and ranks belong to the inspected bot, and Wrath retains Blizzard's view.
+Historical inspection is read-only. Optional quest, gear and guide addons are linked in
 [client addons](addons.md) and installed from their upstream projects.
 
 ## Validation and supported scope

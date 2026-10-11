@@ -51,8 +51,8 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | --- | --- |
 | Natural progression | Enabled |
 | Fresh bot level / XP rate | 1 / 1.0 |
-| Online population target | 2,500 while a real player session is connected |
-| Login / logout delays | 30 / 60 seconds after real-player presence changes |
+| Online population target | 2,500, including without a real player session |
+| Disable bots without a real player | Disabled; set `AiPlayerbot.DisabledWithoutRealPlayer = 1` to restrict activity to real-player sessions |
 | Resident earned caps | About 5% each at 19, 29, 39, 49, 59, 69 and 79 |
 | Free factory equipment, money and supplies | Disabled |
 | Level, quest and leader-progress synchronization | Disabled |
@@ -105,8 +105,10 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Era Talents | Historical Vanilla/TBC trees; native Wrath after earned access |
 | MultiBot Chatless and Bridge | Bot-control UI with natural-progression restrictions |
 | Quest Loot Party | Share naturally rolled normal-quality quest loot with eligible corpse looters |
+| World Buff Bots | Timed Vanilla events for eligible Vanilla-progress characters; native TBC events unchanged |
+| LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | AH Bot Plus | Seller, buyer and generated stock disabled |
-| Dungeon Clear | Scripted runs, filler creation, recovery and spectate shortcuts disabled |
+| Dungeon Clear | Autonomous real parties for supported Vanilla instances; filler creation, recovery and spectate shortcuts disabled |
 | Token Turn-in | Read-only checks available; shortcut redemption blocked in natural mode |
 
 AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
@@ -114,6 +116,20 @@ smaller parties receive the upstream scaling curve with reduced XP and money.
 Bonus tokens and party-count difficulty offsets are disabled. Outdoor elites
 and world bosses retain ordinary world difficulty. Scaling cannot supply missing
 mechanic tactics or guarantee that every class can solo an encounter.
+
+Playerbots includes selected dungeon and raid tactics across Vanilla, TBC and
+Wrath. Bots can accompany a player through real instances without a dungeon
+simulator. `AiPlayerbot.ApplyInstanceStrategies = 1` enables these tactics;
+navigation and boss coverage vary by encounter. Automatic Dungeon Finder
+joining is disabled. Autonomous five-bot parties can walk to and attempt the
+supported Vanilla instances; see [bot dungeons](bot-dungeons.md) for scope and
+configuration. A large bot population does not require a dungeon simulator or
+establish that every instance can be cleared autonomously.
+
+World Buff Bots uses independent 30–150 minute timers for its three Vanilla
+events. Eligibility follows each character's own earned tier and native buff
+conditions. TBC buffs use ordinary quests and areas, including personal K'iru
+requirements. See [world buffs](world-buffs.md) for locations and settings.
 
 Quest Loot Party changes only eligible normal-quality quest-item distribution.
 Players and bots must still loot the corpse; drop rolls, ordinary equipment loot,

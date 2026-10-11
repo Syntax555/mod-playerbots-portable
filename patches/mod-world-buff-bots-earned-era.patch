@@ -1,0 +1,216 @@
+diff --git a/conf/mod_world_buff_bots.conf.dist b/conf/mod_world_buff_bots.conf.dist
+index 8c5f8d0..1209196 100644
+--- a/conf/mod_world_buff_bots.conf.dist
++++ b/conf/mod_world_buff_bots.conf.dist
+@@ -2,7 +2,11 @@
+ 
+ #
+ # WorldBuffBots.Enable
+-#   Enable the module.
++#   Simulate the three Vanilla world events for nearby alive, non-GM players
++#   and bots whose own rewarded Individual Progression milestones are Vanilla.
++#   Requires the active strict default progression chain; custom or disabled
++#   progression fails closed. TBC/Wrath world events retain native behavior.
++#   Native level (at most 63) and Warchief faction/reputation gates apply.
+ #   Default: 1
+ #
+ WorldBuffBots.Enable = 1
+@@ -18,6 +22,7 @@ WorldBuffBots.Debug = 0
+ # WorldBuffBots.BaseMinutes / WorldBuffBots.VarianceMinutes
+ #   Each buff rerolls its next fire time as BaseMinutes +/- VarianceMinutes.
+ #   Default: 90 +/- 60 minutes, meaning 30 to 150 minutes.
++#   Delays are clamped to 1..71582 minutes to keep millisecond timers valid.
+ #
+ WorldBuffBots.BaseMinutes = 90
+ WorldBuffBots.VarianceMinutes = 60
+@@ -33,27 +38,30 @@ WorldBuffBots.InitialMaxMinutes = 150
+ 
+ #
+ # Warchief's Blessing
+-#   Chooses a random Horde-style name for the announcement.
+-#   Applies spell 16609 to eligible players in Orgrimmar.
++#   Announces the scheduled world-buff event.
++#   Applies spell 16609 to eligible Horde players in Orgrimmar who are
++#   Friendly or higher with Orgrimmar. Native buff duration: 60 minutes.
+ #   IncludeCrossroads also applies the buff to eligible players in the Crossroads
+ #   10 seconds later, matching AzerothCore's existing Thrall reward script.
+ #
+ WorldBuffBots.Warchief.Enable = 1
+ WorldBuffBots.Warchief.IncludeCrossroads = 1
+-WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.
++WorldBuffBots.Warchief.Announcement = World buff: Warchief's Blessing is available in Orgrimmar.
+ 
+ #
+ # Rallying Cry of the Dragonslayer
+-#   Chooses a random Alliance-style name for the announcement.
+-#   Applies spell 22888 to eligible players in Stormwind.
++#   Announces the scheduled world-buff event.
++#   Applies spell 22888 to eligible players in Stormwind. Native duration:
++#   120 minutes; the normal lower-level stat scaling remains active.
+ #
+ WorldBuffBots.Dragonslayer.Enable = 1
+-WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.
++WorldBuffBots.Dragonslayer.Announcement = World buff: Rallying Cry of the Dragonslayer is available in Stormwind.
+ 
+ #
+ # Spirit of Zandalar
+-#   Chooses a random name from either faction's name pool.
++#   Announces the scheduled world-buff event.
+ #   Applies spell 24425 to eligible players in Stranglethorn Vale.
++#   Native buff duration: 120 minutes.
+ #
+ WorldBuffBots.Zandalar.Enable = 1
+-WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.
++WorldBuffBots.Zandalar.Announcement = World buff: Spirit of Zandalar is available in Stranglethorn Vale.
+diff --git a/src/WorldBuffBots.cpp b/src/WorldBuffBots.cpp
+index 0d3bbf8..04657bb 100644
+--- a/src/WorldBuffBots.cpp
++++ b/src/WorldBuffBots.cpp
+@@ -1,10 +1,11 @@
+ /*
+- * Simulates classic world buff turn-ins by choosing a faction-appropriate
+- * character name, announcing the event, and applying the actual world buffs.
++ * Simulates recurring Vanilla world-buff events for each eligible character.
++ * Applies native auras without granting quest, item or progression rewards.
+  */
+ 
+ #include "AreaDefines.h"
+ #include "Config.h"
++#include "IndividualProgression.h"
+ #include "Log.h"
+ #include "Player.h"
+ #include "Random.h"
+@@ -14,6 +15,7 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <limits>
+ #include <string>
+ #include <vector>
+ 
+@@ -23,6 +25,9 @@ constexpr uint32 SPELL_WARCHIEFS_BLESSING = 16609;
+ constexpr uint32 SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER = 22888;
+ constexpr uint32 SPELL_SPIRIT_OF_ZANDALAR = 24425;
+ constexpr uint32 MS_PER_MINUTE = 60 * IN_MILLISECONDS;
++constexpr uint32 MAX_TIMER_MINUTES = std::numeric_limits<uint32>::max() / MS_PER_MINUTE;
++constexpr uint32 MAX_VANILLA_BUFF_LEVEL = 63;
++constexpr uint32 FACTION_ORGRIMMAR = 76;
+ 
+ enum class AnnouncerNamePool
+ {
+@@ -70,14 +75,26 @@ bool IsInAreaOrZone(Player const* player, uint32 areaId)
+     return player && (player->GetAreaId() == areaId || player->GetZoneId() == areaId);
+ }
+ 
+-bool IsEligibleTarget(Player const* player)
++bool IsEligibleTarget(Player* player, uint32 spellId)
+ {
+-    return player && player->IsInWorld() && player->IsAlive() && !player->IsGameMaster();
++    if (!player || !player->IsInWorld() || !player->IsAlive() || player->IsGameMaster() ||
++        player->GetLevel() > MAX_VANILLA_BUFF_LEVEL || !sIndividualProgression->IsStrictDefaultProgression())
++        return false;
++
++    // The recipient's rewarded milestones define the era, independently of
++    // level, account unlocks, group leaders and the server's client expansion.
++    if (sIndividualProgression->GetPlayerProgressionFromQuests(player) >= PROGRESSION_PRE_TBC)
++        return false;
++
++    // AddAura does not run the spell's implicit-target conditions. Preserve
++    // Warchief's native Horde/Friendly gates alongside the native level cap.
++    return spellId != SPELL_WARCHIEFS_BLESSING ||
++           (player->GetTeamId() == TEAM_HORDE && player->GetReputationRank(FACTION_ORGRIMMAR) >= REP_FRIENDLY);
+ }
+ 
+ uint32 MinutesToMs(uint32 minutes)
+ {
+-    return minutes * MS_PER_MINUTE;
++    return std::clamp<uint32>(minutes, 1, MAX_TIMER_MINUTES) * MS_PER_MINUTE;
+ }
+ 
+ void ReplaceAll(std::string& text, std::string const& token, std::string const& value)
+@@ -107,7 +124,7 @@ public:
+                 AnnouncerNamePool::Horde,
+                 true,
+                 0,
+-                "Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.",
++                "World buff: Warchief's Blessing is available in Orgrimmar.",
+                 {},
+                 { AREA_ORGRIMMAR }
+             },
+@@ -118,7 +135,7 @@ public:
+                 AnnouncerNamePool::Alliance,
+                 true,
+                 0,
+-                "{player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.",
++                "World buff: Rallying Cry of the Dragonslayer is available in Stormwind.",
+                 {},
+                 { AREA_STORMWIND_CITY }
+             },
+@@ -129,7 +146,7 @@ public:
+                 AnnouncerNamePool::Either,
+                 true,
+                 0,
+-                "{player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.",
++                "World buff: Spirit of Zandalar is available in Stranglethorn Vale.",
+                 {},
+                 { AREA_STRANGLETHORN_VALE }
+             }
+@@ -155,9 +172,15 @@ public:
+ 
+     void OnUpdate(uint32 diff) override
+     {
+-        if (!_enabled)
++        if (!_enabled || !diff)
+             return;
+ 
++        if (!sIndividualProgression->IsStrictDefaultProgression())
++        {
++            _delayedCasts.clear();
++            return;
++        }
++
+         UpdateDelayedCasts(diff);
+ 
+         for (WorldBuffEvent& event : _events)
+@@ -209,8 +232,8 @@ private:
+ 
+     uint32 RollInitialDelayMs() const
+     {
+-        uint32 minMinutes = std::max<uint32>(1, _initialMinMinutes);
+-        uint32 maxMinutes = std::max<uint32>(1, _initialMaxMinutes);
++        uint32 minMinutes = std::clamp<uint32>(_initialMinMinutes, 1, MAX_TIMER_MINUTES);
++        uint32 maxMinutes = std::clamp<uint32>(_initialMaxMinutes, 1, MAX_TIMER_MINUTES);
+ 
+         if (maxMinutes < minMinutes)
+             std::swap(maxMinutes, minMinutes);
+@@ -220,8 +243,10 @@ private:
+ 
+     uint32 RollMainDelayMs() const
+     {
+-        uint32 minMinutes = _baseMinutes > _varianceMinutes ? _baseMinutes - _varianceMinutes : 1;
+-        uint32 maxMinutes = std::max<uint32>(minMinutes, _baseMinutes + _varianceMinutes);
++        uint32 const baseMinutes = std::clamp<uint32>(_baseMinutes, 1, MAX_TIMER_MINUTES);
++        uint32 const varianceMinutes = std::min<uint32>(_varianceMinutes, MAX_TIMER_MINUTES);
++        uint32 const minMinutes = baseMinutes > varianceMinutes ? baseMinutes - varianceMinutes : 1;
++        uint32 const maxMinutes = std::min<uint32>(MAX_TIMER_MINUTES, baseMinutes + varianceMinutes);
+         return MinutesToMs(urand(minMinutes, maxMinutes));
+     }
+ 
+@@ -270,11 +295,14 @@ private:
+ 
+         sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
+         {
+-            if (!IsEligibleTarget(player) || !IsInAreaOrZone(player, areaId))
++            if (!IsInAreaOrZone(player, areaId) || !IsEligibleTarget(player, spellId))
+                 return;
+ 
+-            player->CastSpell(player, spellId, true);
+-            ++appliedCount;
++            // A player-cast Dragonslayer selects the whole city again. Apply
++            // only this validated recipient; native AuraScripts, amounts,
++            // durations, immunity and normal aura replacement remain active.
++            if (player->AddAura(spellId, player))
++                ++appliedCount;
+         });
+ 
+         return appliedCount;

@@ -1,0 +1,140 @@
+diff --git a/client-addon/EraTalents/Comms.lua b/client-addon/EraTalents/Comms.lua
+--- a/client-addon/EraTalents/Comms.lua
++++ b/client-addon/EraTalents/Comms.lua
+@@ -82,6 +82,7 @@
+       clientStamp or L["MISSING"], serverStamp)
+     if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage(msg) end
+   end
++  if ET.RefreshInspect then ET.RefreshInspect() end
+ end
+ 
+ function ET.OnAddonMsg(prefix, message)
+diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspect.lua
+--- a/client-addon/EraTalents/Inspect.lua
++++ b/client-addon/EraTalents/Inspect.lua
+@@ -7,6 +7,7 @@
+ -- (Grid2's LibTalentQuery inspects party members) fire it too and would spam INSPECT requests.
+ EraTalents = EraTalents or {}
+ local ET = EraTalents
++local L = ET.L
+ 
+ -- Stock children the overlay replaces. The scroll frame (talent buttons + branches) and points bar
+ -- are never re-shown by Blizzard code, so Hide/Show is safe (OnShow guard below as a backstop). The
+@@ -38,29 +39,84 @@
+   return ET.inspectView
+ end
+ 
+--- Show the era overlay iff the Talents tab is up and the CURRENT target's cached ISYNC is managed
+--- and has a tree; otherwise hide it and hand the tab back to Blizzard. Called on every ISYNC, on
+--- target changes, and on InspectTalentFrame show/hide.
++-- Do not show native WotLK talents while an authoritative historical reply is
++-- pending or its client data is unavailable. The stock frame remains the inspect
++-- host, and every historical view is read-only.
++local function ShowStatus(message)
++  if ET.inspectView then ET.inspectView.frame:Hide() end
++  if not ET.inspectStatus then
++    ET.inspectStatus = InspectTalentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
++    ET.inspectStatus:SetPoint("CENTER", InspectTalentFrame, "CENTER", 0, 0)
++    ET.inspectStatus:SetWidth(260)
++  end
++  ET.inspectStatus:SetText(message)
++  ET.inspectStatus:Show()
++end
++
+ function ET.RefreshInspect()
+   if not InspectTalentFrame then return end
+   local guid = ET.inspect.current
+   local e = guid and ET.inspect.cache[guid]
+-  local byClass = e and e.managed and EraTalentsData and EraTalentsData[e.era]
+-  local tree = byClass and byClass[e.classId]
+-  if tree and InspectTalentFrame:IsShown() then
++  local shown = guid and InspectTalentFrame:IsShown()
++  local waiting = shown and not e and (ET.state.serverGen or ET.inspect.botTarget == guid)
++  local historical = shown and e and e.managed
++  if waiting or historical then
++    SetStockSuppressed(true)
++    if waiting or e.partial then
++      ShowStatus(L["Loading talent data..."])
++      return
++    end
++    if not ET.state.serverGen then
++      ShowStatus(L["Waiting for server talent data..."])
++      return
++    end
++    if ET.state.clientGen ~= ET.state.serverGen then
++      ShowStatus(L["Install the matching EraTalents client patch and restart the game."])
++      return
++    end
++    local byClass = EraTalentsData and EraTalentsData[e.era]
++    local tree = byClass and byClass[e.classId]
++    local valid = tree ~= nil
++    local nodeRanks = {}
++    if tree then
++      for _, node in ipairs(tree.talents) do nodeRanks[node.id] = node.maxRank end
++      for id, rank in pairs(e.ranks) do
++        if not nodeRanks[id] or rank > nodeRanks[id] then valid = false; break end
++      end
++    end
++    if not valid then
++      ShowStatus(L["Install the matching EraTalents addon and reload the interface."])
++      return
++    end
++    if ET.inspectStatus then ET.inspectStatus:Hide() end
+     local v = EnsureView()
+-    if v.guid ~= guid or v.pickedPartial then    -- new target (or reply still arriving): primary tree
++    if v.guid ~= guid then
+       v.guid = guid
+       v.activeTab = ET.PrimaryTab(tree, e.ranks, 1)
+-      v.pickedPartial = e.partial
+     end
+-    SetStockSuppressed(true)
+     v.frame:Show()
+     ET.RenderView(v, { era = e.era, ranks = e.ranks, availPts = 0 }, e.classId)
+   else
+     if ET.inspectView then ET.inspectView.frame:Hide() end
++    if ET.inspectStatus then ET.inspectStatus:Hide() end
+     SetStockSuppressed(false)
+   end
++end
++
++-- Used by MultiBot's talent button. Stock InspectUnit retains its native unit,
++-- distance and faction checks; ISYNC identifies the inspected character by GUID.
++function ET.OpenBotInspect(unit, toggle)
++  if not unit or not UnitExists(unit) or not CanInspect(unit) then return false end
++  local guid = UnitGUID(unit)
++  if not guid then return false end
++  if InspectFrame and InspectFrame:IsShown() and InspectFrame.unit and UnitGUID(InspectFrame.unit) == guid then
++    if toggle then HideUIPanel(InspectFrame) end
++    return true
++  end
++  InspectUnit(unit)
++  ET.inspect.botTarget = guid
++  ET.RefreshInspect()
++  return true
+ end
+ 
+ local function OnInspectTarget()
+@@ -80,6 +136,7 @@
+   -- InspectFrame_Show hides the frame before re-showing it, so every fresh inspect re-requests.
+   InspectFrame:HookScript("OnHide", function()
+     ET.inspect.current = nil
++    ET.inspect.botTarget = nil
+     wipe(ET.inspect.cache)
+     if ET.inspectView then ET.inspectView.guid = nil end   -- reopening = a fresh inspect: primary tree again
+     ET.RefreshInspect()
+diff --git a/client-addon/EraTalents/Locales.lua b/client-addon/EraTalents/Locales.lua
+--- a/client-addon/EraTalents/Locales.lua
++++ b/client-addon/EraTalents/Locales.lua
+@@ -5,6 +5,12 @@
+ 
+ local deDE = {
+   ["Talents"] = "Talente",
++  ["Loading talent data..."] = "Talentdaten werden geladen...",
++  ["Waiting for server talent data..."] = "Warten auf Talentdaten des Servers...",
++  ["Install the matching EraTalents client patch and restart the game."] =
++    "Installiert den passenden EraTalents-Client-Patch und startet das Spiel neu.",
++  ["Install the matching EraTalents addon and reload the interface."] =
++    "Installiert das passende EraTalents-Add-on und ladet die Oberfläche neu.",
+   ["Pet Talents"] = "Begleitertalente",
+   ["Rank %d/%d"] = "Rang %d/%d",
+   ["Next rank:"] = "Nächster Rang:",

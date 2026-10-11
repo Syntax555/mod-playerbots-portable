@@ -51,6 +51,16 @@ def add_manifest(files, lock):
     return manifest
 
 
+def historical_sources():
+    return {"sources": [
+        {"name": "CMaNGOS Classic DB", "url": "https://github.com/cmangos/classic-db.git", "revision": "b" * 40},
+        {"name": "CMaNGOS TBC DB", "url": "https://github.com/cmangos/tbc-db.git", "revision": "c" * 40},
+        {"name": "CMaNGOS Classic Core", "url": "https://github.com/cmangos/mangos-classic.git", "revision": "d" * 40},
+        {"name": "CMaNGOS TBC Core", "url": "https://github.com/cmangos/mangos-tbc.git", "revision": "e" * 40}],
+        "notice": "licenses/historical-class-data/NOTICE.txt", "license": "licenses/GPL-3.0.txt",
+        "licenses": ["licenses/GPL-2.0.txt"]}
+
+
 class ClientZipTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="era-client-regression-")
@@ -65,6 +75,32 @@ class ClientZipTests(unittest.TestCase):
     def verify(self):
         PACKAGE.write_zip(self.path, self.files)
         return PACKAGE.verify_zip(self.path, self.lock)
+
+    def enable_historical_data(self):
+        self.lock["historicalClassData"] = historical_sources()
+        self.manifest["historicalClassData"] = copy.deepcopy(self.lock["historicalClassData"])
+        self.files.update({"licenses/historical-class-data/NOTICE.txt": b"CMaNGOS attribution and original game-data terms",
+                           "licenses/GPL-3.0.txt": b"GNU GENERAL PUBLIC LICENSE Version 3",
+                           "licenses/GPL-2.0.txt": b"GNU GENERAL PUBLIC LICENSE Version 2"})
+        self.manifest["files"] = {name: PACKAGE.sha(value) for name, value in self.files.items()
+                                  if name != "SOURCE_MANIFEST.json"}
+        self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+
+    def enable_native_restorations(self):
+        source = {"deDE": {"englishSpellSha256": "f" * 64}}
+        self.lock["clientPatch"]["localizations"] = source
+        self.lock["clientPatch"]["nativeSpellRestorations"] = "era-data/vanilla/priest.yaml"
+        self.manifest["localizations"] = copy.deepcopy(source)
+        self.files["licenses/client-locales.txt"] = b"Pinned German text and English gameplay donor"
+        self.manifest["files"]["licenses/client-locales.txt"] = PACKAGE.sha(self.files["licenses/client-locales.txt"])
+        report = {"contractFile": "era-data/vanilla/priest.yaml",
+                  "contract": {"source": "pinned-wrath-english", "sourceSha256": "f" * 64,
+                               "fields": ["ManaCost", "ManaCostPct"], "spellIds": [13908, 19236]},
+                  "changes": [{"spellId": 13908, "field": "ManaCost", "before": 0, "after": 125},
+                              {"spellId": 19236, "field": "ManaCostPct", "before": 0, "after": 23}]}
+        self.manifest["nativeSpellRestorations"] = report
+        self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+        return report
 
     def test_complete_zip_and_deterministic_archive(self):
         self.assertEqual(self.verify()[0], self.files)
@@ -116,6 +152,141 @@ class ClientZipTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "localization source notice"):
             self.verify()
 
+    def test_historical_sources_and_both_licenses_are_preserved(self):
+        self.enable_historical_data()
+        files, manifest = self.verify()
+        self.assertEqual(manifest["historicalClassData"], self.lock["historicalClassData"])
+        for name in ("licenses/historical-class-data/NOTICE.txt", "licenses/GPL-3.0.txt", "licenses/GPL-2.0.txt"):
+            self.assertEqual(files[name], self.files[name])
+
+    def test_historical_provenance_cannot_be_omitted_or_replaced(self):
+        self.enable_historical_data()
+        variants = [None]
+        for field in ("name", "url", "revision"):
+            changed = copy.deepcopy(self.lock["historicalClassData"])
+            changed["sources"][0][field] = "different"
+            variants.append(changed)
+        for field in ("notice", "license", "licenses"):
+            changed = copy.deepcopy(self.lock["historicalClassData"])
+            changed[field] = [] if field == "licenses" else "licenses/different.txt"
+            variants.append(changed)
+        for changed in variants:
+            with self.subTest(changed=changed):
+                manifest = copy.deepcopy(self.manifest)
+                if changed is None:
+                    del manifest["historicalClassData"]
+                else:
+                    manifest["historicalClassData"] = changed
+                self.files["SOURCE_MANIFEST.json"] = json.dumps(manifest).encode()
+                with self.assertRaisesRegex(ValueError, "provenance differs"):
+                    self.verify()
+
+    def test_historical_notice_or_license_required_even_with_updated_inventory(self):
+        self.enable_historical_data()
+        for name in ("licenses/historical-class-data/NOTICE.txt", "licenses/GPL-3.0.txt", "licenses/GPL-2.0.txt"):
+            with self.subTest(name=name):
+                before = self.files.pop(name)
+                manifest = copy.deepcopy(self.manifest)
+                del manifest["files"][name]
+                self.files["SOURCE_MANIFEST.json"] = json.dumps(manifest).encode()
+                with self.assertRaisesRegex(ValueError, "Missing historical class data"):
+                    self.verify()
+                self.files[name] = before
+
+    def test_historical_notice_and_license_hashes_are_checked(self):
+        self.enable_historical_data()
+        for name in ("licenses/historical-class-data/NOTICE.txt", "licenses/GPL-3.0.txt", "licenses/GPL-2.0.txt"):
+            with self.subTest(name=name):
+                before = self.files[name]
+                self.files[name] = b"changed license or attribution"
+                with self.assertRaisesRegex(ValueError, "hash differs"):
+                    self.verify()
+                self.files[name] = before
+
+    def test_unlocked_historical_provenance_is_rejected(self):
+        self.manifest["historicalClassData"] = historical_sources()
+        self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+        with self.assertRaisesRegex(ValueError, "provenance is not locked"):
+            self.verify()
+
+    def test_native_restoration_report_matches_the_pinned_english_source(self):
+        expected = copy.deepcopy(self.enable_native_restorations())
+        files, manifest = self.verify()
+        self.assertEqual(manifest["nativeSpellRestorations"], expected)
+        self.assertEqual(files["Data/patch-V.mpq"], self.files["Data/patch-V.mpq"])
+        self.manifest["nativeSpellRestorations"]["changes"] = []
+        self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+        self.verify()
+
+    def test_native_restoration_report_cannot_be_omitted_or_change_donor_identity(self):
+        self.enable_native_restorations()
+        variants = []
+        missing = copy.deepcopy(self.manifest)
+        del missing["nativeSpellRestorations"]
+        variants.append(missing)
+        for key, value in (("contractFile", "era-data/tbc/priest.yaml"),):
+            changed = copy.deepcopy(self.manifest)
+            changed["nativeSpellRestorations"][key] = value
+            variants.append(changed)
+        for key, value in (("source", "arbitrary-latest-dbc"), ("sourceSha256", "e" * 64),
+                           ("fields", ["ManaCost", "Name_Lang_enUS"]), ("spellIds", [13908, 13908])):
+            changed = copy.deepcopy(self.manifest)
+            changed["nativeSpellRestorations"]["contract"][key] = value
+            variants.append(changed)
+        for changed in variants:
+            with self.subTest(changed=changed.get("nativeSpellRestorations")):
+                self.files["SOURCE_MANIFEST.json"] = json.dumps(changed).encode()
+                with self.assertRaises(ValueError):
+                    self.verify()
+
+    def test_native_restoration_change_report_rejects_unsafe_or_duplicate_changes(self):
+        self.enable_native_restorations()
+        changes = []
+        for key, value in (("spellId", 55555), ("spellId", True), ("field", "ID"),
+                           ("before", -1), ("after", 2 ** 32), ("before", True), ("after", False)):
+            changed = copy.deepcopy(self.manifest["nativeSpellRestorations"]["changes"][0])
+            changed[key] = value
+            changes.append([changed])
+        unchanged = copy.deepcopy(self.manifest["nativeSpellRestorations"]["changes"][0])
+        unchanged["after"] = unchanged["before"]
+        changes.append([unchanged])
+        duplicate = copy.deepcopy(self.manifest["nativeSpellRestorations"]["changes"][0])
+        changes.append([duplicate, copy.deepcopy(duplicate)])
+        for changed in changes:
+            with self.subTest(changed=changed):
+                manifest = copy.deepcopy(self.manifest)
+                manifest["nativeSpellRestorations"]["changes"] = changed
+                self.files["SOURCE_MANIFEST.json"] = json.dumps(manifest).encode()
+                with self.assertRaises(ValueError):
+                    self.verify()
+
+    def test_invalid_historical_source_or_notice_paths_are_rejected(self):
+        self.enable_historical_data()
+        valid = copy.deepcopy(self.lock["historicalClassData"])
+        variants = []
+        for field, value in (("revision", "main"), ("url", "http://github.com/cmangos/classic-db.git"),
+                             ("name", "classic-db/../other")):
+            changed = copy.deepcopy(valid)
+            changed["sources"][0][field] = value
+            variants.append(changed)
+        for path in ("../LICENSE", "README.txt", "/licenses/GPL-3.0.txt", r"licenses\GPL-3.0.txt"):
+            changed = copy.deepcopy(valid)
+            changed["license"] = path
+            variants.append(changed)
+        changed = copy.deepcopy(valid)
+        changed["sources"].append(copy.deepcopy(changed["sources"][0]))
+        variants.append(changed)
+        changed = copy.deepcopy(valid)
+        changed["licenses"].append("licenses/gpl-3.0.TXT")
+        variants.append(changed)
+        for changed in variants:
+            with self.subTest(changed=changed):
+                self.lock["historicalClassData"] = changed
+                self.manifest["historicalClassData"] = copy.deepcopy(changed)
+                self.files["SOURCE_MANIFEST.json"] = json.dumps(self.manifest).encode()
+                with self.assertRaises(ValueError):
+                    self.verify()
+
     def test_missing_toc_asset_rejected_even_with_updated_hashes(self):
         del self.files["Interface/AddOns/EraTalents/Main.lua"]
         del self.files["SOURCE_MANIFEST.json"]
@@ -161,6 +332,29 @@ class ClientZipTests(unittest.TestCase):
             archive.writestr(entry, "outside")
         with self.assertRaisesRegex(ValueError, "symbolic link"):
             PACKAGE.verify_zip(self.path, self.lock)
+
+
+class HistoricalNoticeInputTests(unittest.TestCase):
+    def test_build_reads_the_locked_notice_and_license_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="historical-notice-inputs-") as temporary:
+            root = Path(temporary)
+            lock = source_lock()
+            self.assertEqual(PACKAGE.historical_class_files(root, lock), {})
+            lock["historicalClassData"] = historical_sources()
+            expected = {"licenses/historical-class-data/NOTICE.txt": b"CMaNGOS copyright and game-data terms\n",
+                        "licenses/GPL-3.0.txt": b"GPL3 source bytes\r\n", "licenses/GPL-2.0.txt": b"GPL2 source bytes\n"}
+            for name, content in expected.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            self.assertEqual(PACKAGE.historical_class_files(root, lock), expected)
+            notice = root / lock["historicalClassData"]["notice"]
+            notice.write_bytes(b"")
+            with self.assertRaisesRegex(ValueError, "Empty historical class data"):
+                PACKAGE.historical_class_files(root, lock)
+            notice.unlink()
+            with self.assertRaises(FileNotFoundError):
+                PACKAGE.historical_class_files(root, lock)
 
 
 def dbc(rows, strings=b"\0", fields=234):
@@ -295,6 +489,137 @@ class ClientDbcTests(unittest.TestCase):
         corrupted[4] = 3
         with self.assertRaisesRegex(ValueError, "changed IP skill record"):
             PACKAGE.verify_merged_skill(base, dbc([bytes(corrupted), era], fields=14), {920010})
+
+
+class NativeSpellRestorationTests(unittest.TestCase):
+    def setUp(self):
+        # The two costs occupy their actual build-12340 Spell.dbc DWORD indices.
+        self.columns = [f"Field{index}" for index in range(234)]
+        self.columns[0] = "ID"
+        self.columns[42] = "ManaCost"
+        self.columns[204] = "ManaCostPct"
+        self.types = ["unsigned"] * 234
+        self.types[0] = "signed"
+        self.types[47] = "float"
+        self.types[136] = "string"
+        self.types[139] = "string"
+        self.base_strings = "\0Original English\0Unveränderter deutscher Text\0".encode()
+        self.donor_strings = b"\0Different donor text\0"
+        self.rows = {spell: self.row(spell, spell * 2, 5) for spell in (30, 10, 20)}
+        self.base = dbc([self.rows[spell] for spell in (30, 10, 20)], self.base_strings)
+        donor = {spell: self.row(spell, 9999, 99) for spell in (20, 30, 10)}
+        donor[20] = self.row(20, 40, 12)  # ManaCost already agrees: only the percentage changes.
+        donor[10] = self.row(10, 0xffffffff, 0)
+        self.donor = dbc([donor[spell] for spell in (20, 30, 10)], self.donor_strings)
+        self.contract = {"source": "pinned-wrath-english", "sourceSha256": PACKAGE.sha(self.donor),
+                         "fields": ["ManaCost", "ManaCostPct"], "spellIds": [20, 10]}
+
+    @staticmethod
+    def row(spell, mana, percentage):
+        fields = [(spell * 101 + index * 65537) & 0xffffffff for index in range(234)]
+        fields[0], fields[42], fields[204] = spell, mana, percentage
+        fields[136], fields[139] = 1, 18
+        return struct.pack("<234I", *fields)
+
+    def restore(self, base=None, donor=None, contract=None, columns=None, types=None):
+        return PACKAGE.restore_native_spell_fields(
+            self.base if base is None else base, self.donor if donor is None else donor,
+            self.contract if contract is None else contract,
+            self.columns if columns is None else columns, self.types if types is None else types)
+
+    def test_restores_only_two_dwords_preserving_all_other_bytes_and_row_order(self):
+        restored, report = self.restore()
+        expected = bytearray(self.base)
+        # Base order is 30,10,20; contract and donor deliberately use other orders.
+        struct.pack_into("<I", expected, 20 + 2 * 936 + 204 * 4, 12)
+        struct.pack_into("<I", expected, 20 + 1 * 936 + 42 * 4, 0xffffffff)
+        struct.pack_into("<I", expected, 20 + 1 * 936 + 204 * 4, 0)
+        self.assertEqual(restored, bytes(expected))
+        self.assertEqual(PACKAGE.dbc_records(restored, 234)[1], self.base_strings)
+        self.assertEqual(report, {"contract": self.contract, "changes": [
+            {"spellId": 20, "field": "ManaCostPct", "before": 5, "after": 12},
+            {"spellId": 10, "field": "ManaCost", "before": 20, "after": 0xffffffff},
+            {"spellId": 10, "field": "ManaCostPct", "before": 5, "after": 0}]})
+        repeated, repeated_report = self.restore(base=restored)
+        self.assertEqual(repeated, restored)
+        self.assertEqual(repeated_report, {"contract": self.contract, "changes": []})
+
+    def test_donor_checksum_is_required_before_restoring(self):
+        changed = bytearray(self.donor)
+        changed[20 + 42 * 4] ^= 1
+        with self.assertRaises(ValueError):
+            self.restore(donor=bytes(changed))
+        contract = copy.deepcopy(self.contract)
+        contract["sourceSha256"] = "a" * 64
+        with self.assertRaises(ValueError):
+            self.restore(contract=contract)
+
+    def test_contract_rejects_unpinned_sources_unsafe_fields_and_invalid_ids(self):
+        variants = []
+        for key, values in (("source", ["current", "pinned-classic-english", None]),
+                            ("sourceSha256", ["main", "A" * 64, None]),
+                            ("fields", [["ManaCost"], ["ManaCostPct", "ManaCost"],
+                                        ["ID", "ManaCostPct"], ["Name_Lang_enUS", "ManaCostPct"]]),
+                            ("spellIds", [[], [20, 20], [0], [-1], [2 ** 32], [True], [20.0], ["20"]])):
+            for value in values:
+                changed = copy.deepcopy(self.contract)
+                changed[key] = value
+                variants.append(changed)
+        changed = copy.deepcopy(self.contract)
+        changed["unexpected"] = "unreviewed restoration"
+        variants.append(changed)
+        for changed in variants:
+            with self.subTest(contract=changed):
+                with self.assertRaises(ValueError):
+                    self.restore(contract=changed)
+
+    def test_restoration_requires_each_target_in_both_tables(self):
+        for which in ("base", "donor"):
+            with self.subTest(which=which):
+                if which == "base":
+                    with self.assertRaises(ValueError):
+                        self.restore(base=dbc([self.rows[30]], self.base_strings))
+                else:
+                    donor = dbc([self.rows[30]], self.donor_strings)
+                    contract = copy.deepcopy(self.contract)
+                    contract["sourceSha256"] = PACKAGE.sha(donor)
+                    with self.assertRaises(ValueError):
+                        self.restore(donor=donor, contract=contract)
+
+    def test_schema_lengths_unsigned_costs_and_id_column_are_enforced(self):
+        variants = [(self.columns[:-1], self.types), (self.columns, self.types[:-1])]
+        for field_type in ("signed", "float", "string", "uint"):
+            changed = self.types.copy()
+            changed[42] = field_type
+            variants.append((self.columns, changed))
+        duplicate = self.columns.copy()
+        duplicate[99] = "ManaCost"
+        variants.append((duplicate, self.types))
+        id_field = self.columns.copy()
+        id_field[0], id_field[42] = "ManaCost", "Other"
+        variants.append((id_field, self.types))
+        missing = self.columns.copy()
+        missing[204] = "Other"
+        variants.append((missing, self.types))
+        for columns, types in variants:
+            with self.subTest(columns=columns, types=types):
+                with self.assertRaises(ValueError):
+                    self.restore(columns=columns, types=types)
+
+    def test_malformed_base_and_donor_dbc_layouts_are_rejected(self):
+        malformed = [b"WDBC", self.base[:-1], dbc([self.rows[20], self.rows[20]], self.base_strings)]
+        for offset, value in ((8, 233), (12, 932), (16, len(self.base_strings) + 1)):
+            changed = bytearray(self.base)
+            struct.pack_into("<I", changed, offset, value)
+            malformed.append(bytes(changed))
+        for raw in malformed:
+            with self.subTest(layout=raw[:20]):
+                with self.assertRaises(ValueError):
+                    self.restore(base=raw)
+                contract = copy.deepcopy(self.contract)
+                contract["sourceSha256"] = PACKAGE.sha(raw)
+                with self.assertRaises(ValueError):
+                    self.restore(donor=raw, contract=contract)
 
 
 @unittest.skipUnless(CMAKE and shutil.which("git"), "CMake and Git needed for addon source export checks")

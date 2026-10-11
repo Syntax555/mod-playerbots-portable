@@ -13,13 +13,19 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | AutoBalance | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) | `73d4ad3c379f` | Instance scaling by actual party size |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `60336b349cce` | Earned content milestones and expansion access |
 | AH Bot Plus | [NathanHandley/mod-ah-bot-plus](https://github.com/NathanHandley/mod-ah-bot-plus) | `f685832994c8` | Optional synthetic market; disabled by default |
-| Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `60f3d98b8314` | Optional scripted runs; disabled by default |
+| Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `60f3d98b8314` | Real autonomous parties for supported Vanilla instances |
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `6f073c1bef1b` | Scoped party sharing of naturally dropped quest items |
+| World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Timed Vanilla events with individual earned-era and native recipient checks |
+| LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `5d64585dd2ac` | Optional Dungeon Finder access by every participant's earned era |
 | MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `1da05982e478` | Server support for the MultiBot controls |
 | Token Turn-in | [Zerathane/mod-token-turnin](https://github.com/Zerathane/mod-token-turnin) | `73e447c49975` | Token inspection; shortcut redemption blocked in natural mode |
 | MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
 | Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `86f9b99ffe4d` | Native MPQ generation and verification |
+| CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records |
+| CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records |
+| CMaNGOS Classic core | [cmangos/mangos-classic](https://github.com/cmangos/mangos-classic) | `8ec338a1704e` | Historical spell mechanics and coefficients |
+| CMaNGOS TBC core | [cmangos/mangos-tbc](https://github.com/cmangos/mangos-tbc) | `a8ad244bcbce` | Historical TBC spell mechanics and coefficients |
 
 ## Source preparation
 
@@ -40,6 +46,9 @@ The separate addon ZIP contains the prepared addon; the server package contains
 no client addons. Local addon patches display gold, silver and copper and guard
 options-panel initialization with its existing fallback interface. Its
 `SOURCE_MANIFEST.json` records the upstream revision and those patch hashes.
+With matching EraTalents loaded, the talent button uses native inspection and
+the selected bot's server-authorized historical tree. Both addons must match
+the release; the historical view permits inspection rather than talent writes.
 
 In natural mode, Bridge trainer requests use the bot's current money for explicit
 purchases and the core's trainer pricing and paid purchase path.
@@ -52,6 +61,11 @@ GPL-2.0-or-later notices in common source headers. Individual Progression carrie
 an MIT root license and AGPL-3.0-or-later notices in many source files. Era
 Talents carries an MIT license; portable integration files can carry their own
 GPL notices. These components should not be described under one blanket license.
+
+The historical class data uses pinned CMaNGOS sources. Database projects carry
+GPL-3.0 texts; core projects carry GPL-2.0 texts with GPL-2.0-or-later source
+notices. The server and combined client pack retain their provenance notice and
+both license texts. Original game data retains its own terms.
 
 The locked MultiBot Bridge revision has no explicit upstream license declaration.
 Its packaged notice records provenance and this absence without granting a

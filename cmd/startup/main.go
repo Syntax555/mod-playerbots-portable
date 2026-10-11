@@ -61,9 +61,11 @@ type mysqlBinaries struct {
 }
 
 type ProcessSupervisor struct {
-	name         string
-	startFunc    func() (*exec.Cmd, error)
-	restartDelay time.Duration
+	name          string
+	startFunc     func() (*exec.Cmd, error)
+	killProcess   func(*os.Process) error
+	finishProcess func(*exec.Cmd) error
+	restartDelay  time.Duration
 
 	mu              sync.Mutex
 	currentCmd      *exec.Cmd
@@ -143,11 +145,36 @@ func (ps *ProcessSupervisor) Kill() {
 	ps.stopped = true
 	ps.killRequested = true
 	cmd := ps.currentCmd
+	killProcess := ps.killProcess
+	treeCleanup := killProcess != nil
+	var retained *os.Process
+	if killProcess != nil && ps.interruptTarget != nil {
+		// Retain while the supervisor still holds the original handle. Wait
+		// may finish as soon as we release this lock; a PID-only reopen after
+		// that would risk binding tree cleanup to a different process.
+		retained, _ = os.FindProcess(ps.interruptTarget.Pid)
+	}
 	ps.mu.Unlock()
+	if retained != nil {
+		defer retained.Release()
+	}
 
 	if cmd != nil && cmd.Process != nil {
 		fmt.Printf("Stopping %s (PID: %d)...\n", ps.name, cmd.Process.Pid)
-		_ = cmd.Process.Kill()
+		if killProcess == nil {
+			killProcess = (*os.Process).Kill
+		}
+		target := cmd.Process
+		if retained != nil {
+			target = retained
+		} else if treeCleanup {
+			// The original os.Process can still safely kill its own handle, but
+			// do not discover descendants without a retained root identity.
+			killProcess = (*os.Process).Kill
+		}
+		if err := killProcess(target); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			fmt.Fprintf(os.Stderr, "Could not terminate %s: %v\n", ps.name, err)
+		}
 	}
 }
 
@@ -239,6 +266,11 @@ func (ps *ProcessSupervisor) Run(ctx context.Context, initialCmd *exec.Cmd, wg *
 		}
 
 		err := cmd.Wait()
+		if ps.finishProcess != nil {
+			if cleanupErr := ps.finishProcess(cmd); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrProcessDone) {
+				fmt.Fprintf(os.Stderr, "Could not clean up %s: %v\n", ps.name, cleanupErr)
+			}
+		}
 
 		ps.mu.Lock()
 		ps.setCurrentCmdLocked(nil)
@@ -882,6 +914,11 @@ func startMySQLServer(binaries *mysqlBinaries, dataDir string, port int, configF
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start mysqld: %w", err)
 	}
+	if err := trackMySQLProcess(cmd); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("failed to retain mysqld process identity: %w", err)
+	}
 
 	return cmd, nil
 }
@@ -1084,9 +1121,19 @@ func runMySQLShutdown(ctx context.Context, binaries *mysqlBinaries, port int) er
 	return nil
 }
 
-func shutdownMySQLAndWait(binaries *mysqlBinaries, port int, cmd *exec.Cmd) error {
-	if cmd == nil || cmd.Process == nil || cmd.ProcessState != nil {
+func shutdownMySQLAndWait(binaries *mysqlBinaries, port int, cmd *exec.Cmd) (cleanupErr error) {
+	if cmd == nil || cmd.Process == nil {
 		return nil
+	}
+	defer func() { cleanupErr = errors.Join(cleanupErr, finishMySQLProcess(cmd)) }()
+	if cmd.ProcessState != nil {
+		return nil
+	}
+	// Keep the original process identity alive while cmd.Wait releases its
+	// handle, including the race between normal exit and timeout cleanup.
+	retained, retainErr := os.FindProcess(cmd.Process.Pid)
+	if retained != nil {
+		defer retained.Release()
 	}
 	fmt.Println("Shutting down MySQL server...")
 
@@ -1111,7 +1158,15 @@ func shutdownMySQLAndWait(binaries *mysqlBinaries, port int, cmd *exec.Cmd) erro
 	case <-time.After(10 * time.Second):
 		if cmd != nil && cmd.Process != nil {
 			fmt.Println("MySQL did not stop within 10s, terminating process...")
-			_ = cmd.Process.Kill()
+			var cleanupErr error
+			if retained != nil {
+				cleanupErr = killMySQLProcessTree(retained)
+			} else {
+				cleanupErr = errors.Join(retainErr, cmd.Process.Kill())
+			}
+			if err := cleanupErr; err != nil && !errors.Is(err, os.ErrProcessDone) {
+				fmt.Fprintf(os.Stderr, "Warning: MySQL cleanup: %v\n", err)
+			}
 			<-done
 		}
 	case <-done:
@@ -1752,11 +1807,13 @@ func main() {
 			return nil, err
 		}
 		if err := waitForMySQLReady(supervisorCtx, cmd, binaries, opts.port, 30*time.Second); err != nil {
-			_ = cmd.Process.Kill()
+			_ = shutdownMySQLAndWait(binaries, opts.port, cmd)
 			return nil, err
 		}
 		return cmd, nil
 	}, 2*time.Second)
+	mysqlSupervisor.killProcess = killMySQLProcessTree
+	mysqlSupervisor.finishProcess = finishMySQLProcess
 
 	authSupervisor := newProcessSupervisor("authserver", func() (*exec.Cmd, error) {
 		sanitizeRealmlistFlags(binaries, opts.port)

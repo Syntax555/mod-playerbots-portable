@@ -92,13 +92,21 @@ try {
     $lock = [ordered]@{
         schemaVersion = 1
         core = @{ name = 'azerothcore-wotlk'; revision = $revision; source = 'azerothcore-wotlk' }
-        modules = @(@{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') })
+        modules = @(
+            @{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') },
+            @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') }
+        )
         clientAddons = @(@{ name = 'MultiBot'; revision = $revision; toc = 'MultiBot.toc'; license = 'LICENSE'; interface = 30300 })
+        historicalClassData = @{ sources = @(@{ name = 'Historical fixture'; url = 'https://github.com/example/data.git'; revision = $revision }); notice = 'licenses/historical-class-data/NOTICE.txt'; license = 'licenses/GPL-3.0.txt'; licenses = @('licenses/GPL-2.0.txt') }
     }
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
     foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
-        'patches/fixture.patch', 'CONTRIBUTING.md', 'docs/building.md')) {
+        'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'docs/world-buffs.md',
+        'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',
+        'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt',
+        'docs/class-quests.md',
+        'CONTRIBUTING.md', 'docs/building.md')) {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
@@ -119,6 +127,9 @@ try {
     Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/src/fixture.cpp')
     Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/conf/mod_fixture.conf.dist')
     Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/LICENSE')
+    # A module without SQL or a root LICENSE uses its preserved README notice.
+    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-world-buff-bots/src/WorldBuffBots.cpp')
+    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-world-buff-bots/conf/mod_world_buff_bots.conf.dist')
     $addon = Join-Path $source '.module-cache/prepared-addons/MultiBot'
     Write-FixtureText (Join-Path $addon 'MultiBot.toc') "## Interface: 30300`nCore\MultiBot.lua`n"
     Write-FixtureText (Join-Path $addon 'Core/MultiBot.lua') "print('good')`n"
@@ -253,6 +264,19 @@ try {
     Test-NegativeZip 'release identity belongs to another commit' 'Invalid or mismatched portable release identity' -Replacements @{ 'portable-release.json' = [System.Text.Encoding]::UTF8.GetBytes($wrongIdentity) }
     Test-NegativeZip 'missing one core database while another remains' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')
     Test-NegativeZip 'missing module migration' 'missing module migration' -Omit @('src/modules/mod-fixture/data/sql/db_world/current.sql')
+    foreach ($name in @('docs/world-buffs.md', 'configs/modules/mod_world_buff_bots.conf.dist',
+        'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt')) {
+        Test-NegativeZip "missing world-buff dependency $name" 'Portable ZIP is missing' -Omit @($name)
+    }
+    Test-NegativeZip 'changed world-buff attribution' 'differs from build sources' -Replacements @{
+        'licenses/mod-world-buff-bots/NOTICE.txt' = [System.Text.Encoding]::UTF8.GetBytes('wrong attribution')
+    }
+    foreach ($name in @('docs/class-quests.md', 'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt')) {
+        Test-NegativeZip "missing historical class notice $name" 'missing historical class data notice' -Omit @($name)
+        Test-NegativeZip "changed historical class notice $name" 'differs from build sources' -Replacements @{
+            $name = [System.Text.Encoding]::UTF8.GetBytes('incorrect historical source terms')
+        }
+    }
     foreach ($obsolete in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql')) {
