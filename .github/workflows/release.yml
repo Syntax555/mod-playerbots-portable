@@ -70,24 +70,40 @@ jobs:
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
 
+      - name: Install native gameplay test dependencies
+        if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential cmake lua5.1 python3-venv
+          python3 -m venv "$RUNNER_TEMP/gameplay-python"
+          "$RUNNER_TEMP/gameplay-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/gameplay-python/bin/python" -c 'import yaml; assert yaml.__version__ == "6.0.3"'
+          lua5.1 -e 'assert(_VERSION == "Lua 5.1")'
+          echo "$RUNNER_TEMP/gameplay-python/bin" >> "$GITHUB_PATH"
+
       - name: Check gameplay rules against pinned sources
         if: hashFiles('cmake/tests/TestEarnedProgression.py') != ''
         run: |
           git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
-          python3 cmake/tests/TestEarnedProgression.py
-          python3 cmake/tests/TestMasterFlightLearning.py
-          python3 cmake/tests/TestBotQuestAreaTriggers.py
-          python3 cmake/tests/TestLootRollPolicy.py
-          python3 cmake/tests/TestWorldBuffEvents.py
-          python3 cmake/tests/TestLfgProgression.py
-          python3 cmake/tests/TestEarnedDungeonParties.py
-          python3 cmake/tests/TestHistoricalClassQuests.py
-          python3 cmake/tests/TestMultiBotTrainerMoney.py
-          python3 cmake/tests/TestMultiBotOptionalPresets.py
-          python3 cmake/tests/TestMultiBotEraTalents.py
-          python3 cmake/tests/TestFormationMovement.py
-          python3 cmake/tests/TestFrostmaneHold.py
+          python3 - <<'PYTHON'
+          import pathlib, subprocess, sys
+          fixtures = (
+              'TestEarnedProgression', 'TestMasterFlightLearning', 'TestBotQuestAreaTriggers',
+              'TestLootRollPolicy', 'TestWorldBuffEvents', 'TestLfgProgression',
+              'TestEarnedDungeonParties', 'TestHistoricalClassQuests', 'TestMultiBotTrainerMoney',
+              'TestMultiBotOptionalPresets', 'TestMultiBotEraTalents', 'TestFormationMovement',
+              'TestFrostmaneHold',
+          )
+          for name in fixtures:
+              path = pathlib.Path('cmake/tests') / (name + '.py')
+              print(f'::group::{name}', flush=True)
+              result = subprocess.run([sys.executable, str(path)])
+              print('::endgroup::', flush=True)
+              if result.returncode:
+                  print(f'::error file={path}::{name} failed (exit {result.returncode})', flush=True)
+                  sys.exit(result.returncode)
+          PYTHON
 
   era_client:
     name: Build and verify historical client patch

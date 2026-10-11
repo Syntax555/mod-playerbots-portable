@@ -50,11 +50,14 @@ The simultaneous-party limit accepts 1–8. Set the autonomous-party switch to
 `0` to stop automatic recruitment. The strict travel and gameplay guards require
 `AiPlayerbot.NaturalProgression = 1` in `configs/modules/playerbots.conf`.
 
-The default population remains active without a real player session through
-`AiPlayerbot.DisabledWithoutRealPlayer = 0`. Set it to `1` to log random bots out
-after the last real player leaves. Adjust `AiPlayerbot.MinRandomBots` and
-`AiPlayerbot.MaxRandomBots` for the host's capacity. A saved value of `0` prevents
-random-bot parties; updates preserve custom population settings.
+Random bots run while at least one real player session is connected through
+`AiPlayerbot.DisabledWithoutRealPlayer = 1`. Login begins after a 30-second delay;
+bots log out after the last session has ended for 60 seconds. SelfBot enabled on
+a human player's character still counts as a real session. Independent parties
+can run while that player is elsewhere in the world. Adjust
+`AiPlayerbot.MinRandomBots` and `AiPlayerbot.MaxRandomBots` for the host's
+capacity. A population limit of `0` prevents random-bot parties; updates preserve
+custom population settings.
 
 ## Optional Dungeon Finder
 

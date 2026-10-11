@@ -137,6 +137,84 @@ func TestAutomaticProfilesUseSavedDefaultsAndPreserveRealmPhase(t *testing.T) {
 	}
 }
 
+func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		previousValue string
+		wantValue     string
+	}{
+		{name: "managed always-online default", previousValue: "0", wantValue: "1"},
+		{name: "custom always-online setting", previousValue: "1", wantValue: "0"},
+		{name: "untracked existing setting", wantValue: "0"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			phase, _ := parseRealmPhase("individual")
+			profiles, err := currentManagedProfiles(phase)
+			if err != nil {
+				t.Fatal(err)
+			}
+			current := profiles["playerbots.conf"]
+			if value, ok := configValue(current, "AiPlayerbot.DisabledWithoutRealPlayer"); !ok || value != "1" {
+				t.Fatal("player-presence default is missing from the effective profile")
+			}
+			original := strings.Replace(current, "AiPlayerbot.DisabledWithoutRealPlayer = 1", "AiPlayerbot.DisabledWithoutRealPlayer = 0", 1)
+			original = strings.Replace(original, "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 25", 1)
+			original += "\nPlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\nCustom.Bot = 42\n"
+			bots := profileFixture(t, root, "configs/modules/playerbots.conf", original)
+			characters := profileFixture(t, root, "mysql/data/characters.ibd", "existing characters")
+			if test.previousValue != "" {
+				previous := strings.Replace(current, "AiPlayerbot.DisabledWithoutRealPlayer = 1", "AiPlayerbot.DisabledWithoutRealPlayer = "+test.previousValue, 1)
+				state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"playerbots.conf": previous}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				profileFixture(t, root, "configs/"+automaticProfileState, string(state))
+			}
+			backups, err := migrateConfigProfiles(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updated, err := os.ReadFile(bots)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if value, _ := configValue(string(updated), "AiPlayerbot.DisabledWithoutRealPlayer"); value != test.wantValue {
+				t.Fatalf("presence setting = %q, want %q", value, test.wantValue)
+			}
+			for _, retained := range []string{"AiPlayerbot.MaxRandomBots = 25\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\n", "Custom.Bot = 42\n"} {
+				if !strings.Contains(string(updated), retained) {
+					t.Fatalf("lost custom setting %q", retained)
+				}
+			}
+			if test.wantValue == "1" {
+				foundBackup := false
+				for _, backup := range backups {
+					if strings.HasPrefix(backup, bots+".backup.") {
+						content, err := os.ReadFile(backup)
+						if err != nil || string(content) != original {
+							t.Fatalf("previous config was not backed up exactly: %v", err)
+						}
+						foundBackup = true
+					}
+				}
+				if !foundBackup {
+					t.Fatal("managed presence change did not create a backup")
+				}
+			} else if string(updated) != original {
+				t.Fatal("custom presence configuration was modified")
+			}
+			if content, err := os.ReadFile(characters); err != nil || string(content) != "existing characters" {
+				t.Fatalf("character data changed: %v", err)
+			}
+			second, err := migrateConfigProfiles(root)
+			if err != nil || len(second) != 0 {
+				t.Fatalf("second startup changed the configuration: %v, %v", second, err)
+			}
+		})
+	}
+}
+
 func TestAutomaticProfilesInvalidStateAbortsBeforeWriting(t *testing.T) {
 	for _, content := range []string{`{"schema":2,"profiles":{}}`, `{"schema":1,"profiles":{"../escape.conf":"Value = 1"}}`, "{} trailing"} {
 		t.Run(content, func(t *testing.T) {

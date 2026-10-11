@@ -254,7 +254,7 @@ def main():
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')
         flags=['-std=c++20','-O1','-Wall','-Wextra','-Wno-unused-parameter','-I',str(work)]
         if os.name!='nt':
-            flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
+            flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer','-no-pie']
         subprocess.run([compiler,*flags,str(work/'fixture.cpp'),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True)
         originals={name:(work/name).read_text() for name in ('DcEarnedPlay.h','EarnedDungeonParties.cpp','NativeProductionMethods.h')}

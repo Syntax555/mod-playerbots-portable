@@ -22,7 +22,7 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 		"AiPlayerbot.RandomBotXPRate = 1.0\r\n",
 		"AiPlayerbot.AutoEquipUpgradeLoot = 1\r\n",
 		"AiPlayerbot.AllowLearnTrainerSpells = 1\r\n",
-		"AiPlayerbot.DisabledWithoutRealPlayer = 0\r\n",
+		"AiPlayerbot.DisabledWithoutRealPlayer = 1\r\n",
 		"AiPlayerbot.DisabledWithoutRealPlayerLoginDelay = 30\r\n",
 		"AiPlayerbot.DisabledWithoutRealPlayerLogoutDelay = 60\r\n",
 		"AiPlayerbot.BotActiveAlone = 100\r\n",

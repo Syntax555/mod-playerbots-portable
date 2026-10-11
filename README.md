@@ -35,7 +35,7 @@ Install the server bundle and matching EraTalents client pack. MultiBot is an op
 - Windows 10/11 x64 and a writable server folder.
 - A WoW **3.3.5a client, build 12340**, including for Vanilla and TBC progression.
 - Internet access for automatic server updates and the first-run server-data download.
-- Sufficient CPU, memory and storage for your selected bot population. The default target is **2,500 bots**, including when no real player is connected; capacity depends on your hardware and active content.
+- Sufficient CPU, memory and storage for your selected bot population. The default target is **2,500 bots** while a real player is connected; bots log out after the last player session ends. Capacity depends on your hardware and active content.
 
 The executables are unsigned and may be blocked by Windows Smart App Control.
 
