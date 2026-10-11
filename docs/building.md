@@ -75,6 +75,30 @@ cmake -P cmake/PrepareModules.cmake
 
 The server bundle includes the source manifest, patches and applicable license files or notices. Record the manifest when reporting a problem or sharing a custom build; the rolling download name alone does not identify its sources.
 
+## Integration checks
+
+The gameplay fixtures run on Linux and require prepared sources, Python and
+GCC with AddressSanitizer and UndefinedBehaviorSanitizer support.
+Client Lua checks also require Lua 5.1. They execute selected native handlers
+with controlled adapters; a complete server build and live realm tests remain
+necessary for platform and encounter validation.
+
+```bash
+go test ./...
+go vet ./...
+cmake -P cmake/PrepareModules.cmake
+python3 cmake/tests/TestHistoricalClassQuests.py
+python3 cmake/tests/TestEarnedDungeonParties.py
+python3 cmake/tests/TestWorldBuffEvents.py
+python3 cmake/tests/TestLfgProgression.py
+python3 cmake/tests/TestMultiBotEraTalents.py
+```
+
+The release workflow also verifies historical spell mechanics in the generated
+MPQ, client locales, dependency notices, package inventories and update recovery.
+Historical class source revisions are recorded separately from the module pins
+in `versions.lock.json`.
+
 ## Automated builds
 
 The [release workflow](../.github/workflows/release.yml) validates the launcher and progression adaptations, builds the Windows server and client packages, and verifies the assembled archives. [Actions](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml) records the checks and source commit for each build.

@@ -5,9 +5,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+func trackMySQLProcess(cmd *exec.Cmd) error { return nil }
+
+func finishMySQLProcess(cmd *exec.Cmd) error { return nil }
 
 // The portable launcher supports Windows. Linux uses actual socket ownership
 // for subprocess tests rather than substituting a guessed PID or open port.
@@ -39,4 +44,11 @@ func ownsMySQLListener(port int, process *os.Process) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func killMySQLProcessTree(process *os.Process) error {
+	if process == nil {
+		return os.ErrProcessDone
+	}
+	return process.Kill()
 }

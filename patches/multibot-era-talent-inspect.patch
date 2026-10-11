@@ -1,0 +1,54 @@
+diff --git a/Core/MultiBotEvery.lua b/Core/MultiBotEvery.lua
+--- a/Core/MultiBotEvery.lua
++++ b/Core/MultiBotEvery.lua
+@@ -578,6 +578,7 @@
+ 
+ 	pFrame.addButton("Talent", 304, 0, "ability_marksmanship", MultiBot.L("tips.every.talent")).setDisable()
+ 	.doLeft = function(pButton)
++		if MultiBot.OpenEraTalentInspect and MultiBot.OpenEraTalentInspect(pButton.getName(), true) then return end
+ 		if(pButton.state) then
+ 			pButton.setDisable()
+ 			MultiBot.talent:Hide()
+diff --git a/UI/MultiBotTalentFrame.lua b/UI/MultiBotTalentFrame.lua
+--- a/UI/MultiBotTalentFrame.lua
++++ b/UI/MultiBotTalentFrame.lua
+@@ -1,6 +1,31 @@
+ -- Talents/Glyphs frame module extracted from Core/MultiBotInit.lua
+ 
+ if not MultiBot then return end
++
++-- Historical builds are inspected through EraTalents' server-authoritative ISYNC
++-- view. MultiBot's static WotLK talent data cannot describe Vanilla/TBC ranks.
++function MultiBot.OpenEraTalentInspect(botName, toggle)
++    local era = _G.EraTalents
++    if not era or type(era.OpenBotInspect) ~= "function" then
++        return false
++    end
++
++    -- Automatic talent-build retries must not reopen a closed inspect frame or
++    -- retarget a different bot. ISYNC updates the visible view directly.
++    if toggle == false then return true end
++
++    local unit = MultiBot.toUnit and MultiBot.toUnit(botName)
++    if not unit or not era.OpenBotInspect(unit, toggle) then
++        return false
++    end
++
++    MultiBot.auto.talent = false
++    if MultiBot.talent then
++        MultiBot.talent.name = botName
++        MultiBot.talent:Hide()
++    end
++    return true
++end
+ 
+ local function getTalentFrameAceGUI()
+     if MultiBot.GetAceGUI then
+@@ -2274,6 +2299,7 @@
+     end
+ 
+     MultiBot.talent.setTalents = function()
++        if MultiBot.OpenEraTalentInspect(MultiBot.talent.name, false) then return end
+         MultiBot.talent.__talentsTabApplyMode = nil
+         MultiBot.talent.__talentsApplyPending = false
+         MultiBot.talent.renderTalentBuild(MultiBot.talent.getTalentsBuildOptions())

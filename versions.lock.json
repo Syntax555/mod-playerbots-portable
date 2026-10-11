@@ -19,7 +19,8 @@
       "patches/azerothcore-earned-era-pvp-rules.patch",
       "patches/azerothcore-windows-resource-includes.patch",
       "patches/azerothcore-windows-compile-parallelism.patch",
-      "patches/azerothcore-formation-minimum-velocity.patch"
+      "patches/azerothcore-formation-minimum-velocity.patch",
+      "patches/azerothcore-historical-class-quests.patch"
     ]
   },
   "modules": [
@@ -52,7 +53,8 @@
         "patches/mod-individual-progression-empty-account-filters.patch",
         "patches/mod-individual-progression-earned-milestones.patch",
         "patches/mod-individual-progression-earned-battlegrounds.patch",
-        "patches/mod-individual-progression-frostmane-hold.patch"
+        "patches/mod-individual-progression-frostmane-hold.patch",
+        "patches/mod-individual-progression-historical-class-quests.patch"
       ]
     },
     {
@@ -65,7 +67,8 @@
       "url": "https://github.com/jrad7/mod-dungeon-clear.git",
       "revision": "60f3d98b83143714041df4120abd45f0e3c3ebd7",
       "patches": [
-        "patches/mod-dungeon-clear-playerbots-compat.patch"
+        "patches/mod-dungeon-clear-playerbots-compat.patch",
+        "patches/mod-dungeon-clear-earned-parties.patch"
       ]
     },
     {
@@ -74,13 +77,30 @@
       "revision": "6f073c1bef1bba1aa73787d1e30db7429f2b1c7b"
     },
     {
+      "name": "mod-world-buff-bots",
+      "url": "https://github.com/Rockhopper1776/mod-world-buff-bots.git",
+      "revision": "baae5656aa6a375e103bc83da8262f2061dbfcb6",
+      "patches": [
+        "patches/mod-world-buff-bots-earned-era.patch"
+      ]
+    },
+    {
+      "name": "mod-lfg-progression",
+      "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
+      "revision": "5d64585dd2ac6d9313165f8c46f278980ae89f37",
+      "patches": [
+        "patches/mod-lfg-progression-earned-era.patch"
+      ]
+    },
+    {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
       "revision": "1da05982e478cb00e0b6c87314afe7e0e9653ffb",
       "patches": [
         "patches/mod-multibot-bridge-natural-progression.patch",
         "patches/mod-multibot-bridge-era-talents.patch",
-        "patches/mod-multibot-bridge-trainer-money.patch"
+        "patches/mod-multibot-bridge-trainer-money.patch",
+        "patches/mod-multibot-bridge-optional-presets.patch"
       ]
     },
     {
@@ -100,7 +120,9 @@
         "patches/mod-era-talents-client-locales.patch",
         "patches/mod-era-talents-german-addon.patch",
         "patches/mod-era-talents-german-text.patch",
-        "patches/mod-era-talents-spell-groups.patch"
+        "patches/mod-era-talents-spell-groups.patch",
+        "patches/mod-era-talents-multibot-inspect.patch",
+        "patches/mod-era-talents-historical-priest-quests.patch"
       ]
     }
   ],
@@ -115,7 +137,8 @@
       "license": "LICENSE",
       "patches": [
         "patches/multibot-inventory-money.patch",
-        "patches/multibot-options-initialization.patch"
+        "patches/multibot-options-initialization.patch",
+        "patches/multibot-era-talent-inspect.patch"
       ]
     },
     {
@@ -135,6 +158,7 @@
     "eraModule": "mod-era-talents",
     "baseModule": "mod-individual-progression",
     "baseArchive": "optional/patch-V.7z",
+    "nativeSpellRestorations": "era-data/vanilla/priest.yaml",
     "stormLib": {
       "url": "https://github.com/ladislav-zezula/StormLib.git",
       "revision": "86f9b99ffe4d3417dad16d00541cf6f2e3d7bf79"
@@ -156,5 +180,34 @@
         "overridesSha256": "7a0aebfcca683284289e9d121ac40c102da4fb3b97aa215993cd2549761c4454"
       }
     }
+  },
+  "historicalClassData": {
+    "sources": [
+      {
+        "name": "cmangos-classic-db",
+        "url": "https://github.com/cmangos/classic-db.git",
+        "revision": "ec4f596146be6467ea93c57397858e329e2db852"
+      },
+      {
+        "name": "cmangos-tbc-db",
+        "url": "https://github.com/cmangos/tbc-db.git",
+        "revision": "ebe51a83b0fde5397f0ecd82a36cb6c40f667d36"
+      },
+      {
+        "name": "cmangos-mangos-classic",
+        "url": "https://github.com/cmangos/mangos-classic.git",
+        "revision": "8ec338a1704e7dcb1c0213eb7ed58f9231ade40f"
+      },
+      {
+        "name": "cmangos-mangos-tbc",
+        "url": "https://github.com/cmangos/mangos-tbc.git",
+        "revision": "a8ad244bcbce8457a62a1c73aa1f5241850b75ac"
+      }
+    ],
+    "notice": "licenses/historical-class-data/NOTICE.txt",
+    "license": "licenses/GPL-3.0.txt",
+    "licenses": [
+      "licenses/GPL-2.0.txt"
+    ]
   }
 }

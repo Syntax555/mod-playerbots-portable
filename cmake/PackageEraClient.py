@@ -25,6 +25,7 @@ import zipfile
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 GITHUB_URL = re.compile(r"https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git\Z")
 VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+SOURCE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}\Z")
 INTERNAL_SPELL = r"DBFilesClient\Spell.dbc"
 INTERNAL_SKILL = r"DBFilesClient\SkillLineAbility.dbc"
 FIXED_TIME = (2000, 1, 1, 0, 0, 0)
@@ -67,6 +68,47 @@ def locked_module(lock, name):
     if not SHA.fullmatch(item["revision"]) or not GITHUB_URL.fullmatch(item["url"]):
         raise ValueError(f"Invalid module source: {name}")
     return item
+
+
+def historical_class_data(lock):
+    """Validate the optional historical-data provenance and notice paths."""
+    if "historicalClassData" not in lock:
+        return None
+    spec = lock["historicalClassData"]
+    if not isinstance(spec, dict) or not isinstance(spec.get("sources"), list) or not spec["sources"]:
+        raise ValueError("Historical class data must have locked sources")
+    names = set()
+    for source in spec["sources"]:
+        if (not isinstance(source, dict) or not isinstance(source.get("name"), str)
+                or not SOURCE_NAME.fullmatch(source["name"]) or source["name"] in names
+                or not isinstance(source.get("url"), str) or not GITHUB_URL.fullmatch(source["url"])
+                or not isinstance(source.get("revision"), str) or not SHA.fullmatch(source["revision"])):
+            raise ValueError("Invalid historical class data source")
+        names.add(source["name"])
+    additional = spec.get("licenses", [])
+    if not isinstance(additional, list):
+        raise ValueError("Historical class data licenses must be a list")
+    paths = [spec.get("notice"), spec.get("license"), *additional]
+    for path in paths:
+        relative_path(path)
+        if not path.startswith("licenses/"):
+            raise ValueError("Historical class data notices must be under licenses/")
+    if len({path.casefold() for path in paths}) != len(paths):
+        raise ValueError("Duplicate historical class data notice or license")
+    return spec
+
+
+def historical_class_files(repository: Path, lock):
+    spec = historical_class_data(lock)
+    if spec is None:
+        return {}
+    files = {}
+    for path in (spec["notice"], spec["license"], *spec.get("licenses", [])):
+        content = (repository / path).read_bytes()
+        if not content:
+            raise ValueError(f"Empty historical class data notice or license: {path}")
+        files[path] = content
+    return files
 
 
 def export_module(repository: Path, module, destination: Path, git: str):
@@ -118,6 +160,83 @@ def dbc_records(raw: bytes, field_count: int):
             raise ValueError(f"Duplicate DBC record ID: {key}")
         records[key] = record
     return records, raw[20 + count * size:]
+
+
+def native_spell_contract(contract):
+    """Limit native client restorations to explicitly authored mana-cost fields."""
+    if (not isinstance(contract, dict)
+            or set(contract) != {"source", "sourceSha256", "fields", "spellIds"}
+            or contract["source"] != "pinned-wrath-english"
+            or not isinstance(contract["sourceSha256"], str)
+            or not re.fullmatch(r"[a-f0-9]{64}", contract["sourceSha256"])
+            or contract["fields"] != ["ManaCost", "ManaCostPct"]):
+        raise ValueError("Invalid native spell restoration contract")
+    ids = contract["spellIds"]
+    if (not isinstance(ids, list) or not ids
+            or any(type(value) is not int or not 0 < value <= 0xffffffff for value in ids)
+            or len(set(ids)) != len(ids)):
+        raise ValueError("Invalid native spell restoration IDs")
+    return contract
+
+
+def restore_native_spell_fields(base: bytes, donor: bytes, contract, columns, types):
+    """Copy only contracted unsigned costs; preserve row order and every other byte."""
+    native_spell_contract(contract)
+    if sha(donor) != contract["sourceSha256"]:
+        raise ValueError("Native spell donor hash differs from restoration contract")
+    if (len(columns) != 234 or len(types) != 234 or len(set(columns)) != 234
+            or columns[0] != "ID"):
+        raise ValueError("Invalid native spell restoration column layout")
+    fields = {}
+    for name in contract["fields"]:
+        if name not in columns or types[columns.index(name)] != "unsigned":
+            raise ValueError(f"Native spell restoration field must be unsigned: {name}")
+        fields[name] = columns.index(name)
+    base_records, _ = dbc_records(base, 234)
+    native_records, _ = dbc_records(donor, 234)
+    missing = set(contract["spellIds"]) - (base_records.keys() & native_records.keys())
+    if missing:
+        raise ValueError(f"Missing native spell restoration records: {sorted(missing)}")
+    offsets = {key: 20 + index * 234 * 4 for index, key in enumerate(base_records)}
+    restored, changes = bytearray(base), []
+    for key in contract["spellIds"]:
+        for name, column in fields.items():
+            before = struct.unpack_from("<I", base_records[key], column * 4)[0]
+            after = struct.unpack_from("<I", native_records[key], column * 4)[0]
+            if before != after:
+                struct.pack_into("<I", restored, offsets[key] + column * 4, after)
+                changes.append({"spellId": key, "field": name, "before": before, "after": after})
+    return bytes(restored), {"contract": contract, "changes": changes}
+
+
+def verify_native_spell_restoration_report(report, patch):
+    path = patch.get("nativeSpellRestorations")
+    if path is None:
+        if report is not None:
+            raise ValueError("Native spell restorations are not locked")
+        return
+    relative_path(path)
+    if (not isinstance(report, dict) or set(report) != {"contractFile", "contract", "changes"}
+            or report["contractFile"] != path):
+        raise ValueError("Native spell restoration report differs from lock")
+    contract = native_spell_contract(report["contract"])
+    source = patch.get("localizations", {}).get("deDE", {}).get("englishSpellSha256")
+    if contract["sourceSha256"] != source:
+        raise ValueError("Native spell restoration source differs from lock")
+    if not isinstance(report["changes"], list):
+        raise ValueError("Invalid native spell restoration changes")
+    seen = set()
+    for change in report["changes"]:
+        if (not isinstance(change, dict) or set(change) != {"spellId", "field", "before", "after"}
+                or type(change["spellId"]) is not int or change["spellId"] not in contract["spellIds"]
+                or change["field"] not in contract["fields"]
+                or any(type(change[key]) is not int or not 0 <= change[key] <= 0xffffffff
+                       for key in ("before", "after")) or change["before"] == change["after"]):
+            raise ValueError("Invalid native spell restoration change")
+        key = (change["spellId"], change["field"])
+        if key in seen:
+            raise ValueError("Duplicate native spell restoration change")
+        seen.add(key)
 
 
 def verify_merged_spell(base: bytes, merged: bytes, stamp: str, custom_ids, expected_rows=None):
@@ -229,7 +348,17 @@ def verify_zip(path: Path, lock):
     manifest = json.loads(files["SOURCE_MANIFEST.json"])
     if manifest.get("schemaVersion") != 1 or manifest.get("clientInterface") != 30300:
         raise ValueError("Invalid historical client source manifest")
+    historical = historical_class_data(lock)
+    if historical is not None:
+        if manifest.get("historicalClassData") != historical:
+            raise ValueError("Historical class data provenance differs from lock")
+        for name in (historical["notice"], historical["license"], *historical.get("licenses", [])):
+            if not files.get(name):
+                raise ValueError(f"Missing historical class data notice or license: {name}")
+    elif "historicalClassData" in manifest:
+        raise ValueError("Historical class data provenance is not locked")
     patch = lock["clientPatch"]
+    verify_native_spell_restoration_report(manifest.get("nativeSpellRestorations"), patch)
     for key, module_key in (("eraModule", "eraModule"), ("baseModule", "baseModule")):
         expected = locked_module(lock, patch[module_key])
         actual = manifest[key]
@@ -290,6 +419,7 @@ def build(args):
         raise ValueError("StormLib must have a locked GitHub URL and full commit SHA")
     era_entry = locked_module(lock, spec["eraModule"])
     ip_entry = locked_module(lock, spec["baseModule"])
+    historical_files = historical_class_files(repository, lock)
     cache = repository / ".module-cache"
     cache.mkdir(exist_ok=True)
     storm_source = cache / "client-tools-stormlib"
@@ -338,8 +468,22 @@ def build(args):
         skill_raw = read_mpq(mpqread, base, INTERNAL_SKILL, stage / "base-skill.dbc")
         localized_tables, localization_reports = {}, {}
         localization_identity = None
+        restoration_report = None
         if spec.get("localizations"):
             donors, overrides, localization_identity = CLIENT_LOCALES.load_german_inputs(repository, spec["localizations"])
+        if spec.get("nativeSpellRestorations"):
+            contract_path = era / relative_path(spec["nativeSpellRestorations"])
+            if str(contract_path) not in datasets:
+                raise ValueError("Native spell restoration contract must be a generated era dataset")
+            contract = generator._load(str(contract_path)).get("clientNativeSpellRestoration")
+            if localization_identity is None or "Spell.enUS.dbc" not in donors:
+                raise ValueError("Native spell restoration requires the locked English spell donor")
+            spell_raw, restoration_report = restore_native_spell_fields(
+                spell_raw, donors["Spell.enUS.dbc"], contract, generator.COLS, generator.COLTYPES)
+            restoration_report["contractFile"] = spec["nativeSpellRestorations"]
+            verify_native_spell_restoration_report(restoration_report, spec)
+            (stage / "base-spell.dbc").write_bytes(spell_raw)
+        if spec.get("localizations"):
             for filename in CLIENT_LOCALES.DBC_LAYOUTS:
                 internal = "DBFilesClient\\" + filename
                 original = spell_raw if filename == "Spell.dbc" else read_mpq(mpqread, base, internal, stage / "locale-base.dbc")
@@ -358,6 +502,8 @@ def build(args):
         merged_spell = (stage / "Spell.dbc").read_bytes()
         merged_skill = (stage / "SkillLineAbility.dbc").read_bytes()
         custom = spell_builder._client_rows(datasets, generator.read_dbc_templates(stage / "base-spell.dbc"))
+        if restoration_report is not None and set(restoration_report["contract"]["spellIds"]) & set(custom):
+            raise ValueError("Native spell restoration IDs overlap authored era helpers")
         verify_merged_spell(spell_raw, merged_spell, generation, set(custom) | {generator.SENTINEL_SPELL_ID}, custom)
         custom_skills = {row[2] for row in skill_builder._rows(datasets)}
         verify_merged_skill(skill_raw, merged_skill, custom_skills)
@@ -403,6 +549,7 @@ def build(args):
                 "license nor the TrinityCore code license is applied to these extracted game data.\n"
                 "Source checksums and authored restored-entry overrides are recorded in SOURCE_MANIFEST.json.\n"
             ).encode()
+        files.update(historical_files)
         files["README.txt"] = ("EraTalents client files for World of Warcraft 3.3.5a (build 12340).\n\n"
             "Close WoW completely. Replace Interface/AddOns/EraTalents/ and Data/patch-V.mpq with this\n"
             "matching package, then restart WoW. Both are required; /reload cannot load an MPQ.\n"
@@ -420,6 +567,10 @@ def build(args):
         if localization_identity is not None:
             manifest["localizations"] = {"deDE": localization_identity}
             manifest["localizedDbcReports"] = localization_reports
+        if "historicalClassData" in lock:
+            manifest["historicalClassData"] = lock["historicalClassData"]
+        if restoration_report is not None:
+            manifest["nativeSpellRestorations"] = restoration_report
         files["SOURCE_MANIFEST.json"] = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
         args.output.mkdir(parents=True, exist_ok=True)
         output = args.output / f"{spec['name']}-{args.version}.zip"

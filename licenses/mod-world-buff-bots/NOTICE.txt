@@ -1,0 +1,11 @@
+World Buff Bots
+Upstream: https://github.com/Rockhopper1776/mod-world-buff-bots
+Revision: baae5656aa6a375e103bc83da8262f2061dbfcb6
+
+The upstream README declares:
+"GNU Affero General Public License v3.0"
+
+The pinned repository does not include a separate LICENSE or COPYING file.
+The GNU Affero General Public License version 3 text is included in
+../AGPL-3.0.txt. Upstream authorship and source remain available at the
+repository and revision above; local patches are recorded in versions.lock.json.

@@ -14,6 +14,8 @@ A portable **Windows x64** server for World of Warcraft 3.3.5a, built on [Azerot
 - **Level 1 bots:** bots earn their levels, equipment and gold. Resident bots remain in selected level brackets after reaching them through gameplay.
 - **An earned economy:** bots sell surplus owned loot and buy with their own gold, using normal auction fees and mailbox delivery. A fresh market grows as bots acquire tradable items.
 - **Companions and battlegrounds:** bots can join parties, while eligible bots fill real players' battleground queues. AutoBalance adjusts instance difficulty to the party size.
+- **Autonomous dungeon parties:** suitable nearby bots form groups and walk to supported Vanilla instances for real combat and loot. See [supported dungeons](docs/bot-dungeons.md).
+- **World buffs:** timed Vanilla town and area events follow each recipient's earned era; TBC buffs use their regular quests and areas.
 
 ## Download
 
@@ -33,7 +35,7 @@ Install the server bundle and matching EraTalents client pack. MultiBot is an op
 - Windows 10/11 x64 and a writable server folder.
 - A WoW **3.3.5a client, build 12340**, including for Vanilla and TBC progression.
 - Internet access for automatic server updates and the first-run server-data download.
-- Sufficient CPU, memory and storage for your selected bot population. The default target is **2,500 bots while a real player is connected**; capacity depends on your hardware and active content.
+- Sufficient CPU, memory and storage for your selected bot population. The default target is **2,500 bots**, including when no real player is connected; capacity depends on your hardware and active content.
 
 The executables are unsigned and may be blocked by Windows Smart App Control.
 
@@ -81,9 +83,11 @@ See the [update guide](docs/updating.md) for manual installation, backups, offli
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | Earned-era talents and selected class spell variants for players and bots. |
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Instance scaling for the players and bots present. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
+| [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Timed Vanilla world buffs for eligible Vanilla-progress characters. |
+| [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Earned-era access guards for the optional Dungeon Finder. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
 | [Token Turn-in](https://github.com/Zerathane/mod-token-turnin) | Token inventory checks; rewards still require the ordinary NPC exchange. |
-| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Optional dungeon routes; disabled in the earned-play profile. |
+| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous parties for supported dungeons, with real travel, combat and loot. |
 | [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Optional generated market; seller and buyer disabled in the earned economy. |
 
 ## Supported scope
@@ -98,9 +102,12 @@ Battleground and arena access follows earned progression; see [PvP rules](docs/e
 | --- | --- |
 | [Progression](docs/changing-expansions.md) | Content milestones, expansion modes and realm migration. |
 | [EraTalents](docs/era-talents.md) | Client installation, training, talents and compatibility. |
+| [Class quests](docs/class-quests.md) | Historical priest quest rewards, race gates and paid training. |
 | [Client addons](docs/addons.md) | Curated upstream downloads, client versions and Lua diagnostics. |
 | [Bot brackets](docs/earned-bot-brackets.md) | Resident levels, population and battleground eligibility. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
+| [World buffs](docs/world-buffs.md) | Vanilla event timers, recipient conditions and native TBC events. |
+| [Bot dungeons](docs/bot-dungeons.md) | Autonomous parties, supported instances and travel requirements. |
 | [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |
 | [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |
 | [Updates](docs/updating.md) | Automatic updates, manual installation, backups and recovery. |

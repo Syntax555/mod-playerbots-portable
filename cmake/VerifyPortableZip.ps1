@@ -107,6 +107,26 @@ try {
         }
         $textSources['docs/era-talents.md'] = 'docs/era-talents.md'
     }
+    if (@($lock.modules | Where-Object { $_.name -eq 'mod-world-buff-bots' }).Count -gt 0) {
+        foreach ($name in @('docs/world-buffs.md', 'configs/modules/mod_world_buff_bots.conf.dist',
+            'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt')) {
+            if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+        }
+        $textSources['docs/world-buffs.md'] = 'docs/world-buffs.md'
+        $textSources['licenses/mod-world-buff-bots/NOTICE.txt'] = 'licenses/mod-world-buff-bots/NOTICE.txt'
+    }
+    if ($lock.historicalClassData) {
+        foreach ($name in @('docs/class-quests.md', $lock.historicalClassData.notice, $lock.historicalClassData.license) + @($lock.historicalClassData.licenses)) {
+            if (-not $name -or -not $files.Contains($name)) { throw "Portable ZIP is missing historical class data notice: $name" }
+            $textSources[$name] = $name
+        }
+    }
+    if (@($lock.modules | Where-Object { $_.name -eq 'mod-dungeon-clear' }).Count -gt 0) {
+        foreach ($name in @('docs/bot-dungeons.md', 'configs/modules/mod_dungeon_clear.conf.dist')) {
+            if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+        }
+        $textSources['docs/bot-dungeons.md'] = 'docs/bot-dungeons.md'
+    }
     foreach ($name in $textSources.Keys) {
         $reader = [System.IO.StreamReader]::new($entries[$name].Open())
         try { $packagedText = $reader.ReadToEnd() } finally { $reader.Dispose() }

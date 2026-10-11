@@ -20,6 +20,14 @@ folders before replacement; keep account and character `SavedVariables`.
 See [EraTalents installation](era-talents.md#install-the-matching-client-files)
 for the matching addon/MPQ generation and locale checks.
 
+With both matching addons loaded, MultiBot's talent button opens the selected
+bot in the Blizzard inspect window. EraTalents displays its own Vanilla or TBC
+tree and allocated ranks there; Wrath uses the native inspect view. Historical
+inspection is read-only and still requires normal inspect access and range.
+The separate MultiBot talent window and its Custom/Glyph tabs are not opened
+through this route. Install both updated addons together; mixed addon or MPQ
+generations cannot supply a reliable historical view.
+
 ## Optional upstream addons
 
 These links identify suitable client projects and their limits. They are
