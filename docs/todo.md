@@ -2,6 +2,8 @@
 
 Open integration work and gameplay validation. The scope below describes the
 source implementation; planned work is not a claim of release support.
+Prefer existing AzerothCore and module functions, with small integration
+changes where required by earned progression and ordinary player actions.
 
 ## Current scope
 
@@ -54,6 +56,9 @@ and [server adaptations](adaptations.md) for current behavior.
   and normal recovery.
   Remove a failing dungeon from the default list until it is fixed. Confirm bot
   logout after the last real player session ends.
+- [ ] Verify long entrance and return paths in-game, including bends,
+  interrupted movement and changed obstacles. Measure server tick time while
+  multiple groups are travelling.
 - [ ] Verify player-led Molten Core, Blackwing Lair and Zul'Gurub raids with
   Raid Clear, including the Suppression Room without the raid cheat.
 - [ ] Audit historical class quests beyond the restored priest families across

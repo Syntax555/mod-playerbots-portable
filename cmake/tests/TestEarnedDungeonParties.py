@@ -18,6 +18,7 @@ STUBS = r'''
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <limits>
 #include <set>
 #include <shared_mutex>
 #include <string>
@@ -27,8 +28,9 @@ using uint8=uint8_t;using uint32=uint32_t;using int32=int32_t;
 constexpr uint32 MINUTE=60,IN_MILLISECONDS=1000,CMSG_AREATRIGGER=1,FORCED_MOVEMENT_NONE=0,MOTION_SLOT_ACTIVE=1,ESCORT_MOTION_TYPE=2,FOLLOW_MOTION_TYPE=3;
 enum TeamId:uint8{TEAM_ALLIANCE=0,TEAM_HORDE=1,TEAM_NEUTRAL=2};
 struct ObjectGuid{uint32 id=0;bool operator<(ObjectGuid r)const{return id<r.id;}bool operator==(ObjectGuid r)const{return id==r.id;}bool operator!=(ObjectGuid r)const{return id!=r.id;}std::string ToString()const{return std::to_string(id);}bool IsEmpty()const{return id==0;}uint32 GetCounter()const{return id;}static const ObjectGuid Empty;};const ObjectGuid ObjectGuid::Empty{};
-struct Vec{float x=0,y=0,z=0;Vec operator-(Vec b)const{return {x-b.x,y-b.y,z-b.z};}float magnitude()const{return std::sqrt(x*x+y*y+z*z);}float GetPositionX()const{return x;}float GetPositionY()const{return y;}float GetPositionZ()const{return z;}};
+struct Vec{float x=0,y=0,z=0;Vec()=default;Vec(float a,float b,float c):x(a),y(b),z(c){}Vec operator-(Vec b)const{return {x-b.x,y-b.y,z-b.z};}float magnitude()const{return std::sqrt(x*x+y*y+z*z);}float GetPositionX()const{return x;}float GetPositionY()const{return y;}float GetPositionZ()const{return z;}};
 using Position=Vec;
+namespace G3D{using Vector3=Vec;}
 namespace Movement{using PointsArray=std::vector<Vec>;}
 enum PathType{PATHFIND_BLANK=0,PATHFIND_NORMAL=1,PATHFIND_SHORTCUT=2,PATHFIND_INCOMPLETE=4,PATHFIND_NOPATH=8,PATHFIND_NOT_USING_PATH=16,PATHFIND_SHORT=32,PATHFIND_FARFROMPOLY_START=64,PATHFIND_FARFROMPOLY_END=128,PATHFIND_FARFROMPOLY=192};
 class Player;class PlayerbotAI;class Group;
@@ -66,7 +68,7 @@ bool PlayerbotAI::DoSpecificAction(std::string name,Event,bool){if(name=="accept
 struct ObjectMgr{std::map<uint32,AreaTrigger> triggers;AreaTrigger const* GetAreaTrigger(uint32 id){auto it=triggers.find(id);return it==triggers.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> targets;AreaTriggerTeleport const* GetAreaTriggerTeleport(uint32 id){auto it=targets.find(id);return it==targets.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> const& GetAllAreaTriggerTeleports(){return targets;}};
 ObjectMgr objectMgr;ObjectMgr* sObjectMgr=&objectMgr;
 bool IsContinentMap(uint32 map);
-void Session::HandleAreaTriggerOpcode(WorldPacket& packet){auto* at=sObjectMgr->GetAreaTrigger(packet.id);assert(at&&owner->IsInAreaTriggerRadius(at));++owner->doorCalls;if(owner->doorRefused)return;uint32 origin=owner->GetMapId(),target=sObjectMgr->GetAreaTriggerTeleport(packet.id)->target_mapId;uint32 instance=IsContinentMap(target)?0:owner->group->guid.id;auto& destination=maps[{target,instance}];destination={target,instance,false};owner->map=&destination;AreaTrigger const* exit=nullptr;for(auto const& [id,tp]:sObjectMgr->GetAllAreaTriggerTeleports())if(tp.target_mapId==origin&&sObjectMgr->GetAreaTrigger(id)->map==target)exit=sObjectMgr->GetAreaTrigger(id);owner->position={exit->x+20,exit->y,exit->z};if(owner->pendingDoor){owner->transfer=true;owner->world=false;}owner->moving=false;}
+void Session::HandleAreaTriggerOpcode(WorldPacket& packet){auto* at=sObjectMgr->GetAreaTrigger(packet.id);assert(at&&owner->IsInAreaTriggerRadius(at));++owner->doorCalls;if(owner->doorRefused)return;uint32 origin=owner->GetMapId(),target=sObjectMgr->GetAreaTriggerTeleport(packet.id)->target_mapId;uint32 instance=IsContinentMap(target)?0:(owner->group?owner->group->guid.id:owner->guid.id);auto& destination=maps[{target,instance}];destination={target,instance,false};owner->map=&destination;AreaTrigger const* exit=nullptr;for(auto const& [id,tp]:sObjectMgr->GetAllAreaTriggerTeleports())if(tp.target_mapId==origin&&sObjectMgr->GetAreaTrigger(id)->map==target)exit=sObjectMgr->GetAreaTrigger(id);owner->position={exit->x+20,exit->y,exit->z};if(owner->pendingDoor){owner->transfer=true;owner->world=false;}owner->moving=false;}
 uint32 fakeNow=0;uint32 getMSTime(){return fakeNow;}uint32 getMSTimeDiff(uint32 a,uint32 b){return b-a;}
 struct PlayerbotAIConfig{bool naturalProgression=true;float sightDistance=45.0f;std::set<uint32> random{1};bool IsInRandomAccountList(uint32 id){return random.count(id);}};PlayerbotAIConfig sPlayerbotAIConfig;
 struct IndividualProgression{bool enabled=true,strict=true;bool IsStrictDefaultProgression(){return enabled&&strict;}uint8 GetPlayerProgressionFromQuests(Player* p){return p->tier;}};IndividualProgression ip;IndividualProgression* sIndividualProgression=&ip;
@@ -81,13 +83,13 @@ bool IsContinentMap(uint32 map){auto* row=sMapStore.LookupEntry(map);return row&
 struct AreaTableEntry{uint32 ID,flags,team;};Store<AreaTableEntry> sAreaTableStore;constexpr uint32 AREA_FLAG_CAPITAL=0x100,AREATEAM_ALLY=2,AREATEAM_HORDE=4,PHASEMASK_NORMAL=1,DUNGEON_DIFFICULTY_NORMAL=0;
 struct MapMgr{std::map<std::pair<uint32,int>,uint32> zones;uint32 GetZoneId(uint32,uint32 map,float x,float,float){auto it=zones.find({map,int(x)/100});return it==zones.end()?0:it->second;}};MapMgr mapMgr;MapMgr* sMapMgr=&mapMgr;
 namespace DcEarnedEvents{std::set<uint32> unaudited;bool MapAudited(uint32 map,std::string& reason){if(!unaudited.count(map))return true;reason="fixture objective requires a shortcut";return false;}}LFGMgr lfgManager;LFGMgr* sLFGMgr=&lfgManager;
-uint32 fakePathType=PATHFIND_NORMAL;bool fakePathBuild=true,fakeRaycastBlocked=false;
+uint32 fakePathType=PATHFIND_NORMAL;bool fakePathBuild=true,fakeRaycastBlocked=false,fakeDiagonalWall=false;float fakeWallX=std::numeric_limits<float>::infinity(),fakeMissingTileX=std::numeric_limits<float>::infinity();
 class PathGenerator{
- Player* owner;Movement::PointsArray points;Vec actualEnd;bool raycast=false;
+ Player* owner;Movement::PointsArray points;Vec actualEnd;bool raycast=false,blocked=false,missingTile=false;
  public:explicit PathGenerator(Player* p):owner(p){}void SetUseRaycast(bool on){raycast=on;}
  bool CalculatePath(float x,float y,float z,bool force){return CalculatePath(owner->position.x,owner->position.y,owner->position.z,x,y,z,force);}
- bool CalculatePath(float ax,float ay,float az,float bx,float by,float bz,bool force){assert(!force);actualEnd={bx,by,bz};points={{ax,ay,az},actualEnd};if(raycast&&fakeRaycastBlocked)points.back()={ax+(bx-ax)/2,ay+(by-ay)/2,az+(bz-az)/2};return fakePathBuild;}
- PathType GetPathType()const{return PathType(raycast&&fakeRaycastBlocked?uint32(PATHFIND_INCOMPLETE):fakePathType);}Movement::PointsArray const& GetPath()const{return points;}
+ bool CalculatePath(float ax,float ay,float az,float bx,float by,float bz,bool force){assert(!force);actualEnd={bx,by,bz};points={{ax,ay,az},actualEnd};missingTile=!raycast&&bx>=fakeMissingTileX;blocked=raycast&&(fakeRaycastBlocked||(ax<fakeWallX&&bx>=fakeWallX)||(fakeDiagonalWall&&std::abs(ax-bx)>0.05f&&std::abs(ay-by)>0.05f));if(blocked)points.back()={ax+(bx-ax)/2,ay+(by-ay)/2,az+(bz-az)/2};return fakePathBuild;}
+ PathType GetPathType()const{return PathType(blocked?uint32(PATHFIND_INCOMPLETE):missingTile?uint32(PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH):fakePathType);}Movement::PointsArray const& GetPath()const{return points;}
  // Native early raycast wall return leaves this requested endpoint unchanged.
  Vec const& GetActualEndPosition()const{return actualEnd;}
 };
@@ -104,16 +106,36 @@ namespace DcRun{Run& Of(PlayerbotAI* ai){return ai->run;}}
 namespace DcKey{constexpr char const* StallReason="stall";}
 namespace DcActionShared{void DisableDungeonClear(PlayerbotAI* ai,char const*){ai->run.enabled=false;++ai->disabled;}}
 namespace DcStrategyGate{void Reconcile(Player* p){++p->ai.reconciled;}}
+namespace DcRunWing{std::string FenceWing(Player*){return {};}}
+namespace DcNavPenaltyRegistry{bool HasVolumes(uint32,std::string const&){return false;}bool IsInsideRegion(uint32,float,float,float,std::string const&){return false;}}
+size_t LosCleanPrefixCount(Player*,std::vector<Vec> const& points){return points.size();}
+#define LOG_DEBUG(...) ((void)0)
 #define LOG_INFO(...) ((void)0)
 '''
 
 HARNESS = r'''
+#include "Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h"
+// Keep the producer contract native, but control its upstream fallback outputs:
+// reachable also covers missing-mmap chords and hand-tuned anchors.
+ChunkedPathfinder::Result fakeChunkedResult;
+bool fakeChunkedCustom=false;
+uint32 fakeChunkedCalls=0,fakePlannerMap=0,fakePlannerBoss=999,fakePlannerBudget=0;
+ChunkedPathfinder::Result ChunkedPathfinder::Build(Player* p,uint32 map,uint32 boss,float x,float y,float z,uint32 depth){
+ ++fakeChunkedCalls;fakePlannerMap=map;fakePlannerBoss=boss;fakePlannerBudget=depth;
+ if(fakeChunkedCustom)return fakeChunkedResult;
+ Result result;result.reachable=true;result.complete=true;Vec const target{x,y,z};float const distance=(target-p->position).magnitude();
+ if(distance<=8.0f)return result;
+ PathSegment segment;segment.ex=x;segment.ey=y;segment.ez=z;
+ uint32 const count=uint32(std::ceil(distance/5.0f));
+ for(uint32 i=1;i<=count;++i){float const f=float(i)/count;segment.polyline.push_back({p->position.x+(x-p->position.x)*f,p->position.y+(y-p->position.y)*f,p->position.z+(z-p->position.z)*f});}
+ result.segments.push_back(segment);return result;
+}
 #include "DcEarnedProgression.cpp"
 #include "EarnedDungeonParties.cpp"
 #include "NativeProductionMethods.h"
 #include <iostream>
 std::vector<std::unique_ptr<Player>> actors;
-void reset(){parties.clear();retryAfter.clear();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;sPlayerbotAIConfig.sightDistance=45.0f;ip.enabled=true;ip.strict=true;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
+void reset(){parties.clear();retryAfter.clear();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;fakeDiagonalWall=false;fakeWallX=fakeMissingTileX=std::numeric_limits<float>::infinity();fakeChunkedCustom=false;fakeChunkedResult={};fakeChunkedCalls=0;sPlayerbotAIConfig.sightDistance=45.0f;ip.enabled=true;ip.strict=true;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
  // Dungeon Finder rows: Ragefire Chasm 15-21 (target 15-16), Stockade 20-30 (target 22-25).
  sLFGDungeonStore.rows={{4,{4,15,21,16,15,16,389,0,3,1,0}},{12,{12,20,30,24,22,25,34,0,3,1,0}}};lfgManager.starts={{4,{10,0,0}},{12,{10,0,0}}};
  sMapStore.rows={{0,{0,false,true}},{1,{1,false,true}},{34,{34,true,false}},{389,{389,true,false}}};
@@ -286,7 +308,87 @@ int main(){
    for(auto& p:actors){assert(p->doorCalls==(running?1:0));}unchanged();
   }
  }
- reset();std::cout<<"Earned dungeon production coordinator: recruitment, native era boundaries, three expansion caps, real-path gates, routes on 0/1/530/571, capital factions, wings, level bands, portal pending ACK, complete parties, native exits, ownership, wipes, era transitions, stalls, timeouts and concurrency passed\n";
+
+ // A long native planner corridor crosses several turns/segments. Prefixes must
+ // preserve point order and lengths rather than draw chords to segment endpoints.
+ auto polyline=[](std::vector<Vec> const& points,bool complete=true){ChunkedPathfinder::Result result;result.reachable=true;result.complete=complete;for(size_t start=0;start<points.size();start+=3){PathSegment segment;size_t const end=std::min(start+3,points.size());segment.polyline.assign(points.begin()+start,points.begin()+end);segment.ex=points[end-1].x;segment.ey=points[end-1].y;segment.ez=points[end-1].z;result.segments.push_back(segment);}return result;};
+ auto motionDone=[](Player* p){assert(!p->motion.last.empty());p->position=p->motion.last.back();p->moving=false;};
+ reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=320;fakeChunkedCustom=true;
+ std::vector<Vec> corridor{{40,0,0},{40,40,0},{80,40,0},{80,0,0},{120,0,0},{120,40,0},{160,40,0},{160,0,0},{200,0,0},{200,40,0},{240,40,0},{240,0,0},{280,0,0},{280,40,0},{320,40,0},{320,0,0}};
+ fakeChunkedResult=polyline(corridor);fakeDiagonalWall=true;WalkState travel;
+ size_t visited=0;
+ while(walker->doorCalls==0){Vec const start=walker->position;uint32 const planned=fakeChunkedCalls;
+  assert(Walk(walker,101,travel));if(walker->doorCalls)break;
+  assert(fakePlannerMap==0&&fakePlannerBoss==0&&fakePlannerBudget==4&&walker->motion.last.size()<=32);
+  assert((walker->motion.last.front()-start).magnitude()<0.001f);
+  float length=0;for(size_t i=1;i<walker->motion.last.size();++i){length+=(walker->motion.last[i]-walker->motion.last[i-1]).magnitude();assert((walker->motion.last[i]-corridor.at(visited++)).magnitude()<0.001f);}assert(length<=80.0f);
+  assert(fakeChunkedCalls==(planned?planned:1));int const launched=walker->motion.splines;
+  assert(Walk(walker,101,travel)&&fakeChunkedCalls==1&&walker->motion.splines==launched);motionDone(walker);
+ }
+ assert(visited==corridor.size()&&fakeChunkedCalls==1&&walker->doorCalls==1&&travel.corridor.empty());unchanged();
+ // A producer's partial route can make real progress without complete=true.
+ // At its end the module rebuilds from the new position instead of looping it.
+ reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=200;fakeChunkedCustom=true;fakeChunkedResult=polyline({{30,0,0},{60,0,0}},false);travel={};
+ assert(Walk(walker,101,travel)&&fakeChunkedCalls==1&&walker->motion.last.back().x==60);motionDone(walker);fakeChunkedResult=polyline({{90,0,0},{120,0,0}},false);
+ assert(Walk(walker,101,travel)&&fakeChunkedCalls==2&&walker->motion.last.front().x==60&&walker->motion.last.back().x==120);unchanged();
+ // The first raycast is from the current physical position. A reachable result
+ // from a no-mmap/direct or blocked fallback never authorizes raw movement.
+ for(uint32 type:{uint32(PATHFIND_SHORTCUT),uint32(PATHFIND_NOPATH),uint32(PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH),uint32(PATHFIND_NORMAL|PATHFIND_SHORT),uint32(PATHFIND_FARFROMPOLY),uint32(PATHFIND_INCOMPLETE)}){
+  reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=200;fakeChunkedCustom=true;fakeChunkedResult=polyline({{40,0,0},{80,0,0}});fakePathType=type;travel={};
+  assert(!Walk(walker,101,travel)&&walker->motion.splines==0&&walker->doorCalls==0);unchanged();
+ }
+ reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=200;fakeChunkedCustom=true;fakeChunkedResult=polyline({{40,0,0},{80,0,0}});fakeRaycastBlocked=true;travel={};assert(!Walk(walker,101,travel)&&walker->motion.splines==0);
+ // Cache reuse revalidates changed geometry and never consumes unwalked turns.
+ reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=320;fakeChunkedCustom=true;fakeChunkedResult=polyline(corridor);travel={};assert(Walk(walker,101,travel));motionDone(walker);fakeWallX=80;
+ assert(!Walk(walker,101,travel)&&fakeChunkedCalls==1&&walker->motion.splines==1&&walker->doorCalls==0);unchanged();
+ // Only an actually reached previous endpoint may reuse the cache. Combat
+ // displacement, wrong instance/map or a different portal require a fresh build.
+ for(int changed=0;changed<4;++changed){reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=320;fakeChunkedCustom=true;fakeChunkedResult=polyline(corridor);travel={};assert(Walk(walker,101,travel));motionDone(walker);uint32 trigger=101;
+  if(changed==0)walker->position={45,45,0};
+  if(changed==1){auto& other=maps[{0,99}];other={0,99,false};walker->map=&other;}
+  if(changed==2){auto& other=maps[{1,0}];other={1,0,false};walker->map=&other;objectMgr.triggers[101].map=1;}
+  if(changed==3){objectMgr.triggers[102]={102,0,360,0,0,2};trigger=102;}
+  Vec const pos=walker->position;fakeChunkedResult=polyline({{pos.x+20,pos.y,0},{pos.x+40,pos.y,0}});assert(Walk(walker,trigger,travel)&&fakeChunkedCalls==2&&walker->motion.last.front().x==pos.x&&walker->motion.last.back().x==pos.x+40);unchanged();
+ }
+ // The planner's eight-yard arrival tolerance cannot bypass a smaller native
+ // portal radius. Finish on a verified core path, then submit the normal opcode.
+ reset();walker=add(1,0);walker->position={6,0,0};travel={};assert(Walk(walker,101,travel)&&walker->motion.splines==1&&walker->doorCalls==0);motionDone(walker);assert(walker->position.x==0);assert(Walk(walker,101,travel)&&walker->doorCalls==1);unchanged();
+ // No-op, off-mesh, anchor, jump and door plans cannot advance. Oversized or
+ // nonfinite routes fail before the movement API, including an unsafe tail.
+ for(int bad=0;bad<12;++bad){reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=320;fakeChunkedCustom=true;fakeChunkedResult=polyline(corridor);travel={};
+  switch(bad){case 0:fakeChunkedResult.reachable=false;break;case 1:fakeChunkedResult.startFarFromPoly=true;break;case 2:fakeChunkedResult.segments[1].anchored=true;break;case 3:fakeChunkedResult.segments[1].jumpDown=true;break;case 4:fakeChunkedResult.segments[1].jumpGap=true;break;case 5:fakeChunkedResult.segments[1].doorGoEntry=123;break;case 6:fakeChunkedResult.segments.clear();fakeChunkedResult.complete=false;break;case 7:fakeChunkedResult=polyline({{0,0,0},{0,0,0}});break;case 8:fakeChunkedResult.segments.back().polyline.back().x=std::numeric_limits<float>::quiet_NaN();break;case 9:fakeChunkedResult.segments.back().polyline.back().z=std::numeric_limits<float>::infinity();break;case 10:fakeChunkedResult.segments[0].polyline.assign(4097,Vec{10,0,0});break;case 11:fakeChunkedResult=polyline({{100,0,0}});break;}
+  assert(!Walk(walker,101,travel)&&walker->motion.splines==0&&walker->doorCalls==0);unchanged();
+ }
+ // The point limit independently bounds dense native corridors; distant tails
+ // wait for the next window and are independently checked when reached.
+ reset();walker=add(1,0);walker->position={0,0,0};objectMgr.triggers[101].x=200;std::vector<Vec> dense;for(int x=1;x<=100;++x)dense.push_back({float(x),0,0});fakeChunkedCustom=true;fakeChunkedResult=polyline(dense);fakeWallX=90;travel={};
+ assert(Walk(walker,101,travel)&&walker->motion.last.size()==32&&walker->motion.last.back().x==31);motionDone(walker);assert(Walk(walker,101,travel)&&walker->motion.last.back().x==62);motionDone(walker);assert(!Walk(walker,101,travel)&&fakeChunkedCalls==1&&walker->motion.splines==2);unchanged();
+ // Moving, fighting, casting or crowd-controlled bots never invoke the planner.
+ for(int pause=0;pause<4;++pause){reset();walker=add(1,0);walker->position={10,0,0};travel={};switch(pause){case 0:walker->moving=true;break;case 1:walker->combat=true;break;case 2:walker->cast=true;break;case 3:walker->rooted=true;break;}assert(Walk(walker,101,travel)&&fakeChunkedCalls==0&&walker->motion.splines==0&&walker->doorCalls==0);unchanged();}
+ // The coordinator uses the same cached real corridor on long entrances and
+ // exits in each earned era, while portals and whole-party start remain native.
+ for(uint8 expansion:{uint8(0),uint8(1),uint8(2)}){
+  reset();uint32 const outside=expansion==0?0:expansion==1?530:571,inside=expansion==0?34:expansion==1?543:574;uint8 const tier=expansion==0?7:expansion==1?12:18,level=expansion==0?25:expansion==1?65:75;
+  objectMgr.triggers.clear();objectMgr.targets.clear();expansionRoute(900,inside,outside,expansion,level,level);expansionBots(outside,tier,level);objectMgr.triggers[7000].x=0;tick(30);assert(parties.size()==1);
+  for(int step=0;step<12&&!actors[0]->ai.run.enabled;++step){tick();for(auto& p:actors)if(p->GetMapId()==outside&&p->moving)motionDone(p.get());}
+  assert(parties.size()==1&&actors[0]->ai.run.enabled&&fakeChunkedCalls==5);for(auto& p:actors)assert(p->doorCalls==1&&p->GetMapId()==inside&&p->motion.splines>4);
+  uint32 const entranceCalls=fakeChunkedCalls;actors[0]->ai.run.enabled=false;objectMgr.triggers[7001].x=710;
+  for(int step=0;step<14&&!parties.empty();++step){tick();for(auto& p:actors)if(p->GetMapId()==inside&&p->moving)motionDone(p.get());}
+  assert(parties.empty()&&fakeChunkedCalls==entranceCalls+5);for(auto& p:actors)assert(p->doorCalls==2&&p->GetMapId()==outside&&!p->group);unchanged();
+ }
+
+
+ // Compile the actual upstream TryProbe gate: an unloaded far tile must refuse
+ // its direct shortcut so existing nearer real stride probes can be attempted.
+ reset();walker=add(1,0);walker->position={0,0,0};std::vector<Vec> probe;uint32 probeType=0;fakeMissingTileX=180;
+ assert(!TryProbe(walker,0,0,0,0,300,0,0,probe,probeType)&&probe.empty()&&(probeType&PATHFIND_NOT_USING_PATH));
+ assert(TryProbe(walker,0,0,0,0,90,0,0,probe,probeType)&&probe.size()==1&&probe.back().x==90);
+ fakeMissingTileX=std::numeric_limits<float>::infinity();
+ for(uint32 type:{uint32(PATHFIND_NORMAL),uint32(PATHFIND_INCOMPLETE)}){fakePathType=type;assert(TryProbe(walker,0,0,0,0,90,0,0,probe,probeType)&&!probe.empty());}
+ for(uint32 type:{uint32(PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH),uint32(PATHFIND_NORMAL|PATHFIND_FARFROMPOLY_START),uint32(PATHFIND_NORMAL|PATHFIND_FARFROMPOLY_END),uint32(PATHFIND_SHORT),uint32(PATHFIND_SHORTCUT),uint32(PATHFIND_NOPATH),uint32(PATHFIND_BLANK)}){fakePathType=type;assert(!TryProbe(walker,0,0,0,0,90,0,0,probe,probeType)&&probe.empty());}
+ sPlayerbotAIConfig.naturalProgression=false;fakePathType=PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH;assert(TryProbe(walker,0,0,0,0,90,0,0,probe,probeType)&&probe.size()==1&&probe.back().x==90);unchanged();
+
+ reset();std::cout<<"Earned dungeon production coordinator: cached curved/partial long routes, bounded raw splines, geometry revalidation, native portal finish, recruitment, native era boundaries, three expansion caps, real-path gates, routes on 0/1/530/571, capital factions, wings, level bands, portal pending ACK, complete parties, native exits, ownership, wipes, era transitions, stalls, timeouts and concurrency passed\n";
 }
 '''
 
@@ -349,6 +451,11 @@ def native_contracts(core, source):
     engage=(source/'Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp').read_text()
     for kind in ('EscortCreature','DropInHole','UseItemOnGO','UseItemAt'):
         assert f'step.kind == EventStepKind::{kind} && !DcEarnedPlay::Active()' in engage, kind
+    chunked=(source/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.cpp').read_text()
+    strided=(source/'Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp').read_text()
+    assert 'return StridedPathfinder::Build(' in chunked and 'LongRangePathfinder::Build(bot, tx, ty, tz)' in strided
+    assert 'if (bossEntry)' in strided and 'PATHFIND_NOT_USING_PATH' in strided
+    assert 'ChunkedPathfinder::Build(player, player->GetMapId(), 0,' in function(coordinator, 'bool Walk(')
     print('Native dungeon contracts: joined map workers, invitation security/reset, summon refusal, group ownership, event shortcut and production shortcut gates verified')
 
 
@@ -372,15 +479,18 @@ def main():
         if not progression_enum:
             raise SystemExit('Native Individual Progression stages were not recognised')
         (work/'NativeStubs.h').write_text(STUBS.replace('// NATIVE_PROGRESSION_ENUM', progression_enum.group(0)))
-        headers=('Define.h','MapMgr.h','PlayerbotAIConfig.h','PathGenerator.h','Player.h','DcModuleEnable.h','DcStrategyGate.h','Ai/Dungeon/DungeonClear/Action/DcActionShared.h','Ai/Dungeon/DungeonClear/Util/DcRun.h','Ai/Dungeon/DungeonClear/DcValueKeys.h','Config.h','DBCStores.h','Event.h','Group.h','GroupMgr.h','IndividualProgression.h','Log.h','LFGMgr.h','MotionMaster.h','ObjectAccessor.h','ObjectMgr.h','Playerbots.h','PlayerbotAI.h','Timer.h','WorldPacket.h','WorldSession.h')
+        headers=('Define.h','Common.h','G3D/Vector3.h','Ai/Dungeon/DungeonClear/Data/WaypointHint.h','MapMgr.h','PlayerbotAIConfig.h','PathGenerator.h','Player.h','DcModuleEnable.h','DcStrategyGate.h','Ai/Dungeon/DungeonClear/Action/DcActionShared.h','Ai/Dungeon/DungeonClear/Util/DcRun.h','Ai/Dungeon/DungeonClear/DcValueKeys.h','Config.h','DBCStores.h','Event.h','Group.h','GroupMgr.h','IndividualProgression.h','Log.h','LFGMgr.h','MotionMaster.h','ObjectAccessor.h','ObjectMgr.h','Playerbots.h','PlayerbotAI.h','Timer.h','WorldPacket.h','WorldSession.h')
         for name in headers:
             path=work/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('#include "NativeStubs.h"\n')
+        path=work/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h';shutil.copyfile(source/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h',path)
         for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedPlay.h','DcEarnedEvents.h','DcEarnedProgression.h','DcEarnedProgression.cpp'):
             shutil.copyfile(source/name,work/name)
         methods=function((source/'Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp').read_text(),'void DcLeaderSignal::SetLeaderDazeImmunity(')+'\n'+function((source/'Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp').read_text(),'bool DungeonClearBetterLootRollAction::isUseful(')
         follow=function((source/'Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp').read_text(),'bool DungeonClearFollowTankAction::Execute(')
         follow=follow[follow.rindex('    if (DcEarnedPlay::Active())'):]
         methods+='\nbool NativeFollowFallback(Player* bot,Player* tank,float followDist,float angle)\n{\n'+follow
+        strided=(source/'Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp').read_text()
+        methods+='\n'+function(strided,'bool PathTypeIsBogusChunk(')+'\n'+function(strided,'bool TryProbe(')
         (work/'NativeProductionMethods.h').write_text(methods)
         (work/'fixture.cpp').write_text(HARNESS)
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')
@@ -391,6 +501,23 @@ def main():
         subprocess.run([str(exe)],check=True)
         originals={name:(work/name).read_text() for name in ('DcEarnedPlay.h','EarnedDungeonParties.cpp','DcEarnedProgression.cpp','NativeProductionMethods.h')}
         mutations=[
+            ('unloaded tile probe accepts shortcut','NativeProductionMethods.h','if (DcEarnedPlay::Active() && !DcEarnedPlay::UsesRealPath(gen))','if (false)'),
+            ('raw planner fallback spline','EarnedDungeonParties.cpp','if (!DcEarnedPlay::RealSpline(player, points))','if (false)'),
+            ('flatten segment endpoints into chords','EarnedDungeonParties.cpp','state.corridor.insert(state.corridor.end(), segment.polyline.begin(), segment.polyline.end());','state.corridor.push_back(G3D::Vector3(segment.ex, segment.ey, segment.ez));'),
+            ('partial route requires whole completion','EarnedDungeonParties.cpp','if (!route.reachable || route.startFarFromPoly)','if (!route.complete || !route.reachable || route.startFarFromPoly)'),
+            ('off-mesh route accepted','EarnedDungeonParties.cpp','!route.reachable || route.startFarFromPoly','!route.reachable'),
+            ('anchor shortcut accepted','EarnedDungeonParties.cpp','segment.anchored || segment.jumpDown','segment.jumpDown'),
+            ('jump-down shortcut accepted','EarnedDungeonParties.cpp','segment.anchored || segment.jumpDown || segment.jumpGap','segment.anchored || segment.jumpGap'),
+            ('jump-gap shortcut accepted','EarnedDungeonParties.cpp','segment.jumpDown || segment.jumpGap || segment.doorGoEntry','segment.jumpDown || segment.doorGoEntry'),
+            ('door shortcut accepted','EarnedDungeonParties.cpp','segment.jumpGap || segment.doorGoEntry','segment.jumpGap'),
+            ('lost physical cursor check','EarnedDungeonParties.cpp','state.trigger != trigger || (state.expected - origin).magnitude() > 0.05f','state.trigger != trigger'),
+            ('cached wrong map','EarnedDungeonParties.cpp','state.map != player->GetMapId() || state.instance','state.instance'),
+            ('cached wrong instance','EarnedDungeonParties.cpp','state.instance != player->GetInstanceId() ||',''),
+            ('cached wrong portal','EarnedDungeonParties.cpp','state.trigger != trigger ||',''),
+            ('unbounded spline distance','EarnedDungeonParties.cpp','if (distance + leg > 80.0f)','if (false)'),
+            ('unbounded spline points','EarnedDungeonParties.cpp','points.size() < 32','points.size() < 4096'),
+            ('missing last-yard portal approach','EarnedDungeonParties.cpp','if (state.corridor.empty() && route.complete &&','if (false && route.complete &&'),
+
             ('missing navmesh guard','DcEarnedPlay.h','auto const type = path.GetPathType();','return true;\n        auto const type = path.GetPathType();'),
             ('raw wall-crossing spline','DcEarnedPlay.h','leg.SetUseRaycast(true);','leg.SetUseRaycast(false);'),
             ('member era bypass','EarnedDungeonParties.cpp','DcEarnedProgression::Expansion(player) != route.expansion','false'),

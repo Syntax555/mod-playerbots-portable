@@ -115,10 +115,17 @@ AutoBalance scales raid difficulty to the number of players and bots present.
 
 ## Travel and encounters
 
-The party walks over the native navigation mesh. Each bot must reach the
-entrance and pass the ordinary instance-entry handler; the run starts after all
-five arrive in the same instance. Entering and leaving uses the physical dungeon
-portal. The ordinary Dungeon Finder is not used to teleport the party.
+Entrance and return travel use Dungeon Clear's existing route planner over the
+native navigation mesh. Bots follow short sections of the calculated route;
+each section is checked from the bot's current position before movement.
+The remaining route is reused after arrival and recalculated after interrupted
+movement or a change of travel destination. Missing navigation and unsafe sections
+stop the attempt.
+
+Each bot must reach the entrance and pass the ordinary instance-entry handler;
+the run starts after all five arrive in the same instance. Entering and leaving
+uses the physical dungeon portal. The ordinary Dungeon Finder is not used to
+teleport the party.
 
 Natural progression rejects movement shortcuts, artificial combat recovery and
 item grants. Missing routes, failed recruitment, wipes, timeouts and objectives
