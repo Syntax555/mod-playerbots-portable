@@ -35,6 +35,18 @@ func TestManagedProfileWithoutBaselinePreservesExistingKeys(t *testing.T) {
 	}
 }
 
+func TestManagedProfileUsesFirstDuplicateLikeServer(t *testing.T) {
+	// AzerothCore applies the first assignment and ignores later duplicates.
+	managed, err := mergeManagedProfile("Managed = 10\nManaged = 99\n", "Managed = 10\n", "Managed = 30\n")
+	if err != nil || managed != "Managed = 30\nManaged = 30\n" {
+		t.Fatalf("effective managed value was not updated: %q, %v", managed, err)
+	}
+	custom, err := mergeManagedProfile("Managed = 99\nManaged = 10\n", "Managed = 10\n", "Managed = 30\n")
+	if err != nil || custom != "Managed = 99\nManaged = 10\n" {
+		t.Fatalf("effective custom value was overwritten: %q, %v", custom, err)
+	}
+}
+
 func TestManagedProfileRejectsInvalidBaselines(t *testing.T) {
 	for _, previous := range []string{"Value = 1\nValue = 2\n", "not a setting"} {
 		if _, err := mergeManagedProfile("Value = 1\n", previous, "Value = 3\n"); err == nil {

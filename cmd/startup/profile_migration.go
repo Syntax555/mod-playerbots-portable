@@ -12,16 +12,7 @@ import (
 // Existing credentials, hosts and databases in its template are preserved.
 func applyRuntimePorts(filename, content string, opts startupOptions) (string, error) {
 	var settings []string
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, found := strings.Cut(line, "=")
-		if !found {
-			continue
-		}
-		key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+	for key, value := range configAssignments(content) {
 		switch key {
 		case "LoginDatabaseInfo", "WorldDatabaseInfo", "CharacterDatabaseInfo", "PlayerbotsDatabaseInfo":
 			if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"net"
 	"os"
 	"path/filepath"
@@ -35,17 +36,44 @@ func parseRealmPhase(name string) (realmPhase, error) {
 	}
 }
 
-// Templates contain sections and unrelated settings, so read just this key.
-func configValue(content, key string) (string, bool) {
-	var value string
-	var found bool
-	for _, line := range strings.Split(content, "\n") {
-		name, candidate, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if ok && strings.TrimSpace(name) == key {
-			value, found = strings.TrimSpace(candidate), true
+// configAssignments reads settings as AzerothCore's config parser does. Blank,
+// comment and section lines are skipped; keys and raw values are trimmed, and
+// raw values keep their quotes.
+func configAssignments(content string) iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for line := range strings.SplitSeq(content, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || line[0] == '#' || line[0] == '[' {
+				continue
+			}
+			key, value, ok := strings.Cut(line, "=")
+			if ok && !yield(strings.TrimSpace(key), strings.TrimSpace(value)) {
+				return
+			}
 		}
 	}
-	return value, found
+}
+
+// configValue returns the raw value a server uses. AzerothCore ignores later
+// duplicates of a key, so the first assignment wins.
+func configValue(content, key string) (string, bool) {
+	for name, value := range configAssignments(content) {
+		if name == key {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+// configInt parses a numeric setting. AzerothCore removes every double quote
+// from a value, so `WorldServerPort = "8085"` is a valid port.
+func configInt(content, key string) (int, bool, error) {
+	value, exists := configValue(content, key)
+	if !exists {
+		return 0, false, nil
+	}
+	number, err := strconv.Atoi(strings.ReplaceAll(value, `"`, ""))
+	return number, true, err
 }
 
 func loadRealmPhase(workDir string) (realmPhase, error) {
@@ -82,11 +110,10 @@ func detectRealmPhase(workDir string, allowConflictingCaps bool) (realmPhase, er
 		if err != nil {
 			return realmPhase{}, err
 		}
-		value, exists := configValue(string(content), setting.key)
+		number, exists, err := configInt(string(content), setting.key)
 		if !exists {
 			continue
 		}
-		number, err := strconv.Atoi(value)
 		if err != nil {
 			return realmPhase{}, fmt.Errorf("invalid %s in %s", setting.key, path)
 		}
@@ -111,7 +138,7 @@ func detectRealmPhase(workDir string, allowConflictingCaps bool) (realmPhase, er
 			}
 		}
 		if name == "" {
-			return realmPhase{}, fmt.Errorf("unsupported expansion setting %s = %s in %s", setting.key, value, path)
+			return realmPhase{}, fmt.Errorf("unsupported expansion setting %s = %d in %s", setting.key, number, path)
 		}
 		phase, _ := parseRealmPhase(name)
 		if inferred.name != "" && inferred != phase {
@@ -172,16 +199,15 @@ func ensureRealmStopped(workDir string) error {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		port := server.port
-		if value, exists := configValue(string(content), server.key); exists {
-			port, err = strconv.Atoi(value)
-			if err != nil || port < 1 || port > 65535 {
-				return fmt.Errorf("invalid %s in %s", server.key, server.file)
-			}
+		port, exists, err := configInt(string(content), server.key)
+		if !exists {
+			port = server.port
+		} else if err != nil || port < 1 || port > 65535 {
+			return fmt.Errorf("invalid %s in %s", server.key, server.file)
 		}
 		hosts := []string{"127.0.0.1", "::1"}
 		if value, exists := configValue(string(content), "BindIP"); exists {
-			host := strings.Trim(value, "\"")
+			host := strings.ReplaceAll(value, `"`, "")
 			if host != "" && host != "0.0.0.0" && host != "::" {
 				hosts = append(hosts, host)
 			}

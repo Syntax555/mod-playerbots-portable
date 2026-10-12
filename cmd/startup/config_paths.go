@@ -40,10 +40,9 @@ func hasBundledSQL(baseDir string) bool {
 func legacySourceDirectory(content string) (string, bool) {
 	var value string
 	count := 0
-	for _, line := range strings.Split(content, "\n") {
-		name, candidate, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if ok && strings.TrimSpace(name) == "SourceDirectory" {
-			value = strings.TrimSpace(candidate)
+	for name, candidate := range configAssignments(content) {
+		if name == "SourceDirectory" {
+			value = candidate
 			count++
 		}
 	}
