@@ -3,11 +3,29 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
 	"unsafe"
+)
+
+// The syscall package covers process handles and Toolhelp snapshots. These
+// procedures are the remaining kernel32 calls; resolve them once.
+var (
+	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
+	procSetConsoleCtrlHandler      = kernel32.NewProc("SetConsoleCtrlHandler")
+	procGenerateConsoleCtrlEvent   = kernel32.NewProc("GenerateConsoleCtrlEvent")
+	procGetConsoleProcessList      = kernel32.NewProc("GetConsoleProcessList")
+	procGlobalMemoryStatusEx       = kernel32.NewProc("GlobalMemoryStatusEx")
+	procGetCurrentPackageFullName  = kernel32.NewProc("GetCurrentPackageFullName")
+	procQueryFullProcessImageNameW = kernel32.NewProc("QueryFullProcessImageNameW")
+)
+
+const (
+	processQueryLimitedInformation = 0x1000
+	stillActive                    = 259
 )
 
 func configureConsoleProcess(cmd *exec.Cmd) {
@@ -21,8 +39,7 @@ func enableConsoleInterrupt() error {
 	// restarted by the update helper. Registering a Go signal handler does
 	// not clear that inherited flag. Only the normal launcher enables it;
 	// the atomic update helper remains protected from interruption.
-	setConsoleCtrlHandler := kernel32.NewProc("SetConsoleCtrlHandler")
-	ret, _, err := setConsoleCtrlHandler.Call(0, 0)
+	ret, _, err := procSetConsoleCtrlHandler.Call(0, 0)
 	if ret == 0 {
 		return fmt.Errorf("SetConsoleCtrlHandler: %w", err)
 	}
@@ -35,8 +52,7 @@ func interruptConsoleProcess(process *os.Process) error {
 	}
 	// CTRL_BREAK reaches only this owned process group; CTRL_C cannot be
 	// directed at one group. AzerothCore handles SIGBREAK as a normal stop.
-	generateConsoleCtrlEvent := kernel32.NewProc("GenerateConsoleCtrlEvent")
-	ret, _, err := generateConsoleCtrlEvent.Call(syscall.CTRL_BREAK_EVENT, uintptr(process.Pid))
+	ret, _, err := procGenerateConsoleCtrlEvent.Call(syscall.CTRL_BREAK_EVENT, uintptr(process.Pid))
 	if ret == 0 {
 		return fmt.Errorf("GenerateConsoleCtrlEvent: %w", err)
 	}
@@ -47,35 +63,55 @@ func isProcessAlive(pid int) (bool, uint32) {
 	if pid <= 0 {
 		return false, 0
 	}
-
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	openProcess := kernel32.NewProc("OpenProcess")
-	getExitCodeProcess := kernel32.NewProc("GetExitCodeProcess")
-	waitForSingleObject := kernel32.NewProc("WaitForSingleObject")
-	closeHandle := kernel32.NewProc("CloseHandle")
-
-	const SYNCHRONIZE = 0x00100000
-	const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-	const WAIT_TIMEOUT = 258 // 0x102
-	const STILL_ACTIVE = 259
-
-	hProcess, _, _ := openProcess.Call(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION, 0, uintptr(pid))
-	if hProcess == 0 {
+	handle, err := syscall.OpenProcess(syscall.SYNCHRONIZE|processQueryLimitedInformation, false, uint32(pid))
+	if err != nil {
 		return false, 0
 	}
-	defer closeHandle.Call(hProcess)
-
-	waitRet, _, _ := waitForSingleObject.Call(hProcess, 0)
-	if waitRet == WAIT_TIMEOUT {
-		return true, STILL_ACTIVE
+	defer syscall.CloseHandle(handle)
+	if status, err := syscall.WaitForSingleObject(handle, 0); err == nil && status == syscall.WAIT_TIMEOUT {
+		return true, stillActive
 	}
-
 	var exitCode uint32
-	ret, _, _ := getExitCodeProcess.Call(hProcess, uintptr(unsafe.Pointer(&exitCode)))
-	if ret == 0 {
+	if err := syscall.GetExitCodeProcess(handle, &exitCode); err != nil {
 		return false, 0
 	}
 	return false, exitCode
+}
+
+func processImagePath(handle syscall.Handle) (string, error) {
+	var image [32768]uint16
+	length := uint32(len(image))
+	ok, _, err := procQueryFullProcessImageNameW.Call(uintptr(handle), 0,
+		uintptr(unsafe.Pointer(&image[0])), uintptr(unsafe.Pointer(&length)))
+	if ok == 0 || length == 0 || length > uint32(len(image)) {
+		return "", fmt.Errorf("QueryFullProcessImageNameW: %w", err)
+	}
+	return syscall.UTF16ToString(image[:length]), nil
+}
+
+// forEachProcess walks one Toolhelp snapshot. Enumeration failures are
+// returned rather than treated as the end of the process list.
+func forEachProcess(visit func(*syscall.ProcessEntry32) error) error {
+	snapshot, err := syscall.CreateToolhelp32Snapshot(syscall.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return fmt.Errorf("CreateToolhelp32Snapshot: %w", err)
+	}
+	defer syscall.CloseHandle(snapshot)
+	entry := syscall.ProcessEntry32{Size: uint32(unsafe.Sizeof(syscall.ProcessEntry32{}))}
+	if err := syscall.Process32First(snapshot, &entry); err != nil {
+		return fmt.Errorf("Process32First: %w", err)
+	}
+	for {
+		if err := visit(&entry); err != nil {
+			return err
+		}
+		if err := syscall.Process32Next(snapshot, &entry); err != nil {
+			if errors.Is(err, syscall.ERROR_NO_MORE_FILES) {
+				return nil
+			}
+			return fmt.Errorf("Process32Next: %w", err)
+		}
+	}
 }
 
 type memoryStatusEx struct {
@@ -91,21 +127,14 @@ type memoryStatusEx struct {
 }
 
 func getTotalRAMBytes() uint64 {
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	globalMemoryStatusEx := kernel32.NewProc("GlobalMemoryStatusEx")
 	var mem memoryStatusEx
 	mem.cbSize = uint32(unsafe.Sizeof(mem))
-	ret, _, _ := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&mem)))
+	ret, _, _ := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&mem)))
 	if ret == 0 {
 		return 0
 	}
 	return mem.ullTotalPhys
 }
-
-var (
-	kernel32                      = syscall.NewLazyDLL("kernel32.dll")
-	procGetCurrentPackageFullName = kernel32.NewProc("GetCurrentPackageFullName")
-)
 
 const appModelErrorNoPackage = 15700
 

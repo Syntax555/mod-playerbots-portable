@@ -18,7 +18,7 @@ import (
 func attachedConsoleProcesses(t *testing.T) []uint32 {
 	t.Helper()
 	var ids [8]uint32
-	count, _, err := kernel32.NewProc("GetConsoleProcessList").Call(uintptr(unsafe.Pointer(&ids[0])), uintptr(len(ids)))
+	count, _, err := procGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&ids[0])), uintptr(len(ids)))
 	if count == 0 || count > uintptr(len(ids)) {
 		t.Fatalf("private test console has invalid process count %d: %v", count, err)
 	}
@@ -76,7 +76,7 @@ func TestConsoleInterruptReenabledAfterGroupRestart(t *testing.T) {
 			t.Fatalf("refusing CTRL_C_EVENT in a console with an unrelated process: %v", ids)
 		}
 	}
-	ret, _, err := kernel32.NewProc("GenerateConsoleCtrlEvent").Call(syscall.CTRL_C_EVENT, 0)
+	ret, _, err := procGenerateConsoleCtrlEvent.Call(syscall.CTRL_C_EVENT, 0)
 	if ret == 0 {
 		t.Fatalf("private CTRL_C_EVENT failed: %v", err)
 	}
