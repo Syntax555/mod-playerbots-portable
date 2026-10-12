@@ -29,8 +29,14 @@ native_hooks = '\n'.join(function(script, signature).replace(' override', '') fo
     '    bool OnPlayerCanJoinInArenaQueue('))
 assert 'PLAYERHOOK_CAN_JOIN_IN_BATTLEGROUND_QUEUE' in script
 assert 'PLAYERHOOK_CAN_JOIN_IN_ARENA_QUEUE' in script
-queue_recorder = function((pb / 'RandomPlayerbotMgr.cpp').read_text(),
-                          'static void RecordEarnedBattlegroundQueue(')
+manager_source = (pb / 'RandomPlayerbotMgr.cpp').read_text()
+queue_recorder = function(manager_source, 'static void RecordEarnedBattlegroundQueue(')
+check_queue = function(manager_source, 'void RandomPlayerbotMgr::CheckBgQueue()')
+assert 'GetBattlegroundBracketByLevel' not in check_queue
+for participant in ('player', 'bot'):
+    assert check_queue.count(f'getQueueBracket({participant}, bg, queueType, queueTypeId, mapId)') == 1
+bracket_start = check_queue.index('    auto getQueueBracket = [&](')
+queue_bracket = check_queue[bracket_start:check_queue.index('\n    };\n', bracket_start) + len('\n    };\n')]
 
 shared = r'''
 #ifndef TEST_SHARED_DEFINES_H
@@ -50,7 +56,8 @@ struct Battleground;
 struct Session { bool headless = false; bool IsHeadless() { return headless; } };
 struct Player {
     unsigned stage = 0, level = 1;
-    bool isBot = false, selfBot = false;
+    bool isBot = false, selfBot = false, inBattleground = false;
+    uint8 queueSlot = 0;
     Session session;
     Session* GetSession() { return &session; }
     Group* group = nullptr;
@@ -59,7 +66,10 @@ struct Player {
     Battleground* battleground = nullptr;
     unsigned GetGUID() { return guid; }
     TeamId GetTeamId() { return team; }
-    Battleground* GetBattleground() { return battleground; }
+    Battleground* GetBattleground(bool create = false);
+    unsigned GetLevel() { return level; }
+    bool InBattleground() { return inBattleground; }
+    uint8 GetCurrentBattlegroundQueueSlot() { return queueSlot; }
     Group* GetGroup() { return group; }
 };
 using BattlegroundTypeId = uint32;
@@ -87,13 +97,34 @@ bgmgr = r'''
 #include <array>
 constexpr unsigned STATUS_WAIT_JOIN = 2, STATUS_IN_PROGRESS = 3, STATUS_WAIT_LEAVE = 4;
 struct Battleground {
-    uint32 queue = 0, instance = 0, status = STATUS_IN_PROGRESS;
+    uint32 queue = 0, instance = 0, status = STATUS_IN_PROGRESS, bracket = 0;
+    bool mapCreated = true;
+    uint32 GetBracketId() { return bracket; }
     uint32 GetBgTypeID() { return queue; }
     uint32 GetArenaType() { return 0; }
     uint32 GetStatus() { return status; }
     uint32 GetInstanceID() { return instance; }
 };
-struct GroupQueueInfo { uint32 IsInvitedToBGInstanceGUID = 0; };
+inline Battleground* Player::GetBattleground(bool create)
+{
+    return battleground && (create || battleground->mapCreated) ? battleground : nullptr;
+}
+struct GroupQueueInfo { uint32 IsInvitedToBGInstanceGUID = 0; uint8 BracketId = 0; };
+struct PvPDifficultyEntry {
+    uint32 mapId, bracketId, minLevel, maxLevel;
+    BattlegroundBracketId GetBracketId() const { return bracketId; }
+};
+inline std::array<PvPDifficultyEntry, 4> pvpBrackets{{{489, 0, 10, 19}, {489, 1, 20, 29}, {489, 2, 30, 39}, {489, 3, 40, 49}}};
+inline PvPDifficultyEntry const* GetBattlegroundBracketById(uint32 mapId, BattlegroundBracketId id) {
+    for (auto const& entry : pvpBrackets)
+        if (entry.mapId == mapId && entry.bracketId == id) return &entry;
+    return nullptr;
+}
+inline PvPDifficultyEntry const* GetBattlegroundBracketByLevel(uint32 mapId, uint32 level) {
+    for (auto const& entry : pvpBrackets)
+        if (entry.mapId == mapId && level >= entry.minLevel && level <= entry.maxLevel) return &entry;
+    return nullptr;
+}
 struct BattlegroundQueue {
     std::map<uint32, GroupQueueInfo> groups;
     bool GetPlayerGroupInfoData(uint32 guid, GroupQueueInfo* output) {
@@ -148,6 +179,12 @@ uint8 IndividualProgression_BattlegroundEra(Player* player)
     return player->stage < 8 ? 0 : (player->stage < 13 ? 1 : 2);
 }
 ''' + queue_recorder + r'''
+PvPDifficultyEntry const* QueueBracket(Player* participant, Battleground* bg, uint8 slot,
+                                       BattlegroundQueueTypeId queueTypeId, uint32 mapId)
+{
+''' + queue_bracket + r'''
+    return getQueueBracket(participant, bg, slot, queueTypeId, mapId);
+}
 int main()
 {
     Player player;
@@ -358,6 +395,32 @@ int main()
     assert(accountOnly.TryReserve(BATTLEGROUND_QUEUE_AB, bracket, 0, TEAM_ALLIANCE, 13, 15));
     assert(!accountOnly.TryReserve(BATTLEGROUND_QUEUE_AB, bracket, 0, TEAM_ALLIANCE, 1, 15));
 
+    // Census brackets come from the queue or instance, not from a level gained while waiting.
+    Player leveled;
+    leveled.guid = 20;
+    leveled.level = 30;
+    testBattlegroundMgr.queues[BATTLEGROUND_QUEUE_WS].groups[20].BracketId = 1;
+    assert(GetBattlegroundBracketByLevel(489, leveled.level)->GetBracketId() == 2);
+    assert(QueueBracket(&leveled, nullptr, 0, BATTLEGROUND_QUEUE_WS, 489)->GetBracketId() == 1);
+    Battleground leveledMatch{BATTLEGROUND_QUEUE_WS, 50, STATUS_IN_PROGRESS};
+    leveled.inBattleground = true;
+    assert(QueueBracket(&leveled, &leveledMatch, 0, BATTLEGROUND_QUEUE_WS, 489)->GetBracketId() == 0);
+    assert(!QueueBracket(&leveled, nullptr, 0, BATTLEGROUND_QUEUE_WS, 489));
+    leveled.queueSlot = 1;
+    assert(QueueBracket(&leveled, &leveledMatch, 0, BATTLEGROUND_QUEUE_WS, 489)->GetBracketId() == 1);
+    testBattlegroundMgr.queues[BATTLEGROUND_QUEUE_WS].groups.erase(20);
+    assert(!QueueBracket(&leveled, &leveledMatch, 0, BATTLEGROUND_QUEUE_WS, 489));
+
+    // A match whose map is still being created keeps counting the participants who entered it.
+    EarnedBattlegroundQueueState starting;
+    Battleground pending{BATTLEGROUND_QUEUE_AB, 60, STATUS_WAIT_JOIN};
+    pending.mapCreated = false;
+    Player entered;
+    entered.guid = 21;
+    entered.battleground = &pending;
+    RecordEarnedBattlegroundQueue(starting, &entered, BATTLEGROUND_QUEUE_AB, bracket);
+    assert(starting.NeedsPlayer(BATTLEGROUND_QUEUE_AB, bracket, 0, TEAM_HORDE, 15));
+
     EarnedBattlegroundQueueState contested;
     contested.Record(q, bracket, 0, TEAM_ALLIANCE, false, true, 0);
     std::atomic<unsigned> claimed = 0;
@@ -406,6 +469,12 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
         ('SelfBot humans use the bot queue policy', '!GET_PLAYERBOT_AI(member) || IsSelfBot(member) ||',
          '!GET_PLAYERBOT_AI(member) ||'),
         ('group members skip the bot queue policy', 'if (!allowed(ref->GetSource()))', 'if (false)'),
+        ('queued bracket follows current level', 'GetBattlegroundBracketById(mapId, BattlegroundBracketId(groupInfo.BracketId))',
+         'GetBattlegroundBracketByLevel(mapId, participant->GetLevel())'),
+        ('instance bracket used for another queue slot', 'participant->GetCurrentBattlegroundQueueSlot() == slot',
+         'participant->GetCurrentBattlegroundQueueSlot() <= slot + 1u'),
+        ('starting match ignored', 'Battleground* active = player->GetBattleground(true);',
+         'Battleground* active = player->GetBattleground();'),
     ]
     for label, old, new in mutations:
         mutated = fixture.replace(old, new)
