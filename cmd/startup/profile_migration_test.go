@@ -65,6 +65,27 @@ func TestApplyProfileUpdatesRestoresStateWithoutBackup(t *testing.T) {
 	}
 }
 
+func TestApplyProfileUpdatesBackupCollisionChangesNoConfig(t *testing.T) {
+	directory := t.TempDir()
+	first := writeFixture(t, filepath.Join(directory, "first.conf"), "first original")
+	second := writeFixture(t, filepath.Join(directory, "second.conf"), "second original")
+	collision := writeFixture(t, second+".backup.test", "earlier backup")
+	updates := []profileUpdate{
+		{path: first, original: []byte("first original"), updated: []byte("first updated"), mode: 0644, backup: first + ".backup.test"},
+		{path: second, original: []byte("second original"), updated: []byte("second updated"), mode: 0644, backup: second + ".backup.test"},
+	}
+	backups, err := applyProfileUpdates(updates)
+	if err == nil {
+		t.Fatal("overwrote an existing backup")
+	}
+	if len(backups) != 1 || backups[0] != first+".backup.test" || readFixture(t, backups[0]) != "first original" {
+		t.Errorf("backups written before the collision = %v", backups)
+	}
+	if readFixture(t, first) != "first original" || readFixture(t, second) != "second original" || readFixture(t, collision) != "earlier backup" {
+		t.Error("a config or earlier backup changed after a backup collision")
+	}
+}
+
 func TestApplyRuntimePortsPreservesCredentialsAndNewlines(t *testing.T) {
 	content := "# LoginDatabaseInfo = \"comment\"\r\nLoginDatabaseInfo = \"dbhost;3306;alice;password;auth_db\"\r\nRealmServerPort = 3724\r\nCustom = 7\r\n"
 	updated, err := applyRuntimePorts("authserver.conf.dist", content, startupOptions{port: 3307, authPort: 3725})
