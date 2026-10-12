@@ -1390,6 +1390,25 @@ index 88243d22..a75c449c 100644
      if (Pet* pet = bot->GetPet(); pet && pet->getPetType() == HUNTER_PET &&
          pet->GetHappinessState() != HAPPY)
      {
+diff --git a/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp b/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp
+index 25d3f23f..39dc0dfc 100644
+--- a/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp
++++ b/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp
+@@ -52,6 +52,14 @@ void GenericWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+             }
+         )
+     );
++    triggers.push_back(
++        new TriggerNode(
++            "target critical health and no soul shard",
++            {
++                NextAction("drain soul", 15.5f)
++            }
++        )
++    );
+     triggers.push_back(
+         new TriggerNode(
+             "too many soul shards",
 diff --git a/src/Ai/Class/Warlock/WarlockActions.cpp b/src/Ai/Class/Warlock/WarlockActions.cpp
 index 2587c028..71f3ad3f 100644
 --- a/src/Ai/Class/Warlock/WarlockActions.cpp
@@ -1414,6 +1433,44 @@ index 2587c028..71f3ad3f 100644
      Player* bot = botAI->GetBot();
      if (!bot)
          return false;
+diff --git a/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp b/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp
+index 74e4a15e..8f67f50c 100644
+--- a/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp
++++ b/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp
+@@ -146,6 +146,7 @@ public:
+         creators["unending breath"] = &WarlockTriggerFactoryInternal::unending_breath;
+         creators["unending breath on party"] = &WarlockTriggerFactoryInternal::unending_breath_on_party;
+         creators["no soul shard"] = &WarlockTriggerFactoryInternal::no_soul_shard;
++        creators["target critical health and no soul shard"] = &WarlockTriggerFactoryInternal::drain_soul_for_shard;
+         creators["too many soul shards"] = &WarlockTriggerFactoryInternal::too_many_soul_shards;
+         creators["no healthstone"] = &WarlockTriggerFactoryInternal::HasHealthstone;
+         creators["no firestone"] = &WarlockTriggerFactoryInternal::HasFirestone;
+@@ -194,6 +195,7 @@ private:
+     static Trigger* unending_breath(PlayerbotAI* botAI) { return new UnendingBreathTrigger(botAI); }
+     static Trigger* unending_breath_on_party(PlayerbotAI* botAI) { return new UnendingBreathOnPartyTrigger(botAI); }
+     static Trigger* no_soul_shard(PlayerbotAI* botAI) { return new OutOfSoulShardsTrigger(botAI); }
++    static Trigger* drain_soul_for_shard(PlayerbotAI* botAI) { return new DrainSoulForShardTrigger(botAI); }
+     static Trigger* too_many_soul_shards(PlayerbotAI* botAI) { return new TooManySoulShardsTrigger(botAI); }
+     static Trigger* HasHealthstone(PlayerbotAI* botAI) { return new HasHealthstoneTrigger(botAI); }
+     static Trigger* HasFirestone(PlayerbotAI* botAI) { return new HasFirestoneTrigger(botAI); }
+diff --git a/src/Ai/Class/Warlock/WarlockTriggers.h b/src/Ai/Class/Warlock/WarlockTriggers.h
+index 7d5d0ddd..b7ba87a3 100644
+--- a/src/Ai/Class/Warlock/WarlockTriggers.h
++++ b/src/Ai/Class/Warlock/WarlockTriggers.h
+@@ -56,6 +56,13 @@ public:
+     bool IsActive() override;
+ };
+ 
++// Soul Shards come from Drain Soul kills; the trigger checks target health before scanning bags.
++class DrainSoulForShardTrigger : public TwoTriggers
++{
++public:
++    DrainSoulForShardTrigger(PlayerbotAI* botAI) : TwoTriggers(botAI, "target critical health", "no soul shard") {}
++};
++
+ class TooManySoulShardsTrigger : public Trigger
+ {
+ public:
 diff --git a/src/Ai/Dungeon/OC/OCActions.cpp b/src/Ai/Dungeon/OC/OCActions.cpp
 index f45671e5..f5194134 100644
 --- a/src/Ai/Dungeon/OC/OCActions.cpp
