@@ -25,30 +25,11 @@ func newPhaseRealm(t *testing.T) string {
 		if name == "worldserver.conf" {
 			path = filepath.Join(directory, "configs", name)
 		}
-		writePhaseTestFile(t, path, content)
+		writeFixture(t, path, content)
 	}
-	writePhaseTestFile(t, filepath.Join(directory, "mysql", "data", "progress.ibd"), "earned characters and progression")
-	writePhaseTestFile(t, filepath.Join(directory, "configs", "authserver.conf"), "Custom.Auth = preserve\n")
+	writeFixture(t, filepath.Join(directory, "mysql", "data", "progress.ibd"), "earned characters and progression")
+	writeFixture(t, filepath.Join(directory, "configs", "authserver.conf"), "Custom.Auth = preserve\n")
 	return directory
-}
-
-func writePhaseTestFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func readPhaseTestFile(t *testing.T, path string) string {
-	t.Helper()
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(content)
 }
 
 func TestConfigValueMatchesAzerothCoreParser(t *testing.T) {
@@ -78,7 +59,7 @@ func TestConfigValueMatchesAzerothCoreParser(t *testing.T) {
 
 func TestRealmSettingsAcceptQuotedNumbers(t *testing.T) {
 	directory := t.TempDir()
-	writePhaseTestFile(t, filepath.Join(directory, "configs", "worldserver.conf"), "MaxPlayerLevel = \"70\"\n")
+	writeFixture(t, filepath.Join(directory, "configs", "worldserver.conf"), "MaxPlayerLevel = \"70\"\n")
 	if phase, err := loadRealmPhase(directory); err != nil || phase.name != "tbc" {
 		t.Fatalf("quoted level cap read as %+v (%v)", phase, err)
 	}
@@ -94,12 +75,12 @@ func TestRealmSettingsAcceptQuotedNumbers(t *testing.T) {
 	closedPort := closed.Addr().(*net.TCPAddr).Port
 	closed.Close()
 	world := filepath.Join(directory, "configs", "worldserver.conf")
-	writePhaseTestFile(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", listener.Addr().(*net.TCPAddr).Port))
-	writePhaseTestFile(t, filepath.Join(directory, "configs", "authserver.conf"), fmt.Sprintf("RealmServerPort = \"%d\"\n", closedPort))
+	writeFixture(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", listener.Addr().(*net.TCPAddr).Port))
+	writeFixture(t, filepath.Join(directory, "configs", "authserver.conf"), fmt.Sprintf("RealmServerPort = \"%d\"\n", closedPort))
 	if err := ensureRealmStopped(directory); err == nil || !strings.Contains(err.Error(), "is listening") {
 		t.Fatalf("quoted listening port was not checked: %v", err)
 	}
-	writePhaseTestFile(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", closedPort))
+	writeFixture(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", closedPort))
 	if err := ensureRealmStopped(directory); err != nil {
 		t.Fatalf("quoted port blocked a stopped realm: %v", err)
 	}
@@ -126,7 +107,7 @@ func TestConfiguredListener(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			os.Remove(auth)
 			if test.content != "" {
-				writePhaseTestFile(t, auth, test.content)
+				writeFixture(t, auth, test.content)
 			}
 			hosts, port, err := configuredListener(directory, "authserver.conf", "RealmServerPort", 3724)
 			if (err != nil) != test.invalid || port != test.port || !slices.Equal(hosts, test.hosts) {
@@ -148,8 +129,8 @@ func TestRealmChecksUseConfiguredBindAddress(t *testing.T) {
 		t.Skip("loopback addresses share listeners on this system")
 	}
 	directory := t.TempDir()
-	writePhaseTestFile(t, filepath.Join(directory, "configs", "worldserver.conf"), "WorldServerPort = 1\n")
-	writePhaseTestFile(t, filepath.Join(directory, "configs", "authserver.conf"), fmt.Sprintf("BindIP = \"127.0.0.2\"\nRealmServerPort = %d\n", port))
+	writeFixture(t, filepath.Join(directory, "configs", "worldserver.conf"), "WorldServerPort = 1\n")
+	writeFixture(t, filepath.Join(directory, "configs", "authserver.conf"), fmt.Sprintf("BindIP = \"127.0.0.2\"\nRealmServerPort = %d\n", port))
 	if err := ensureRealmStopped(directory); err == nil || !strings.Contains(err.Error(), "authserver.conf is listening") {
 		t.Fatalf("realm listening on its bind address was not detected: %v", err)
 	}
@@ -168,7 +149,7 @@ func TestRealmChecksUseConfiguredBindAddress(t *testing.T) {
 func TestApplyConfiguredPortsFollowsActiveConfig(t *testing.T) {
 	directory := t.TempDir()
 	auth := filepath.Join(directory, "configs", "authserver.conf")
-	writePhaseTestFile(t, auth, "LoginDatabaseInfo = \"127.0.0.1;3310;acore;acore;acore_auth\"\nRealmServerPort = 3725\n")
+	writeFixture(t, auth, "LoginDatabaseInfo = \"127.0.0.1;3310;acore;acore;acore_auth\"\nRealmServerPort = 3725\n")
 	// Runs without the original flags must still use the ports the configs name.
 	opts := startupOptions{port: 3306, authPort: 3724}
 	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3310 || opts.authPort != 3725 {
@@ -180,7 +161,7 @@ func TestApplyConfiguredPortsFollowsActiveConfig(t *testing.T) {
 		t.Fatalf("explicit ports = %d/%d, %v; want 3320/3725", opts.port, opts.authPort, err)
 	}
 	// A database on another host does not choose the port of the local server.
-	writePhaseTestFile(t, auth, "LoginDatabaseInfo = \"db.example;3311;acore;acore;acore_auth\"\n")
+	writeFixture(t, auth, "LoginDatabaseInfo = \"db.example;3311;acore;acore;acore_auth\"\n")
 	opts = startupOptions{port: 3306, authPort: 3724}
 	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3306 || opts.authPort != 3724 {
 		t.Fatalf("remote database ports = %d/%d, %v; want 3306/3724", opts.port, opts.authPort, err)
@@ -200,7 +181,7 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 		originals := make(map[string]string)
 		for _, relative := range []string{"worldserver.conf", "modules/playerbots.conf", "modules/individualProgression.conf"} {
 			path := filepath.Join(directory, "configs", filepath.FromSlash(relative))
-			originals[path] = readPhaseTestFile(t, path)
+			originals[path] = readFixture(t, path)
 		}
 		backups, err := setRealmPhase(directory, phase)
 		if err != nil {
@@ -211,12 +192,12 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 			for _, backup := range backups {
 				if strings.HasPrefix(backup, path+".backup.") {
 					found = true
-					if readPhaseTestFile(t, backup) != original {
+					if readFixture(t, backup) != original {
 						t.Fatalf("backup did not preserve %s", path)
 					}
 				}
 			}
-			if !found && readPhaseTestFile(t, path) != original {
+			if !found && readFixture(t, path) != original {
 				t.Fatalf("missing backup for %s", path)
 			}
 		}
@@ -224,25 +205,21 @@ func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testi
 		if _, err := migrateConfigProfiles(directory); err != nil {
 			t.Fatal(err)
 		}
-		for relative, expected := range map[string]map[string]string{
+		assertConfigValues(t, directory, map[string]map[string]string{
 			"worldserver.conf":                   {"Expansion": "2", "MaxPlayerLevel": target.level, "CharacterCreating.Disabled.RaceMask": target.raceMask, "CharacterCreating.Disabled.ClassMask": target.classMask, "Rate.XP.Kill": "1", "StartPlayerLevel": "1", "Battleground.Arathi.CapturePoints": "1600", "Battleground.Alterac.Reinforcements": "600"},
 			"modules/individualProgression.conf": {"IndividualProgression.Enable": "1", "IndividualProgression.ProgressionLimit": target.limit, "IndividualProgression.BotAccountsMaxLevel": target.level, "IndividualProgression.StartingProgression": "0", "IndividualProgression.BotAccountsRegex": "\"\""},
 			"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": target.level, "AiPlayerbot.RandomBotMaps": target.maps, "AiPlayerbot.NaturalProgression": "1", "AiPlayerbot.DisableRandomLevels": "1", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.BotCheats": "\"\"", "AiPlayerbot.EarnedEraBattlegrounds": "1", "AiPlayerbot.VanillaBattlegroundsOnly": "0", "AiPlayerbot.LimitTalentsExpansion": "0", "AiPlayerbot.RandomBotAutoJoinBG": "0", "AiPlayerbot.RandomBotAutoJoinBGEYCount": "1", "AiPlayerbot.RandomBotAutoJoinBGICCount": "1", "AiPlayerbot.RandomBotArenaTeam2v2Count": "0"},
-		} {
-			content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
-			for key, want := range expected {
-				if actual, exists := configValue(content, key); !exists || actual != want {
-					t.Errorf("%s: %s = %q; want %q", target.name, key, actual, want)
-				}
-			}
+		})
+		for _, relative := range []string{"worldserver.conf", "modules/individualProgression.conf", "modules/playerbots.conf"} {
+			content := readFixture(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
 			for _, retained := range []string{"Custom.Value = \"retain=me\"\r\n", "CharacterDatabaseInfo = \"host;3307;user;password;custom_characters\"\r\n"} {
 				if !strings.Contains(content, retained) {
-					t.Fatalf("lost custom setting or CRLF: %s", relative)
+					t.Fatalf("%s: lost custom setting or CRLF: %s", target.name, relative)
 				}
 			}
 		}
-		if readPhaseTestFile(t, filepath.Join(directory, "mysql", "data", "progress.ibd")) != "earned characters and progression" ||
-			readPhaseTestFile(t, filepath.Join(directory, "configs", "authserver.conf")) != "Custom.Auth = preserve\n" {
+		if readFixture(t, filepath.Join(directory, "mysql", "data", "progress.ibd")) != "earned characters and progression" ||
+			readFixture(t, filepath.Join(directory, "configs", "authserver.conf")) != "Custom.Auth = preserve\n" {
 			t.Fatal("changed characters or auth config")
 		}
 		if backups, err := setRealmPhase(directory, phase); err != nil || len(backups) != 0 {
@@ -257,16 +234,16 @@ func TestExpansionRejectsDowngradesAndMissingConfigWithoutChanges(t *testing.T) 
 			directory := newPhaseRealm(t)
 			target, _ := parseRealmPhase("tbc")
 			if failure == "downgrade" {
-				writePhaseTestFile(t, filepath.Join(directory, "configs", realmPhaseFile), "wotlk\n")
+				writeFixture(t, filepath.Join(directory, "configs", realmPhaseFile), "wotlk\n")
 			} else {
 				os.Remove(filepath.Join(directory, "configs", "modules", "playerbots.conf"))
 			}
 			world := filepath.Join(directory, "configs", "worldserver.conf")
-			before := readPhaseTestFile(t, world)
+			before := readFixture(t, world)
 			if backups, err := setRealmPhase(directory, target); err == nil || len(backups) != 0 {
 				t.Fatalf("accepted %s or wrote backups: %v %v", failure, backups, err)
 			}
-			if readPhaseTestFile(t, world) != before {
+			if readFixture(t, world) != before {
 				t.Fatal("changed config after rejected switch")
 			}
 		})
@@ -281,13 +258,13 @@ func TestExpansionRejectsListeningRealm(t *testing.T) {
 	}
 	defer listener.Close()
 	world := filepath.Join(directory, "configs", "worldserver.conf")
-	before := readPhaseTestFile(t, world) + fmt.Sprintf("WorldServerPort = %d\r\n", listener.Addr().(*net.TCPAddr).Port)
-	writePhaseTestFile(t, world, before)
+	before := readFixture(t, world) + fmt.Sprintf("WorldServerPort = %d\r\n", listener.Addr().(*net.TCPAddr).Port)
+	writeFixture(t, world, before)
 	target, _ := parseRealmPhase("tbc")
 	if _, err := setRealmPhase(directory, target); err == nil || !strings.Contains(err.Error(), "stop startup.exe") {
 		t.Fatalf("did not reject a listening realm: %v", err)
 	}
-	if readPhaseTestFile(t, world) != before {
+	if readFixture(t, world) != before {
 		t.Fatal("changed running realm config")
 	}
 }
@@ -296,8 +273,8 @@ func TestExpansionRefusesSymlinkTargets(t *testing.T) {
 	directory := newPhaseRealm(t)
 	bots := filepath.Join(directory, "configs", "modules", "playerbots.conf")
 	external := filepath.Join(t.TempDir(), "playerbots.conf")
-	original := readPhaseTestFile(t, bots)
-	writePhaseTestFile(t, external, original)
+	original := readFixture(t, bots)
+	writeFixture(t, external, original)
 	if err := os.Remove(bots); err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +282,7 @@ func TestExpansionRefusesSymlinkTargets(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	world := filepath.Join(directory, "configs", "worldserver.conf")
-	before := readPhaseTestFile(t, world)
+	before := readFixture(t, world)
 	target, _ := parseRealmPhase("tbc")
 	if backups, err := setRealmPhase(directory, target); err == nil || len(backups) != 0 {
 		t.Fatalf("expansion change followed a symlink: %v, %v", backups, err)
@@ -313,7 +290,7 @@ func TestExpansionRefusesSymlinkTargets(t *testing.T) {
 	if info, err := os.Lstat(bots); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("symlink was replaced: %v", err)
 	}
-	if readPhaseTestFile(t, external) != original || readPhaseTestFile(t, world) != before {
+	if readFixture(t, external) != original || readFixture(t, world) != before {
 		t.Fatal("configuration changed before all targets were validated")
 	}
 	if matches, err := filepath.Glob(filepath.Join(directory, "configs", "*.backup.*")); err != nil || len(matches) != 0 {
@@ -327,8 +304,8 @@ func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 		phase, _ := parseRealmPhase(name)
 		for _, relative := range []string{"worldserver.conf", "modules/individualProgression.conf", "modules/playerbots.conf"} {
 			path := filepath.Join(directory, "configs", filepath.FromSlash(relative))
-			content, _ := mergeConfigProfile(readPhaseTestFile(t, path), phase.profile(filepath.Base(relative)))
-			writePhaseTestFile(t, path, content)
+			content, _ := mergeConfigProfile(readFixture(t, path), phase.profile(filepath.Base(relative)))
+			writeFixture(t, path, content)
 		}
 		if actual, err := loadRealmPhase(directory); err != nil || actual.name != name {
 			t.Fatalf("legacy %s inferred as %+v (%v)", name, actual, err)
@@ -341,8 +318,8 @@ func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 		}
 	}
 	world := filepath.Join(directory, "configs", "worldserver.conf")
-	content, _ := mergeConfigProfile(readPhaseTestFile(t, world), "MaxPlayerLevel = 60")
-	writePhaseTestFile(t, world, content)
+	content, _ := mergeConfigProfile(readFixture(t, world), "MaxPlayerLevel = 60")
+	writeFixture(t, world, content)
 	if _, err := migrateConfigProfiles(directory); err == nil {
 		t.Fatal("accepted conflicting legacy caps")
 	}
@@ -350,10 +327,10 @@ func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 	if _, err := setRealmPhase(directory, wrath); err != nil {
 		t.Fatalf("could not repair partial legacy upgrade: %v", err)
 	}
-	if actual, _ := configValue(readPhaseTestFile(t, world), "MaxPlayerLevel"); actual != "80" {
+	if actual, _ := configValue(readFixture(t, world), "MaxPlayerLevel"); actual != "80" {
 		t.Fatal("partial upgrade was not aligned to Wrath")
 	}
-	writePhaseTestFile(t, filepath.Join(directory, "configs", realmPhaseFile), "not-an-expansion\n")
+	writeFixture(t, filepath.Join(directory, "configs", realmPhaseFile), "not-an-expansion\n")
 	if _, err := loadRealmPhase(directory); err == nil {
 		t.Fatal("ignored malformed saved phase")
 	}
@@ -361,15 +338,15 @@ func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 
 func TestMissingConfigUsesSavedPhase(t *testing.T) {
 	directory := t.TempDir()
-	writePhaseTestFile(t, filepath.Join(directory, "configs", realmPhaseFile), "tbc\n")
+	writeFixture(t, filepath.Join(directory, "configs", realmPhaseFile), "tbc\n")
 	base := t.TempDir()
 	for _, relative := range []string{"worldserver.conf.dist", "modules/playerbots.conf.dist", "modules/individualProgression.conf.dist"} {
-		writePhaseTestFile(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
+		writeFixture(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
 	}
 	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe", defaultTestOptions()); err != nil {
 		t.Fatal(err)
 	}
-	world := readPhaseTestFile(t, filepath.Join(directory, "configs", "worldserver.conf"))
+	world := readFixture(t, filepath.Join(directory, "configs", "worldserver.conf"))
 	if actual, _ := configValue(world, "MaxPlayerLevel"); actual != "70" {
 		t.Fatalf("missing config recreated Vanilla cap: %s", actual)
 	}
@@ -378,7 +355,7 @@ func TestMissingConfigUsesSavedPhase(t *testing.T) {
 func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
 	directory, base := t.TempDir(), t.TempDir()
 	for _, relative := range []string{"worldserver.conf.dist", "modules/playerbots.conf.dist", "modules/individualProgression.conf.dist"} {
-		writePhaseTestFile(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
+		writeFixture(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
 	}
 	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe", defaultTestOptions()); err != nil {
 		t.Fatal(err)
@@ -389,18 +366,11 @@ func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
 	if _, err := migrateConfigProfiles(directory); err != nil {
 		t.Fatal(err)
 	}
-	for relative, expected := range map[string]map[string]string{
+	assertConfigValues(t, directory, map[string]map[string]string{
 		"worldserver.conf":                   {"MaxPlayerLevel": "80", "StartPlayerLevel": "1", "StartPlayerMoney": "0", "MinDualSpecLevel": "80", "CharacterCreating.Disabled.RaceMask": "0"},
 		"modules/individualProgression.conf": {"IndividualProgression.ProgressionLimit": "0", "IndividualProgression.StartingProgression": "0", "IndividualProgression.TbcRacesUnlockProgression": "8", "IndividualProgression.tbcRacesStartingProgression": "0", "IndividualProgression.DeathKnightUnlockProgression": "13", "IndividualProgression.BotAccountsRegex": "\"\"", "IndividualProgression.ExcludedAccountsRegex": "\"\""},
 		"modules/playerbots.conf":            {"AiPlayerbot.RandomBotMaxLevel": "80", "AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.EarnedEraBattlegrounds": "1", "AiPlayerbot.VanillaBattlegroundsOnly": "0", "AiPlayerbot.LimitTalentsExpansion": "0", "AiPlayerbot.RandomBotAutoJoinBG": "0", "AiPlayerbot.RandomBotAutoJoinBGEYCount": "1", "AiPlayerbot.RandomBotAutoJoinBGICCount": "1", "AiPlayerbot.RandomBotArenaTeam2v2Count": "0"},
-	} {
-		content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
-		for key, want := range expected {
-			if actual, _ := configValue(content, key); actual != want {
-				t.Errorf("%s: %s = %q; want %q", relative, key, actual, want)
-			}
-		}
-	}
+	})
 }
 
 func TestIndividualSelectionRestoresEarnedUnlocksAndRetainsLegacyCeilingUntilSelected(t *testing.T) {
@@ -417,29 +387,22 @@ func TestIndividualSelectionRestoresEarnedUnlocksAndRetainsLegacyCeilingUntilSel
 		"modules/individualProgression.conf": "IndividualProgression.StartingProgression = 8\nIndividualProgression.tbcRacesStartingProgression = 8\nIndividualProgression.TbcRacesUnlockProgression = 0\nIndividualProgression.BotAccountsRegex = \"RNDBOT.*\"\nIndividualProgression.DisableDefaultProgression = 1\n",
 	} {
 		path := filepath.Join(directory, "configs", filepath.FromSlash(relative))
-		content, err := mergeConfigProfile(readPhaseTestFile(t, path), unsafe)
+		content, err := mergeConfigProfile(readFixture(t, path), unsafe)
 		if err != nil {
 			t.Fatal(err)
 		}
-		writePhaseTestFile(t, path, content)
+		writeFixture(t, path, content)
 	}
 	individual, _ := parseRealmPhase("individual")
 	if _, err := setRealmPhase(directory, individual); err != nil {
 		t.Fatal(err)
 	}
-	for relative, expected := range map[string]map[string]string{
+	assertConfigValues(t, directory, map[string]map[string]string{
 		"worldserver.conf":                   {"MaxPlayerLevel": "80", "StartPlayerLevel": "1", "StartPlayerMoney": "0"},
 		"modules/playerbots.conf":            {"AiPlayerbot.RandombotStartingLevel": "1", "AiPlayerbot.RandomBotFixedLevel": "0", "AiPlayerbot.SyncLevelWithPlayers": "0", "AiPlayerbot.DisableDeathKnightLogin": "1", "AiPlayerbot.EarnedEraBattlegrounds": "1", "AiPlayerbot.VanillaBattlegroundsOnly": "0", "AiPlayerbot.LimitTalentsExpansion": "0", "AiPlayerbot.RandomBotAutoJoinBG": "0", "AiPlayerbot.RandomBotAutoJoinBGEYCount": "1", "AiPlayerbot.RandomBotAutoJoinBGICCount": "1", "AiPlayerbot.RandomBotArenaTeam2v2Count": "0"},
 		"modules/individualProgression.conf": {"IndividualProgression.StartingProgression": "0", "IndividualProgression.tbcRacesStartingProgression": "0", "IndividualProgression.TbcRacesUnlockProgression": "8", "IndividualProgression.BotAccountsRegex": "\"\"", "IndividualProgression.DisableDefaultProgression": "0"},
-	} {
-		content := readPhaseTestFile(t, filepath.Join(directory, "configs", filepath.FromSlash(relative)))
-		for key, want := range expected {
-			if actual, _ := configValue(content, key); actual != want {
-				t.Errorf("%s = %q; want %q", key, actual, want)
-			}
-		}
-	}
-	if readPhaseTestFile(t, filepath.Join(directory, "mysql", "data", "progress.ibd")) != "earned characters and progression" {
+	})
+	if readFixture(t, filepath.Join(directory, "mysql", "data", "progress.ibd")) != "earned characters and progression" {
 		t.Fatal("individual selection changed saved progression")
 	}
 }

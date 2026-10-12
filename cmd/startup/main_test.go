@@ -60,95 +60,43 @@ func TestMainRejectsNonWindows(t *testing.T) {
 	}
 }
 
-func TestParseArgsDefaults(t *testing.T) {
-	opts, err := parseArgs([]string{})
-	if err != nil {
-		t.Fatalf("parseArgs failed: %v", err)
-	}
-
-	if opts.port != 3306 {
-		t.Errorf("port = %d, want 3306", opts.port)
-	}
-
-	if opts.authPort != 3724 {
-		t.Errorf("authPort = %d, want 3724", opts.authPort)
-	}
-
-	if opts.timeout != 30 {
-		t.Errorf("timeout = %d, want 30", opts.timeout)
-	}
-
-	if opts.initOnly != false {
-		t.Errorf("initOnly = %v, want false", opts.initOnly)
-	}
-
-	if opts.skipSQL != false {
-		t.Errorf("skipSQL = %v, want false", opts.skipSQL)
-	}
-}
-
-func TestParseArgsCustomFlags(t *testing.T) {
+func TestParseArgs(t *testing.T) {
 	customDir := t.TempDir()
-	customData := filepath.Join(customDir, "mydata")
-	customCnf := filepath.Join(customDir, "custom.cnf")
-
-	args := []string{
-		"-mysql-dir", customDir,
-		"-data-dir", customData,
-		"-mysql-cnf", customCnf,
-		"-port", "3307",
-		"-auth-port", "3725",
-		"-timeout", "45",
-		"-init-only",
-		"-skip-sql",
-	}
-
-	opts, err := parseArgs(args)
-	if err != nil {
-		t.Fatalf("parseArgs failed: %v", err)
-	}
-
-	if opts.mysqlDir != customDir {
-		t.Errorf("mysqlDir = %s, want %s", opts.mysqlDir, customDir)
-	}
-
-	if opts.dataDir != customData {
-		t.Errorf("dataDir = %s, want %s", opts.dataDir, customData)
-	}
-
-	if opts.mysqlCnf != customCnf {
-		t.Errorf("mysqlCnf = %s, want %s", opts.mysqlCnf, customCnf)
-	}
-
-	if opts.port != 3307 {
-		t.Errorf("port = %d, want 3307", opts.port)
-	}
-
-	if opts.authPort != 3725 {
-		t.Errorf("authPort = %d, want 3725", opts.authPort)
-	}
-
-	if opts.timeout != 45 {
-		t.Errorf("timeout = %d, want 45", opts.timeout)
-	}
-
-	if !opts.initOnly {
-		t.Errorf("initOnly = false, want true")
-	}
-
-	if !opts.skipSQL {
-		t.Errorf("skipSQL = false, want true")
+	defaults := startupOptions{mysqlDir: findDefaultMySQLDir(), port: 3306, authPort: 3724, timeout: 30, dataURL: defaultClientDataURL}
+	for _, test := range []struct {
+		name string
+		args []string
+		want func(*startupOptions)
+	}{
+		{"defaults", nil, func(*startupOptions) {}},
+		{"server flags", []string{
+			"-mysql-dir", customDir, "-data-dir", filepath.Join(customDir, "mydata"), "-mysql-cnf", filepath.Join(customDir, "custom.cnf"),
+			"-port", "3307", "-auth-port", "3725", "-timeout", "45", "-init-only", "-skip-sql",
+		}, func(opts *startupOptions) {
+			opts.mysqlDir, opts.dataDir, opts.mysqlCnf = customDir, filepath.Join(customDir, "mydata"), filepath.Join(customDir, "custom.cnf")
+			opts.port, opts.portSet, opts.authPort, opts.authPortSet, opts.timeout = 3307, true, 3725, true, 45
+			opts.initOnly, opts.skipSQL = true, true
+		}},
+		{"data flags", []string{"-skip-data-check", "-data-url", "https://example.com/custom-data.zip", "-download-data-only"}, func(opts *startupOptions) {
+			opts.skipDataCheck, opts.dataURL, opts.downloadDataOnly = true, "https://example.com/custom-data.zip", true
+		}},
+		{"no update", []string{"--no-update"}, func(opts *startupOptions) { opts.noUpdate = true }},
+		{"explicit default ports", []string{"--port", "3306", "--auth-port", "3724"}, func(opts *startupOptions) {
+			opts.portSet, opts.authPortSet = true, true
+		}},
+	} {
+		want := defaults
+		test.want(&want)
+		if got, err := parseArgs(test.args); err != nil || got != want {
+			t.Errorf("%s: parseArgs(%q) = %+v, %v; want %+v", test.name, test.args, got, err, want)
+		}
 	}
 }
 
-func TestParseArgsUpdateModeAndInvalidOptions(t *testing.T) {
-	opts, err := parseArgs([]string{"--no-update"})
-	if err != nil || !opts.noUpdate {
-		t.Fatalf("no-update was not parsed: %+v, %v", opts, err)
-	}
+func TestParseArgsRejectsInvalidOptions(t *testing.T) {
 	for _, args := range [][]string{
 		{"--apply-profiles"}, {"--port", "0"}, {"--port", "65536"},
-		{"--auth-port", "-1"}, {"--timeout", "0"},
+		{"--auth-port", "-1"}, {"--timeout", "0"}, {"unexpected"},
 	} {
 		if _, err := parseArgs(args); err == nil {
 			t.Errorf("accepted invalid options %v", args)
@@ -221,12 +169,9 @@ func TestFindMySQLBinaries(t *testing.T) {
 }
 
 func TestFindMySQLBinariesMissing(t *testing.T) {
-	emptyDir := t.TempDir()
-	_, err := findMySQLBinaries(emptyDir)
-	// If not in system PATH, should return error
-	// Even if in PATH, let's verify calling with an empty dir doesn't panic
-	if err != nil && !strings.Contains(err.Error(), "required MySQL binaries not found") {
-		t.Errorf("unexpected error format: %v", err)
+	t.Setenv("PATH", "")
+	if _, err := findMySQLBinaries(t.TempDir()); err == nil || !strings.Contains(err.Error(), "required MySQL binaries not found (mysqld, mysql, mysqladmin)") {
+		t.Errorf("missing MySQL binaries were not reported: %v", err)
 	}
 }
 
@@ -258,20 +203,12 @@ func TestDirExistsAndFileExists(t *testing.T) {
 	}
 }
 
-func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
-	}
-	os.Exit(0)
-}
-
 func TestProcessSupervisorAutoRestart(t *testing.T) {
 	var startCount atomic.Int32
 
 	startFunc := func() (*exec.Cmd, error) {
 		startCount.Add(1)
-		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
-		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		cmd := helperProcessCmd()
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -321,8 +258,7 @@ func TestProcessSupervisorStop(t *testing.T) {
 
 	startFunc := func() (*exec.Cmd, error) {
 		startCount.Add(1)
-		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
-		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+		cmd := helperProcessCmd()
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
@@ -364,55 +300,6 @@ func TestProcessSupervisorStop(t *testing.T) {
 
 	if countAfter != countBefore {
 		t.Errorf("supervisor continued starting processes after Kill(): %d -> %d", countBefore, countAfter)
-	}
-}
-
-func TestOrderlyShutdown(t *testing.T) {
-	var events []string
-	var mu sync.Mutex
-
-	recordEvent := func(name string) {
-		mu.Lock()
-		defer mu.Unlock()
-		events = append(events, name)
-	}
-
-	gameSuper := newProcessSupervisor("game", func() (*exec.Cmd, error) {
-		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
-		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
-		return cmd, cmd.Start()
-	}, 100*time.Millisecond)
-
-	dbSuper := newProcessSupervisor("db", func() (*exec.Cmd, error) {
-		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
-		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
-		return cmd, cmd.Start()
-	}, 100*time.Millisecond)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go gameSuper.Run(ctx, nil, nil)
-	go dbSuper.Run(ctx, nil, nil)
-
-	time.Sleep(50 * time.Millisecond)
-
-	// Shutdown sequence:
-	// 1. Mark and stop game server first while db is fully active
-	gameSuper.MarkStopped()
-	gameSuper.StopAndWait(1 * time.Second)
-	recordEvent("game_stopped")
-
-	// 2. Shut down db server last
-	dbSuper.MarkStopped()
-	cancel()
-	dbSuper.StopAndWait(1 * time.Second)
-	recordEvent("db_stopped")
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(events) != 2 || events[0] != "game_stopped" || events[1] != "db_stopped" {
-		t.Errorf("unexpected shutdown order: %v", events)
 	}
 }
 
@@ -1000,8 +887,7 @@ func TestIsProcessAlive(t *testing.T) {
 
 func TestWaitForAuthServerReadyProcessExit(t *testing.T) {
 	// Helper process that immediately exits
-	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess", "--")
-	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	cmd := helperProcessCmd()
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("failed to start helper process: %v", err)
 	}
@@ -1027,29 +913,6 @@ func TestWaitForAuthServerReadyProcessExit(t *testing.T) {
 	// Should fail quickly (within 2s), NOT waiting for the 10s timeout
 	if duration > 2*time.Second {
 		t.Errorf("detection took too long (%v), should have detected exit within ~500ms", duration)
-	}
-}
-
-func TestParseArgsDataFlags(t *testing.T) {
-	args := []string{
-		"-skip-data-check",
-		"-data-url", "https://example.com/custom-data.zip",
-		"-download-data-only",
-	}
-
-	opts, err := parseArgs(args)
-	if err != nil {
-		t.Fatalf("parseArgs failed: %v", err)
-	}
-
-	if !opts.skipDataCheck {
-		t.Errorf("skipDataCheck = false, want true")
-	}
-	if opts.dataURL != "https://example.com/custom-data.zip" {
-		t.Errorf("dataURL = %s, want https://example.com/custom-data.zip", opts.dataURL)
-	}
-	if !opts.downloadDataOnly {
-		t.Errorf("downloadDataOnly = false, want true")
 	}
 }
 

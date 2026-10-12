@@ -55,18 +55,6 @@ func TestManagedProfileRejectsInvalidBaselines(t *testing.T) {
 	}
 }
 
-func profileFixture(t *testing.T, root, relative, content string) string {
-	t.Helper()
-	path := filepath.Join(root, filepath.FromSlash(relative))
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 func TestAutomaticProfilesIgnoreEditedLegacyDefaultsAndKeepCustomData(t *testing.T) {
 	root := t.TempDir()
 	phase, _ := parseRealmPhase("individual")
@@ -74,21 +62,21 @@ func TestAutomaticProfilesIgnoreEditedLegacyDefaultsAndKeepCustomData(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	profileFixture(t, root, "configs/realm-phase.txt", "individual\n")
+	writeFixture(t, filepath.Join(root, "configs/realm-phase.txt"), "individual\n")
 	previous := strings.Replace(profiles["playerbots.conf"], "AiPlayerbot.RandomBotJoinBG = 1", "AiPlayerbot.RandomBotJoinBG = 0", 1)
 	if previous == profiles["playerbots.conf"] {
 		t.Fatal("fixture no longer represents a changed default")
 	}
-	profileFixture(t, root, "defaults/playerbots.conf", previous)
+	writeFixture(t, filepath.Join(root, "defaults/playerbots.conf"), previous)
 	previous = strings.Replace(previous, "AiPlayerbot.RandomBotEmote = 0", "AiPlayerbot.RandomBotEmote = 1", 1)
 	previous = strings.ReplaceAll(previous, "\r\n", "\n")
 	previous = strings.Replace(previous, "AiPlayerbot.Enabled = 1\n", "", 1)
 	original := "# custom comment\n" + previous + "\nPlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\nCustom.Bot = 42\n"
 	original = strings.ReplaceAll(strings.ReplaceAll(original, "\r\n", "\n"), "\n", "\r\n")
-	bots := profileFixture(t, root, "configs/modules/playerbots.conf", original)
-	world := profileFixture(t, root, "configs/worldserver.conf", profiles["worldserver.conf"])
-	characters := profileFixture(t, root, "mysql/data/characters.ibd", "existing characters")
-	auth := profileFixture(t, root, "configs/authserver.conf", "LoginDatabaseInfo = \"db;3310;alice;secret;auth\"\n")
+	bots := writeFixture(t, filepath.Join(root, "configs/modules/playerbots.conf"), original)
+	world := writeFixture(t, filepath.Join(root, "configs/worldserver.conf"), profiles["worldserver.conf"])
+	characters := writeFixture(t, filepath.Join(root, "mysql/data/characters.ibd"), "existing characters")
+	auth := writeFixture(t, filepath.Join(root, "configs/authserver.conf"), "LoginDatabaseInfo = \"db;3310;alice;secret;auth\"\n")
 	backups, err := migrateConfigProfiles(root)
 	if err != nil {
 		t.Fatal(err)
@@ -133,13 +121,13 @@ func TestAutomaticProfilesUseSavedDefaultsAndPreserveRealmPhase(t *testing.T) {
 	phase, _ := parseRealmPhase("tbc")
 	profiles, _ := currentManagedProfiles(phase)
 	old := strings.Replace(profiles["playerbots.conf"], "AiPlayerbot.RandomBotJoinBG = 1", "AiPlayerbot.RandomBotJoinBG = 0", 1)
-	profileFixture(t, root, "configs/realm-phase.txt", "tbc\n")
-	bots := profileFixture(t, root, "configs/modules/playerbots.conf", old)
+	writeFixture(t, filepath.Join(root, "configs/realm-phase.txt"), "tbc\n")
+	bots := writeFixture(t, filepath.Join(root, "configs/modules/playerbots.conf"), old)
 	state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"playerbots.conf": old}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	profileFixture(t, root, "configs/"+automaticProfileState, string(state))
+	writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState), string(state))
 	backups, err := migrateConfigProfiles(root)
 	if err != nil {
 		t.Fatal(err)
@@ -185,15 +173,15 @@ func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 			original := strings.Replace(current, "AiPlayerbot.DisabledWithoutRealPlayer = 1", "AiPlayerbot.DisabledWithoutRealPlayer = 0", 1)
 			original = strings.Replace(original, "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 25", 1)
 			original += "\nPlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\nCustom.Bot = 42\n"
-			bots := profileFixture(t, root, "configs/modules/playerbots.conf", original)
-			characters := profileFixture(t, root, "mysql/data/characters.ibd", "existing characters")
+			bots := writeFixture(t, filepath.Join(root, "configs/modules/playerbots.conf"), original)
+			characters := writeFixture(t, filepath.Join(root, "mysql/data/characters.ibd"), "existing characters")
 			if test.previousValue != "" {
 				previous := strings.Replace(current, "AiPlayerbot.DisabledWithoutRealPlayer = 1", "AiPlayerbot.DisabledWithoutRealPlayer = "+test.previousValue, 1)
 				state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"playerbots.conf": previous}})
 				if err != nil {
 					t.Fatal(err)
 				}
-				profileFixture(t, root, "configs/"+automaticProfileState, string(state))
+				writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState), string(state))
 			}
 			backups, err := migrateConfigProfiles(root)
 			if err != nil {
@@ -275,14 +263,14 @@ func TestAutomaticDungeonRoutesPreserveCustomSelection(t *testing.T) {
 				original = strings.Replace(original, "DungeonClear.AutonomousParties.MaxConcurrent = 2", "DungeonClear.AutonomousParties.MaxConcurrent = 1", 1)
 				original += "\nCustom.Dungeon = 42\n"
 				original = strings.ReplaceAll(original, "\n", ending)
-				path := profileFixture(t, root, "configs/modules/mod_dungeon_clear.conf", original)
-				characters := profileFixture(t, root, "mysql/data/characters.ibd", "existing characters")
+				path := writeFixture(t, filepath.Join(root, "configs/modules/mod_dungeon_clear.conf"), original)
+				characters := writeFixture(t, filepath.Join(root, "mysql/data/characters.ibd"), "existing characters")
 				if test.tracked {
 					state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"mod_dungeon_clear.conf": previous}})
 					if err != nil {
 						t.Fatal(err)
 					}
-					profileFixture(t, root, "configs/"+automaticProfileState, string(state))
+					writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState), string(state))
 				}
 				backups, err := migrateConfigProfiles(root)
 				if err != nil {
@@ -338,8 +326,8 @@ func TestAutomaticProfilesInvalidStateAbortsBeforeWriting(t *testing.T) {
 		t.Run(content, func(t *testing.T) {
 			root := t.TempDir()
 			original := "Custom = 42\n"
-			path := profileFixture(t, root, "configs/worldserver.conf", original)
-			profileFixture(t, root, "configs/"+automaticProfileState, content)
+			path := writeFixture(t, filepath.Join(root, "configs/worldserver.conf"), original)
+			writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState), content)
 			if _, err := migrateConfigProfiles(root); err == nil {
 				t.Fatal("invalid state accepted")
 			}
@@ -353,7 +341,7 @@ func TestAutomaticProfilesInvalidStateAbortsBeforeWriting(t *testing.T) {
 
 func TestAutomaticProfilesRefuseSymlinkTargets(t *testing.T) {
 	root := t.TempDir()
-	target := profileFixture(t, t.TempDir(), "outside.conf", "Existing = 5\n")
+	target := writeFixture(t, filepath.Join(t.TempDir(), "outside.conf"), "Existing = 5\n")
 	directory := filepath.Join(root, "configs")
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		t.Fatal(err)
