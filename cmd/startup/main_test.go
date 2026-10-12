@@ -897,6 +897,64 @@ func TestMySQLClientArguments(t *testing.T) {
 	}
 }
 
+func TestSanitizeRealmlistFlagsClearsOnlyVersionMismatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the MySQL client")
+	}
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	client := filepath.Join(dir, "mysql")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS_FILE\"\nprintf '%s\\n' \"$CLIENT_OUTPUT\" >&2\nexit \"$CLIENT_EXIT\"\n"
+	if err := os.WriteFile(client, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ARGS_FILE", argsFile)
+	binaries := &mysqlBinaries{mysql: client}
+	stderr := func(output, exit string) string {
+		t.Helper()
+		t.Setenv("CLIENT_OUTPUT", output)
+		t.Setenv("CLIENT_EXIT", exit)
+		capture, err := os.CreateTemp(dir, "stderr")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer capture.Close()
+		previous := os.Stderr
+		os.Stderr = capture
+		sanitizeRealmlistFlags(binaries, 3307)
+		os.Stderr = previous
+		written, err := os.ReadFile(capture.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(written)
+	}
+
+	if got := stderr("", "0"); got != "" {
+		t.Errorf("successful reset printed %q", got)
+	}
+	args, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "-u\nroot\n-h\n127.0.0.1\n-P\n3307\n--protocol=tcp\n-e\n" +
+		"UPDATE `acore_auth`.`realmlist` SET `flag` = `flag` & ~1 WHERE (`flag` & 1) <> 0;\n"
+	if string(args) != want {
+		t.Errorf("mysql arguments = %q, want %q", args, want)
+	}
+	for _, missing := range []string{
+		"ERROR 1049 (42000): Unknown database 'acore_auth'",
+		"ERROR 1146 (42S02) at line 1: Table 'acore_auth.realmlist' doesn't exist",
+	} {
+		if got := stderr(missing, "1"); got != "" {
+			t.Errorf("new installation without realm list printed %q", got)
+		}
+	}
+	if got := stderr("ERROR 2003 (HY000): Can't connect", "1"); !strings.Contains(got, "could not reset stale realm flags") || !strings.Contains(got, "ERROR 2003") {
+		t.Errorf("failed reset was not reported: %q", got)
+	}
+}
+
 func TestWaitForReadyStopsOnProbeResult(t *testing.T) {
 	ctx := context.Background()
 	calls := 0

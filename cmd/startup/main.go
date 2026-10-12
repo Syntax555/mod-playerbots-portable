@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -998,11 +999,19 @@ func runEmbeddedSQL(binaries *mysqlBinaries, port int, sqlContent string) error 
 	return nil
 }
 
+// sanitizeRealmlistFlags clears the version-mismatch flag that a worldserver
+// interrupted during boot leaves behind. Together with the offline flag set
+// by authserver it would hide the realm from the realm list (flag 3). Other
+// flags, such as recommended or new, are administrator settings and are kept.
 func sanitizeRealmlistFlags(binaries *mysqlBinaries, port int) {
-	// Reset any stale realm flags (e.g. flag 1 or 3) left behind if worldserver was interrupted/killed mid-boot.
-	query := "UPDATE `acore_auth`.`realmlist` SET `flag` = 0 WHERE `flag` IN (1, 3) OR (`flag` & 1) != 0;"
-	cmd := exec.Command(binaries.mysql, mysqlRootArgs(port, "-e", query)...)
-	_ = cmd.Run()
+	query := "UPDATE `acore_auth`.`realmlist` SET `flag` = `flag` & ~1 WHERE (`flag` & 1) <> 0;"
+	output, err := exec.Command(binaries.mysql, mysqlRootArgs(port, "-e", query)...).CombinedOutput()
+	// Before the first authserver start the auth database or table is not
+	// created yet (unknown database 1049, missing table 1146).
+	if err == nil || bytes.Contains(output, []byte("ERROR 1049")) || bytes.Contains(output, []byte("ERROR 1146")) {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Warning: could not reset stale realm flags: %v %s\n", err, strings.TrimSpace(string(output)))
 }
 
 func startServerProcess(name, exePath, workDir string, stdin *os.File) (*exec.Cmd, error) {
@@ -1698,7 +1707,7 @@ func main() {
 	// 6. Start authserver and worldserver (staggered)
 	fmt.Println("\n=== [4/4] Starting authserver and worldserver ===")
 
-	// Reset any leftover realm status flags (e.g. flag = 1 or 3 from previous interrupted worldserver boots)
+	// Reset the realm status left by a worldserver interrupted during boot
 	sanitizeRealmlistFlags(binaries, opts.port)
 
 	authCmd, err := startServerProcess("authserver", authserverExe, workDir, nil)
