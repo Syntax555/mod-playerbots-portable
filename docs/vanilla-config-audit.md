@@ -92,7 +92,9 @@ random bots learn the flight point you visit when you speak to its flight master
 This also works while SelfBot is enabled on your character.
 Both characters must be alive and able to interact with the same NPC in normal
 range. Reopen the conversation after a following bot catches up. Learning a
-point does not start a flight; ordinary route availability still applies.
+point does not start a flight. Bots fly only routes whose flight points they have
+discovered, from a flight master within normal interaction range; a following bot
+without the route stays behind and says so.
 
 Bots use the same roll policy with ordinary players and SelfBot masters.
 `AiPlayerbot.LootNeedRollLevel = 2` permits Need for appropriate equipment
