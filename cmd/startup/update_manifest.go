@@ -23,6 +23,19 @@ const maxUpdateManifestBytes = 8 << 20
 const maxUpdateFileBytes = 1 << 30
 const maxUpdatePackageBytes = 4 << 30
 
+// Offline and filtered networks fail at the response deadline; a slow link
+// may then use the remaining check time to transfer the manifest itself.
+const updateManifestResponseTimeout = 8 * time.Second
+
+// Sequential ZIP reads double the requested range while each request finishes
+// within a second. Random access and slow links keep the smallest range.
+const minUpdateRangeBytes = 256 << 10
+const maxUpdateRangeBytes = 8 << 20
+const updateRangeAttempts = 3
+const updateRangeRetryDelay = 500 * time.Millisecond
+
+var errUntrustedUpdateRedirect = errors.New("update redirect is not a trusted HTTPS GitHub asset")
+
 var updateRevisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var updateDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -139,20 +152,31 @@ func portableUpdateHTTPClient() *http.Client {
 		Timeout: 45 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 || !trustedUpdateURL(req.URL) {
-				return errors.New("update redirect is not a trusted HTTPS GitHub asset")
+				return errUntrustedUpdateRedirect
 			}
 			return nil
 		},
 	}
 }
 
-func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL string) (portableUpdateManifest, error) {
+func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL string, responseTimeout time.Duration) (portableUpdateManifest, error) {
 	var manifest portableUpdateManifest
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
+	responseCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	timer := time.AfterFunc(responseTimeout, cancel)
+	req, err := http.NewRequestWithContext(responseCtx, http.MethodGet, manifestURL, nil)
 	if err != nil {
 		return manifest, err
 	}
 	resp, err := client.Do(req)
+	if !timer.Stop() {
+		// The response deadline cancelled the request, possibly just after
+		// its headers arrived; its body can no longer be read.
+		if err == nil {
+			resp.Body.Close()
+		}
+		return manifest, fmt.Errorf("update manifest: no response within %v", responseTimeout)
+	}
 	if err != nil {
 		return manifest, err
 	}
@@ -176,15 +200,22 @@ func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL s
 // updateRangeReader never falls back to downloading the entire archive. The first
 // byte request resolves GitHub's rolling URL to one immutable asset URL.
 type updateRangeReader struct {
-	ctx       context.Context
-	client    *http.Client
-	assetURL  string
-	size      int64
-	etag      string
-	mu        sync.Mutex
-	cacheOff  int64
-	cacheData []byte
+	ctx         context.Context
+	client      *http.Client
+	assetURL    string
+	size        int64
+	etag        string
+	mu          sync.Mutex
+	cacheOff    int64
+	cacheData   []byte
+	lastRequest time.Duration
 }
+
+// updateRangeRetryable marks a failure that a repeated identical request can
+// fix: a dropped connection, a timeout or temporary server-side throttling.
+type updateRangeRetryable struct{ error }
+
+func (e updateRangeRetryable) Unwrap() error { return e.error }
 
 func newUpdateRangeReader(ctx context.Context, client *http.Client, assetURL string, size int64) (*updateRangeReader, error) {
 	r := &updateRangeReader{ctx: ctx, client: client, assetURL: assetURL, size: size, cacheOff: -1}
@@ -199,7 +230,26 @@ func newUpdateRangeReader(ctx context.Context, client *http.Client, assetURL str
 	return r, nil
 }
 
+// Each retry keeps the resolved asset URL and its ETag precondition, so a
+// retried range still comes from the same immutable release asset.
 func (r *updateRangeReader) request(offset, length int64) ([]byte, string, string, error) {
+	started := time.Now()
+	defer func() { r.lastRequest = time.Since(started) }()
+	for attempt := 1; ; attempt++ {
+		content, finalURL, etag, err := r.requestOnce(offset, length)
+		var retryable updateRangeRetryable
+		if err == nil || attempt == updateRangeAttempts || !errors.As(err, &retryable) {
+			return content, finalURL, etag, err
+		}
+		select {
+		case <-r.ctx.Done():
+			return nil, "", "", errors.Join(r.ctx.Err(), err)
+		case <-time.After(time.Duration(attempt) * updateRangeRetryDelay):
+		}
+	}
+}
+
+func (r *updateRangeReader) requestOnce(offset, length int64) ([]byte, string, string, error) {
 	req, err := http.NewRequestWithContext(r.ctx, http.MethodGet, r.assetURL, nil)
 	if err != nil {
 		return nil, "", "", err
@@ -211,9 +261,16 @@ func (r *updateRangeReader) request(offset, length int64) ([]byte, string, strin
 	}
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, "", "", err
+		if r.ctx.Err() != nil || errors.Is(err, errUntrustedUpdateRedirect) {
+			return nil, "", "", err
+		}
+		return nil, "", "", updateRangeRetryable{err}
 	}
 	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return nil, "", "", updateRangeRetryable{fmt.Errorf("release host returned HTTP %d", resp.StatusCode)}
+	}
 	wantRange := fmt.Sprintf("bytes %d-%d/%d", offset, offset+length-1, r.size)
 	if resp.StatusCode != http.StatusPartialContent || resp.Header.Get("Content-Range") != wantRange || resp.Header.Get("Content-Encoding") != "" || (resp.ContentLength >= 0 && resp.ContentLength != length) {
 		return nil, "", "", errors.New("release host did not provide the requested ZIP range; keeping the installed version")
@@ -228,7 +285,10 @@ func (r *updateRangeReader) request(offset, length int64) ([]byte, string, strin
 		if err == nil {
 			err = io.ErrUnexpectedEOF
 		}
-		return nil, "", "", err
+		if r.ctx.Err() != nil {
+			return nil, "", "", err
+		}
+		return nil, "", "", updateRangeRetryable{err}
 	}
 	return content, finalURL, etag, nil
 }
@@ -250,7 +310,10 @@ func (r *updateRangeReader) ReadAt(p []byte, off int64) (int, error) {
 	for n < want {
 		pos := off + int64(n)
 		if pos < r.cacheOff || pos >= r.cacheOff+int64(len(r.cacheData)) {
-			length := int64(256 << 10)
+			length := int64(minUpdateRangeBytes)
+			if pos == r.cacheOff+int64(len(r.cacheData)) && r.lastRequest < time.Second {
+				length = min(max(2*int64(len(r.cacheData)), minUpdateRangeBytes), maxUpdateRangeBytes)
+			}
 			if length > r.size-pos {
 				length = r.size - pos
 			}

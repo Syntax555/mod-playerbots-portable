@@ -185,6 +185,9 @@ func readInstalledUpdateManifest(root string) (portableUpdateManifest, error) {
 }
 
 func discardStagedUpdate(root string) error {
+	if plan, err := readPortableUpdatePlan(root); err == nil && plan.Phase != "committed" {
+		keepStagedUpdateFiles(root, plan)
+	}
 	for _, relative := range []string{"stage", "backup"} {
 		filename, err := safeUpdateChild(root, portableUpdateDirectory+"/"+relative)
 		if err != nil {
