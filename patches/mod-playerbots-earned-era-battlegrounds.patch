@@ -322,7 +322,7 @@ index 00000000..fc6e2817
 +
 +#endif
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 36220f6d..343181f2 100644
+index 36220f6d..7e7ec0de 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
 @@ -921,6 +921,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
@@ -334,7 +334,7 @@ index 36220f6d..343181f2 100644
 +{
 +    uint32 instanceId = 0;
 +    bool waiting = false;
-+    Battleground* active = player->GetBattleground();
++    Battleground* active = player->GetBattleground(true);
 +    if (active && BattlegroundMgr::BGQueueTypeId(active->GetBgTypeID(), active->GetArenaType()) == queue)
 +    {
 +        if (active->GetStatus() == STATUS_WAIT_LEAVE)
@@ -389,7 +389,38 @@ index 36220f6d..343181f2 100644
      // Initialize Battleground Data (do not clear here)
  
      for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
-@@ -969,7 +1019,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -949,6 +999,21 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         }
+     }
+ 
++    // A participant may level past the queue's bracket while waiting or inside the match.
++    // Use the bracket assigned by the queue or the instance, never their current level.
++    auto getQueueBracket = [&](Player* participant, Battleground* bg, uint8 slot,
++                               BattlegroundQueueTypeId queueTypeId, uint32 mapId) -> PvPDifficultyEntry const*
++    {
++        if (participant->InBattleground() && participant->GetCurrentBattlegroundQueueSlot() == slot)
++            return bg ? GetBattlegroundBracketById(mapId, bg->GetBracketId()) : nullptr;
++
++        GroupQueueInfo groupInfo;
++        BattlegroundQueue& queue = sBattlegroundMgr->GetBattlegroundQueue(queueTypeId);
++        if (!queue.GetPlayerGroupInfoData(participant->GetGUID(), &groupInfo))
++            return nullptr;
++        return GetBattlegroundBracketById(mapId, BattlegroundBracketId(groupInfo.BracketId));
++    };
++
+     // Process real players and populate Battleground Data with player/queue count
+     // Opens a queue for bots to join
+     for (Player* player : players)
+@@ -957,7 +1022,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         if (!player->InBattlegroundQueue())
+             continue;
+ 
+-        Battleground* bg = player->GetBattleground();
++        Battleground* bg = player->GetBattleground(true);
+         if (bg && bg->GetStatus() == STATUS_WAIT_LEAVE)
+             continue;
+ 
+@@ -969,7 +1034,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
              if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
                  continue;
  
@@ -399,7 +430,16 @@ index 36220f6d..343181f2 100644
                  continue;
  
              // Check if real player is able to create/join this queue
-@@ -988,6 +1039,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -979,7 +1045,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                 continue;
+ 
+             uint32 mapId = templateBg->GetMapId();
+-            PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, player->GetLevel());
++            PvPDifficultyEntry const* pvpDiff = getQueueBracket(player, bg, queueType, queueTypeId, mapId);
+             if (!pvpDiff)
+                 continue;
+ 
+@@ -988,6 +1054,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
              BattlegroundData[queueTypeId][bracketId].minLevel = pvpDiff->minLevel;
              BattlegroundData[queueTypeId][bracketId].maxLevel = pvpDiff->maxLevel;
  
@@ -409,7 +449,38 @@ index 36220f6d..343181f2 100644
              // Arena logic
              bool isRated = false;
              if (BattlegroundMgr::BGArenaType(queueTypeId))
-@@ -1067,7 +1121,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1001,7 +1070,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                 }
+ 
+                 if (bgQueue.IsPlayerInvitedToRatedArena(player->GetGUID()) ||
+-                    (player->InArena() && player->GetBattleground()->isRated()))
++                    (player->InArena() && bg->isRated()))
+                     isRated = true;
+ 
+                 if (isRated)
+@@ -1018,10 +1087,10 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                     BattlegroundData[queueTypeId][bracketId].bgHordePlayerCount++;
+ 
+                 // If a player has joined the BG, update the instance count in BattlegroundData (for consistency)
+-                if (player->InBattleground())
++                if (player->InBattleground() && player->GetCurrentBattlegroundQueueSlot() == queueType)
+                 {
+                     std::vector<uint32>* instanceIds = nullptr;
+-                    uint32 instanceId = player->GetBattleground()->GetInstanceID();
++                    uint32 instanceId = bg->GetInstanceID();
+ 
+                     instanceIds = &BattlegroundData[queueTypeId][bracketId].bgInstances;
+                     if (instanceIds &&
+@@ -1055,7 +1124,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+         if (!bot || !bot->InBattlegroundQueue() || !bot->IsInWorld() || !IsRandomBot(bot))
+             continue;
+ 
+-        Battleground* bg = bot->GetBattleground();
++        Battleground* bg = bot->GetBattleground(true);
+         if (bg && bg->GetStatus() == STATUS_WAIT_LEAVE)
+             continue;
+ 
+@@ -1067,7 +1136,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
              if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
                  continue;
  
@@ -419,7 +490,16 @@ index 36220f6d..343181f2 100644
                  continue;
  
              BattlegroundTypeId bgTypeId = sBattlegroundMgr->BGTemplateId(queueTypeId);
-@@ -1084,6 +1139,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1076,7 +1146,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                 continue;
+ 
+             uint32 mapId = templateBg->GetMapId();
+-            PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, bot->GetLevel());
++            PvPDifficultyEntry const* pvpDiff = getQueueBracket(bot, bg, queueType, queueTypeId, mapId);
+             if (!pvpDiff)
+                 continue;
+ 
+@@ -1084,6 +1154,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
              BattlegroundData[queueTypeId][bracketId].minLevel = pvpDiff->minLevel;
              BattlegroundData[queueTypeId][bracketId].maxLevel = pvpDiff->maxLevel;
  
@@ -429,7 +509,38 @@ index 36220f6d..343181f2 100644
              if (BattlegroundMgr::BGArenaType(queueTypeId))
              {
                  bool isRated = false;
-@@ -1182,6 +1240,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1095,7 +1168,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                     isRated = ginfo.IsRated;
+                 }
+ 
+-                if (bgQueue.IsPlayerInvitedToRatedArena(guid) || (bot->InArena() && bot->GetBattleground()->isRated()))
++                if (bgQueue.IsPlayerInvitedToRatedArena(guid) || (bot->InArena() && bg->isRated()))
+                     isRated = true;
+ 
+                 if (isRated)
+@@ -1111,10 +1184,10 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                     BattlegroundData[queueTypeId][bracketId].bgHordeBotCount++;
+             }
+ 
+-            if (bot->InBattleground())
++            if (bot->InBattleground() && bot->GetCurrentBattlegroundQueueSlot() == queueType)
+             {
+                 std::vector<uint32>* instanceIds = nullptr;
+-                uint32 instanceId = bot->GetBattleground()->GetInstanceID();
++                uint32 instanceId = bg->GetInstanceID();
+                 bool isArena = false;
+                 bool isRated = false;
+ 
+@@ -1122,7 +1195,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+                 if (bot->InArena())
+                 {
+                     isArena = true;
+-                    if (bot->GetBattleground()->isRated())
++                    if (bg->isRated())
+                     {
+                         isRated = true;
+                         instanceIds = &BattlegroundData[queueTypeId][bracketId].ratedArenaInstances;
+@@ -1182,6 +1255,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
          auto updateRatedArenaInstanceCount = [&](uint32 queueType, uint32 bracket, uint32 minCount)
          {
              if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
@@ -437,7 +548,7 @@ index 36220f6d..343181f2 100644
                                                       BattlegroundQueueTypeId(queueType)))
                  return;
  
-@@ -1194,6 +1253,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1194,6 +1268,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
          auto updateBGInstanceCount = [&](uint32 queueType, std::vector<uint32> brackets, uint32 minCount)
          {
              if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
@@ -445,7 +556,7 @@ index 36220f6d..343181f2 100644
                                                       BattlegroundQueueTypeId(queueType)))
                  return;
  
-@@ -1222,6 +1282,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1222,6 +1297,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
          updateBGInstanceCount(BATTLEGROUND_QUEUE_WS, wsBrackets, randomBotAutoJoinBGWSCount);
      }
  
