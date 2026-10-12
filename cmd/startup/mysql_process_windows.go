@@ -16,19 +16,7 @@ import (
 	"unsafe"
 )
 
-// mysqlProcessEntry mirrors Windows PROCESSENTRY32W.
-type mysqlProcessEntry struct {
-	Size            uint32
-	Usage           uint32
-	ProcessID       uint32
-	DefaultHeapID   uintptr
-	ModuleID        uint32
-	Threads         uint32
-	ParentProcessID uint32
-	BasePriority    int32
-	Flags           uint32
-	Executable      [260]uint16
-}
+var procGetExtendedTCPTable = syscall.NewLazyDLL("iphlpapi.dll").NewProc("GetExtendedTcpTable")
 
 type mysqlNativeProcess struct {
 	pid     uint32
@@ -114,7 +102,6 @@ func (p *mysqlNativeProcess) alive() bool {
 }
 
 func openMySQLProcess(pid uint32, terminate bool) (*mysqlNativeProcess, error) {
-	const processQueryLimitedInformation = 0x1000
 	access := uint32(syscall.SYNCHRONIZE | processQueryLimitedInformation)
 	if terminate {
 		access |= syscall.PROCESS_TERMINATE
@@ -130,41 +117,23 @@ func openMySQLProcess(pid uint32, terminate bool) (*mysqlNativeProcess, error) {
 		return nil, fmt.Errorf("GetProcessTimes(%d): %w", pid, err)
 	}
 	p.created = uint64(created.HighDateTime)<<32 | uint64(created.LowDateTime)
-	var image [32768]uint16
-	length := uint32(len(image))
-	ok, _, err := kernel32.NewProc("QueryFullProcessImageNameW").Call(uintptr(handle), 0,
-		uintptr(unsafe.Pointer(&image[0])), uintptr(unsafe.Pointer(&length)))
-	if ok == 0 || length == 0 || length > uint32(len(image)) {
+	if p.image, err = processImagePath(handle); err != nil {
 		p.close()
-		return nil, fmt.Errorf("QueryFullProcessImageNameW(%d): %w", pid, err)
+		return nil, fmt.Errorf("process %d image: %w", pid, err)
 	}
-	p.image = syscall.UTF16ToString(image[:length])
 	return p, nil
 }
 
 func mysqlProcessParents() (map[uint32]uint32, error) {
-	snapshot, _, err := kernel32.NewProc("CreateToolhelp32Snapshot").Call(0x00000002, 0)
-	if snapshot == ^uintptr(0) {
-		return nil, fmt.Errorf("CreateToolhelp32Snapshot: %w", err)
-	}
-	defer syscall.CloseHandle(syscall.Handle(snapshot))
 	parents := make(map[uint32]uint32)
-	entry := mysqlProcessEntry{Size: uint32(unsafe.Sizeof(mysqlProcessEntry{}))}
-	ok, _, err := kernel32.NewProc("Process32FirstW").Call(snapshot, uintptr(unsafe.Pointer(&entry)))
-	if ok == 0 {
-		return nil, fmt.Errorf("Process32FirstW: %w", err)
-	}
-	for {
+	err := forEachProcess(func(entry *syscall.ProcessEntry32) error {
 		parents[entry.ProcessID] = entry.ParentProcessID
-		ok, _, err = kernel32.NewProc("Process32NextW").Call(snapshot, uintptr(unsafe.Pointer(&entry)))
-		if ok != 0 {
-			continue
-		}
-		if !errors.Is(err, syscall.ERROR_NO_MORE_FILES) {
-			return nil, fmt.Errorf("Process32NextW: %w", err)
-		}
-		return parents, nil
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
+	return parents, nil
 }
 
 // Hold every new ancestor until a second snapshot verifies its actual links.
@@ -325,14 +294,13 @@ func ownsMySQLListener(port int, process *os.Process) (bool, error) {
 }
 
 func mysqlListenerPID(port int) (uint32, error) {
-	getExtendedTCPTable := syscall.NewLazyDLL("iphlpapi.dll").NewProc("GetExtendedTcpTable")
 	const (
 		afInet                   = 2
 		tcpTableOwnerPIDListener = 3
 		errorInsufficientBuffer  = 122
 	)
 	var size uint32
-	status, _, _ := getExtendedTCPTable.Call(0, uintptr(unsafe.Pointer(&size)), 0, afInet, tcpTableOwnerPIDListener, 0)
+	status, _, _ := procGetExtendedTCPTable.Call(0, uintptr(unsafe.Pointer(&size)), 0, afInet, tcpTableOwnerPIDListener, 0)
 	if status != errorInsufficientBuffer {
 		return 0, fmt.Errorf("GetExtendedTcpTable size: %w", syscall.Errno(status))
 	}
@@ -341,7 +309,7 @@ func mysqlListenerPID(port int) (uint32, error) {
 			return 0, fmt.Errorf("invalid TCP table size %d", size)
 		}
 		buffer := make([]byte, size)
-		status, _, _ = getExtendedTCPTable.Call(uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)), 0, afInet, tcpTableOwnerPIDListener, 0)
+		status, _, _ = procGetExtendedTCPTable.Call(uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)), 0, afInet, tcpTableOwnerPIDListener, 0)
 		if status == errorInsufficientBuffer {
 			continue
 		}
