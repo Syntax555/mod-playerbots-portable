@@ -482,6 +482,66 @@ func TestPortableUpdateInterruptedCommitRestoresCompletePreviousVersion(t *testi
 	}
 }
 
+func TestPortableUpdateFailureAfterInstalledFilesRestoresPreviousVersion(t *testing.T) {
+	root := t.TempDir()
+	oldIdentity, err := json.Marshal(portableReleaseIdentity{Schema: 1, Revision: strings.Repeat("a", 40), Package: portableUpdatePackage, Version: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed := map[string][]byte{
+		"startup.exe":                   []byte("old working launcher"),
+		"portable-release.json":         oldIdentity,
+		"configs/worldserver.conf.dist": []byte("old distributed configuration"),
+		"configs/worldserver.conf":      []byte("custom settings"),
+		"mysql/data/characters.ibd":     []byte("saved characters"),
+	}
+	for name, content := range installed {
+		updateTestWrite(t, root, name, content)
+	}
+	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+	server, _, _ := updateTestRangeServer(t, archive)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Operations follow manifest order. A directory that appears where the new
+	// SQL file belongs fails it after earlier files were already replaced.
+	updateTestWrite(t, root, "src/data/sql/updates/new.sql/user.txt", []byte("user file"))
+	if err := applyPortableUpdate(root, plan); err == nil || !strings.Contains(err.Error(), "restored to the previous version") {
+		t.Fatalf("partial installation was not reported as restored: %v", err)
+	}
+	for name, content := range installed {
+		if got, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); err != nil || !bytes.Equal(got, content) {
+			t.Fatalf("rollback did not restore %s: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "licenses", "empty.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("new file from the failed update remains: %v", err)
+	}
+	journal, err := readPortableUpdatePlan(root)
+	if err != nil || journal.Phase != "rolled-back" {
+		t.Fatalf("rollback was not recorded: %v", err)
+	}
+	restored := 0
+	for _, op := range journal.Operations {
+		if op.State == "rolled-back" {
+			restored++
+		}
+	}
+	if restored < 2 {
+		t.Fatalf("failure did not occur after earlier files were installed: %d restored", restored)
+	}
+	if err := recoverPortableUpdate(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("recovery kept the rolled-back journal")
+	}
+	if content, err := os.ReadFile(filepath.Join(root, "src/data/sql/updates/new.sql/user.txt")); err != nil || string(content) != "user file" {
+		t.Fatal("recovery changed an unrelated user file")
+	}
+}
+
 func TestPortableUpdateRemovesOnlyRecordedUnmodifiedObsoleteFiles(t *testing.T) {
 	root := t.TempDir()
 	previousFiles := updateTestFiles()

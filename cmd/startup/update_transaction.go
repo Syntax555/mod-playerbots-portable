@@ -158,6 +158,7 @@ func readPortableUpdatePlan(root string) (*portableUpdatePlan, error) {
 			return nil, errors.New("invalid update journal operation")
 		}
 		seen[strings.ToLower(op.File.Path)] = true
+		// Earlier helpers also recorded "applied"; rollback treats it like "applying".
 		if op.State != "" && op.State != "applying" && op.State != "applied" && op.State != "rolled-back" {
 			return nil, errors.New("invalid update operation state")
 		}
@@ -351,10 +352,9 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, reporters ...*po
 		if err := syncUpdateDirectory(filepath.Dir(target)); err != nil {
 			return rollbackUpdateAfterError(root, plan, err)
 		}
-		op.State = "applied"
-		if err := writePortableUpdatePlan(root, plan); err != nil {
-			return rollbackUpdateAfterError(root, plan, err)
-		}
+		// Rollback treats a started operation the same whether or not it
+		// finished, so completed files stay "applying". Recording "applied"
+		// would rewrite the whole journal, manifest included, twice per file.
 		progress.add(1)
 	}
 	plan.Phase = "committed"
