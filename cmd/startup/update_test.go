@@ -864,3 +864,31 @@ func TestPortableUpdateFreshBaselineEnablesFutureObsoleteSQLCleanup(t *testing.T
 		t.Fatal("modified user SQL was removed")
 	}
 }
+
+func TestPortableUpdateFileRetryOnlyWaitsForTransientErrors(t *testing.T) {
+	transient := errors.New("file is briefly in use")
+	isTransient := func(err error) bool { return errors.Is(err, transient) }
+	calls := 0
+	err := retryTransientUpdateError(func() error {
+		calls++
+		if calls < 3 {
+			return transient
+		}
+		return nil
+	}, isTransient, time.Second)
+	if err != nil || calls != 3 {
+		t.Fatalf("transient failure was not retried: calls=%d err=%v", calls, err)
+	}
+	calls = 0
+	permanent := errors.New("access permanently refused")
+	if err := retryTransientUpdateError(func() error { calls++; return permanent }, isTransient, time.Second); !errors.Is(err, permanent) || calls != 1 {
+		t.Fatalf("permanent failure was retried: calls=%d err=%v", calls, err)
+	}
+	started := time.Now()
+	if err := retryTransientUpdateError(func() error { return transient }, isTransient, 100*time.Millisecond); !errors.Is(err, transient) {
+		t.Fatalf("exhausted retry hid its error: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("retry exceeded its budget: %v", elapsed)
+	}
+}

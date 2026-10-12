@@ -20,6 +20,9 @@ func syncUpdateDirectory(directory string) error {
 	return file.Sync()
 }
 
+// POSIX rename and unlink do not fail because another process has the file open.
+func transientUpdateFileError(error) bool { return false }
+
 func ensurePortableUpdateStopped(root string, excludedPID int) error {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {

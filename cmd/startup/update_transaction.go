@@ -39,6 +39,33 @@ type portableUpdateOwner struct {
 	PID int `json:"pid"`
 }
 
+// Windows refuses to rename or remove a file while another process has it
+// open without FILE_SHARE_DELETE. Antivirus scanners, indexers and an older
+// launcher polling journal.json do that briefly, so retry those errors for a
+// short time. Other errors, and every error on other platforms, return at once.
+func retryUpdateFileOperation(operation func() error) error {
+	return retryTransientUpdateError(operation, transientUpdateFileError, 2*time.Second)
+}
+
+func retryTransientUpdateError(operation func() error, transient func(error) bool, budget time.Duration) error {
+	deadline := time.Now().Add(budget)
+	for delay := 10 * time.Millisecond; ; delay = min(2*delay, 200*time.Millisecond) {
+		err := operation()
+		if err == nil || !transient(err) || time.Now().Add(delay).After(deadline) {
+			return err
+		}
+		time.Sleep(delay)
+	}
+}
+
+func renameUpdateFile(from, to string) error {
+	return retryUpdateFileOperation(func() error { return os.Rename(from, to) })
+}
+
+func removeUpdateFile(filename string) error {
+	return retryUpdateFileOperation(func() error { return os.Remove(filename) })
+}
+
 func writeUpdateJSON(filename string, value any) error {
 	content, err := json.Marshal(value)
 	if err != nil {
@@ -50,7 +77,7 @@ func writeUpdateJSON(filename string, value any) error {
 		if info, statErr := os.Lstat(temporary); statErr != nil || !info.Mode().IsRegular() {
 			return errors.New("unsafe updater temporary file")
 		}
-		if err := os.Remove(temporary); err != nil {
+		if err := removeUpdateFile(temporary); err != nil {
 			return err
 		}
 		file, err = os.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
@@ -64,7 +91,7 @@ func writeUpdateJSON(filename string, value any) error {
 		_ = os.Remove(temporary)
 		return err
 	}
-	if err := os.Rename(temporary, filename); err != nil {
+	if err := renameUpdateFile(temporary, filename); err != nil {
 		_ = os.Remove(temporary)
 		return err
 	}
@@ -91,8 +118,9 @@ func readLimitedUpdateJSON(filename string, destination any) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	// Close before decoding: an open handle blocks the helper's journal rename.
 	content, err := io.ReadAll(io.LimitReader(file, (32<<20)+1))
+	file.Close()
 	if err != nil || len(content) > 32<<20 {
 		return errors.New("invalid update state file")
 	}
@@ -162,7 +190,7 @@ func discardStagedUpdate(root string) error {
 			return err
 		}
 		// RemoveAll never follows links inside an unused staging tree.
-		if err := os.RemoveAll(filename); err != nil {
+		if err := retryUpdateFileOperation(func() error { return os.RemoveAll(filename) }); err != nil {
 			return err
 		}
 	}
@@ -171,12 +199,12 @@ func discardStagedUpdate(root string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.Remove(filename); err != nil && !errors.Is(err, os.ErrNotExist) {
-			if relative != "helper.exe" {
-				return err
-			}
+		if relative == "helper.exe" {
 			// Windows retains the executing helper until it exits. The next
 			// normal launcher startup removes this verified temporary copy.
+			_ = os.Remove(filename)
+		} else if err := removeUpdateFile(filename); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 	return nil
@@ -303,7 +331,7 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, reporters ...*po
 			return rollbackUpdateAfterError(root, plan, err)
 		}
 		if op.HadOriginal {
-			if err := os.Rename(target, backup); err != nil {
+			if err := renameUpdateFile(target, backup); err != nil {
 				return rollbackUpdateAfterError(root, plan, err)
 			}
 		}
@@ -316,7 +344,7 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, reporters ...*po
 					return rollbackUpdateAfterError(root, plan, err)
 				}
 			}
-			if err := os.Rename(stage, target); err != nil {
+			if err := renameUpdateFile(stage, target); err != nil {
 				return rollbackUpdateAfterError(root, plan, err)
 			}
 		}
@@ -368,10 +396,10 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 			if digest, err := hashUpdateFile(backup, op.OriginalSize); err != nil || digest != op.OriginalSHA256 {
 				return fmt.Errorf("rollback backup failed original-file verification: %s", op.File.Path)
 			}
-			if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := removeUpdateFile(target); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
-			if err := os.Rename(backup, target); err != nil {
+			if err := renameUpdateFile(backup, target); err != nil {
 				return err
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
@@ -383,7 +411,7 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 				if digest != op.File.SHA256 {
 					return errors.New("new update file changed before rollback")
 				}
-				if err := os.Remove(target); err != nil {
+				if err := removeUpdateFile(target); err != nil {
 					return err
 				}
 			} else if !errors.Is(err, os.ErrNotExist) {
