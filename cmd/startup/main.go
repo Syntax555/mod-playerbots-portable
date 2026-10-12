@@ -1644,13 +1644,7 @@ func main() {
 		return
 	}
 
-	binaries, err := findMySQLBinaries(opts.mysqlDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Handle -download-data-only mode
+	// Handle -download-data-only mode, which needs no MySQL installation
 	if opts.downloadDataOnly {
 		if err := ensureClientData(rootCtx, workDir, baseDir, opts.dataURL, false); err != nil {
 			fmt.Fprintf(os.Stderr, "Error downloading client data: %v\n", err)
@@ -1658,6 +1652,12 @@ func main() {
 		}
 		fmt.Println("Client data download and extraction complete.")
 		os.Exit(0)
+	}
+
+	binaries, err := findMySQLBinaries(opts.mysqlDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	authserverExe := findExecutable(baseDir, "authserver")
