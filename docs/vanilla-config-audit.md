@@ -195,7 +195,8 @@ profession and raid is not guaranteed. Some upstream encounter actions retain
 special movement or combat shortcuts; the earned-play guards do not cover every
 AI action. For example, the specialized Onyxia
 whelp action recognizes entry `11262`, while restored Vanilla whelps use
-`301001`; generic combat does not establish full encounter support.
+`301001`; generic combat does not establish full encounter support. Hunter bots
+do not tame pets, and warlock bots gain Soul Shards only from Drain Soul kills.
 
 Source fixtures, launcher checks and package verification cover the implemented
 policies and release tooling. Full compilation verifies integration. These
