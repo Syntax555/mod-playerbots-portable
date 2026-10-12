@@ -804,6 +804,81 @@ index a202d686..38142b82 100644
      // Parse the user's input command into mode and value (e.g. "name wolf", "id 1234", etc.)
      std::string param = event.getParam();
      std::istringstream iss(param);
+diff --git a/src/Ai/Base/Actions/TaxiAction.cpp b/src/Ai/Base/Actions/TaxiAction.cpp
+index 41c12771..f37f759e 100644
+--- a/src/Ai/Base/Actions/TaxiAction.cpp
++++ b/src/Ai/Base/Actions/TaxiAction.cpp
+@@ -40,7 +40,9 @@ bool TaxiAction::Execute(Event event)
+         if (!(npc->GetNpcFlags() & UNIT_NPC_FLAG_FLIGHTMASTER))
+             continue;
+ 
+-        if (bot->GetDistance(npc) > sPlayerbotAIConfig.farDistance)
++        // Natural bots must be able to talk to the flight master like a player.
++        if (sPlayerbotAIConfig.naturalProgression ? !bot->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_FLIGHTMASTER)
++                                                  : bot->GetDistance(npc) > sPlayerbotAIConfig.farDistance)
+             continue;
+ 
+         bot->GetSession()->SendLearnNewTaxiNode(npc);
+@@ -54,7 +56,7 @@ bool TaxiAction::Execute(Event event)
+                 if (entry->from == curloc)
+                 {
+                     uint8 field = uint8((i - 1) / 32);
+-                    if (field < TaxiMaskSize)
++                    if (field < TaxiMaskSize && CanUseTaxiNodes(bot, {entry->from, entry->to}))
+                         nodes.push_back(i);
+                 }
+         }
+@@ -62,6 +64,15 @@ bool TaxiAction::Execute(Event event)
+         // Only for follower bots
+         if (botAI->HasGameClientMaster())
+         {
++            if (!CanUseTaxiNodes(bot, movement.taxiNodes))
++            {
++                movement.taxiNodes.clear();
++                movement.Set(nullptr);
++                botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
++                    "taxi_route_not_discovered", "I have not discovered that flight path", {}));
++                return false;
++            }
++
+             uint32 index = botAI->GetGroupSlotIndex(bot);
+             uint32 delay = sPlayerbotAIConfig.botTaxiDelayMin +
+                           index * sPlayerbotAIConfig.botTaxiGapMs +
+@@ -76,9 +87,11 @@ bool TaxiAction::Execute(Event event)
+             botAI->AddTimedEvent(
+                 [bot = bot, &movement, npcGuid]() -> void
+                 {
+-                    if (Creature* npcPtr = ObjectAccessor::GetCreature(*bot, npcGuid))
+-                        if (!movement.taxiNodes.empty())
+-                            bot->ActivateTaxiPathTo(movement.taxiNodes, npcPtr, 0);
++                    Creature* npcPtr = sPlayerbotAIConfig.naturalProgression
++                                           ? bot->GetNPCIfCanInteractWith(npcGuid, UNIT_NPC_FLAG_FLIGHTMASTER)
++                                           : ObjectAccessor::GetCreature(*bot, npcGuid);
++                    if (npcPtr && !movement.taxiNodes.empty() && CanUseTaxiNodes(bot, movement.taxiNodes))
++                        bot->ActivateTaxiPathTo(movement.taxiNodes, npcPtr, 0);
+                 },
+                 delay);
+             botAI->SetNextCheckDelay(delay + 50);
+@@ -111,6 +124,9 @@ bool TaxiAction::Execute(Event event)
+         uint32 selected = atoi(param.c_str());
+         if (selected)
+         {
++            if (selected > nodes.size())
++                return false;
++
+             uint32 path = nodes[selected - 1];
+             TaxiPathEntry const* entry = sTaxiPathStore.LookupEntry(path);
+             if (!entry)
+@@ -119,7 +135,8 @@ bool TaxiAction::Execute(Event event)
+             return bot->ActivateTaxiPathTo({entry->from, entry->to}, npc, 0);
+         }
+ 
+-        if (!movement.taxiNodes.empty() && !bot->ActivateTaxiPathTo(movement.taxiNodes, npc, 0))
++        if (!movement.taxiNodes.empty() &&
++            (!CanUseTaxiNodes(bot, movement.taxiNodes) || !bot->ActivateTaxiPathTo(movement.taxiNodes, npc, 0)))
+         {
+             movement.taxiNodes.clear();
+             movement.Set(nullptr);
 diff --git a/src/Ai/Base/Actions/TeleportAction.cpp b/src/Ai/Base/Actions/TeleportAction.cpp
 index c1efb7f1..cb2c4e13 100644
 --- a/src/Ai/Base/Actions/TeleportAction.cpp
@@ -955,6 +1030,20 @@ index 0c9a679f..abd207c0 100644
      std::string const text = event.getParam();
  
      std::vector<uint32> buffs = NeedWorldBuffs(bot);  // Get matching buffs
+diff --git a/src/Ai/Base/Actions/XpGainAction.cpp b/src/Ai/Base/Actions/XpGainAction.cpp
+index 86934c5f..94a16438 100644
+--- a/src/Ai/Base/Actions/XpGainAction.cpp
++++ b/src/Ai/Base/Actions/XpGainAction.cpp
+@@ -55,6 +55,9 @@ bool XpGainAction::Execute(Event event)
+ 
+ void XpGainAction::GiveXP(uint32 xp, Unit* victim)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (xp < 1)
+     {
+         return;
 diff --git a/src/Ai/Base/TriggerContext.h b/src/Ai/Base/TriggerContext.h
 index 5219992e..39fb7a5c 100644
 --- a/src/Ai/Base/TriggerContext.h
@@ -1398,7 +1487,7 @@ index 42b8d88e..cfd45bcd 100644
          return;
  
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4bfafe7..d046a784 100644
+index d4bfafe7..6d25b5b8 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -5,12 +5,19 @@
@@ -1506,6 +1595,15 @@ index d4bfafe7..d046a784 100644
  
  void TellRpgStatusAction::WhisperStatusChange(Player* owner, std::string const& statusName)
  {
+@@ -670,7 +743,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
+ 
+     bot->GetSession()->SendLearnNewTaxiNode(flightMaster);
+ 
+-    if (!bot->ActivateTaxiPathTo(nodes, flightMaster, 0))
++    if (!CanUseTaxiNodes(bot, nodes) || !bot->ActivateTaxiPathTo(nodes, flightMaster, 0))
+     {
+         LOG_DEBUG("playerbots", "[New RPG] {} active taxi path {} (from {} to {}) failed", bot->GetName(),
+                   flightMaster->GetEntry(), nodes.empty() ? 0 : nodes.front(), nodes.empty() ? 0 : nodes.back());
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.h b/src/Ai/World/Rpg/Action/NewRpgAction.h
 index d015a87e..5b00a59f 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.h
@@ -1681,6 +1779,96 @@ index 00000000..4f4b3f2b
 +    return !vanillaOnly || queueTypeId == BATTLEGROUND_QUEUE_AV || queueTypeId == BATTLEGROUND_QUEUE_WS ||
 +           queueTypeId == BATTLEGROUND_QUEUE_AB;
 +}
++
++#endif
+diff --git a/src/Bot/EarnedLevelBracketPolicy.h b/src/Bot/EarnedLevelBracketPolicy.h
+new file mode 100644
+index 00000000..2582f6e1
+--- /dev/null
++++ b/src/Bot/EarnedLevelBracketPolicy.h
+@@ -0,0 +1,84 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_EARNEDLEVELBRACKETPOLICY_H
++#define PLAYERBOTS_EARNEDLEVELBRACKETPOLICY_H
++
++#include <array>
++#include <charconv>
++#include <cstdint>
++#include <string_view>
++
++// Stable GUID buckets reserve bots for earned caps without changing character state.
++class EarnedLevelBracketPolicy
++{
++    static constexpr unsigned BucketCount = 100;
++    static constexpr unsigned MaxLevel = 80;
++    static constexpr std::uint32_t GuidHashMultiplier = 2654435761;
++
++public:
++    bool Load(std::string_view config)
++    {
++        _caps = {};
++        std::array<std::uint8_t, BucketCount> caps{};
++        std::array<bool, MaxLevel + 1> used{};
++        unsigned total = 0;
++        config = Trim(config);
++        while (!config.empty())
++        {
++            auto const comma = config.find(',');
++            auto const entry = config.substr(0, comma);
++            auto const colon = entry.find(':');
++            unsigned level = 0;
++            unsigned percentage = 0;
++            if (colon == std::string_view::npos || !Number(entry.substr(0, colon), level) ||
++                !Number(entry.substr(colon + 1), percentage) || level < 1 || level > MaxLevel || percentage < 1 ||
++                percentage > BucketCount || total + percentage > BucketCount || used[level])
++                return false;
++
++            used[level] = true;
++            for (unsigned end = total + percentage; total < end; ++total)
++                caps[total] = static_cast<std::uint8_t>(level);
++
++            if (comma == std::string_view::npos)
++                break;
++            config = Trim(config.substr(comma + 1));
++            if (config.empty())
++                return false;
++        }
++        _caps = caps;
++        return true;
++    }
++
++    std::uint8_t GetCap(std::uint32_t guid, std::uint8_t currentLevel) const
++    {
++        // Unsigned wraparound is deliberate and stable across platforms/restarts.
++        auto const cap = _caps[(guid * GuidHashMultiplier) % _caps.size()];
++        return currentLevel <= cap ? cap : 0;  // Never downgrade an existing higher-level bot.
++    }
++
++private:
++    static std::string_view Trim(std::string_view value)
++    {
++        auto const first = value.find_first_not_of(" \t\r\n");
++        if (first == std::string_view::npos)
++            return {};
++        return value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
++    }
++
++    static bool Number(std::string_view value, unsigned& number)
++    {
++        value = Trim(value);
++        if (value.empty())
++            return false;
++        auto const result = std::from_chars(value.data(), value.data() + value.size(), number);
++        return result.ec == std::errc{} && result.ptr == value.data() + value.size();
++    }
++
++    std::array<std::uint8_t, BucketCount> _caps{};
++};
 +
 +#endif
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
@@ -2084,7 +2272,7 @@ index bee5aa24..f0609354 100644
              if (!((1 << (cls - 1)) & CLASSMASK_ALL_PLAYABLE) || !sChrClassesStore.LookupEntry(cls))
                  continue;
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index 67cf77ca..163e2363 100644
+index 67cf77ca..e04b15ac 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -143,7 +143,9 @@ PlayerbotAI::PlayerbotAI(Player* bot)
@@ -2120,11 +2308,39 @@ index 67cf77ca..163e2363 100644
                              return;
                      }
                      else
+@@ -4423,6 +4426,19 @@ bool IsSelfBot(Player* player)
+     return botAI && botAI->GetMaster() == player;
+ }
+ 
++bool CanUseTaxiNodes(Player* player, std::vector<uint32> const& nodes)
++{
++    // Natural progression follows the core taxi handlers: every node of a flight must already be discovered.
++    if (!sPlayerbotAIConfig.naturalProgression || player->isTaxiCheater())
++        return true;
++
++    for (uint32 node : nodes)
++        if (!node || node > TaxiMaskSize * 32 || !player->m_taxi.IsTaximaskNodeKnown(node))
++            return false;
++
++    return true;
++}
++
+ bool IsAlliance(uint8 race)
+ {
+     return race == RACE_HUMAN || race == RACE_DWARF || race == RACE_NIGHTELF || race == RACE_GNOME ||
 diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
-index 9c87cdb3..b7e5262f 100644
+index 9c87cdb3..dc55e875 100644
 --- a/src/Bot/PlayerbotAI.h
 +++ b/src/Bot/PlayerbotAI.h
-@@ -564,6 +564,9 @@ public:
+@@ -80,6 +80,7 @@ enum BotState
+ 
+ bool IsRealPlayer(Player* player);
+ bool IsSelfBot(Player* player);
++bool CanUseTaxiNodes(Player* player, std::vector<uint32> const& nodes);
+ bool IsAlliance(uint8 race);
+ 
+ class PlayerbotChatHandler : protected ChatHandler
+@@ -564,6 +565,9 @@ public:
  
      bool HasCheat(BotCheatMask mask)
      {
@@ -2218,6 +2434,106 @@ index 848ba215..c30584a2 100644
      OnBotLoginInternal(bot);
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
+index 8bcebe3b..4f7fd91e 100644
+--- a/src/Bot/RandomBotLevelMgr.cpp
++++ b/src/Bot/RandomBotLevelMgr.cpp
+@@ -293,6 +293,9 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
+ // be resized on a config reload.
+ void RandomBotLevelMgr::AdjustBotToRange(Player* bot, int targetRangeIndex, TeamId team)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!bot || !bot->IsInWorld() || !bot->GetSession() || bot->GetSession()->IsLoggingOut() ||
+         bot->IsDuringRemoveFromWorld())
+         return;
+@@ -828,6 +831,9 @@ uint8 RandomBotLevelMgr::ComputeResetChance(uint8 level) const
+ // whichever is higher) via a full PlayerbotFactory randomize.
+ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint8 levelToResetTo = sPlayerbotAIConfig.resetBotLevelResetTo;
+ 
+     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
+@@ -851,6 +857,9 @@ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
+ // level, whichever is higher) via a full PlayerbotFactory randomize.
+ void RandomBotLevelMgr::SkipBotLevel(Player* player, uint8 currentLevel)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     uint8 levelToSkipTo = sPlayerbotAIConfig.resetBotLevelSkipTo;
+ 
+     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
+@@ -928,6 +937,9 @@ void RandomBotLevelMgr::RunResetPlayedTimeCheck()
+ 
+ void RandomBotLevelMgr::Update(uint32 diff)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (sPlayerbotAIConfig.levelBracketsEnabled)
+     {
+         _bracketsTimer += diff;
+@@ -960,6 +972,9 @@ void RandomBotLevelMgr::Update(uint32 diff)
+ 
+ void RandomBotLevelMgr::OnBotLogin(Player* player)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(player))
+         return;
+ 
+@@ -1013,6 +1028,9 @@ void RandomBotLevelMgr::OnBotLogin(Player* player)
+ 
+ void RandomBotLevelMgr::OnBotLevelChanged(Player* player, uint8 oldLevel)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return;
++
+     if (!sRandomPlayerbotMgr.IsRandomBot(player))
+         return;
+ 
+@@ -1134,11 +1152,34 @@ public:
+ // =============================================================================
+ class RandomBotLevelPlayerScript : public PlayerScript
+ {
++    static uint8 GetEarnedLevelCap(Player* player)
++    {
++        if (!sPlayerbotAIConfig.naturalProgression || !player || !sRandomPlayerbotMgr.IsRandomBot(player))
++            return 0;
++
++        auto const policy = sPlayerbotAIConfig.earnedLevelBrackets.load();
++        return policy->GetCap(player->GetGUID().GetCounter(), player->GetLevel());
++    }
++
+ public:
+     RandomBotLevelPlayerScript()
+         : PlayerScript("RandomBotLevelPlayerScript",
+-              { PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT })
++                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_GIVE_EXP,
++                        PLAYERHOOK_ON_CAN_GIVE_LEVEL})
++    {
++    }
++
++    void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
++    {
++        uint8 const cap = GetEarnedLevelCap(player);
++        if (cap && player->GetLevel() >= cap)
++            amount = 0;
++    }
++
++    bool OnPlayerCanGiveLevel(Player* player, uint8 newLevel) override
+     {
++        uint8 const cap = GetEarnedLevelCap(player);
++        return !cap || newLevel <= cap;
+     }
+ 
+     void OnPlayerLogin(Player* player) override
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
 index 4a8229f7..36220f6d 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
@@ -2444,6 +2760,39 @@ index dd2d5878..cbca8d2c 100644
      time_t printStatsTimer;
      uint32 AddRandomBots();
      bool ProcessBot(uint32 bot);
+diff --git a/src/Mgr/Travel/TravelMgr.cpp b/src/Mgr/Travel/TravelMgr.cpp
+index a967f7bb..7f5ca0f5 100644
+--- a/src/Mgr/Travel/TravelMgr.cpp
++++ b/src/Mgr/Travel/TravelMgr.cpp
+@@ -4464,17 +4464,19 @@ std::vector<std::vector<uint32>> TravelMgr::GetOptimalFlightDestinations(Player*
+         uint32 zoneIndex = urand(0, candidateZones.size() - 1);
+         uint32 pickedZone = candidateZones[zoneIndex];
+ 
+-        std::vector<uint32> usableNodes = GetFlightNodesInZone(pickedZone, bot->GetTeamId(), fromNode);
++        std::vector<std::vector<uint32>> usablePaths;
++        for (uint32 node : GetFlightNodesInZone(pickedZone, bot->GetTeamId(), fromNode))
++        {
++            std::vector<uint32> path = sTravelNodeMap.FindTaxiPath(fromNode, node);
++            // The origin is learned at its flight master; every later node must already be discovered.
++            if (!path.empty() && CanUseTaxiNodes(bot, std::vector<uint32>(path.begin() + 1, path.end())))
++                usablePaths.push_back(std::move(path));
++        }
+ 
+-        if (!usableNodes.empty())
++        if (!usablePaths.empty())
+         {
+-            uint32 pickedNode = usableNodes[urand(0, usableNodes.size() - 1)];
+-            std::vector<uint32> path = sTravelNodeMap.FindTaxiPath(fromNode, pickedNode);
+-            if (!path.empty())
+-            {
+-                validDestinations.push_back(std::move(path));
+-                return validDestinations;
+-            }
++            validDestinations.push_back(std::move(usablePaths[urand(0, usablePaths.size() - 1)]));
++            return validDestinations;
+         }
+ 
+         candidateZones.erase(candidateZones.begin() + zoneIndex);
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
 index 915bff53..911b9617 100644
 --- a/src/PlayerbotAIConfig.cpp
@@ -2515,210 +2864,6 @@ index 781d4d27..26765636 100644
      bool randomBotSayWithoutMaster;
      bool AnnounceConsumableUse;
  
-diff --git a/src/Ai/Base/Actions/XpGainAction.cpp b/src/Ai/Base/Actions/XpGainAction.cpp
-index 86934c5f..94a16438 100644
---- a/src/Ai/Base/Actions/XpGainAction.cpp
-+++ b/src/Ai/Base/Actions/XpGainAction.cpp
-@@ -55,6 +55,9 @@ bool XpGainAction::Execute(Event event)
- 
- void XpGainAction::GiveXP(uint32 xp, Unit* victim)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     if (xp < 1)
-     {
-         return;
-diff --git a/src/Bot/EarnedLevelBracketPolicy.h b/src/Bot/EarnedLevelBracketPolicy.h
-new file mode 100644
-index 00000000..2582f6e1
---- /dev/null
-+++ b/src/Bot/EarnedLevelBracketPolicy.h
-@@ -0,0 +1,84 @@
-+/*
-+ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
-+ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
-+ * or (at your option) any later version.
-+ */
-+
-+#ifndef PLAYERBOTS_EARNEDLEVELBRACKETPOLICY_H
-+#define PLAYERBOTS_EARNEDLEVELBRACKETPOLICY_H
-+
-+#include <array>
-+#include <charconv>
-+#include <cstdint>
-+#include <string_view>
-+
-+// Stable GUID buckets reserve bots for earned caps without changing character state.
-+class EarnedLevelBracketPolicy
-+{
-+    static constexpr unsigned BucketCount = 100;
-+    static constexpr unsigned MaxLevel = 80;
-+    static constexpr std::uint32_t GuidHashMultiplier = 2654435761;
-+
-+public:
-+    bool Load(std::string_view config)
-+    {
-+        _caps = {};
-+        std::array<std::uint8_t, BucketCount> caps{};
-+        std::array<bool, MaxLevel + 1> used{};
-+        unsigned total = 0;
-+        config = Trim(config);
-+        while (!config.empty())
-+        {
-+            auto const comma = config.find(',');
-+            auto const entry = config.substr(0, comma);
-+            auto const colon = entry.find(':');
-+            unsigned level = 0;
-+            unsigned percentage = 0;
-+            if (colon == std::string_view::npos || !Number(entry.substr(0, colon), level) ||
-+                !Number(entry.substr(colon + 1), percentage) || level < 1 || level > MaxLevel || percentage < 1 ||
-+                percentage > BucketCount || total + percentage > BucketCount || used[level])
-+                return false;
-+
-+            used[level] = true;
-+            for (unsigned end = total + percentage; total < end; ++total)
-+                caps[total] = static_cast<std::uint8_t>(level);
-+
-+            if (comma == std::string_view::npos)
-+                break;
-+            config = Trim(config.substr(comma + 1));
-+            if (config.empty())
-+                return false;
-+        }
-+        _caps = caps;
-+        return true;
-+    }
-+
-+    std::uint8_t GetCap(std::uint32_t guid, std::uint8_t currentLevel) const
-+    {
-+        // Unsigned wraparound is deliberate and stable across platforms/restarts.
-+        auto const cap = _caps[(guid * GuidHashMultiplier) % _caps.size()];
-+        return currentLevel <= cap ? cap : 0;  // Never downgrade an existing higher-level bot.
-+    }
-+
-+private:
-+    static std::string_view Trim(std::string_view value)
-+    {
-+        auto const first = value.find_first_not_of(" \t\r\n");
-+        if (first == std::string_view::npos)
-+            return {};
-+        return value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
-+    }
-+
-+    static bool Number(std::string_view value, unsigned& number)
-+    {
-+        value = Trim(value);
-+        if (value.empty())
-+            return false;
-+        auto const result = std::from_chars(value.data(), value.data() + value.size(), number);
-+        return result.ec == std::errc{} && result.ptr == value.data() + value.size();
-+    }
-+
-+    std::array<std::uint8_t, BucketCount> _caps{};
-+};
-+
-+#endif
-diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
-index 8bcebe3b..4f7fd91e 100644
---- a/src/Bot/RandomBotLevelMgr.cpp
-+++ b/src/Bot/RandomBotLevelMgr.cpp
-@@ -293,6 +293,9 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
- // be resized on a config reload.
- void RandomBotLevelMgr::AdjustBotToRange(Player* bot, int targetRangeIndex, TeamId team)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     if (!bot || !bot->IsInWorld() || !bot->GetSession() || bot->GetSession()->IsLoggingOut() ||
-         bot->IsDuringRemoveFromWorld())
-         return;
-@@ -828,6 +831,9 @@ uint8 RandomBotLevelMgr::ComputeResetChance(uint8 level) const
- // whichever is higher) via a full PlayerbotFactory randomize.
- void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     uint8 levelToResetTo = sPlayerbotAIConfig.resetBotLevelResetTo;
- 
-     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
-@@ -851,6 +857,9 @@ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
- // level, whichever is higher) via a full PlayerbotFactory randomize.
- void RandomBotLevelMgr::SkipBotLevel(Player* player, uint8 currentLevel)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     uint8 levelToSkipTo = sPlayerbotAIConfig.resetBotLevelSkipTo;
- 
-     uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
-@@ -928,6 +937,9 @@ void RandomBotLevelMgr::RunResetPlayedTimeCheck()
- 
- void RandomBotLevelMgr::Update(uint32 diff)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     if (sPlayerbotAIConfig.levelBracketsEnabled)
-     {
-         _bracketsTimer += diff;
-@@ -960,6 +972,9 @@ void RandomBotLevelMgr::Update(uint32 diff)
- 
- void RandomBotLevelMgr::OnBotLogin(Player* player)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     if (!sRandomPlayerbotMgr.IsRandomBot(player))
-         return;
- 
-@@ -1013,6 +1028,9 @@ void RandomBotLevelMgr::OnBotLogin(Player* player)
- 
- void RandomBotLevelMgr::OnBotLevelChanged(Player* player, uint8 oldLevel)
- {
-+    if (sPlayerbotAIConfig.naturalProgression)
-+        return;
-+
-     if (!sRandomPlayerbotMgr.IsRandomBot(player))
-         return;
- 
-@@ -1134,11 +1152,34 @@ public:
- // =============================================================================
- class RandomBotLevelPlayerScript : public PlayerScript
- {
-+    static uint8 GetEarnedLevelCap(Player* player)
-+    {
-+        if (!sPlayerbotAIConfig.naturalProgression || !player || !sRandomPlayerbotMgr.IsRandomBot(player))
-+            return 0;
-+
-+        auto const policy = sPlayerbotAIConfig.earnedLevelBrackets.load();
-+        return policy->GetCap(player->GetGUID().GetCounter(), player->GetLevel());
-+    }
-+
- public:
-     RandomBotLevelPlayerScript()
-         : PlayerScript("RandomBotLevelPlayerScript",
--              { PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT })
-+                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_GIVE_EXP,
-+                        PLAYERHOOK_ON_CAN_GIVE_LEVEL})
-+    {
-+    }
-+
-+    void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
-+    {
-+        uint8 const cap = GetEarnedLevelCap(player);
-+        if (cap && player->GetLevel() >= cap)
-+            amount = 0;
-+    }
-+
-+    bool OnPlayerCanGiveLevel(Player* player, uint8 newLevel) override
-     {
-+        uint8 const cap = GetEarnedLevelCap(player);
-+        return !cap || newLevel <= cap;
-     }
- 
-     void OnPlayerLogin(Player* player) override
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
 index 669eefb1..f0619c68 100644
 --- a/src/Script/Playerbots.cpp
