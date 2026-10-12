@@ -254,22 +254,20 @@ func setRealmPhase(workDir string, phase realmPhase) ([]string, error) {
 	if phase.level < current.level {
 		return nil, fmt.Errorf("cannot lower the realm from %s to %s; reverting requires a matching database and config backup", current.name, phase.name)
 	}
-	timestamp := time.Now().UTC().Format("20060102T150405.000000000Z")
+	timestamp := backupTimestamp()
 	var updates []profileUpdate
 	for _, relative := range []string{"worldserver.conf", "modules/individualProgression.conf", "modules/playerbots.conf", realmPhaseFile} {
 		path := filepath.Join(workDir, "configs", filepath.FromSlash(relative))
-		original, err := os.ReadFile(path)
-		create := errors.Is(err, os.ErrNotExist) && relative == realmPhaseFile
-		if err != nil && !create {
-			return nil, fmt.Errorf("read %s: %w; initialize the realm configs with startup.exe before choosing an expansion", path, err)
+		original, mode, exists, err := readConfigForUpdate(workDir, path)
+		if err != nil {
+			return nil, err
 		}
-		mode := os.FileMode(0644)
-		if !create {
-			info, err := os.Stat(path)
-			if err != nil {
-				return nil, err
-			}
-			mode = info.Mode().Perm()
+		create := !exists
+		if create && relative != realmPhaseFile {
+			return nil, fmt.Errorf("%s is missing; initialize the realm configs with startup.exe before choosing an expansion", path)
+		}
+		if create {
+			mode = 0644
 		}
 		updated := phase.name + "\n"
 		if relative != realmPhaseFile {

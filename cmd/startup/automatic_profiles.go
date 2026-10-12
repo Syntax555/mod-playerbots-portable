@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
 const automaticProfileState = ".portable-profiles.json"
@@ -164,7 +163,7 @@ func migrateConfigProfiles(root string) ([]string, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	timestamp := time.Now().UTC().Format("20060102T150405.000000000Z")
+	timestamp := backupTimestamp()
 	var updates []profileUpdate
 	next := managedProfileState{Schema: 1, Profiles: make(map[string]string)}
 	for _, name := range names {
@@ -172,19 +171,12 @@ func migrateConfigProfiles(root string) ([]string, error) {
 		if name == "worldserver.conf" {
 			path = filepath.Join(root, "configs", name)
 		}
-		if err := requireRegularConfigPath(root, path); err != nil {
+		original, mode, exists, err := readConfigForUpdate(root, path)
+		if err != nil {
 			return nil, err
 		}
-		original, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
+		if !exists {
 			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, err
 		}
 		updated, err := mergeManagedProfile(string(original), previous.Profiles[name], current[name])
 		if err != nil {
@@ -193,7 +185,7 @@ func migrateConfigProfiles(root string) ([]string, error) {
 		next.Profiles[name] = current[name]
 		if updated != string(original) {
 			updates = append(updates, profileUpdate{path: path, original: original, updated: []byte(updated),
-				mode: info.Mode().Perm(), backup: path + ".backup." + timestamp})
+				mode: mode, backup: path + ".backup." + timestamp})
 		}
 	}
 	if len(next.Profiles) == 0 {

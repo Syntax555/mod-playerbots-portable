@@ -805,7 +805,7 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 func activateClientData(stageDataDir, workDataDir string) error {
 	backupPath := ""
 	if entries, err := os.ReadDir(workDataDir); err == nil {
-		backupPath = workDataDir + ".backup." + time.Now().UTC().Format("20060102T150405.000000000Z")
+		backupPath = workDataDir + ".backup." + backupTimestamp()
 		if err := os.Rename(workDataDir, backupPath); err != nil {
 			return fmt.Errorf("failed to preserve previous client data: %w", err)
 		}
