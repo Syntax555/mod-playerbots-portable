@@ -18,7 +18,12 @@ import (
 )
 
 const portableUpdateDirectory = ".portable-update"
+const portableUpdateCacheDirectory = portableUpdateDirectory + "/cache"
 const portableUpdateHelperFlag = "--portable-update-helper"
+
+// Bounds how long one launch spends downloading before it starts the installed
+// release. Verified files are kept, so the next launch continues from there.
+const portableUpdateDownloadTime = 15 * time.Minute
 
 func safeUpdateTarget(root, relative string) (string, error) {
 	if err := validateUpdatePath(relative); err != nil {
@@ -109,8 +114,8 @@ func checkPortableUpdate(ctx context.Context, root string, args []string) (bool,
 	progress := startPortableUpdateProgress(ctx)
 	defer progress.close()
 	progress.begin("Checking release metadata", "", 0, 0)
-	checkCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	manifest, err := fetchUpdateManifest(checkCtx, portableUpdateHTTPClient(), portableUpdateManifestURL)
+	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	manifest, err := fetchUpdateManifest(checkCtx, portableUpdateHTTPClient(), portableUpdateManifestURL, updateManifestResponseTimeout)
 	cancel()
 	if err != nil {
 		return false, err
@@ -129,11 +134,14 @@ func checkPortableUpdate(ctx context.Context, root string, args []string) (bool,
 	if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
 		return false, err
 	}
-	updateCtx, cancelUpdate := context.WithTimeout(ctx, 15*time.Minute)
+	updateCtx, cancelUpdate := context.WithTimeout(ctx, portableUpdateDownloadTime)
 	defer cancelUpdate()
 	assetURL := strings.TrimSuffix(portableUpdateManifestURL, "UPDATE_MANIFEST.json") + manifest.Package
 	plan, err := stagePortableUpdate(updateCtx, root, manifest, args, portableUpdateHTTPClient(), assetURL, progress)
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(updateCtx.Err(), context.DeadlineExceeded) {
+			return false, fmt.Errorf("update download did not finish within %v; the next start continues with the files verified so far: %w", portableUpdateDownloadTime, err)
+		}
 		return false, err
 	}
 	progress.begin("Starting verified updater", "", 0, 0)
@@ -304,6 +312,11 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 		plan.Operations[i].Stage = fmt.Sprintf("stage/%06d", i)
 		plan.Operations[i].Backup = fmt.Sprintf("backup/%06d", i)
 	}
+	cacheDir, err := safeUpdateChild(root, portableUpdateCacheDirectory)
+	if err != nil {
+		return nil, err
+	}
+	pruneUpdateCache(cacheDir, plan.Operations)
 	progress.begin("Reading update ZIP index", "", 0, 0)
 	if err = writePortableUpdatePlan(root, plan); err != nil {
 		return nil, err
@@ -330,13 +343,19 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 		if op.Remove {
 			continue
 		}
+		stagePath := filepath.Join(stateDir, filepath.FromSlash(op.Stage))
+		if reuseCachedUpdateFile(filepath.Join(cacheDir, op.File.SHA256), stagePath, op.File) {
+			progress.add(op.File.Size)
+			progress.verifiedFile()
+			continue
+		}
 		entry := index[strings.ToLower(op.File.Path)]
 		input, openErr := entry.Open()
 		if openErr != nil {
 			err = openErr
 			return nil, err
 		}
-		stage, createErr := os.OpenFile(filepath.Join(stateDir, filepath.FromSlash(op.Stage)), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		stage, createErr := os.OpenFile(stagePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if createErr != nil {
 			input.Close()
 			err = createErr
@@ -377,8 +396,73 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 	if err = writePortableUpdatePlan(root, plan); err != nil {
 		return nil, err
 	}
+	// Every needed cached file is now staged; the rest are duplicates.
+	_ = os.RemoveAll(cacheDir)
 	progress.finish()
 	return plan, nil
+}
+
+// keepStagedUpdateFiles moves complete downloads of an unfinished update into
+// the download cache, named by their expected SHA-256, so the next attempt
+// fetches only the files that are still missing. The cache is best effort and
+// untrusted: staging verifies each cached file again before reusing it.
+func keepStagedUpdateFiles(root string, plan *portableUpdatePlan) {
+	cacheDir, err := safeUpdateChild(root, portableUpdateCacheDirectory)
+	if err != nil {
+		return
+	}
+	created := false
+	for _, op := range plan.Operations {
+		if op.Remove || op.File.Size == 0 {
+			continue
+		}
+		stage, err := safeUpdateChild(root, portableUpdateDirectory+"/"+op.Stage)
+		if err != nil {
+			continue
+		}
+		if info, err := os.Lstat(stage); err != nil || !info.Mode().IsRegular() || info.Size() != op.File.Size {
+			continue
+		}
+		if !created {
+			if err := os.Mkdir(cacheDir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+				return
+			}
+			created = true
+		}
+		_ = os.Rename(stage, filepath.Join(cacheDir, op.File.SHA256))
+	}
+}
+
+// pruneUpdateCache keeps only cached files that this update still needs, so
+// failed attempts across several releases cannot accumulate downloads.
+func pruneUpdateCache(cacheDir string, operations []portableUpdateOperation) {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		return
+	}
+	needed := make(map[string]bool, len(operations))
+	for _, op := range operations {
+		if !op.Remove {
+			needed[op.File.SHA256] = true
+		}
+	}
+	for _, entry := range entries {
+		if !needed[entry.Name()] {
+			_ = os.Remove(filepath.Join(cacheDir, entry.Name()))
+		}
+	}
+}
+
+func reuseCachedUpdateFile(cached, stage string, file portableUpdateFile) bool {
+	digest, err := hashUpdateFile(cached, file.Size)
+	if err != nil {
+		return false
+	}
+	if digest != file.SHA256 {
+		_ = os.Remove(cached)
+		return false
+	}
+	return os.Rename(cached, stage) == nil
 }
 
 func launchPortableUpdateHelper(root string, plan *portableUpdatePlan) error {

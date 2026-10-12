@@ -87,9 +87,18 @@ func updateTestWrite(t *testing.T, root, name string, content []byte) {
 
 func updateTestRangeServer(t *testing.T, archive []byte) (*httptest.Server, *atomic.Int64, *atomic.Int64) {
 	t.Helper()
+	return updateTestFaultyRangeServer(t, archive, nil)
+}
+
+// fault may answer a numbered request itself, for example with an error
+// status or a dropped connection, and then returns true.
+func updateTestFaultyRangeServer(t *testing.T, archive []byte, fault func(request int64, w http.ResponseWriter, req *http.Request) bool) (*httptest.Server, *atomic.Int64, *atomic.Int64) {
+	t.Helper()
 	bytesServed, requests := new(atomic.Int64), new(atomic.Int64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		requests.Add(1)
+		if request := requests.Add(1); fault != nil && fault(request, w, req) {
+			return
+		}
 		var start, end int64
 		if _, err := fmt.Sscanf(req.Header.Get("Range"), "bytes=%d-%d", &start, &end); err != nil || start < 0 || end < start || end >= int64(len(archive)) {
 			http.Error(w, "range required", http.StatusRequestedRangeNotSatisfiable)
@@ -602,11 +611,11 @@ func TestPortableUpdateOfflineAndCancelledRequestsLeaveInstalledVersion(t *testi
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
-	if _, err := fetchUpdateManifest(ctx, server.Client(), server.URL); err == nil {
+	if _, err := fetchUpdateManifest(ctx, server.Client(), server.URL, time.Second); err == nil {
 		t.Fatal("cancelled request accepted")
 	}
 	server.Close()
-	if _, err := fetchUpdateManifest(context.Background(), &http.Client{Timeout: time.Second}, server.URL); err == nil {
+	if _, err := fetchUpdateManifest(context.Background(), &http.Client{Timeout: time.Second}, server.URL, time.Second); err == nil {
 		t.Fatal("offline request accepted")
 	}
 }
@@ -968,5 +977,255 @@ func TestPortableUpdateFileRetryOnlyWaitsForTransientErrors(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("retry exceeded its budget: %v", elapsed)
+	}
+}
+
+func TestPortableUpdateManifestResponseDeadlineAllowsSlowTransfer(t *testing.T) {
+	_, manifest := updateTestArchive(t, updateTestFiles(), "")
+	content, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/silent" {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(content[:len(content)/2])
+		w.(http.Flusher).Flush()
+		time.Sleep(300 * time.Millisecond)
+		w.Write(content[len(content)/2:])
+	}))
+	defer server.Close()
+	// The response deadline covers only the wait for a reply. A slow link may
+	// use the rest of the check time to transfer a large manifest.
+	got, err := fetchUpdateManifest(context.Background(), server.Client(), server.URL+"/slow", 100*time.Millisecond)
+	if err != nil || got.Revision != manifest.Revision {
+		t.Fatalf("slow manifest transfer was cut off by the response deadline: %v", err)
+	}
+	started := time.Now()
+	if _, err := fetchUpdateManifest(context.Background(), server.Client(), server.URL+"/silent", 100*time.Millisecond); err == nil || !strings.Contains(err.Error(), "no response") {
+		t.Fatalf("silent release host was not reported: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("silent release host delayed startup for %v", elapsed)
+	}
+}
+
+func TestPortableUpdateRetriesInterruptedRangeRequests(t *testing.T) {
+	root := t.TempDir()
+	files := updateTestFiles()
+	large := make([]byte, 2<<20)
+	if _, err := rand.Read(large); err != nil {
+		t.Fatal(err)
+	}
+	files["bin/large.dll"] = large
+	archive, manifest := updateTestArchive(t, files, "")
+	var injected atomic.Int64
+	server, _, _ := updateTestFaultyRangeServer(t, archive, func(request int64, w http.ResponseWriter, req *http.Request) bool {
+		switch request {
+		case 2:
+			injected.Add(1)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return true
+		case 5:
+			// Drop the connection halfway through a range body.
+			var start, end int64
+			fmt.Sscanf(req.Header.Get("Range"), "bytes=%d-%d", &start, &end)
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(archive)))
+			w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
+			w.Header().Set("ETag", `"immutable-test-asset"`)
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(archive[start : start+(end-start+1)/2])
+			w.(http.Flusher).Flush()
+			injected.Add(1)
+			panic(http.ErrAbortHandler)
+		case 7:
+			// Drop the connection before any response.
+			injected.Add(1)
+			panic(http.ErrAbortHandler)
+		}
+		return false
+	})
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+	if err != nil {
+		t.Fatalf("transient release host failures aborted the update: %v", err)
+	}
+	if injected.Load() != 3 {
+		t.Fatalf("only %d of 3 faults were exercised", injected.Load())
+	}
+	if err := applyPortableUpdate(root, plan, nil); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		if got, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); err != nil || !bytes.Equal(got, content) {
+			t.Fatalf("retried download installed wrong %s: %v", name, err)
+		}
+	}
+}
+
+func TestPortableUpdateRangeRetriesStopForPermanentErrors(t *testing.T) {
+	archive := bytes.Repeat([]byte("x"), 1000)
+	failing := func(status int) func(int64, http.ResponseWriter, *http.Request) bool {
+		return func(request int64, w http.ResponseWriter, req *http.Request) bool {
+			if request == 1 {
+				return false
+			}
+			w.WriteHeader(status)
+			return true
+		}
+	}
+	server, _, requests := updateTestFaultyRangeServer(t, archive, failing(http.StatusNotFound))
+	reader, err := newUpdateRangeReader(context.Background(), server.Client(), server.URL, int64(len(archive)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.ReadAt(make([]byte, 10), 500); err == nil || requests.Load() != 2 {
+		t.Fatalf("permanent HTTP error was retried: requests=%d err=%v", requests.Load(), err)
+	}
+	server, _, requests = updateTestFaultyRangeServer(t, archive, failing(http.StatusServiceUnavailable))
+	reader, err = newUpdateRangeReader(context.Background(), server.Client(), server.URL, int64(len(archive)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.ReadAt(make([]byte, 10), 500); err == nil || requests.Load() != 1+updateRangeAttempts {
+		t.Fatalf("persistent outage was not limited to %d attempts: requests=%d err=%v", updateRangeAttempts, requests.Load(), err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server, _, _ = updateTestFaultyRangeServer(t, archive, func(request int64, w http.ResponseWriter, req *http.Request) bool {
+		if request == 1 {
+			return false
+		}
+		cancel()
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return true
+	})
+	reader, err = newUpdateRangeReader(ctx, server.Client(), server.URL, int64(len(archive)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.ReadAt(make([]byte, 10), 500); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled update kept retrying: %v", err)
+	}
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		http.Redirect(w, r, "/asset", http.StatusFound)
+	}))
+	defer redirect.Close()
+	requests.Store(0)
+	client := redirect.Client()
+	client.CheckRedirect = portableUpdateHTTPClient().CheckRedirect
+	if _, err := newUpdateRangeReader(context.Background(), client, redirect.URL, int64(len(archive))); !errors.Is(err, errUntrustedUpdateRedirect) || requests.Load() != 1 {
+		t.Fatalf("untrusted redirect was retried: requests=%d err=%v", requests.Load(), err)
+	}
+}
+
+func TestPortableUpdateSequentialRangesGrow(t *testing.T) {
+	archive := make([]byte, 8<<20)
+	if _, err := rand.Read(archive); err != nil {
+		t.Fatal(err)
+	}
+	server, served, requests := updateTestRangeServer(t, archive)
+	reader, err := newUpdateRangeReader(context.Background(), server.Client(), server.URL, int64(len(archive)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var content bytes.Buffer
+	if _, err := io.Copy(&content, io.NewSectionReader(reader, 0, 4<<20)); err != nil || !bytes.Equal(content.Bytes(), archive[:4<<20]) {
+		t.Fatalf("sequential read failed: %v", err)
+	}
+	if requests.Load() > 6 {
+		t.Fatalf("sequential 4 MiB read used %d range requests", requests.Load())
+	}
+	// A jump to another part of the archive starts again with the smallest range.
+	before := served.Load()
+	if _, err := reader.ReadAt(make([]byte, 100), 100); err != nil {
+		t.Fatal(err)
+	}
+	if fetched := served.Load() - before; fetched != minUpdateRangeBytes {
+		t.Fatalf("random access fetched %d bytes", fetched)
+	}
+}
+
+func TestPortableUpdateResumesWithVerifiedDownloads(t *testing.T) {
+	root := t.TempDir()
+	files := updateTestFiles()
+	first, second := make([]byte, 1<<20), make([]byte, 1<<20)
+	for _, content := range [][]byte{first, second} {
+		if _, err := rand.Read(content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files["bin/a.dll"], files["bin/b.dll"] = first, second
+	archive, manifest := updateTestArchive(t, files, "")
+	server, served, _ := updateTestRangeServer(t, archive)
+	// The first attempt fails after bin/a.dll was downloaded and verified.
+	broken := manifest
+	broken.Files = append([]portableUpdateFile{}, manifest.Files...)
+	for i := range broken.Files {
+		if broken.Files[i].Path == "bin/b.dll" {
+			broken.Files[i].SHA256 = strings.Repeat("0", 64)
+		}
+	}
+	if _, err := stagePortableUpdate(context.Background(), root, broken, nil, server.Client(), server.URL, nil); err == nil {
+		t.Fatal("corrupt download accepted")
+	}
+	cache := filepath.Join(root, filepath.FromSlash(portableUpdateCacheDirectory))
+	if digest, err := hashUpdateFile(filepath.Join(cache, updateTestDigest(first)), int64(len(first))); err != nil || digest != updateTestDigest(first) {
+		t.Fatalf("verified download was not kept for the next attempt: %v", err)
+	}
+	served.Store(0)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if served.Load() > int64(len(archive)-len(first)/2) {
+		t.Fatalf("second attempt downloaded %d bytes again for a %d-byte ZIP", served.Load(), len(archive))
+	}
+	if _, err := os.Stat(cache); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("completed staging kept its download cache: %v", err)
+	}
+	if err := applyPortableUpdate(root, plan, nil); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		if got, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); err != nil || !bytes.Equal(got, content) {
+			t.Fatalf("resumed update installed wrong %s: %v", name, err)
+		}
+	}
+}
+
+func TestPortableUpdateCacheKeepsOnlyNeededVerifiedFiles(t *testing.T) {
+	cache := t.TempDir()
+	needed, stale := []byte("needed release file"), []byte("file of an older release")
+	updateTestWrite(t, cache, updateTestDigest(needed), needed)
+	updateTestWrite(t, cache, updateTestDigest(stale), stale)
+	pruneUpdateCache(cache, []portableUpdateOperation{
+		{File: portableUpdateFile{Path: "needed.dll", Size: int64(len(needed)), SHA256: updateTestDigest(needed)}},
+		{File: portableUpdateFile{Path: "stale.dll", Size: int64(len(stale)), SHA256: updateTestDigest(stale)}, Remove: true},
+	})
+	if _, err := os.Stat(filepath.Join(cache, updateTestDigest(stale))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("cache kept a file the update does not install")
+	}
+	stage := filepath.Join(t.TempDir(), "000000")
+	file := portableUpdateFile{Path: "needed.dll", Size: int64(len(needed)), SHA256: updateTestDigest(needed)}
+	updateTestWrite(t, cache, file.SHA256, []byte("damaged release file"))
+	if reuseCachedUpdateFile(filepath.Join(cache, file.SHA256), stage, file) {
+		t.Fatal("damaged cached file was reused")
+	}
+	if _, err := os.Stat(filepath.Join(cache, file.SHA256)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("damaged cached file was kept")
+	}
+	updateTestWrite(t, cache, file.SHA256, needed)
+	if !reuseCachedUpdateFile(filepath.Join(cache, file.SHA256), stage, file) {
+		t.Fatal("verified cached file was not reused")
+	}
+	if got, err := os.ReadFile(stage); err != nil || !bytes.Equal(got, needed) {
+		t.Fatalf("reused file was not staged: %v", err)
 	}
 }
