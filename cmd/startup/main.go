@@ -341,8 +341,9 @@ func run(args []string) int {
 		if err != nil {
 			return nil, err
 		}
-		// Crash recovery after an unexpected exit can be slow; honor --timeout.
-		if err := waitForMySQLReady(supervisorCtx, cmd, binaries, opts.port, timeoutDuration); err != nil {
+		// Crash recovery after an unexpected exit can be slow. Wait at least
+		// 30 seconds, and longer when --timeout asks for it.
+		if err := waitForMySQLReady(supervisorCtx, cmd, binaries, opts.port, max(timeoutDuration, 30*time.Second)); err != nil {
 			stopMySQLOrWarn(binaries, opts.port, cmd)
 			return nil, err
 		}
