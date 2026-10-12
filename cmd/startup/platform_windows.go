@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -76,6 +77,37 @@ func isProcessAlive(pid int) (bool, uint32) {
 		return false, 0
 	}
 	return false, exitCode
+}
+
+// processExecutable returns the program file of a running process. It returns
+// os.ErrProcessDone when pid names no process that this user can observe.
+func processExecutable(pid int) (string, error) {
+	if pid <= 0 {
+		return "", os.ErrProcessDone
+	}
+	handle, err := syscall.OpenProcess(syscall.SYNCHRONIZE|processQueryLimitedInformation, false, uint32(pid))
+	if err != nil {
+		return "", os.ErrProcessDone
+	}
+	defer syscall.CloseHandle(handle)
+	if status, err := syscall.WaitForSingleObject(handle, 0); err == nil && status != syscall.WAIT_TIMEOUT {
+		return "", os.ErrProcessDone
+	}
+	return processImagePath(handle)
+}
+
+// watchProcessExit opens pid at once. The returned wait then observes that
+// process even if Windows assigns its number to another process after it exits.
+func watchProcessExit(pid int) func(timeout time.Duration) bool {
+	handle, err := syscall.OpenProcess(syscall.SYNCHRONIZE, false, uint32(pid))
+	if err != nil {
+		return func(timeout time.Duration) bool { return pollProcessExit(pid, timeout) }
+	}
+	return func(timeout time.Duration) bool {
+		defer syscall.CloseHandle(handle)
+		status, err := syscall.WaitForSingleObject(handle, uint32(timeout.Milliseconds()))
+		return err == nil && status == syscall.WAIT_OBJECT_0
+	}
 }
 
 func processImagePath(handle syscall.Handle) (string, error) {
