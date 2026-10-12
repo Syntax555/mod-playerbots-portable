@@ -59,7 +59,6 @@ type mysqlBinaries struct {
 	mysqld     string
 	mysql      string
 	mysqladmin string
-	dir        string
 }
 
 type ProcessSupervisor struct {
@@ -88,12 +87,6 @@ func newProcessSupervisor(name string, startFunc func() (*exec.Cmd, error), rest
 	}
 }
 
-func (ps *ProcessSupervisor) SetCurrentCmd(cmd *exec.Cmd) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.setCurrentCmdLocked(cmd)
-}
-
 func (ps *ProcessSupervisor) setCurrentCmdLocked(cmd *exec.Cmd) {
 	if ps.currentCmd == cmd {
 		return
@@ -108,12 +101,6 @@ func (ps *ProcessSupervisor) setCurrentCmdLocked(cmd *exec.Cmd) {
 		// prevents a completed child's PID from being reused during dispatch.
 		ps.interruptTarget, _ = os.FindProcess(cmd.Process.Pid)
 	}
-}
-
-func (ps *ProcessSupervisor) GetCurrentCmd() *exec.Cmd {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	return ps.currentCmd
 }
 
 func (ps *ProcessSupervisor) IsRunning() bool {
@@ -178,10 +165,6 @@ func (ps *ProcessSupervisor) Kill() {
 			fmt.Fprintf(os.Stderr, "Could not terminate %s: %v\n", ps.name, err)
 		}
 	}
-}
-
-func (ps *ProcessSupervisor) Stop() {
-	ps.Kill()
 }
 
 func (ps *ProcessSupervisor) StopAndWait(gracePeriod time.Duration) {
@@ -485,7 +468,6 @@ func findMySQLBinaries(mysqlDir string) (*mysqlBinaries, error) {
 		mysqld:     mysqld,
 		mysql:      mysql,
 		mysqladmin: mysqladmin,
-		dir:        mysqlDir,
 	}, nil
 }
 
@@ -1204,10 +1186,6 @@ func findBaseDir() string {
 	return "."
 }
 
-func calculateMySQLBufferPoolSettings() (sizeStr string, instances int, totalRAMGB int) {
-	return mysqlBufferPoolSettings(getTotalRAMBytes())
-}
-
 func mysqlBufferPoolSettings(totalRAMBytes uint64) (sizeStr string, instances int, totalRAMGB int) {
 	if totalRAMBytes == 0 {
 		return "1G", 1, 0
@@ -1358,24 +1336,22 @@ func getWorkDir(baseDir string) string {
 	return appDir
 }
 
-func findMySQLConfigFile(customPath, mysqlDir, baseDir string, workDir ...string) string {
+func findMySQLConfigFile(customPath, mysqlDir, baseDir, workDir string) string {
 	if customPath != "" && fileExists(customPath) {
 		return customPath
 	}
 
 	var candidates []string
 
-	for _, w := range workDir {
-		if w != "" {
-			candidates = append(candidates,
-				filepath.Join(w, "mysql", "my.cnf"),
-				filepath.Join(w, "mysql", "my.ini"),
-				filepath.Join(w, "configs", "my.cnf"),
-				filepath.Join(w, "configs", "my.ini"),
-				filepath.Join(w, "my.cnf"),
-				filepath.Join(w, "my.ini"),
-			)
-		}
+	if workDir != "" {
+		candidates = append(candidates,
+			filepath.Join(workDir, "mysql", "my.cnf"),
+			filepath.Join(workDir, "mysql", "my.ini"),
+			filepath.Join(workDir, "configs", "my.cnf"),
+			filepath.Join(workDir, "configs", "my.ini"),
+			filepath.Join(workDir, "my.cnf"),
+			filepath.Join(workDir, "my.ini"),
+		)
 	}
 
 	if mysqlDir != "" {
@@ -1411,7 +1387,7 @@ func ensureMySQLConfigFile(baseDir, workDir, mysqlDir string) (string, error) {
 	targetDir := filepath.Join(workDir, "mysql")
 	targetPath := filepath.Join(targetDir, "my.cnf")
 
-	poolSize, instances, ramGB := calculateMySQLBufferPoolSettings()
+	poolSize, instances, ramGB := mysqlBufferPoolSettings(getTotalRAMBytes())
 	content := generateDefaultMyCnf(poolSize, instances, ramGB)
 
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
@@ -1433,15 +1409,7 @@ func ensureMySQLConfigFile(baseDir, workDir, mysqlDir string) (string, error) {
 	return targetPath, nil
 }
 
-func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, mysqlDir ...string) error {
-	opts := startupOptions{port: 3306, authPort: 3724}
-	if len(mysqlDir) > 0 {
-		opts.mysqlDir = mysqlDir[0]
-	}
-	return ensureConfigFilesWithOptions(baseDir, workDir, mysqlExePath, opts)
-}
-
-func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, opts startupOptions) error {
+func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startupOptions) error {
 	phase, err := loadRealmPhase(workDir)
 	if err != nil {
 		return err
@@ -1682,7 +1650,7 @@ func main() {
 	}
 
 	// Ensure config files (e.g. worldserver.conf, authserver.conf, modules/playerbots.conf, mysql/my.cnf) exist in workDir
-	if err := ensureConfigFilesWithOptions(baseDir, workDir, binaries.mysql, opts); err != nil {
+	if err := ensureConfigFiles(baseDir, workDir, binaries.mysql, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to ensure config files: %v\n", err)
 		os.Exit(1)
 	}

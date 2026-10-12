@@ -337,7 +337,7 @@ func TestMissingConfigUsesSavedPhase(t *testing.T) {
 	for _, relative := range []string{"worldserver.conf.dist", "modules/playerbots.conf.dist", "modules/individualProgression.conf.dist"} {
 		writePhaseTestFile(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
 	}
-	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe"); err != nil {
+	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe", defaultTestOptions()); err != nil {
 		t.Fatal(err)
 	}
 	world := readPhaseTestFile(t, filepath.Join(directory, "configs", "worldserver.conf"))
@@ -351,7 +351,7 @@ func TestFreshRealmDefaultsToPersistentIndividualProgression(t *testing.T) {
 	for _, relative := range []string{"worldserver.conf.dist", "modules/playerbots.conf.dist", "modules/individualProgression.conf.dist"} {
 		writePhaseTestFile(t, filepath.Join(base, "configs", filepath.FromSlash(relative)), "[worldserver]\nExpansion = 2\n")
 	}
-	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe"); err != nil {
+	if err := ensureConfigFiles(base, directory, "mysql/bin/mysql.exe", defaultTestOptions()); err != nil {
 		t.Fatal(err)
 	}
 	if phase, err := loadRealmPhase(directory); err != nil || phase.name != "individual" {

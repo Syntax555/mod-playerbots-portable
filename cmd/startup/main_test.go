@@ -342,7 +342,7 @@ func TestProcessSupervisorStop(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop supervisor explicitly
-	ps.Stop()
+	ps.Kill()
 	cancel()
 
 	done := make(chan struct{})
@@ -355,7 +355,7 @@ func TestProcessSupervisorStop(t *testing.T) {
 	case <-done:
 		// Stopped cleanly
 	case <-time.After(2 * time.Second):
-		t.Fatal("supervisor did not stop after ps.Stop()")
+		t.Fatal("supervisor did not stop after ps.Kill()")
 	}
 
 	countBefore := startCount.Load()
@@ -363,7 +363,7 @@ func TestProcessSupervisorStop(t *testing.T) {
 	countAfter := startCount.Load()
 
 	if countAfter != countBefore {
-		t.Errorf("supervisor continued starting processes after Stop(): %d -> %d", countBefore, countAfter)
+		t.Errorf("supervisor continued starting processes after Kill(): %d -> %d", countBefore, countAfter)
 	}
 }
 
@@ -416,6 +416,10 @@ func TestOrderlyShutdown(t *testing.T) {
 	}
 }
 
+func defaultTestOptions() startupOptions {
+	return startupOptions{port: 3306, authPort: 3724}
+}
+
 func TestEnsureConfigFiles(t *testing.T) {
 	baseDir := t.TempDir()
 	configDir := filepath.Join(baseDir, "configs")
@@ -459,7 +463,7 @@ MyCustomOption = 42
 	}
 
 	mysqlExe := filepath.Join(baseDir, "mysql", "bin", "mysql.exe")
-	if err := ensureConfigFiles(baseDir, baseDir, mysqlExe); err != nil {
+	if err := ensureConfigFiles(baseDir, baseDir, mysqlExe, defaultTestOptions()); err != nil {
 		t.Fatalf("ensureConfigFiles failed: %v", err)
 	}
 
@@ -506,7 +510,7 @@ MyCustomOption = 42
 	if err := os.WriteFile(filepath.Join(modulesDir, "playerbots.conf"), []byte(customBots), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureConfigFiles(baseDir, baseDir, mysqlExe); err != nil {
+	if err := ensureConfigFiles(baseDir, baseDir, mysqlExe, defaultTestOptions()); err != nil {
 		t.Fatal(err)
 	}
 	unchangedBots, err := os.ReadFile(filepath.Join(modulesDir, "playerbots.conf"))
@@ -578,7 +582,7 @@ func TestEnsureConfigFilesCustomPortsAndExistingConfig(t *testing.T) {
 		}
 	}
 	opts := startupOptions{port: 3307, authPort: 3725}
-	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err != nil {
+	if err := ensureConfigFiles(baseDir, baseDir, "", opts); err != nil {
 		t.Fatal(err)
 	}
 	for name := range templates {
@@ -594,7 +598,7 @@ func TestEnsureConfigFilesCustomPortsAndExistingConfig(t *testing.T) {
 		}
 	}
 	opts.port, opts.authPort = 3308, 3726
-	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err != nil {
+	if err := ensureConfigFiles(baseDir, baseDir, "", opts); err != nil {
 		t.Fatal(err)
 	}
 	auth, err := os.ReadFile(filepath.Join(configDir, "authserver.conf"))
@@ -608,7 +612,7 @@ func TestEnsureConfigFilesPropagatesMySQLError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(baseDir, "mysql"), []byte("directory blocked"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureConfigFiles(baseDir, baseDir, ""); err == nil || !strings.Contains(err.Error(), "failed to ensure MySQL config file") {
+	if err := ensureConfigFiles(baseDir, baseDir, "", defaultTestOptions()); err == nil || !strings.Contains(err.Error(), "failed to ensure MySQL config file") {
 		t.Errorf("MySQL configuration creation error was not propagated: %v", err)
 	}
 }
@@ -623,11 +627,11 @@ func TestEnsureConfigFilesUsesExplicitMySQLConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts := startupOptions{port: 3306, authPort: 3724, mysqlCnf: customConfig}
-	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err != nil {
+	if err := ensureConfigFiles(baseDir, baseDir, "", opts); err != nil {
 		t.Fatalf("explicit valid MySQL config should avoid creating an unused default: %v", err)
 	}
 	opts.mysqlCnf = filepath.Join(baseDir, "missing.ini")
-	if err := ensureConfigFilesWithOptions(baseDir, baseDir, "", opts); err == nil {
+	if err := ensureConfigFiles(baseDir, baseDir, "", opts); err == nil {
 		t.Error("missing explicit MySQL config was silently ignored")
 	}
 }
@@ -712,16 +716,6 @@ func TestIsDirWritable(t *testing.T) {
 	nonExistent := filepath.Join(tmpDir, "does_not_exist")
 	if isDirWritable(nonExistent) {
 		t.Errorf("expected isDirWritable(%s) = false", nonExistent)
-	}
-}
-
-func TestCalculateMySQLBufferPoolSettings(t *testing.T) {
-	poolSize, instances, _ := calculateMySQLBufferPoolSettings()
-	if poolSize == "" {
-		t.Error("poolSize should not be empty")
-	}
-	if instances < 1 {
-		t.Errorf("instances should be >= 1, got %d", instances)
 	}
 }
 
@@ -836,7 +830,7 @@ func TestFindMySQLConfigFile(t *testing.T) {
 	}
 
 	// Nothing exists
-	if found := findMySQLConfigFile("", mysqlDir, tmpDir); found != "" {
+	if found := findMySQLConfigFile("", mysqlDir, tmpDir, ""); found != "" {
 		t.Errorf("found should be empty when no file exists, got: %s", found)
 	}
 
@@ -846,7 +840,7 @@ func TestFindMySQLConfigFile(t *testing.T) {
 		t.Fatalf("failed to write custom.ini: %v", err)
 	}
 
-	if found := findMySQLConfigFile(customPath, mysqlDir, tmpDir); found != customPath {
+	if found := findMySQLConfigFile(customPath, mysqlDir, tmpDir, ""); found != customPath {
 		t.Errorf("expected custom path %s, got %s", customPath, found)
 	}
 
@@ -856,7 +850,7 @@ func TestFindMySQLConfigFile(t *testing.T) {
 		t.Fatalf("failed to write my.cnf: %v", err)
 	}
 
-	if found := findMySQLConfigFile("", mysqlDir, tmpDir); found != myCnfPath {
+	if found := findMySQLConfigFile("", mysqlDir, tmpDir, ""); found != myCnfPath {
 		t.Errorf("expected %s, got %s", myCnfPath, found)
 	}
 }
