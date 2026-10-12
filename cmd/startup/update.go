@@ -107,6 +107,12 @@ func readPortableIdentity(root string) (portableReleaseIdentity, error) {
 }
 
 func checkPortableUpdate(ctx context.Context, root string, args []string) (bool, error) {
+	return checkPortableUpdateFrom(ctx, root, args, portableUpdateHTTPClient(), portableUpdateManifestURL)
+}
+
+// checkPortableUpdateFrom checks the release whose manifest is at manifestURL;
+// its package must be published next to the manifest.
+func checkPortableUpdateFrom(ctx context.Context, root string, args []string, client *http.Client, manifestURL string) (bool, error) {
 	identity, err := readPortableIdentity(root)
 	if err != nil {
 		return false, fmt.Errorf("read installed version: %w", err)
@@ -115,7 +121,7 @@ func checkPortableUpdate(ctx context.Context, root string, args []string) (bool,
 	defer progress.close()
 	progress.begin("Checking release metadata", "", 0, 0)
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	manifest, err := fetchUpdateManifest(checkCtx, portableUpdateHTTPClient(), portableUpdateManifestURL, updateManifestResponseTimeout)
+	manifest, err := fetchUpdateManifest(checkCtx, client, manifestURL, updateManifestResponseTimeout)
 	cancel()
 	if err != nil {
 		return false, err
@@ -136,8 +142,8 @@ func checkPortableUpdate(ctx context.Context, root string, args []string) (bool,
 	}
 	updateCtx, cancelUpdate := context.WithTimeout(ctx, portableUpdateDownloadTime)
 	defer cancelUpdate()
-	assetURL := strings.TrimSuffix(portableUpdateManifestURL, "UPDATE_MANIFEST.json") + manifest.Package
-	plan, err := stagePortableUpdate(updateCtx, root, manifest, args, portableUpdateHTTPClient(), assetURL, progress)
+	assetURL := strings.TrimSuffix(manifestURL, "UPDATE_MANIFEST.json") + manifest.Package
+	plan, err := stagePortableUpdate(updateCtx, root, manifest, args, client, assetURL, progress)
 	if err != nil {
 		if ctx.Err() == nil && errors.Is(updateCtx.Err(), context.DeadlineExceeded) {
 			return false, fmt.Errorf("update download did not finish within %v; the next start continues with the files verified so far: %w", portableUpdateDownloadTime, err)

@@ -1454,3 +1454,84 @@ func TestPortableUpdateRefusesRunningInstallationServers(t *testing.T) {
 		t.Fatalf("running installation server was not detected: %v", err)
 	}
 }
+
+func TestPortableUpdateCheckRecordsCurrentReleaseAndStagesNewOne(t *testing.T) {
+	files := updateTestFiles()
+	archive, manifest := updateTestArchive(t, files, "")
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The package must be read next to the manifest.
+	server, _, _ := updateTestFaultyRangeServer(t, archive, func(_ int64, w http.ResponseWriter, req *http.Request) bool {
+		switch req.URL.Path {
+		case "/UPDATE_MANIFEST.json":
+			w.Write(manifestJSON)
+		case "/" + portableUpdatePackage:
+			return false
+		default:
+			http.NotFound(w, req)
+		}
+		return true
+	})
+	manifestURL := server.URL + "/UPDATE_MANIFEST.json"
+	t.Run("current", func(t *testing.T) {
+		root := t.TempDir()
+		for name, content := range files {
+			updateTestWrite(t, root, name, content)
+		}
+		if updating, err := checkPortableUpdateFrom(context.Background(), root, nil, server.Client(), manifestURL); updating || err != nil {
+			t.Fatalf("current release was not accepted: updating=%v err=%v", updating, err)
+		}
+		if installed, err := readInstalledUpdateManifest(root); err != nil || installed.Revision != manifest.Revision {
+			t.Fatalf("verified inventory of the current release was not recorded: %v", err)
+		}
+	})
+	t.Run("outdated", func(t *testing.T) {
+		root := t.TempDir()
+		oldIdentity, err := json.Marshal(portableReleaseIdentity{Schema: 1, Revision: strings.Repeat("a", 40), Package: portableUpdatePackage, Version: "latest"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		installed := map[string][]byte{
+			"startup.exe":              []byte("old launcher"),
+			"portable-release.json":    oldIdentity,
+			"configs/worldserver.conf": []byte("custom settings"),
+		}
+		for name, content := range installed {
+			updateTestWrite(t, root, name, content)
+		}
+		// The test release's launcher is not a program, so the verified
+		// update is staged completely and then fails to start its helper.
+		updating, err := checkPortableUpdateFrom(context.Background(), root, []string{"--skip-sql"}, server.Client(), manifestURL)
+		if updating || err == nil || !strings.Contains(err.Error(), "start verified update helper") {
+			t.Fatalf("update did not reach the helper launch: updating=%v err=%v", updating, err)
+		}
+		for name, content := range installed {
+			if got, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); err != nil || !bytes.Equal(got, content) {
+				t.Fatalf("failed handoff changed %s: %v", name, err)
+			}
+		}
+		for _, name := range []string{"journal.json", "owner.json", "stage", "backup", "helper.exe"} {
+			if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, name)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("failed handoff left %s: %v", name, err)
+			}
+		}
+		launcher := files["startup.exe"]
+		if digest, err := hashUpdateFile(filepath.Join(root, filepath.FromSlash(portableUpdateCacheDirectory), updateTestDigest(launcher)), int64(len(launcher))); err != nil || digest != updateTestDigest(launcher) {
+			t.Fatalf("verified downloads were not kept for the next attempt: %v", err)
+		}
+	})
+	t.Run("offline", func(t *testing.T) {
+		root := t.TempDir()
+		updateTestWrite(t, root, "portable-release.json", files["portable-release.json"])
+		offline := httptest.NewServer(http.NotFoundHandler())
+		offline.Close()
+		if updating, err := checkPortableUpdateFrom(context.Background(), root, nil, offline.Client(), offline.URL+"/UPDATE_MANIFEST.json"); updating || err == nil {
+			t.Fatalf("unreachable release host was accepted: updating=%v err=%v", updating, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("offline check created update state: %v", err)
+		}
+	})
+}
