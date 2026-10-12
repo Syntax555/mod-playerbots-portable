@@ -77,6 +77,12 @@ the earned integration cannot perform through ordinary actions. For example,
 Trial of the Champion needs its arena controller, and Drak'Tharon Keep needs
 an unaudited Novos controller. They remain available to player-led groups.
 
+Entry rules still apply to candidate routes. Individual Progression admits
+Magisters' Terrace from progression stage 12 and The Forge of Souls from
+stage 16; the core checks attunements, lockouts and instance limits. Before
+recruiting, the coordinator asks the portal's own checks for every member, so
+bots that cannot enter are not invited.
+
 The worldserver log lists every configured dungeon at startup as enabled or
 not enabled with its reason. That log is authoritative for the installed world
 data. Complete autonomous runs have not been verified in-game; automated checks
@@ -116,14 +122,17 @@ AutoBalance scales raid difficulty to the number of players and bots present.
 ## Travel and encounters
 
 Entrance and return travel use Dungeon Clear's existing route planner over the
-native navigation mesh. Bots follow short sections of the calculated route;
-each section is checked from the bot's current position before movement.
-The remaining route is reused after arrival and recalculated after interrupted
-movement or a change of travel destination. Missing navigation and unsafe sections
-stop the attempt.
+native navigation mesh. The party shares one calculated route per journey and
+bots follow it in short sections, each checked from the bot's current position
+before movement. After a fight, looting or another interruption a bot rejoins
+the nearest point of the route; a new route is calculated only when no point is
+within reach or the travel destination changes. Sections crossing water use the
+bot's swim speed. Missing navigation and unsafe sections stop the attempt.
 
 Each bot must reach the entrance and pass the ordinary instance-entry handler;
-the run starts after all five arrive in the same instance. Entering and leaving
+the run starts after all five arrive in the same instance. If the portal
+refuses a member, the attempt stops and that bot is not recruited for the
+dungeon again for two hours or until its level or progression changes. Entering and leaving
 uses the physical dungeon portal. The ordinary Dungeon Finder is not used to
 teleport the party.
 

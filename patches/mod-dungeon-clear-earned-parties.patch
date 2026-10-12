@@ -339,7 +339,7 @@ index c254542..866fbdf 100644
          leader->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_DAZE, true);
          // Immunity only blocks FUTURE applications; clear any Daze already on
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
-index e0d355e..8eeedbb 100644
+index e0d355e..7d64e9f 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
 @@ -4,6 +4,7 @@
@@ -359,7 +359,7 @@ index e0d355e..8eeedbb 100644
              return false;
          Player* bot = botAI->GetBot();
          if (!bot || pts.size() < 2)
-@@ -185,6 +186,12 @@ namespace DcMovement
+@@ -185,6 +186,14 @@ namespace DcMovement
          MotionMaster* mm = bot->GetMotionMaster();
          if (!mm)
              return false;
@@ -369,6 +369,8 @@ index e0d355e..8eeedbb 100644
 +                "No real navigation-mesh route; earned dungeon clear will not bypass geometry.";
 +            return false;
 +        }
++        if (DcEarnedPlay::Active())
++            DcEarnedPlay::MatchSwimming(bot, pts);
  
          if (bot->IsSitState())
              bot->SetStandState(UNIT_STAND_STATE_STAND);
@@ -569,10 +571,10 @@ index aaef5a2..d66011b 100644
      // certainly loaded by then, which it may not be at script registration.
 diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
 new file mode 100644
-index 0000000..749bdc4
+index 0000000..b6d5eac
 --- /dev/null
 +++ b/src/DcEarnedEvents.cpp
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,131 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -581,6 +583,7 @@ index 0000000..749bdc4
 +
 +#include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 +#include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
++#include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 +#include "Ai/Dungeon/DungeonClear/Util/DcDifficulty.h"
 +#include "DBCStores.h"
 +#include "GameObject.h"
@@ -670,7 +673,15 @@ index 0000000..749bdc4
 +    bool MapAudited(uint32 mapId, std::string& reason)
 +    {
 +        DcDiffKey const normal{false, DUNGEON_DIFFICULTY_NORMAL};
-+        for (DungeonBossInfo const& info : BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL))
++        // Optional encounter controllers can still own the only movement,
++        // gossip or pull that advances required progress gates. Refusing
++        // that controller must refuse autonomous recruitment as well.
++        auto const essential = [](DungeonEvent const& ev)
++        { return ev.required || ev.ownsThePull || ev.stepsOwnMovement; };
++        // Event objectives are added by the per-dungeon roster corrections.
++        // Audit the roster a running clear uses, not the bare encounter index.
++        for (DungeonBossInfo const& info : BossRosterRegistry::Apply(
++                 mapId, normal, BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL)))
 +        {
 +            if (info.eventId)
 +            {
@@ -680,7 +691,7 @@ index 0000000..749bdc4
 +                    reason = "objective '" + info.name + "' has no event data";
 +                    return false;
 +                }
-+                if (ev->required && DcGateMatches(ev->gate, normal) && !StepsAudited(*ev, reason))
++                if (essential(*ev) && DcGateMatches(ev->gate, normal) && !StepsAudited(*ev, reason))
 +                    return false;
 +            }
 +            else if (info.onArriveHook)
@@ -690,10 +701,7 @@ index 0000000..749bdc4
 +            }
 +        }
 +        for (DungeonEvent const* ev : DungeonEventRegistry::Conditional(mapId, normal))
-+            // Optional encounter controllers can still own the only movement,
-+            // gossip or pull that advances required progress gates. Refusing
-+            // that controller must refuse autonomous recruitment as well.
-+            if ((ev->required || ev->ownsThePull || ev->stepsOwnMovement) && !StepsAudited(*ev, reason))
++            if (essential(*ev) && !StepsAudited(*ev, reason))
 +                return false;
 +        return true;
 +    }
@@ -737,19 +745,21 @@ index 0000000..e4d6ecb
 +#endif
 diff --git a/src/DcEarnedPlay.h b/src/DcEarnedPlay.h
 new file mode 100644
-index 0000000..f711d9e
+index 0000000..2be18ef
 --- /dev/null
 +++ b/src/DcEarnedPlay.h
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,66 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
 + */
 +#ifndef DC_EARNED_PLAY_H
 +#define DC_EARNED_PLAY_H
++#include "Map.h"
 +#include "PlayerbotAIConfig.h"
 +#include "PathGenerator.h"
 +#include "Player.h"
++#include <algorithm>
 +
 +namespace DcEarnedPlay
 +{
@@ -792,14 +802,25 @@ index 0000000..f711d9e
 +        }
 +        return true;
 +    }
++    // A raw spline moves at the speed of the current movement flags. A
++    // player swims through water on the way, so a window touching water uses
++    // the swim speed: earned movement is never faster than a client's.
++    inline void MatchSwimming(Player* bot, Movement::PointsArray const& points)
++    {
++        Map const* map = bot->GetMap();
++        bool const water = std::any_of(points.begin(), points.end(), [&](G3D::Vector3 const& p)
++        { return map->IsInWater(bot->GetPhaseMask(), p.x, p.y, p.z, bot->GetCollisionHeight()); });
++        if (bot->SetSwim(water))
++            bot->SendMovementFlagUpdate();
++    }
 +}
 +#endif
 diff --git a/src/DcEarnedProgression.cpp b/src/DcEarnedProgression.cpp
 new file mode 100644
-index 0000000..b945e3b
+index 0000000..8ea586f
 --- /dev/null
 +++ b/src/DcEarnedProgression.cpp
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,27 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "DcEarnedProgression.h"
 +#include "IndividualProgression.h"
@@ -811,10 +832,15 @@ index 0000000..b945e3b
 +        return sIndividualProgression->IsStrictDefaultProgression();
 +    }
 +
++    uint8 Stage(Player* player)
++    {
++        return sIndividualProgression->GetPlayerProgressionFromQuests(player);
++    }
++
 +    // The character's own rewarded progression markers decide its earned era.
 +    uint8 Expansion(Player* player)
 +    {
-+        uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
++        uint8 const stage = Stage(player);
 +        if (stage > PROGRESSION_WOTLK_TIER_5)
 +            return 3;
 +        if (stage >= PROGRESSION_TBC_TIER_5)
@@ -824,10 +850,10 @@ index 0000000..b945e3b
 +}
 diff --git a/src/DcEarnedProgression.h b/src/DcEarnedProgression.h
 new file mode 100644
-index 0000000..04fe3c1
+index 0000000..8db12f8
 --- /dev/null
 +++ b/src/DcEarnedProgression.h
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,16 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#ifndef DC_EARNED_PROGRESSION_H
 +#define DC_EARNED_PROGRESSION_H
@@ -838,6 +864,8 @@ index 0000000..04fe3c1
 +namespace DcEarnedProgression
 +{
 +    bool StrictDefault();
++    // The highest rewarded Individual Progression marker stage.
++    uint8 Stage(Player* player);
 +    // Returns 0 (Vanilla), 1 (TBC), 2 (Wrath), or 3 for an invalid marker stage.
 +    uint8 Expansion(Player* player);
 +}
@@ -941,10 +969,10 @@ index 12ebee8..b8138ce 100644
  
 diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
 new file mode 100644
-index 0000000..cc213cf
+index 0000000..e5a638e
 --- /dev/null
 +++ b/src/EarnedDungeonParties.cpp
-@@ -0,0 +1,748 @@
+@@ -0,0 +1,851 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "EarnedDungeonParties.h"
 +#include "DcEarnedEvents.h"
@@ -969,12 +997,14 @@ index 0000000..cc213cf
 +#include "ObjectMgr.h"
 +#include "Playerbots.h"
 +#include "PlayerbotAI.h"
++#include "ScriptMgr.h"
 +#include "Timer.h"
 +#include "WorldPacket.h"
 +#include "WorldSession.h"
 +#include <algorithm>
 +#include <array>
 +#include <map>
++#include <memory>
 +#include <shared_mutex>
 +#include <cctype>
 +#include <cmath>
@@ -1002,27 +1032,39 @@ index 0000000..cc213cf
 +    constexpr uint32 runTimeout = 90 * MINUTE * IN_MILLISECONDS;
 +    constexpr uint32 stallTimeout = 5 * MINUTE * IN_MILLISECONDS;
 +    constexpr uint32 retryDelay = 15 * MINUTE * IN_MILLISECONDS;
++    constexpr uint32 refusalMemory = 2 * HOUR * IN_MILLISECONDS;
 +    constexpr float recruitRange = 60.0f;
 +    constexpr float startRange = 1000.0f;
++    // A bot rejoins a computed corridor within this straight distance; every
++    // emitted leg is still raycast before it moves.
++    constexpr float rejoinRange = 30.0f;
++    // Full outdoor corridor builds run on the world thread. Spread them over
++    // coordinator ticks instead of planning every member at once.
++    constexpr uint32 buildsPerTick = 2;
 +    constexpr uint8 ExpansionLevelCap(uint32 expansion)
 +    {
 +        return expansion == 0 ? 60 : expansion == 1 ? 70 : expansion == 2 ? 80 : 0;
 +    }
 +    bool enabled = false, routesDirty = true;
 +    std::string configuredDungeons;
-+    uint32 maxConcurrent = 2, levelSpread = 3, accumulator = 0, recruitAccumulator = 0;
++    uint32 maxConcurrent = 2, levelSpread = 3, accumulator = 0, recruitAccumulator = 0, buildBudget = 0;
 +    size_t nextRoute = 0;
 +    thread_local bool internalStart = false;
 +    enum class Phase { Entering, Running, Returning };
-+    // Only retain the module's corridor while its previous emitted endpoint
-+    // was physically reached. Combat displacement or a new portal invalidates it.
++    // A corridor computed once per party leg. Members share it and rejoin it
++    // after combat, looting or other movement instead of planning again.
 +    struct WalkState
 +    {
 +        uint32 map = 0, instance = 0, trigger = 0;
-+        Movement::PointsArray corridor;
++        std::shared_ptr<Movement::PointsArray const> corridor;
 +        size_t next = 0;
 +        G3D::Vector3 expected;
++        bool Follows(Player* player, uint32 portal) const
++        {
++            return corridor && map == player->GetMapId() && instance == player->GetInstanceId() && trigger == portal;
++        }
 +    };
++    enum class Travel { Moving, Refused, NoPath };
 +    struct Party
 +    {
 +        Route route;
@@ -1037,6 +1079,10 @@ index 0000000..cc213cf
 +    };
 +    std::vector<Party> parties;
 +    std::map<ObjectGuid, uint32> retryAfter;
++    // A portal that refused a bot stays closed to it for that dungeon until its
++    // level or earned progression changes or the memory expires.
++    struct Refusal { uint8 level, stage; uint32 at; };
++    std::map<std::pair<ObjectGuid, uint32>, Refusal> refusals;
 +    constexpr std::array<char const*, 9> navigation{{
 +        "follow", "new rpg", "rpg", "grind", "travel", "move random", "bg", "lfg", "pvp"
 +    }};
@@ -1095,98 +1141,169 @@ index 0000000..cc213cf
 +                ai->ChangeStrategy(std::string("-") + name, BOT_STATE_NON_COMBAT);
 +    }
 +
-+    bool NativeDoor(Player* player, uint32 trigger)
++    bool Refused(Player* player, Route const& route)
 +    {
-+        AreaTrigger const* at = sObjectMgr->GetAreaTrigger(trigger);
-+        if (!at || at->map != player->GetMapId() ||
-+            !player->IsInAreaTriggerRadius(at))
-+            return false;
++        auto const it = refusals.find({player->GetGUID(), route.dungeon});
++        return it != refusals.end() && it->second.level == player->GetLevel() &&
++               it->second.stage == DcEarnedProgression::Stage(player);
++    }
++
++    // Ask the portal's native checks before recruiting: module teleport gates
++    // such as Individual Progression's dungeon stages, then the core's entry,
++    // lockout and access requirements. Nothing is granted or relaxed here.
++    bool CanEnter(Player* player, AreaTriggerTeleport const& target)
++    {
++        return sScriptMgr->OnPlayerBeforeTeleport(player, target.target_mapId, target.target_X, target.target_Y,
++                                                  target.target_Z, target.target_Orientation, 0, nullptr) &&
++               sMapMgr->PlayerCannotEnter(target.target_mapId, player, false) == Map::CAN_ENTER;
++    }
++
++    // Only a physically reached portal is submitted. The session handler keeps
++    // faction, level, expansion, attunement, progression and instance checks;
++    // a refused entry starts no teleport.
++    std::optional<bool> NativeDoor(Player* player, AreaTrigger const* at, uint32 trigger)
++    {
++        if (!player->IsInAreaTriggerRadius(at))
++            return std::nullopt;
 +        WorldPacket packet(CMSG_AREATRIGGER);
 +        packet << trigger;
-+        // Only a physically reached portal is submitted. The session handler
-+        // retains faction, level, expansion, attunement and instance checks.
 +        player->GetSession()->HandleAreaTriggerOpcode(packet);
++        return player->IsBeingTeleported() || player->GetMapId() != at->map;
++    }
++
++    bool BuildCorridor(Player* player, AreaTrigger const* at, uint32 trigger, WalkState& state)
++    {
++        state = {};
++        // Reuse Dungeon Clear's long-range/strided navmesh planner. A zero
++        // boss entry bypasses its registered anchors and scripted shortcuts.
++        auto const route = ChunkedPathfinder::Build(player, player->GetMapId(), 0, at->x, at->y, at->z, 4);
++        if (!route.reachable || route.startFarFromPoly)
++            return false;
++        Movement::PointsArray corridor;
++        for (auto const& segment : route.segments)
++        {
++            if (segment.anchored || segment.jumpDown || segment.jumpGap || segment.doorGoEntry ||
++                segment.polyline.size() > 4096 - corridor.size())
++                return false;
++            corridor.insert(corridor.end(), segment.polyline.begin(), segment.polyline.end());
++        }
++        // The module can report arrival within eight yards without a
++        // corridor. Finish the last yards with the core's real path; only
++        // NativeDoor may decide that the portal was physically reached.
++        if (corridor.empty() && route.complete && player->GetExactDist(at->x, at->y, at->z) <= 8.0f)
++        {
++            PathGenerator path(player);
++            if (!path.CalculatePath(at->x, at->y, at->z, false) || !DcEarnedPlay::UsesRealPath(path))
++                return false;
++            corridor = path.GetPath();
++        }
++        if (corridor.empty() || corridor.size() > 4096 ||
++            std::any_of(corridor.begin(), corridor.end(), [](auto const& p)
++            { return !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z); }))
++            return false;
++        state.map = player->GetMapId();
++        state.instance = player->GetInstanceId();
++        state.trigger = trigger;
++        state.corridor = std::make_shared<Movement::PointsArray const>(std::move(corridor));
 +        return true;
 +    }
 +
-+    bool Walk(Player* player, uint32 trigger, WalkState& state)
++    // Continue from the nearest point of this member's or a party member's
++    // corridor for the same portal. The first emitted leg is raycast like
++    // every other one, so a corridor behind a wall is never joined.
++    bool Rejoin(Player* player, G3D::Vector3 const& origin, uint32 trigger,
++                std::array<WalkState, 5> const& walks, size_t self, WalkState& state)
 +    {
++        for (size_t offset = 0; offset < walks.size(); ++offset)
++        {
++            WalkState const& source = walks[(self + offset) % walks.size()];
++            if (!source.Follows(player, trigger))
++                continue;
++            auto const& points = *source.corridor;
++            size_t best = points.size();
++            float bestDistance = rejoinRange * rejoinRange;
++            for (size_t i = 0; i < points.size(); ++i)
++                if (float const distance = (points[i] - origin).squaredMagnitude(); distance <= bestDistance)
++                {
++                    best = i;
++                    bestDistance = distance;
++                }
++            if (best == points.size())
++                continue;
++            WalkState joined = source;
++            joined.next = best;
++            state = std::move(joined);
++            return true;
++        }
++        return false;
++    }
++
++    Travel Walk(Player* player, uint32 trigger, std::array<WalkState, 5>& walks, size_t self)
++    {
++        WalkState& state = walks[self];
 +        AreaTrigger const* at = sObjectMgr->GetAreaTrigger(trigger);
 +        if (!at || at->map != player->GetMapId())
-+            return false;
-+        if (NativeDoor(player, trigger))
++            return Travel::NoPath;
++        if (std::optional<bool> const entered = NativeDoor(player, at, trigger))
 +        {
 +            state = {};
-+            return true;
++            return *entered ? Travel::Moving : Travel::Refused;
 +        }
 +        if (player->IsInCombat() || player->IsNonMeleeSpellCast(true) ||
 +            !GET_PLAYERBOT_AI(player)->CanMove() || player->isMoving())
-+            return true;
++            return Travel::Moving;
 +        G3D::Vector3 const origin(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
 +        if (!std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z))
-+            return false;
-+        if (state.corridor.empty() || state.next == state.corridor.size() ||
-+            state.map != player->GetMapId() || state.instance != player->GetInstanceId() ||
-+            state.trigger != trigger || (state.expected - origin).magnitude() > 0.05f)
++            return Travel::NoPath;
++        bool const onCorridor = state.Follows(player, trigger) && state.next < state.corridor->size() &&
++                                (state.expected - origin).magnitude() <= 0.05f;
++        for (bool fresh = false; ; fresh = true)
 +        {
-+            state = {};
-+            // Reuse Dungeon Clear's long-range/strided navmesh planner. A zero
-+            // boss entry bypasses its registered anchors and scripted shortcuts.
-+            auto const route = ChunkedPathfinder::Build(player, player->GetMapId(), 0,
-+                                                       at->x, at->y, at->z, 4);
-+            if (!route.reachable || route.startFarFromPoly)
-+                return false;
-+            for (auto const& segment : route.segments)
++            if (fresh || (!onCorridor && !Rejoin(player, origin, trigger, walks, self, state)))
 +            {
-+                if (segment.anchored || segment.jumpDown || segment.jumpGap || segment.doorGoEntry)
-+                    return false;
-+                if (segment.polyline.size() > 4096 - state.corridor.size())
-+                    return false;
-+                state.corridor.insert(state.corridor.end(), segment.polyline.begin(), segment.polyline.end());
++                if (!buildBudget)
++                {
++                    // Wait for a later coordinator tick; the walk timeout
++                    // still bounds the attempt.
++                    state = {};
++                    return Travel::Moving;
++                }
++                --buildBudget;
++                if (!BuildCorridor(player, at, trigger, state))
++                    return Travel::NoPath;
++                fresh = true;
 +            }
-+            // The module can report arrival within eight yards without a
-+            // corridor. Finish the last yards with the core's real path; only
-+            // NativeDoor may decide that the portal was physically reached.
-+            if (state.corridor.empty() && route.complete && player->GetExactDist(at->x, at->y, at->z) <= 8.0f)
++            // Emit actual corridor points in short windows, never endpoint
++            // chords. A partial upstream route advances and is rebuilt at its end.
++            auto const& corridor = *state.corridor;
++            Movement::PointsArray points{origin};
++            size_t next = state.next;
++            float distance = 0.0f;
++            while (next < corridor.size() && points.size() < 32)
 +            {
-+                PathGenerator path(player);
-+                if (!path.CalculatePath(at->x, at->y, at->z, false) || !DcEarnedPlay::UsesRealPath(path))
-+                    return false;
-+                state.corridor = path.GetPath();
++                auto const& point = corridor[next];
++                float const leg = (point - points.back()).magnitude();
++                if (distance + leg > 80.0f)
++                    break;
++                ++next;
++                if (leg <= 0.05f)
++                    continue;
++                points.push_back(point);
++                distance += leg;
 +            }
-+            if (state.corridor.empty() || state.corridor.size() > 4096 ||
-+                std::any_of(state.corridor.begin(), state.corridor.end(), [](auto const& p)
-+                { return !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z); }))
-+                return false;
-+            state.map = player->GetMapId();
-+            state.instance = player->GetInstanceId();
-+            state.trigger = trigger;
++            // Reachability flags also cover no-mmap shortcuts upstream.
++            // Independently raycast every emitted leg before raw movement.
++            if (DcEarnedPlay::RealSpline(player, points))
++            {
++                state.next = next;
++                state.expected = points.back();
++                DcEarnedPlay::MatchSwimming(player, points);
++                player->GetMotionMaster()->MoveSplinePath(&points, FORCED_MOVEMENT_NONE);
++                return Travel::Moving;
++            }
++            if (fresh)
++                return Travel::NoPath;
 +        }
-+        // Emit actual corridor points in short windows, never endpoint chords.
-+        // A partial upstream route may advance safely and be rebuilt at its end.
-+        Movement::PointsArray points{origin};
-+        size_t next = state.next;
-+        float distance = 0.0f;
-+        while (next < state.corridor.size() && points.size() < 32)
-+        {
-+            auto const& point = state.corridor[next];
-+            float const leg = (point - points.back()).magnitude();
-+            if (distance + leg > 80.0f)
-+                break;
-+            ++next;
-+            if (leg <= 0.05f)
-+                continue;
-+            points.push_back(point);
-+            distance += leg;
-+        }
-+        // Reachability flags also cover no-mmap shortcuts upstream. Independently
-+        // raycast every emitted leg, including cached legs, before raw movement.
-+        if (!DcEarnedPlay::RealSpline(player, points))
-+            return false;
-+        state.next = next;
-+        state.expected = points.back();
-+        player->GetMotionMaster()->MoveSplinePath(&points, FORCED_MOVEMENT_NONE);
-+        return true;
 +    }
 +
 +    void Stop(Party& party, char const* reason)
@@ -1344,12 +1461,23 @@ index 0000000..cc213cf
 +            }
 +            else
 +                for (size_t i = 0; i < members.size(); ++i)
-+                    if (!members[i]->IsBeingTeleported() && members[i]->GetMapId() == party.route.continent &&
-+                        !Walk(members[i], party.route.entrance, party.walks[i]))
++                {
++                    if (members[i]->IsBeingTeleported() || members[i]->GetMapId() != party.route.continent)
++                        continue;
++                    Travel const travel = Walk(members[i], party.route.entrance, party.walks, i);
++                    if (travel == Travel::Refused)
++                    {
++                        refusals[{members[i]->GetGUID(), party.route.dungeon}] = {
++                            members[i]->GetLevel(), DcEarnedProgression::Stage(members[i]), getMSTime()};
++                        Stop(party, "the native portal refused a member's entry; autonomous run stopped");
++                        return false;
++                    }
++                    if (travel == Travel::NoPath)
 +                    {
 +                        Stop(party, "no real navigation-mesh path to the entrance; autonomous run stopped");
 +                        return false;
 +                    }
++                }
 +        }
 +        else if (party.phase == Phase::Running)
 +        {
@@ -1391,9 +1519,9 @@ index 0000000..cc213cf
 +            }
 +            for (size_t i = 0; i < members.size(); ++i)
 +                if (!members[i]->IsBeingTeleported() && members[i]->GetMapId() == party.route.map &&
-+                    !Walk(members[i], party.route.exit, party.walks[i]))
++                    Walk(members[i], party.route.exit, party.walks, i) != Travel::Moving)
 +                {
-+                    Stop(party, "no real navigation-mesh path to the exit; autonomous run stopped");
++                    Stop(party, "no real navigation-mesh path through the exit; autonomous run stopped");
 +                    return false;
 +                }
 +        }
@@ -1549,7 +1677,8 @@ index 0000000..cc213cf
 +                player->IsInCombat() || player->GetMapId() != route.continent)
 +                continue;
 +            auto retry = retryAfter.find(player->GetGUID());
-+            if (retry != retryAfter.end() && getMSTimeDiff(retry->second, getMSTime()) < retryDelay)
++            if ((retry != retryAfter.end() && getMSTimeDiff(retry->second, getMSTime()) < retryDelay) ||
++                Refused(player, route) || !CanEnter(player, *entranceTarget))
 +                continue;
 +            uint8 const role = Role(player, true);
 +            candidates.push_back({player, role});
@@ -1671,6 +1800,7 @@ index 0000000..cc213cf
 +            parties.clear();
 +            return;
 +        }
++        buildBudget = buildsPerTick;
 +        std::erase_if(parties, [](Party& party) { return !TickParty(party); });
 +        if (routesDirty)
 +            BuildRoutes();
@@ -1691,6 +1821,7 @@ index 0000000..cc213cf
 +        nextRoute = (nextRoute + 1) % routes.size();
 +        uint32 const now = getMSTime();
 +        std::erase_if(retryAfter, [now](auto const& pair) { return getMSTimeDiff(pair.second, now) >= retryDelay; });
++        std::erase_if(refusals, [now](auto const& pair) { return getMSTimeDiff(pair.second.at, now) >= refusalMemory; });
 +    }
 +}
 diff --git a/src/EarnedDungeonParties.h b/src/EarnedDungeonParties.h
