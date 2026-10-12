@@ -40,16 +40,26 @@ func applyRuntimePorts(filename, content string, opts startupOptions) (string, e
 
 // The servers read their ports from the active configs, while the port flags
 // only seed new configs. Follow the configs so mysqld, the readiness checks and
-// the servers agree. An explicit --port still selects the MySQL port. Returns
-// the addresses on which authserver accepts connections.
-func applyConfiguredPorts(workDir string, opts *startupOptions) ([]string, error) {
-	if port, ok := configuredMySQLPort(workDir); ok && port != opts.port {
-		if opts.portSet {
-			fmt.Fprintf(os.Stderr, "Warning: --port %d differs from the LoginDatabaseInfo port %d in authserver.conf.\n", opts.port, port)
-		} else {
-			opts.port = port
-		}
+// the servers agree.
+//
+// applyConfiguredMySQLPort runs before missing configs are created, so a
+// regenerated config receives the port its realm already uses. An explicit
+// --port still selects the MySQL port.
+func applyConfiguredMySQLPort(workDir string, opts *startupOptions) {
+	port, file, ok := configuredMySQLPort(workDir)
+	if !ok || port == opts.port {
+		return
 	}
+	if opts.portSet {
+		fmt.Fprintf(os.Stderr, "Warning: --port %d differs from the LoginDatabaseInfo port %d in %s.\n", opts.port, port, file)
+		return
+	}
+	opts.port = port
+}
+
+// applyConfiguredAuthPort reads the authserver listener once its config exists
+// and returns the addresses on which authserver accepts connections.
+func applyConfiguredAuthPort(workDir string, opts *startupOptions) ([]string, error) {
 	hosts, port, err := configuredListener(workDir, "authserver.conf", "RealmServerPort", 3724)
 	if err != nil {
 		return nil, err
@@ -61,31 +71,35 @@ func applyConfiguredPorts(workDir string, opts *startupOptions) ([]string, error
 	return hosts, nil
 }
 
-// configuredMySQLPort returns the port in authserver.conf's LoginDatabaseInfo
-// when it addresses this computer, where the launcher runs its MySQL server.
-func configuredMySQLPort(workDir string) (int, bool) {
-	content, err := os.ReadFile(filepath.Join(workDir, "configs", "authserver.conf"))
-	if err != nil {
-		return 0, false
+// configuredMySQLPort returns the LoginDatabaseInfo port of the first existing
+// authserver.conf or worldserver.conf that sets it, when that connection
+// addresses this computer, where the launcher runs its MySQL server.
+func configuredMySQLPort(workDir string) (int, string, bool) {
+	for _, file := range []string{"authserver.conf", "worldserver.conf"} {
+		content, err := os.ReadFile(filepath.Join(workDir, "configs", file))
+		if err != nil {
+			continue
+		}
+		value, exists := configValue(string(content), "LoginDatabaseInfo")
+		if !exists {
+			continue
+		}
+		parts := strings.Split(strings.ReplaceAll(value, `"`, ""), ";")
+		if len(parts) < 5 {
+			return 0, "", false
+		}
+		switch strings.ToLower(strings.TrimSpace(parts[0])) {
+		case "127.0.0.1", "localhost", "::1":
+		default:
+			return 0, "", false
+		}
+		port, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || port < 1 || port > 65535 {
+			return 0, "", false
+		}
+		return port, file, true
 	}
-	value, exists := configValue(string(content), "LoginDatabaseInfo")
-	if !exists {
-		return 0, false
-	}
-	parts := strings.Split(strings.ReplaceAll(value, `"`, ""), ";")
-	if len(parts) < 5 {
-		return 0, false
-	}
-	switch strings.ToLower(strings.TrimSpace(parts[0])) {
-	case "127.0.0.1", "localhost", "::1":
-	default:
-		return 0, false
-	}
-	port, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-	if err != nil || port < 1 || port > 65535 {
-		return 0, false
-	}
-	return port, true
+	return 0, "", false
 }
 
 type profileUpdate struct {

@@ -203,7 +203,8 @@ func TestPrepareConfigurationUpdatesMovedLegacyRealmInOnePass(t *testing.T) {
 	}
 	t.Chdir(t.TempDir())
 
-	if err := prepareConfiguration(relocated, relocated, filepath.Join(relocated, "mysql", "bin", "mysql.exe"), defaultTestOptions()); err != nil {
+	opts := defaultTestOptions()
+	if _, err := prepareConfiguration(relocated, relocated, filepath.Join(relocated, "mysql", "bin", "mysql.exe"), &opts); err != nil {
 		t.Fatal(err)
 	}
 	world = filepath.Join(relocated, "configs", "worldserver.conf")
@@ -235,7 +236,8 @@ func TestPrepareConfigurationUpdatesMovedLegacyRealmInOnePass(t *testing.T) {
 	if readFixture(t, filepath.Join(relocated, "mysql", "data", "characters.ibd")) != "existing character fixture" {
 		t.Error("character data changed")
 	}
-	if err := prepareConfiguration(relocated, relocated, filepath.Join(relocated, "mysql", "bin", "mysql.exe"), defaultTestOptions()); err != nil {
+	opts = defaultTestOptions()
+	if _, err := prepareConfiguration(relocated, relocated, filepath.Join(relocated, "mysql", "bin", "mysql.exe"), &opts); err != nil {
 		t.Fatal(err)
 	}
 	top, _ := filepath.Glob(filepath.Join(relocated, "configs", "*.backup.*"))

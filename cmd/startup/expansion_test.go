@@ -135,7 +135,7 @@ func TestRealmChecksUseConfiguredBindAddress(t *testing.T) {
 		t.Fatalf("realm listening on its bind address was not detected: %v", err)
 	}
 	opts := startupOptions{port: 3306, authPort: 3724}
-	hosts, err := applyConfiguredPorts(directory, &opts)
+	hosts, err := applyConfiguredAuthPort(directory, &opts)
 	if err != nil || opts.authPort != port {
 		t.Fatalf("configured authserver port = %d, %v; want %d", opts.authPort, err, port)
 	}
@@ -149,23 +149,72 @@ func TestRealmChecksUseConfiguredBindAddress(t *testing.T) {
 func TestApplyConfiguredPortsFollowsActiveConfig(t *testing.T) {
 	directory := t.TempDir()
 	auth := filepath.Join(directory, "configs", "authserver.conf")
+	world := filepath.Join(directory, "configs", "worldserver.conf")
+	applyPorts := func(opts *startupOptions) error {
+		applyConfiguredMySQLPort(directory, opts)
+		_, err := applyConfiguredAuthPort(directory, opts)
+		return err
+	}
 	writeFixture(t, auth, "LoginDatabaseInfo = \"127.0.0.1;3310;acore;acore;acore_auth\"\nRealmServerPort = 3725\n")
+	writeFixture(t, world, "LoginDatabaseInfo = \"127.0.0.1;3312;acore;acore;acore_auth\"\n")
 	// Runs without the original flags must still use the ports the configs name.
 	opts := startupOptions{port: 3306, authPort: 3724}
-	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3310 || opts.authPort != 3725 {
+	if err := applyPorts(&opts); err != nil || opts.port != 3310 || opts.authPort != 3725 {
 		t.Fatalf("ports = %d/%d, %v; want 3310/3725", opts.port, opts.authPort, err)
 	}
 	// An explicit MySQL port is honored; the servers' port cannot be overridden.
 	opts = startupOptions{port: 3320, portSet: true, authPort: 3730, authPortSet: true}
-	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3320 || opts.authPort != 3725 {
+	if err := applyPorts(&opts); err != nil || opts.port != 3320 || opts.authPort != 3725 {
 		t.Fatalf("explicit ports = %d/%d, %v; want 3320/3725", opts.port, opts.authPort, err)
 	}
 	// A database on another host does not choose the port of the local server.
 	writeFixture(t, auth, "LoginDatabaseInfo = \"db.example;3311;acore;acore;acore_auth\"\n")
 	opts = startupOptions{port: 3306, authPort: 3724}
-	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3306 || opts.authPort != 3724 {
+	if err := applyPorts(&opts); err != nil || opts.port != 3306 || opts.authPort != 3724 {
 		t.Fatalf("remote database ports = %d/%d, %v; want 3306/3724", opts.port, opts.authPort, err)
 	}
+	// Before authserver.conf is regenerated, worldserver.conf names the port.
+	if err := os.Remove(auth); err != nil {
+		t.Fatal(err)
+	}
+	opts = startupOptions{port: 3306, authPort: 3724}
+	applyConfiguredMySQLPort(directory, &opts)
+	if opts.port != 3312 {
+		t.Fatalf("worldserver.conf MySQL port = %d; want 3312", opts.port)
+	}
+}
+
+// A config regenerated after its realm moved to another MySQL port, without
+// the original --port flag, must connect to the server the launcher starts.
+func TestPrepareConfigurationSeedsNewConfigsWithRealmMySQLPort(t *testing.T) {
+	root := t.TempDir()
+	for _, server := range []string{"authserver", "worldserver"} {
+		writeFixture(t, filepath.Join(root, "configs", server+".conf.dist"),
+			"LoginDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_auth\"\nWorldDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_world\"\n")
+	}
+	writeFixture(t, filepath.Join(root, "configs", "modules", "playerbots.conf.dist"),
+		"PlayerbotsDatabaseInfo = \"127.0.0.1;3306;acore;acore;acore_playerbots\"\n")
+	existingAuth := "LoginDatabaseInfo = \"127.0.0.1;3310;acore;acore;acore_auth\"\nRealmServerPort = 3724\n"
+	auth := writeFixture(t, filepath.Join(root, "configs", "authserver.conf"), existingAuth)
+	t.Chdir(t.TempDir())
+
+	opts := defaultTestOptions()
+	if _, err := prepareConfiguration(root, root, filepath.Join(root, "mysql", "bin", "mysql.exe"), &opts); err != nil {
+		t.Fatal(err)
+	}
+	if opts.port != 3310 {
+		t.Errorf("MySQL port = %d; want the realm's 3310", opts.port)
+	}
+	if readFixture(t, auth) != existingAuth {
+		t.Error("existing authserver.conf changed")
+	}
+	assertConfigValues(t, root, map[string]map[string]string{
+		"worldserver.conf": {
+			"LoginDatabaseInfo": `"127.0.0.1;3310;acore;acore;acore_auth"`,
+			"WorldDatabaseInfo": `"127.0.0.1;3310;acore;acore;acore_world"`,
+		},
+		"modules/playerbots.conf": {"PlayerbotsDatabaseInfo": `"127.0.0.1;3310;acore;acore;acore_playerbots"`},
+	})
 }
 
 func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testing.T) {
