@@ -1441,3 +1441,16 @@ func TestPortableUpdateHelperWaitsForRecordedLauncherExit(t *testing.T) {
 		t.Fatal("launcher exit was not observed")
 	}
 }
+
+func TestPortableUpdateRefusesRunningInstallationServers(t *testing.T) {
+	root := t.TempDir()
+	// The same server program from another folder belongs to another realm.
+	updateTestStartIdleProcess(t, filepath.Join(t.TempDir(), "worldserver.exe"))
+	if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
+		t.Fatalf("a server of another installation blocked the update: %v", err)
+	}
+	updateTestStartIdleProcess(t, filepath.Join(root, "bin", "worldserver.exe"))
+	if err := ensurePortableUpdateStopped(root, os.Getpid()); err == nil || !strings.Contains(err.Error(), "worldserver.exe is running") {
+		t.Fatalf("running installation server was not detected: %v", err)
+	}
+}

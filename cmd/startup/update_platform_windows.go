@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -53,7 +54,25 @@ func ensurePortableUpdateStopped(root string, excludedPID int) error {
 	return ensureRealmStopped(root)
 }
 
+// portableUpdateProcessPath reports whether executable lies inside root.
+// Windows reports image paths in long form with links resolved, while root
+// keeps the spelling it was started with, for example 8.3 short names or a
+// junction. Folders that differ in spelling are compared by file identity.
 func portableUpdateProcessPath(root, executable string) bool {
 	rel, err := filepath.Rel(strings.ToLower(root), strings.ToLower(executable))
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return true
+	}
+	rootInfo, err := os.Stat(root)
+	if err != nil {
+		return false
+	}
+	for folder := filepath.Dir(executable); ; folder = filepath.Dir(folder) {
+		if info, err := os.Stat(folder); err == nil && os.SameFile(info, rootInfo) {
+			return true
+		}
+		if filepath.Dir(folder) == folder {
+			return false
+		}
+	}
 }
