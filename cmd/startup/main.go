@@ -230,13 +230,9 @@ func run(args []string) int {
 		opts.dataDir = filepath.Join(workDir, "mysql", "data")
 	}
 
-	if err := prepareConfiguration(baseDir, workDir, binaries.mysql, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return 1
-	}
-	authHosts, err := applyConfiguredPorts(workDir, &opts)
+	authHosts, err := prepareConfiguration(baseDir, workDir, binaries.mysql, &opts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading server ports: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
 
@@ -389,29 +385,36 @@ func run(args []string) int {
 }
 
 // prepareConfiguration creates missing configs and updates existing ones in
-// the order startup requires: configs exist, the realm is stopped, moved SQL
-// paths are repaired and then managed defaults are migrated.
-func prepareConfiguration(baseDir, workDir, mysqlExePath string, opts startupOptions) error {
+// the order startup requires: the MySQL port of existing configs is adopted so
+// new configs match it, configs exist, the realm is stopped, moved SQL paths
+// are repaired, managed defaults are migrated and the authserver listener is
+// read. Returns the addresses on which authserver accepts connections.
+func prepareConfiguration(baseDir, workDir, mysqlExePath string, opts *startupOptions) ([]string, error) {
+	applyConfiguredMySQLPort(workDir, opts)
 	// Ensure config files (e.g. worldserver.conf, authserver.conf, modules/playerbots.conf, mysql/my.cnf) exist in workDir
-	if err := ensureConfigFiles(baseDir, workDir, mysqlExePath, opts); err != nil {
-		return fmt.Errorf("failed to ensure config files: %w", err)
+	if err := ensureConfigFiles(baseDir, workDir, mysqlExePath, *opts); err != nil {
+		return nil, fmt.Errorf("failed to ensure config files: %w", err)
 	}
 	if err := ensureRealmStopped(workDir); err != nil {
-		return err
+		return nil, err
 	}
 	pathBackups, err := relocatePortableSourcePaths(baseDir, workDir)
 	if err != nil {
-		return fmt.Errorf("failed to update portable SQL paths: %w", err)
+		return nil, fmt.Errorf("failed to update portable SQL paths: %w", err)
 	}
 	for _, backup := range pathBackups {
 		fmt.Printf("SQL path updated; previous settings saved to %s\n", backup)
 	}
 	backups, err := migrateConfigProfiles(workDir)
 	if err != nil {
-		return fmt.Errorf("failed to update configuration defaults: %w", err)
+		return nil, fmt.Errorf("failed to update configuration defaults: %w", err)
 	}
 	for _, backup := range backups {
 		fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
 	}
-	return nil
+	authHosts, err := applyConfiguredAuthPort(workDir, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read server ports: %w", err)
+	}
+	return authHosts, nil
 }
