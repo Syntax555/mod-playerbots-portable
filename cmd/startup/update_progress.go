@@ -68,13 +68,6 @@ func newPortableUpdateProgress(ctx context.Context, output io.Writer, console bo
 	return progress
 }
 
-func optionalUpdateProgress(progress []*portableUpdateProgress) *portableUpdateProgress {
-	if len(progress) == 0 {
-		return nil
-	}
-	return progress[0]
-}
-
 func (p *portableUpdateProgress) begin(label, unit string, total, files int64) {
 	if p == nil {
 		return

@@ -162,7 +162,7 @@ func readPortableUpdatePlan(root string) (*portableUpdatePlan, error) {
 		if op.State != "" && op.State != "applying" && op.State != "applied" && op.State != "rolled-back" {
 			return nil, errors.New("invalid update operation state")
 		}
-		if !op.Remove && files[op.File.Path] != op.File || op.Remove && !op.HadOriginal {
+		if !op.Remove && files[op.File.Path] != op.File || op.Remove && (!op.HadOriginal || op.OriginalSize != op.File.Size || op.OriginalSHA256 != op.File.SHA256) {
 			return nil, errors.New("update operation differs from manifest")
 		}
 		if op.HadOriginal && (op.OriginalSize < 0 || op.OriginalSize > maxUpdateFileBytes || !updateDigestPattern.MatchString(op.OriginalSHA256)) {
@@ -252,8 +252,7 @@ func recoverPortableUpdate(root string) error {
 	return discardStagedUpdate(root)
 }
 
-func validateStagedUpdate(root string, plan *portableUpdatePlan, reporters ...*portableUpdateProgress) error {
-	progress := optionalUpdateProgress(reporters)
+func validateStagedUpdate(root string, plan *portableUpdatePlan, progress *portableUpdateProgress) error {
 	for _, op := range plan.Operations {
 		target, err := safeUpdateTarget(root, op.File.Path)
 		if err != nil {
@@ -281,8 +280,7 @@ func validateStagedUpdate(root string, plan *portableUpdatePlan, reporters ...*p
 	return nil
 }
 
-func applyPortableUpdate(root string, plan *portableUpdatePlan, reporters ...*portableUpdateProgress) error {
-	progress := optionalUpdateProgress(reporters)
+func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portableUpdateProgress) error {
 	if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
 		return err
 	}
@@ -313,12 +311,7 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, reporters ...*po
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			return rollbackUpdateAfterError(root, plan, err)
 		}
-		if op.Remove {
-			digest, err := hashUpdateFile(target, op.File.Size)
-			if err != nil || digest != op.File.SHA256 {
-				return rollbackUpdateAfterError(root, plan, errors.New("obsolete package file was modified during update"))
-			}
-		}
+		// A removal's original is the obsolete package file itself.
 		if op.HadOriginal {
 			digest, err := hashUpdateFile(target, op.OriginalSize)
 			if err != nil || digest != op.OriginalSHA256 {

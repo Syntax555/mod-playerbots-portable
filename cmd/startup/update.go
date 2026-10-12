@@ -214,8 +214,7 @@ func acquirePortableUpdateOwner(root string) (string, error) {
 	return stateDir, nil
 }
 
-func stagePortableUpdate(ctx context.Context, root string, manifest portableUpdateManifest, args []string, client *http.Client, assetURL string, reporters ...*portableUpdateProgress) (plan *portableUpdatePlan, err error) {
-	progress := optionalUpdateProgress(reporters)
+func stagePortableUpdate(ctx context.Context, root string, manifest portableUpdateManifest, args []string, client *http.Client, assetURL string, progress *portableUpdateProgress) (plan *portableUpdatePlan, err error) {
 	if err := validateUpdateManifest(manifest); err != nil {
 		return nil, err
 	}

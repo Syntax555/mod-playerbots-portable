@@ -212,7 +212,7 @@ func TestPortableUpdateCancellationAfterVerifiedStaging(t *testing.T) {
 			defer cancel()
 			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 			server, _, _ := updateTestRangeServer(t, archive)
-			plan, err := stagePortableUpdate(ctx, root, manifest, nil, server.Client(), server.URL)
+			plan, err := stagePortableUpdate(ctx, root, manifest, nil, server.Client(), server.URL, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -435,7 +435,7 @@ func TestPortableUpdateInterruptedCommitRestoresCompletePreviousVersion(t *testi
 			}
 			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 			server, _, _ := updateTestRangeServer(t, archive)
-			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -500,14 +500,14 @@ func TestPortableUpdateFailureAfterInstalledFilesRestoresPreviousVersion(t *test
 	}
 	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Operations follow manifest order. A directory that appears where the new
 	// SQL file belongs fails it after earlier files were already replaced.
 	updateTestWrite(t, root, "src/data/sql/updates/new.sql/user.txt", []byte("user file"))
-	if err := applyPortableUpdate(root, plan); err == nil || !strings.Contains(err.Error(), "restored to the previous version") {
+	if err := applyPortableUpdate(root, plan, nil); err == nil || !strings.Contains(err.Error(), "restored to the previous version") {
 		t.Fatalf("partial installation was not reported as restored: %v", err)
 	}
 	for name, content := range installed {
@@ -559,11 +559,30 @@ func TestPortableUpdateRemovesOnlyRecordedUnmodifiedObsoleteFiles(t *testing.T) 
 	updateTestWrite(t, root, "unknown.dll", []byte("unknown user file"))
 	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := applyPortableUpdate(root, plan); err != nil {
+	// Apply verifies a removal against its original digest, so the journal
+	// must record the obsolete package file itself as that original.
+	for i, op := range plan.Operations {
+		if !op.Remove {
+			continue
+		}
+		tampered := *plan
+		tampered.Operations = append([]portableUpdateOperation{}, plan.Operations...)
+		tampered.Operations[i].OriginalSHA256 = updateTestDigest([]byte("user modified this"))
+		if err := writePortableUpdatePlan(root, &tampered); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readPortableUpdatePlan(root); err == nil {
+			t.Fatal("removal of a file other than the recorded package file accepted")
+		}
+	}
+	if err := writePortableUpdatePlan(root, plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyPortableUpdate(root, plan, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "obsolete.dll")); !errors.Is(err, os.ErrNotExist) {
@@ -688,7 +707,7 @@ func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
 	files["startup.exe"] = launcherBytes
 	archive, manifest := updateTestArchive(t, files, "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, []string{"--help"}, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, []string{"--help"}, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -779,7 +798,7 @@ func TestPortableUpdateRecoveryStopsWhenOriginalAndBackupAreMissing(t *testing.T
 	updateTestWrite(t, root, "startup.exe", []byte("original"))
 	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -810,7 +829,7 @@ func TestPortableUpdateMissingBackupDoesNotAcceptInstalledNewFile(t *testing.T) 
 	files := updateTestFiles()
 	archive, manifest := updateTestArchive(t, files, "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -834,7 +853,7 @@ func TestPortableUpdateCommittedJournalWithActiveHelperRefusesCleanup(t *testing
 	root := t.TempDir()
 	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -863,13 +882,13 @@ func TestPortableUpdateModifiedRuntimeDuringStagingIsPreserved(t *testing.T) {
 	updateTestWrite(t, root, "startup.exe", []byte("original working launcher"))
 	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	changed := []byte("user edited original runtime while update was downloading")
 	updateTestWrite(t, root, "startup.exe", changed)
-	if err := applyPortableUpdate(root, plan); err == nil || !strings.Contains(err.Error(), "changed during") {
+	if err := applyPortableUpdate(root, plan, nil); err == nil || !strings.Contains(err.Error(), "changed during") {
 		t.Fatalf("changed runtime overwritten: %v", err)
 	}
 	if content, _ := os.ReadFile(filepath.Join(root, "startup.exe")); !bytes.Equal(content, changed) {
@@ -894,13 +913,12 @@ func TestPortableUpdateFreshBaselineEnablesFutureObsoleteSQLCleanup(t *testing.T
 		t.Fatalf("fresh installed inventory missing: %v", err)
 	}
 	updateTestWrite(t, root, "src/data/sql/updates/modified.sql", []byte("custom SQL change"))
-	archive, next := updateTestArchive(t, updateTestFiles(), "")
-	next.Revision = strings.Repeat("c", 40)
+	nextRevision := strings.Repeat("c", 40)
 	files := updateTestFiles()
-	identity, _ := json.Marshal(portableReleaseIdentity{Schema: 1, Revision: next.Revision, Package: portableUpdatePackage, Version: "latest"})
+	identity, _ := json.Marshal(portableReleaseIdentity{Schema: 1, Revision: nextRevision, Package: portableUpdatePackage, Version: "latest"})
 	files["portable-release.json"] = identity
-	archive, next = updateTestArchive(t, files, "")
-	next.Revision = strings.Repeat("c", 40)
+	archive, next := updateTestArchive(t, files, "")
+	next.Revision = nextRevision
 	// A manual overlay must retain the older owned inventory for its first
 	// subsequent automatic update rather than forgetting removed SQL paths.
 	if err := rememberPortableUpdateBaseline(root, next); err != nil {
@@ -910,11 +928,11 @@ func TestPortableUpdateFreshBaselineEnablesFutureObsoleteSQLCleanup(t *testing.T
 		t.Fatal("manual-overlay check discarded previous owned paths")
 	}
 	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, next, nil, server.Client(), server.URL)
+	plan, err := stagePortableUpdate(context.Background(), root, next, nil, server.Client(), server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := applyPortableUpdate(root, plan); err != nil {
+	if err := applyPortableUpdate(root, plan, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "src/data/sql/updates/retired.sql")); !errors.Is(err, os.ErrNotExist) {

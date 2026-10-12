@@ -33,13 +33,12 @@ type portableUpdateFile struct {
 }
 
 type portableUpdateManifest struct {
-	Schema     int                  `json:"schema"`
-	Revision   string               `json:"revision"`
-	Package    string               `json:"package"`
-	SHA256     string               `json:"sha256"`
-	Size       int64                `json:"size"`
-	Generation string               `json:"generation,omitempty"`
-	Files      []portableUpdateFile `json:"files"`
+	Schema   int                  `json:"schema"`
+	Revision string               `json:"revision"`
+	Package  string               `json:"package"`
+	SHA256   string               `json:"sha256"`
+	Size     int64                `json:"size"`
+	Files    []portableUpdateFile `json:"files"`
 }
 
 type portableReleaseIdentity struct {
@@ -104,17 +103,13 @@ func validateUpdateManifest(m portableUpdateManifest) error {
 		if seen[key] || f.Size < 0 || f.Size > maxUpdateFileBytes || !updateDigestPattern.MatchString(f.SHA256) {
 			return fmt.Errorf("invalid or duplicate update file: %s", f.Path)
 		}
-		for ancestor := path.Dir(key); ancestor != "."; ancestor = path.Dir(ancestor) {
-			if seen[ancestor] {
-				return fmt.Errorf("update file conflicts with directory: %s", f.Path)
-			}
-		}
 		seen[key] = true
 		total += f.Size
 		if total > 8<<30 {
 			return errors.New("update exceeds installed-size limit")
 		}
 	}
+	// A file path may not also be a directory of another file, in either order.
 	for name := range seen {
 		for ancestor := path.Dir(name); ancestor != "."; ancestor = path.Dir(ancestor) {
 			if seen[ancestor] {
