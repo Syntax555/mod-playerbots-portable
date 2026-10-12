@@ -223,7 +223,7 @@ func recoverPortableUpdate(root string) error {
 		}
 		var owner portableUpdateOwner
 		if ownerErr := readLimitedUpdateJSON(ownerPath, &owner); ownerErr == nil {
-			if alive, _ := isProcessAlive(owner.PID); alive && owner.PID != os.Getpid() {
+			if owner.PID != os.Getpid() && updateProcessActive(root, owner.PID) {
 				return errors.New("another launcher is preparing an update; wait for it to finish")
 			}
 		} else if !errors.Is(ownerErr, os.ErrNotExist) {
@@ -235,10 +235,8 @@ func recoverPortableUpdate(root string) error {
 		return fmt.Errorf("read pending update: %w", err)
 	}
 	for _, pid := range []int{plan.ParentPID, plan.HelperPID} {
-		if pid != os.Getpid() {
-			if alive, _ := isProcessAlive(pid); alive {
-				return errors.New("another launcher is updating this installation; wait for it to finish")
-			}
+		if pid != os.Getpid() && updateProcessActive(root, pid) {
+			return errors.New("another launcher is updating this installation; wait for it to finish")
 		}
 	}
 	if plan.Phase == "committed" {
@@ -253,6 +251,46 @@ func recoverPortableUpdate(root string) error {
 		}
 	}
 	return discardStagedUpdate(root)
+}
+
+// updateProcessActive reports whether pid runs a program from this
+// installation's root or update directory, as the launcher and the update
+// helper do. Owner and journal files outlive crashes and reboots, and Windows
+// soon reuses process IDs, so an unrelated process that later received a
+// recorded ID must not block startup. A process whose program cannot be
+// located still counts as active.
+func updateProcessActive(root string, pid int) bool {
+	executable, err := processExecutable(pid)
+	if errors.Is(err, os.ErrProcessDone) {
+		return false
+	}
+	if err != nil {
+		return true
+	}
+	folder, err := os.Stat(filepath.Dir(executable))
+	if err != nil {
+		return true
+	}
+	for _, candidate := range []string{root, filepath.Join(root, portableUpdateDirectory)} {
+		if info, err := os.Stat(candidate); err == nil && os.SameFile(info, folder) {
+			return true
+		}
+	}
+	return false
+}
+
+// pollProcessExit reports whether pid exited within timeout.
+func pollProcessExit(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if alive, _ := isProcessAlive(pid); !alive {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func validateStagedUpdate(root string, plan *portableUpdatePlan, progress *portableUpdateProgress) error {
@@ -463,20 +501,15 @@ func runPortableUpdateHelper(args []string) (bool, error) {
 	if err != nil || !strings.EqualFold(filepath.Clean(executable), filepath.Join(root, portableUpdateDirectory, "helper.exe")) || parentPID != plan.ParentPID || args[3] != plan.Token || plan.Phase != "staged" {
 		return true, errors.New("untrusted internal updater invocation")
 	}
+	// The launcher waits for this acknowledgement, so it is still running
+	// here; a number reused after it exits cannot delay the update.
+	parentExited := watchProcessExit(parentPID)
 	plan.HelperPID = os.Getpid()
 	if err := writePortableUpdatePlan(root, plan); err != nil {
 		return true, err
 	}
-	deadline := time.Now().Add(2 * time.Minute)
-	for {
-		alive, _ := isProcessAlive(parentPID)
-		if !alive {
-			break
-		}
-		if time.Now().After(deadline) {
-			return true, errors.New("launcher is still running; update was not applied")
-		}
-		time.Sleep(100 * time.Millisecond)
+	if !parentExited(2 * time.Minute) {
+		return true, errors.New("launcher is still running; update was not applied")
 	}
 	progress := startPortableUpdateProgress(context.Background())
 	defer progress.close()

@@ -647,15 +647,35 @@ func TestPortableUpdateTrustedURLsAndHelperDispatch(t *testing.T) {
 	}
 }
 
-func TestPortableUpdateActiveOwnerPreventsConcurrentCleanup(t *testing.T) {
-	root := t.TempDir()
-	updateTestWrite(t, root, portableUpdateDirectory+"/stage/pending", []byte("pending verified download"))
-	cmd := exec.Command(os.Args[0], "-test.run=TestPortableUpdateOwnerChild")
+// updateTestStartIdleProcess runs a copy of the test binary from executable,
+// so a test can record a live process whose program has that location.
+func updateTestStartIdleProcess(t *testing.T, executable string) *exec.Cmd {
+	t.Helper()
+	if executable != os.Args[0] {
+		content, err := os.ReadFile(os.Args[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(executable), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(executable, content, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command(executable, "-test.run=^TestPortableUpdateOwnerChild$")
 	cmd.Env = append(os.Environ(), "PORTABLE_UPDATE_OWNER_CHILD=1")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	return cmd
+}
+
+func TestPortableUpdateActiveOwnerPreventsConcurrentCleanup(t *testing.T) {
+	root := t.TempDir()
+	updateTestWrite(t, root, portableUpdateDirectory+"/stage/pending", []byte("pending verified download"))
+	cmd := updateTestStartIdleProcess(t, filepath.Join(root, "startup.exe"))
 	if err := writeUpdateJSON(filepath.Join(root, portableUpdateDirectory, "owner.json"), portableUpdateOwner{PID: cmd.Process.Pid}); err != nil {
 		t.Fatal(err)
 	}
@@ -866,12 +886,7 @@ func TestPortableUpdateCommittedJournalWithActiveHelperRefusesCleanup(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestPortableUpdateOwnerChild")
-	cmd.Env = append(os.Environ(), "PORTABLE_UPDATE_OWNER_CHILD=1")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	cmd := updateTestStartIdleProcess(t, filepath.Join(root, portableUpdateDirectory, "helper.exe"))
 	plan.ParentPID = 2147483647
 	plan.HelperPID = cmd.Process.Pid
 	plan.Phase = "committed"
@@ -1227,5 +1242,85 @@ func TestPortableUpdateCacheKeepsOnlyNeededVerifiedFiles(t *testing.T) {
 	}
 	if got, err := os.ReadFile(stage); err != nil || !bytes.Equal(got, needed) {
 		t.Fatalf("reused file was not staged: %v", err)
+	}
+}
+
+func TestPortableUpdateRecoveryIgnoresReusedProcessIDs(t *testing.T) {
+	// A program from another folder stands in for an unrelated process that
+	// received a process ID recorded before a crash or reboot.
+	unrelated := updateTestStartIdleProcess(t, os.Args[0]).Process.Pid
+	t.Run("owner", func(t *testing.T) {
+		root := t.TempDir()
+		updateTestWrite(t, root, portableUpdateDirectory+"/stage/pending", []byte("abandoned download"))
+		if err := writeUpdateJSON(filepath.Join(root, portableUpdateDirectory, "owner.json"), portableUpdateOwner{PID: unrelated}); err != nil {
+			t.Fatal(err)
+		}
+		if err := recoverPortableUpdate(root); err != nil {
+			t.Fatalf("unrelated process blocked startup: %v", err)
+		}
+		for _, name := range []string{"stage", "owner.json"} {
+			if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, name)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("abandoned %s was kept: %v", name, err)
+			}
+		}
+	})
+	for _, role := range []string{"parent", "helper"} {
+		t.Run(role, func(t *testing.T) {
+			root := t.TempDir()
+			old := []byte("old working launcher")
+			updateTestWrite(t, root, "startup.exe", old)
+			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+			server, _, _ := updateTestRangeServer(t, archive)
+			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan.Phase, plan.ParentPID = "applying", 2147483647
+			if role == "parent" {
+				plan.ParentPID = unrelated
+			} else {
+				plan.HelperPID = unrelated
+			}
+			for i := range plan.Operations {
+				op := &plan.Operations[i]
+				if op.File.Path == "startup.exe" {
+					op.State = "applying"
+					if err := os.Rename(filepath.Join(root, op.File.Path), filepath.Join(root, portableUpdateDirectory, op.Backup)); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Rename(filepath.Join(root, portableUpdateDirectory, op.Stage), filepath.Join(root, op.File.Path)); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if err := writePortableUpdatePlan(root, plan); err != nil {
+				t.Fatal(err)
+			}
+			if err := recoverPortableUpdate(root); err != nil {
+				t.Fatalf("unrelated process blocked recovery: %v", err)
+			}
+			if got, err := os.ReadFile(filepath.Join(root, "startup.exe")); err != nil || !bytes.Equal(got, old) {
+				t.Fatalf("interrupted update was not rolled back: %v", err)
+			}
+		})
+	}
+}
+
+func TestPortableUpdateHelperWaitsForRecordedLauncherExit(t *testing.T) {
+	launcher := updateTestStartIdleProcess(t, os.Args[0])
+	exited := watchProcessExit(launcher.Process.Pid)
+	if watchProcessExit(launcher.Process.Pid)(200 * time.Millisecond) {
+		t.Fatal("running launcher was reported as exited")
+	}
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		time.Sleep(100 * time.Millisecond)
+		launcher.Process.Kill()
+		launcher.Wait()
+	}()
+	defer func() { <-stopped }()
+	if !exited(10 * time.Second) {
+		t.Fatal("launcher exit was not observed")
 	}
 }
