@@ -322,8 +322,14 @@ func TestAutomaticDungeonRoutesPreserveCustomSelection(t *testing.T) {
 }
 
 func TestAutomaticProfilesInvalidStateAbortsBeforeWriting(t *testing.T) {
-	for _, content := range []string{`{"schema":2,"profiles":{}}`, `{"schema":1,"profiles":{"../escape.conf":"Value = 1"}}`, "{} trailing"} {
-		t.Run(content, func(t *testing.T) {
+	for name, content := range map[string]string{
+		"schema":   `{"schema":2,"profiles":{}}`,
+		"filename": `{"schema":1,"profiles":{"../escape.conf":"Value = 1"}}`,
+		"trailing": "{} trailing",
+		"unknown":  `{"schema":1,"profiles":{},"extra":true}`,
+		"oversize": `{"schema":1,"profiles":{}}` + strings.Repeat(" ", 1024*1024),
+	} {
+		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			original := "Custom = 42\n"
 			path := writeFixture(t, filepath.Join(root, "configs/worldserver.conf"), original)
@@ -355,5 +361,58 @@ func TestAutomaticProfilesRefuseSymlinkTargets(t *testing.T) {
 	after, _ := os.ReadFile(target)
 	if string(after) != "Existing = 5\n" {
 		t.Fatal("external configuration overwritten")
+	}
+}
+
+func TestAutomaticProfilesRefuseSymlinkedModuleDirectory(t *testing.T) {
+	root := t.TempDir()
+	world := writeFixture(t, filepath.Join(root, "configs", "worldserver.conf"), "Custom = 42\n")
+	external := t.TempDir()
+	bots := writeFixture(t, filepath.Join(external, "playerbots.conf"), "AiPlayerbot.MinRandomBots = 7\n")
+	if err := os.Symlink(external, filepath.Join(root, "configs", "modules")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := migrateConfigProfiles(root); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("migration wrote through a linked module directory: %v", err)
+	}
+	if readFixture(t, bots) != "AiPlayerbot.MinRandomBots = 7\n" || readFixture(t, world) != "Custom = 42\n" {
+		t.Fatal("configuration changed before all targets were validated")
+	}
+	for _, pattern := range []string{filepath.Join(root, "configs", "*.backup.*"), filepath.Join(external, "*.backup.*"), filepath.Join(root, "configs", automaticProfileState)} {
+		if matches, err := filepath.Glob(pattern); err != nil || len(matches) != 0 {
+			t.Fatalf("refused migration wrote %v (%v)", matches, err)
+		}
+	}
+}
+
+func TestRequireRegularConfigPath(t *testing.T) {
+	root := t.TempDir()
+	config := writeFixture(t, filepath.Join(root, "configs", "worldserver.conf"), "Custom = 42\n")
+	if err := requireRegularConfigPath(root, config); err != nil {
+		t.Fatalf("regular config refused: %v", err)
+	}
+	if err := requireRegularConfigPath(root, filepath.Join(root, "configs", "modules", "new.conf")); err != nil {
+		t.Fatalf("missing config refused: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "configs", "directory.conf"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, path := range map[string]string{
+		"outside":   filepath.Join(filepath.Dir(root), "outside.conf"),
+		"directory": filepath.Join(root, "configs", "directory.conf"),
+	} {
+		if err := requireRegularConfigPath(root, path); err == nil {
+			t.Errorf("%s: accepted %s", name, path)
+		}
+	}
+	if err := requireRegularConfigPath(config, config); err == nil {
+		t.Error("accepted a file as installation root")
+	}
+	linkedRoot := filepath.Join(t.TempDir(), "linked")
+	if err := os.Symlink(root, linkedRoot); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := requireRegularConfigPath(linkedRoot, filepath.Join(linkedRoot, "configs", "worldserver.conf")); err == nil {
+		t.Error("accepted a linked installation root")
 	}
 }
