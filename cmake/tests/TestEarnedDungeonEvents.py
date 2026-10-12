@@ -59,8 +59,11 @@ struct DcDiffKey{{bool isRaid=false;uint8 difficulty=0;bool IsHeroic()const{{ret
 inline bool DcGateMatches(DcDifficultyGate gate,DcDiffKey key){{return gate==DcDifficultyGate::Any||(gate==DcDifficultyGate::NormalOnly)!=key.IsHeroic();}}
 struct DungeonEvent{{uint32 mapId=0,id=0;std::string name;DcDifficultyGate gate{{DcDifficultyGate::Any}};std::vector<EventStep> steps;{event_flags}}};
 struct DungeonBossInfo{{std::string name;uint32 onArriveHook=0,eventId=0;}};
-std::map<uint32,std::vector<DungeonBossInfo>> bosses;std::map<std::pair<uint32,uint32>,DungeonEvent> events;std::map<uint32,std::vector<DungeonEvent>> conditional;
-struct BossSpawnIndex{{static std::vector<DungeonBossInfo> const& Get(uint32 map,uint8){{return bosses[map];}}}};
+// Production splits objectives: the spawn index only lists encounter bosses,
+// while the roster corrections add every event objective and its event id.
+std::map<uint32,std::vector<DungeonBossInfo>> spawned,roster;std::map<std::pair<uint32,uint32>,DungeonEvent> events;std::map<uint32,std::vector<DungeonEvent>> conditional;
+struct BossSpawnIndex{{static std::vector<DungeonBossInfo> const& Get(uint32 map,uint8){{for(auto const& boss:spawned[map])if(boss.eventId||boss.onArriveHook)throw 0;return spawned[map];}}}};
+struct BossRosterRegistry{{static std::vector<DungeonBossInfo> Apply(uint32 map,DcDiffKey,std::vector<DungeonBossInfo> base){{base.insert(base.end(),roster[map].begin(),roster[map].end());return base;}}}};
 struct DungeonEventRegistry{{static DungeonEvent const* Find(uint32 map,uint32 id){{auto it=events.find({{map,id}});return it==events.end()?nullptr:&it->second;}}
  static std::vector<DungeonEvent const*> Conditional(uint32 map,DcDiffKey key){{std::vector<DungeonEvent const*> out;for(auto& ev:conditional[map])if(DcGateMatches(ev.gate,key))out.push_back(&ev);return out;}}}};
 struct LockEntry{{uint32 ID;uint32 Type[MAX_LOCK_CASE];uint32 Index[MAX_LOCK_CASE];uint32 Skill[MAX_LOCK_CASE];}};
@@ -99,23 +102,30 @@ int main(){
  // Map audit: every required normal objective must consist of ordinary keyless steps.
  objectMgr.templates={{10,{0}},{11,{1}},{12,{2}}};
  assert(audited(1));
- bosses[2]={{"Gong",0,1}};events[{2,1}]=event("Ring the Gong",{step(EventStepKind::MoveTo),step(EventStepKind::UseGameObject,10),step(EventStepKind::UseGameObject,11),step(EventStepKind::Gossip),step(EventStepKind::ClearRadius)});assert(audited(2));
- bosses[3]={{"Cannon",0,1}};events[{3,1}]=event("Cannon",{step(EventStepKind::MoveTo),step(EventStepKind::Custom)});assert(!audited(3));
+ // Encounter bosses alone carry no event; the roster-added objective decides.
+ spawned[9]={{"Mennu the Betrayer",0,0}};assert(audited(9));
+ roster[9]={{"Drop down past Mennu",0,1}};events[{9,1}]=event("Drop down past Mennu",{step(EventStepKind::MoveTo),step(EventStepKind::TeleportParty)});assert(!audited(9));
+ events[{9,1}].required=false;assert(audited(9));
+ // An optional anchored controller that owns the pull or the movement is essential too.
+ events[{9,1}].ownsThePull=true;assert(!audited(9));
+ events[{9,1}].ownsThePull=false;events[{9,1}].stepsOwnMovement=true;assert(!audited(9));
+ roster[2]={{"Gong",0,1}};events[{2,1}]=event("Ring the Gong",{step(EventStepKind::MoveTo),step(EventStepKind::UseGameObject,10),step(EventStepKind::UseGameObject,11),step(EventStepKind::Gossip),step(EventStepKind::ClearRadius)});assert(audited(2));
+ roster[3]={{"Cannon",0,1}};events[{3,1}]=event("Cannon",{step(EventStepKind::MoveTo),step(EventStepKind::Custom)});assert(!audited(3));
  events[{3,1}].required=false;assert(audited(3));
  events[{3,1}]=event("Cannon",{step(EventStepKind::Custom)},true,DcDifficultyGate::HeroicOnly);assert(audited(3));
- bosses[4]={{"Keyed door",0,1}};events[{4,1}]=event("Door",{step(EventStepKind::UseGameObject,12)});assert(!audited(4));
+ roster[4]={{"Keyed door",0,1}};events[{4,1}]=event("Door",{step(EventStepKind::UseGameObject,12)});assert(!audited(4));
  events[{4,1}]=event("Door",{step(EventStepKind::UseGameObject,99)});assert(!audited(4));
  events[{4,1}]=event("Urn",{step(EventStepKind::UseGameObject,10,4242)});assert(!audited(4));
  events[{4,1}]=event("Egg",{step(EventStepKind::UseItem,0,4242)});assert(!audited(4));
  for(EventStepKind kind:{EventStepKind::Jump,EventStepKind::DropInHole,EventStepKind::TeleportParty,EventStepKind::EscortCreature,EventStepKind::CastSpell,EventStepKind::UseItemOnGO,EventStepKind::UseItemAt}){events[{4,1}]=event("Shortcut",{step(kind)});assert(!audited(4));}
- bosses[5]={{"Ring of Law",7,0}};assert(!audited(5));
- bosses[6]={{"Missing",0,9}};assert(!audited(6));
+ roster[5]={{"Ring of Law",7,0}};assert(!audited(5));
+ roster[6]={{"Missing",0,9}};assert(!audited(6));
  conditional[7]={event("Room aggro",{step(EventStepKind::KillCreature)}),event("Drop",{step(EventStepKind::Jump)},false)};assert(audited(7));
  conditional[7].push_back(event("Wake",{step(EventStepKind::Custom)}));assert(!audited(7));
  // Trial of the Champion: required objectives only wait for instance progress.
  // Its optional controller performs the gossip/joust transitions those waits
  // depend on. An unsupported controller must reject automatic recruitment.
- bosses[650]={{"The Grand Champions",0,1},{"The Argent Challenge",0,2},{"The Black Knight",0,3}};
+ roster[650]={{"The Grand Champions",0,1},{"The Argent Challenge",0,2},{"The Black Knight",0,3}};
  events[{650,1}]=event("The Grand Champions",{step(EventStepKind::MoveTo),progress_gate(TRIAL_DATA_INSTANCE_PROGRESS,TRIAL_PROGRESS_CHAMPIONS_DEAD)});
  events[{650,2}]=event("The Argent Challenge",{step(EventStepKind::MoveTo),progress_gate(TRIAL_DATA_INSTANCE_PROGRESS,TRIAL_PROGRESS_ARGENT_CHALLENGE_DIED)});
  events[{650,3}]=event("The Black Knight",{step(EventStepKind::MoveTo),progress_gate(TRIAL_DATA_INSTANCE_PROGRESS,TRIAL_PROGRESS_FINISHED)});
@@ -153,12 +163,20 @@ def native_contracts(core, dc):
     assert 'return ev.required ? EventDriveOutcome::Stalled : EventDriveOutcome::Skipped;' in advance
     hop = function(executor, 'void HopTo(Player* bot, float x, float y, float z)')
     assert hop.index('DcEarnedPlay::ReachableLeg(bot, x, y, z)') < hop.index('MovePoint(')
+    # Event objectives reach a running clear only through the roster corrections;
+    # the spawn index never assigns them. The audit must read the same roster.
+    spawn_index = (dc/'Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.cpp').read_text()
+    assert 'eventId' not in spawn_index and 'onArriveHook' not in spawn_index
+    bosses_value = (dc/'Ai/Dungeon/DungeonClear/Value/DungeonBossesValue.cpp').read_text()
+    assert re.search(r'BossRosterRegistry::Apply\(mapId,\s*DcDifficulty::Of\(map\),\s*BossSpawnIndex::Get\(', bosses_value)
+    audit = function((dc/'DcEarnedEvents.cpp').read_text(), 'bool MapAudited(')
+    assert re.search(r'BossRosterRegistry::Apply\(\s*mapId,\s*normal,\s*BossSpawnIndex::Get\(', audit)
     trial = (dc/'Ai/Dungeon/DungeonClear/Data/Events/TrialOfTheChampionEvents.cpp').read_text()
     trial_events = function(trial, 'void RegisterTrialOfTheChampionEvents(')
     assert trial_events.count('.MoveToHoldUntilInstanceData(') == 3
     controller = trial_events[trial_events.index('"The Champion\'s Arena"'):]
     assert all(flag in controller for flag in ('.Optional()', '.OwnsThePull()', '.StepsOwnMovement()', '.Custom('))
-    print('Native event contracts: lock-free use opcode, core lock rules, refused-step outcomes and real-path hops verified')
+    print('Native event contracts: lock-free use opcode, core lock rules, roster-sourced objectives, refused-step outcomes and real-path hops verified')
 
 
 def main():
@@ -184,7 +202,7 @@ def main():
             'constexpr EventStepKind ALL_KINDS[]{' + ','.join('EventStepKind::' + k for k in kinds) + '};\n')
         for name in ('Define.h', 'DBCStores.h', 'GameObject.h', 'ObjectMgr.h', 'Player.h', 'SharedDefines.h',
                      'Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h', 'Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h',
-                     'Ai/Dungeon/DungeonClear/Util/DcDifficulty.h'):
+                     'Ai/Dungeon/DungeonClear/Util/DcDifficulty.h', 'Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h'):
             path = work/name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('#include "NativeStubs.h"\n')
@@ -206,9 +224,11 @@ def main():
             ('quest-conditional interaction', '(go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot))', 'false'),
             ('granted quest item accepted', '|| step.kind == EventStepKind::UseItem || step.itemId', ''),
             ('legacy objective hook', 'else if (info.onArriveHook)', 'else if (false)'),
-            ('conditional events skipped', 'if ((ev->required || ev->ownsThePull || ev->stepsOwnMovement) && !StepsAudited(*ev, reason))', 'if (false)'),
-            ('optional pull controller skipped', 'ev->required || ev->ownsThePull || ev->stepsOwnMovement', 'ev->required || ev->stepsOwnMovement'),
-            ('optional movement controller skipped', 'ev->required || ev->ownsThePull || ev->stepsOwnMovement', 'ev->required || ev->ownsThePull'),
+            ('roster event objectives ignored', 'BossRosterRegistry::Apply(\n                 mapId, normal, BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL))', 'BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL)'),
+            ('optional anchored controller skipped', 'if (essential(*ev) && DcGateMatches(ev->gate, normal)', 'if (ev->required && DcGateMatches(ev->gate, normal)'),
+            ('conditional events skipped', 'if (essential(*ev) && !StepsAudited(*ev, reason))', 'if (false)'),
+            ('optional pull controller skipped', 'return ev.required || ev.ownsThePull || ev.stepsOwnMovement;', 'return ev.required || ev.stepsOwnMovement;'),
+            ('optional movement controller skipped', 'return ev.required || ev.ownsThePull || ev.stepsOwnMovement;', 'return ev.required || ev.ownsThePull;'),
         ]
         for label, old, new in mutations:
             mutated = original.replace(old, new)
