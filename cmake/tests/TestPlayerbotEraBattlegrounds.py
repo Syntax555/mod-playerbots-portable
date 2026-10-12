@@ -50,7 +50,7 @@ struct Battleground;
 struct Session { bool headless = false; bool IsHeadless() { return headless; } };
 struct Player {
     unsigned stage = 0, level = 1;
-    bool isBot = false;
+    bool isBot = false, selfBot = false;
     Session session;
     Session* GetSession() { return &session; }
     Group* group = nullptr;
@@ -129,6 +129,7 @@ fixture = r'''
 
 struct Config { bool earnedEraBattlegrounds = true, vanillaBattlegroundsOnly = false; } sPlayerbotAIConfig;
 #define GET_PLAYERBOT_AI(player) ((player)->isBot)
+bool IsSelfBot(Player* player) { return player && player->isBot && player->selfBot; }
 struct QueueHooks {
 ''' + native_hooks + r'''
 } queueHooks;
@@ -212,6 +213,32 @@ int main()
     assert(queueHooks.OnPlayerCanJoinInBattlegroundQueue(&human, {}, BATTLEGROUND_QUEUE_SA, 1, result));
     assert(queueHooks.OnPlayerCanJoinInArenaQueue(&human, {}, 0, 0, 1, 0, result));
     sPlayerbotAIConfig.earnedEraBattlegrounds = true;
+
+    // A human with SelfBot keeps human queue rights; real bots in that group still follow the bot policy.
+    Player selfBot;
+    selfBot.stage = 18;
+    selfBot.level = 80;
+    selfBot.isBot = selfBot.selfBot = true;
+    for (auto queue : {BATTLEGROUND_QUEUE_SA, BATTLEGROUND_QUEUE_RB})
+    {
+        result = TEST_QUEUE_OK;
+        assert(queueHooks.OnPlayerCanJoinInBattlegroundQueue(&selfBot, {}, queue, 0, result));
+        assert(result == TEST_QUEUE_OK);
+    }
+    assert(queueHooks.OnPlayerCanJoinInArenaQueue(&selfBot, {}, 0, 0, 0, 0, result));
+    GroupReference selfBotMemberRef{&bot, nullptr}, selfBotRef{&selfBot, &selfBotMemberRef};
+    Group selfBotParty{&selfBotRef};
+    selfBot.group = &selfBotParty;
+    assert(!queueHooks.OnPlayerCanJoinInArenaQueue(&selfBot, {}, 0, 0, 1, 0, result));
+    assert(!queueHooks.OnPlayerCanJoinInBattlegroundQueue(&selfBot, {}, BATTLEGROUND_QUEUE_SA, 1, result));
+    selfBotMemberRef.player = &human;
+    assert(queueHooks.OnPlayerCanJoinInArenaQueue(&selfBot, {}, 0, 0, 1, 0, result));
+    assert(queueHooks.OnPlayerCanJoinInArenaQueue(&human, {}, 0, 0, 0, 0, result));
+    selfBotMemberRef.player = &selfBot;
+    selfBotRef.player = &human;
+    human.group = &selfBotParty;
+    assert(queueHooks.OnPlayerCanJoinInBattlegroundQueue(&human, {}, BATTLEGROUND_QUEUE_SA, 1, result));
+    human.group = &party;
 
     EarnedBattlegroundQueueState state;
     constexpr uint32 q = BATTLEGROUND_QUEUE_WS, bracket = 5, size = 10;
@@ -375,6 +402,20 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
                '-I', str(tmp), str(tmp / 'fixture.cpp'), str(tmp / 'BattlegroundQueuePolicy.cpp'), '-o', str(executable)]
     subprocess.run(command, check=True)
     subprocess.run([str(executable)], check=True)
+    mutations = [
+        ('SelfBot humans use the bot queue policy', '!GET_PLAYERBOT_AI(member) || IsSelfBot(member) ||',
+         '!GET_PLAYERBOT_AI(member) ||'),
+        ('group members skip the bot queue policy', 'if (!allowed(ref->GetSource()))', 'if (false)'),
+    ]
+    for label, old, new in mutations:
+        mutated = fixture.replace(old, new)
+        if mutated == fixture:
+            raise SystemExit(f'{label} mutation was not applied')
+        (tmp / 'fixture.cpp').write_text(mutated)
+        subprocess.run(command, check=True)
+        if subprocess.run([str(executable)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            raise SystemExit(f'Bot queue fixture did not reject: {label}')
+        print(f'Bot queue mutation rejected: {label}')
     (tmp / 'IndividualProgressionBattlegrounds.h').unlink()
     (tmp / 'fixture.cpp').write_text(missing)
     subprocess.run(command, check=True)
