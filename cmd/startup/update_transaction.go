@@ -514,16 +514,56 @@ func runPortableUpdateHelper(args []string) (bool, error) {
 	progress := startPortableUpdateProgress(context.Background())
 	defer progress.close()
 	if err := applyPortableUpdate(root, plan, progress); err != nil {
-		return true, err
+		progress.close()
+		// The original launcher has exited. Start the intact installed release
+		// so the realm still runs and this console keeps the reason visible.
+		if !discardIntactUpdate(root) {
+			return true, err
+		}
+		fmt.Fprintf(os.Stderr, "Error completing update: %v\nStarting the installed release without the update check.\n", err)
+		if err := restartPortableLauncher(root, withoutUpdateCheck(plan.Args)); err != nil {
+			return true, fmt.Errorf("start startup.exe again: %w", err)
+		}
+		return true, nil
 	}
 	progress.close()
 	fmt.Println("Update complete. Restarting the launcher.")
-	cmd := exec.Command(filepath.Join(root, "startup.exe"), plan.Args...)
+	if err := restartPortableLauncher(root, plan.Args); err != nil {
+		return true, fmt.Errorf("update completed; start startup.exe again: %w", err)
+	}
+	return true, nil
+}
+
+// discardIntactUpdate clears an update that never changed installed files or
+// was completely rolled back, and reports whether the installed release is
+// intact. Downloads stay cached for the next attempt. An update that is still
+// applying, after a failed rollback, keeps its journal for recovery.
+func discardIntactUpdate(root string) bool {
+	plan, err := readPortableUpdatePlan(root)
+	if err != nil || plan.Phase != "staged" && plan.Phase != "rolled-back" {
+		return false
+	}
+	return discardStagedUpdate(root) == nil
+}
+
+// withoutUpdateCheck adds --no-update once, before any "--" terminator, so a
+// release that cannot be installed is not downloaded again in a loop.
+func withoutUpdateCheck(args []string) []string {
+	for _, arg := range args {
+		if arg == "--no-update" || arg == "-no-update" {
+			return args
+		}
+	}
+	return append([]string{"--no-update"}, args...)
+}
+
+func restartPortableLauncher(root string, args []string) error {
+	cmd := exec.Command(filepath.Join(root, "startup.exe"), args...)
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	configureConsoleProcess(cmd)
 	if err := cmd.Start(); err != nil {
-		return true, fmt.Errorf("update completed; start startup.exe again: %w", err)
+		return err
 	}
-	return true, cmd.Process.Release()
+	return cmd.Process.Release()
 }
