@@ -1151,34 +1151,34 @@ func shutdownMySQLAndWait(binaries *mysqlBinaries, port int, cmd *exec.Cmd) (cle
 	}
 
 	done := make(chan error, 1)
-	go func() {
-		if cmd != nil {
-			done <- cmd.Wait()
-		} else {
-			done <- nil
-		}
-	}()
+	go func() { done <- cmd.Wait() }()
 
 	select {
 	case <-time.After(10 * time.Second):
-		if cmd != nil && cmd.Process != nil {
-			fmt.Println("MySQL did not stop within 10s, terminating process...")
-			var cleanupErr error
-			if retained != nil {
-				cleanupErr = killMySQLProcessTree(retained)
-			} else {
-				cleanupErr = errors.Join(retainErr, cmd.Process.Kill())
-			}
-			if err := cleanupErr; err != nil && !errors.Is(err, os.ErrProcessDone) {
-				fmt.Fprintf(os.Stderr, "Warning: MySQL cleanup: %v\n", err)
-			}
-			<-done
+		fmt.Println("MySQL did not stop within 10s, terminating process...")
+		var killErr error
+		if retained != nil {
+			killErr = killMySQLProcessTree(retained)
+		} else {
+			killErr = errors.Join(retainErr, cmd.Process.Kill())
 		}
+		if killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			fmt.Fprintf(os.Stderr, "Warning: MySQL cleanup: %v\n", killErr)
+		}
+		<-done
 	case <-done:
 		fmt.Println("MySQL server stopped cleanly.")
 	}
 
 	return nil
+}
+
+// stopMySQLOrWarn stops a MySQL server the launcher started and reports owned
+// processes that could not be cleaned up and may still hold its port or data.
+func stopMySQLOrWarn(binaries *mysqlBinaries, port int, cmd *exec.Cmd) {
+	if err := shutdownMySQLAndWait(binaries, port, cmd); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		fmt.Fprintf(os.Stderr, "Warning: MySQL cleanup: %v\n", err)
+	}
 }
 
 func findBaseDir() string {
@@ -1752,7 +1752,7 @@ func main() {
 	timeoutDuration := time.Duration(opts.timeout) * time.Second
 	if err := waitForMySQLReady(rootCtx, mysqlCmd, binaries, opts.port, timeoutDuration); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
+		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
 		os.Exit(1)
 	}
 
@@ -1760,7 +1760,7 @@ func main() {
 	if !opts.skipSQL {
 		if err := runEmbeddedSQL(binaries, opts.port, createMySQLSQL); err != nil {
 			fmt.Fprintf(os.Stderr, "Error applying SQL: %v\n", err)
-			_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
+			stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
 			os.Exit(1)
 		}
 	}
@@ -1768,7 +1768,7 @@ func main() {
 	// 5. If init-only, shutdown and exit
 	if opts.initOnly {
 		fmt.Println("\nInit-only mode complete. Shutting down MySQL...")
-		_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
+		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
 		os.Exit(0)
 	}
 
@@ -1781,7 +1781,7 @@ func main() {
 	authCmd, err := startServerProcess("authserver", authserverExe, workDir, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting authserver: %v\n", err)
-		_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
+		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
 		os.Exit(1)
 	}
 
@@ -1793,7 +1793,7 @@ func main() {
 	if err := waitForAuthServerReady(rootCtx, authCmd, authHosts, opts.authPort, authTimeout); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		stopProcess("authserver", authCmd)
-		_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
+		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
 		os.Exit(1)
 	}
 
@@ -1801,7 +1801,7 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting worldserver: %v\n", err)
 		stopProcess("authserver", authCmd)
-		_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
+		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
 		os.Exit(1)
 	}
 
@@ -1818,7 +1818,7 @@ func main() {
 		}
 		// Crash recovery after an unexpected exit can be slow; honor --timeout.
 		if err := waitForMySQLReady(supervisorCtx, cmd, binaries, opts.port, timeoutDuration); err != nil {
-			_ = shutdownMySQLAndWait(binaries, opts.port, cmd)
+			stopMySQLOrWarn(binaries, opts.port, cmd)
 			return nil, err
 		}
 		return cmd, nil
