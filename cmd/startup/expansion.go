@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -190,34 +191,53 @@ func applyConfigProfileForPhase(filename, content string, phase realmPhase) (str
 	return content, nil
 }
 
+// configuredListener returns the port a realm server reads from its config,
+// using AzerothCore's default when the key is absent, and the local addresses
+// that reach it: loopback plus BindIP when that is a concrete address.
+func configuredListener(workDir, file, key string, def int) ([]string, int, error) {
+	content, err := os.ReadFile(filepath.Join(workDir, "configs", file))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, 0, err
+	}
+	port, exists, err := configInt(string(content), key)
+	if !exists {
+		port = def
+	} else if err != nil || port < 1 || port > 65535 {
+		return nil, 0, fmt.Errorf("invalid %s in %s", key, file)
+	}
+	hosts := []string{"127.0.0.1", "::1"}
+	if value, exists := configValue(string(content), "BindIP"); exists {
+		host := strings.ReplaceAll(value, `"`, "")
+		if host != "" && host != "0.0.0.0" && host != "::" && !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts, port, nil
+}
+
+// acceptsConnection reports whether any of hosts accepts a TCP connection on port.
+func acceptsConnection(hosts []string, port int, timeout time.Duration) bool {
+	for _, host := range hosts {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), timeout)
+		if err == nil {
+			conn.Close()
+			return true
+		}
+	}
+	return false
+}
+
 func ensureRealmStopped(workDir string) error {
 	for _, server := range []struct {
 		file, key string
 		port      int
 	}{{"worldserver.conf", "WorldServerPort", 8085}, {"authserver.conf", "RealmServerPort", 3724}} {
-		content, err := os.ReadFile(filepath.Join(workDir, "configs", server.file))
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
+		hosts, port, err := configuredListener(workDir, server.file, server.key, server.port)
+		if err != nil {
 			return err
 		}
-		port, exists, err := configInt(string(content), server.key)
-		if !exists {
-			port = server.port
-		} else if err != nil || port < 1 || port > 65535 {
-			return fmt.Errorf("invalid %s in %s", server.key, server.file)
-		}
-		hosts := []string{"127.0.0.1", "::1"}
-		if value, exists := configValue(string(content), "BindIP"); exists {
-			host := strings.ReplaceAll(value, `"`, "")
-			if host != "" && host != "0.0.0.0" && host != "::" {
-				hosts = append(hosts, host)
-			}
-		}
-		for _, host := range hosts {
-			conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), 200*time.Millisecond)
-			if err == nil {
-				conn.Close()
-				return fmt.Errorf("%s is listening on port %d; stop startup.exe and the realm servers before changing expansion settings", server.file, port)
-			}
+		if acceptsConnection(hosts, port, 200*time.Millisecond) {
+			return fmt.Errorf("%s is listening on port %d; stop startup.exe and the realm servers first", server.file, port)
 		}
 	}
 	return nil

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newPhaseRealm(t *testing.T) string {
@@ -99,6 +102,88 @@ func TestRealmSettingsAcceptQuotedNumbers(t *testing.T) {
 	writePhaseTestFile(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", closedPort))
 	if err := ensureRealmStopped(directory); err != nil {
 		t.Fatalf("quoted port blocked a stopped realm: %v", err)
+	}
+}
+
+func TestConfiguredListener(t *testing.T) {
+	directory := t.TempDir()
+	auth := filepath.Join(directory, "configs", "authserver.conf")
+	for _, test := range []struct {
+		name, content string
+		hosts         []string
+		port          int
+		invalid       bool
+	}{
+		{name: "missing config", hosts: []string{"127.0.0.1", "::1"}, port: 3724},
+		{name: "default port", content: "BindIP = \"127.0.0.1\"\n", hosts: []string{"127.0.0.1", "::1"}, port: 3724},
+		{name: "custom port", content: "RealmServerPort = 3725\n", hosts: []string{"127.0.0.1", "::1"}, port: 3725},
+		{name: "quoted port", content: "RealmServerPort = \"3726\"\n", hosts: []string{"127.0.0.1", "::1"}, port: 3726},
+		{name: "LAN address", content: "BindIP = \"192.168.1.10\"\nRealmServerPort = 3727\n", hosts: []string{"127.0.0.1", "::1", "192.168.1.10"}, port: 3727},
+		{name: "all IPv4 addresses", content: "BindIP = \"0.0.0.0\"\n", hosts: []string{"127.0.0.1", "::1"}, port: 3724},
+		{name: "all IPv6 addresses", content: "BindIP = \"::\"\n", hosts: []string{"127.0.0.1", "::1"}, port: 3724},
+		{name: "invalid port", content: "RealmServerPort = 70000\n", invalid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			os.Remove(auth)
+			if test.content != "" {
+				writePhaseTestFile(t, auth, test.content)
+			}
+			hosts, port, err := configuredListener(directory, "authserver.conf", "RealmServerPort", 3724)
+			if (err != nil) != test.invalid || port != test.port || !slices.Equal(hosts, test.hosts) {
+				t.Fatalf("listener = %v, %d, %v; want %v, %d, invalid %v", hosts, port, err, test.hosts, test.port, test.invalid)
+			}
+		})
+	}
+}
+
+// A realm bound to one address only answers there, not on 127.0.0.1.
+func TestRealmChecksUseConfiguredBindAddress(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.2:0")
+	if err != nil {
+		t.Skipf("second loopback address unavailable: %v", err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	if acceptsConnection([]string{"127.0.0.1"}, port, 200*time.Millisecond) {
+		t.Skip("loopback addresses share listeners on this system")
+	}
+	directory := t.TempDir()
+	writePhaseTestFile(t, filepath.Join(directory, "configs", "worldserver.conf"), "WorldServerPort = 1\n")
+	writePhaseTestFile(t, filepath.Join(directory, "configs", "authserver.conf"), fmt.Sprintf("BindIP = \"127.0.0.2\"\nRealmServerPort = %d\n", port))
+	if err := ensureRealmStopped(directory); err == nil || !strings.Contains(err.Error(), "authserver.conf is listening") {
+		t.Fatalf("realm listening on its bind address was not detected: %v", err)
+	}
+	opts := startupOptions{port: 3306, authPort: 3724}
+	hosts, err := applyConfiguredPorts(directory, &opts)
+	if err != nil || opts.authPort != port {
+		t.Fatalf("configured authserver port = %d, %v; want %d", opts.authPort, err, port)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := waitForAuthServerReady(ctx, nil, hosts, opts.authPort, 3*time.Second); err != nil {
+		t.Fatalf("authserver on its configured address was not ready: %v", err)
+	}
+}
+
+func TestApplyConfiguredPortsFollowsActiveConfig(t *testing.T) {
+	directory := t.TempDir()
+	auth := filepath.Join(directory, "configs", "authserver.conf")
+	writePhaseTestFile(t, auth, "LoginDatabaseInfo = \"127.0.0.1;3310;acore;acore;acore_auth\"\nRealmServerPort = 3725\n")
+	// Runs without the original flags must still use the ports the configs name.
+	opts := startupOptions{port: 3306, authPort: 3724}
+	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3310 || opts.authPort != 3725 {
+		t.Fatalf("ports = %d/%d, %v; want 3310/3725", opts.port, opts.authPort, err)
+	}
+	// An explicit MySQL port is honored; the servers' port cannot be overridden.
+	opts = startupOptions{port: 3320, portSet: true, authPort: 3730, authPortSet: true}
+	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3320 || opts.authPort != 3725 {
+		t.Fatalf("explicit ports = %d/%d, %v; want 3320/3725", opts.port, opts.authPort, err)
+	}
+	// A database on another host does not choose the port of the local server.
+	writePhaseTestFile(t, auth, "LoginDatabaseInfo = \"db.example;3311;acore;acore;acore_auth\"\n")
+	opts = startupOptions{port: 3306, authPort: 3724}
+	if _, err := applyConfiguredPorts(directory, &opts); err != nil || opts.port != 3306 || opts.authPort != 3724 {
+		t.Fatalf("remote database ports = %d/%d, %v; want 3306/3724", opts.port, opts.authPort, err)
 	}
 }
 

@@ -883,7 +883,7 @@ func TestWaitForAuthServerReadyProcessExit(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := waitForAuthServerReady(ctx, cmd, 37240, 10*time.Second)
+	err := waitForAuthServerReady(ctx, cmd, []string{"127.0.0.1"}, 37240, 10*time.Second)
 	duration := time.Since(start)
 
 	if err == nil {
