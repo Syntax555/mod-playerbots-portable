@@ -1524,6 +1524,66 @@ func TestActivateClientDataRollback(t *testing.T) {
 	}
 }
 
+func TestDownloadFileWithProgressRedirectedOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/missing" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Length", "2097152")
+		_, _ = w.Write(make([]byte, 2097152))
+	}))
+	defer server.Close()
+
+	capture, err := os.Create(filepath.Join(t.TempDir(), "stdout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer capture.Close()
+	previous := os.Stdout
+	os.Stdout = capture
+	destination := filepath.Join(t.TempDir(), "Data.zip")
+	err = downloadFileWithProgress(context.Background(), server.URL, destination)
+	missingErr := downloadFileWithProgress(context.Background(), server.URL+"/missing", destination+".missing")
+	os.Stdout = previous
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(destination); err != nil || info.Size() != 2097152 {
+		t.Fatalf("downloaded file: %v, %v", info, err)
+	}
+	if missingErr == nil || !strings.HasSuffix(missingErr.Error(), "server returned HTTP 404 Not Found") {
+		t.Errorf("HTTP status error = %v", missingErr)
+	}
+	output, err := os.ReadFile(capture.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(output), "\r") || !strings.Contains(string(output), "100.0% (   2.0 /    2.0 MB)") {
+		t.Errorf("redirected download progress = %q", output)
+	}
+}
+
+func TestDownloadCancellationDuringBody(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1048576")
+		_, _ = w.Write(make([]byte, 1024))
+		w.(http.Flusher).Flush()
+		cancel()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	destination := filepath.Join(t.TempDir(), "Data.zip")
+	if err := downloadFileWithProgress(ctx, server.URL, destination); !errors.Is(err, context.Canceled) {
+		t.Errorf("download did not preserve context cancellation: %v", err)
+	}
+	if fileExists(destination) || fileExists(destination+".download") {
+		t.Error("canceled download left a file")
+	}
+}
+
 func TestDownloadCancellationBeforeResponseHeaders(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

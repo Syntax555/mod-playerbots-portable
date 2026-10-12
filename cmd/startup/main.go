@@ -529,7 +529,7 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("server returned HTTP %d: %s", resp.StatusCode, resp.Status)
+		return fmt.Errorf("server returned HTTP %s", resp.Status)
 	}
 
 	tmpPath := destPath + ".download"
@@ -541,88 +541,21 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file %s: %w", tmpPath, err)
 	}
-
-	cleanedUp := false
-	cleanup := func() {
-		if !cleanedUp {
-			cleanedUp = true
+	finalized := false
+	defer func() {
+		if !finalized {
 			out.Close()
-			if fileExists(tmpPath) {
-				_ = os.Remove(tmpPath)
-			}
+			_ = os.Remove(tmpPath)
 		}
+	}()
+
+	progress := newDownloadProgress(resp.ContentLength)
+	// The request context also cancels reading the response body.
+	_, err = io.Copy(io.MultiWriter(out, progress), resp.Body)
+	progress.finish()
+	if err != nil {
+		return fmt.Errorf("failed to download to %s: %w", tmpPath, err)
 	}
-	defer cleanup()
-
-	totalBytes := resp.ContentLength
-	var downloadedBytes int64
-	buf := make([]byte, 64*1024)
-	startTime := time.Now()
-	lastPrintTime := time.Now()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
-				return fmt.Errorf("failed writing to %s: %w", tmpPath, writeErr)
-			}
-			downloadedBytes += int64(n)
-
-			now := time.Now()
-			if now.Sub(lastPrintTime) >= 200*time.Millisecond || readErr != nil {
-				lastPrintTime = now
-				elapsedSec := now.Sub(startTime).Seconds()
-				speedMBps := 0.0
-				if elapsedSec > 0 {
-					speedMBps = (float64(downloadedBytes) / (1024 * 1024)) / elapsedSec
-				}
-
-				if totalBytes > 0 {
-					percent := float64(downloadedBytes) / float64(totalBytes) * 100.0
-					if percent > 100.0 {
-						percent = 100.0
-					}
-					barWidth := 25
-					filled := int(percent / 100.0 * float64(barWidth))
-					if filled > barWidth {
-						filled = barWidth
-					}
-					bar := strings.Repeat("=", filled)
-					if filled < barWidth {
-						bar += ">" + strings.Repeat(" ", barWidth-filled-1)
-					}
-					etaSec := 0
-					if speedMBps > 0 {
-						remainingMB := float64(totalBytes-downloadedBytes) / (1024 * 1024)
-						etaSec = int(remainingMB / speedMBps)
-					}
-					fmt.Printf("\r  [%s] %5.1f%% (%6.1f / %6.1f MB) %5.1f MB/s (ETA: %ds)  ",
-						bar, percent,
-						float64(downloadedBytes)/(1024*1024),
-						float64(totalBytes)/(1024*1024),
-						speedMBps, etaSec)
-				} else {
-					fmt.Printf("\r  %6.1f MB downloaded (%5.1f MB/s)  ",
-						float64(downloadedBytes)/(1024*1024), speedMBps)
-				}
-			}
-		}
-
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return fmt.Errorf("error reading response stream: %w", readErr)
-		}
-	}
-
-	fmt.Println()
 	if err := out.Close(); err != nil {
 		return fmt.Errorf("failed to close downloaded file: %w", err)
 	}
@@ -630,9 +563,81 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		return fmt.Errorf("failed to finalize downloaded file: %w", err)
 	}
-	cleanedUp = true
+	finalized = true
 
 	return nil
+}
+
+// downloadProgress reports the bytes written to a download. A console shows a
+// status line that is redrawn in place; redirected output gets a complete line
+// every few seconds instead of carriage-return frames.
+type downloadProgress struct {
+	console  bool
+	interval time.Duration
+	total    int64
+	done     int64
+	started  time.Time
+	printed  time.Time
+}
+
+func newDownloadProgress(total int64) *downloadProgress {
+	now := time.Now()
+	progress := &downloadProgress{console: portableUpdateConsole(os.Stdout), interval: 5 * time.Second, total: total, started: now, printed: now}
+	if progress.console {
+		progress.interval = 200 * time.Millisecond
+	}
+	return progress
+}
+
+func (p *downloadProgress) Write(content []byte) (int, error) {
+	p.done += int64(len(content))
+	if now := time.Now(); now.Sub(p.printed) >= p.interval {
+		p.printed = now
+		p.print(now)
+	}
+	return len(content), nil
+}
+
+func (p *downloadProgress) finish() {
+	p.print(time.Now())
+	if p.console {
+		fmt.Println()
+	}
+}
+
+func (p *downloadProgress) print(now time.Time) {
+	const mb = 1024 * 1024
+	speed := 0.0
+	if elapsed := now.Sub(p.started).Seconds(); elapsed > 0 {
+		speed = float64(p.done) / mb / elapsed
+	}
+	if p.total <= 0 {
+		printProgress(p.console, "%6.1f MB downloaded (%5.1f MB/s)", float64(p.done)/mb, speed)
+		return
+	}
+	percent := min(float64(p.done)/float64(p.total)*100, 100)
+	const barWidth = 25
+	filled := int(percent / 100 * barWidth)
+	bar := strings.Repeat("=", filled)
+	if filled < barWidth {
+		bar += ">" + strings.Repeat(" ", barWidth-filled-1)
+	}
+	eta := 0
+	if speed > 0 {
+		eta = int(float64(p.total-p.done) / mb / speed)
+	}
+	printProgress(p.console, "[%s] %5.1f%% (%6.1f / %6.1f MB) %5.1f MB/s (ETA: %ds)",
+		bar, percent, float64(p.done)/mb, float64(p.total)/mb, speed, eta)
+}
+
+// printProgress redraws a status line on a console and writes complete lines
+// when output is redirected to a file.
+func printProgress(console bool, format string, args ...any) {
+	if console {
+		fmt.Printf("\r  "+format+"  ", args...)
+	} else {
+		fmt.Printf("  "+format+"\n", args...)
+	}
 }
 
 type contextReader struct {
@@ -681,6 +686,7 @@ func extractZip(ctx context.Context, zipPath string, destDir string) error {
 	}
 
 	totalFiles := len(r.File)
+	console := portableUpdateConsole(os.Stdout)
 	fmt.Printf("Extracting %d files into %s...\n", totalFiles, cleanDestDir)
 
 	for i, f := range r.File {
@@ -742,11 +748,14 @@ func extractZip(ctx context.Context, zipPath string, destDir string) error {
 		}
 
 		if (i+1)%500 == 0 || i+1 == totalFiles {
-			fmt.Printf("\r  Extracting client data: %d / %d files (%d%%)  ", i+1, totalFiles, (i+1)*100/totalFiles)
+			printProgress(console, "Extracting client data: %d / %d files (%d%%)", i+1, totalFiles, (i+1)*100/totalFiles)
 		}
 	}
 
-	fmt.Println("\nClient data extracted successfully.")
+	if console {
+		fmt.Println()
+	}
+	fmt.Println("Client data extracted successfully.")
 	return nil
 }
 
