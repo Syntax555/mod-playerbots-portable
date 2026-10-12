@@ -66,7 +66,7 @@ func relocationSQLFixture(t *testing.T, root string) {
 	t.Helper()
 	for _, database := range []string{"db_auth", "db_world", "db_characters"} {
 		for _, kind := range []string{"base", "updates"} {
-			profileFixture(t, root, "src/data/sql/"+kind+"/"+database+"/fixture.sql", "-- relocation SQL fixture\n")
+			writeFixture(t, filepath.Join(root, "src/data/sql/"+kind+"/"+database+"/fixture.sql"), "-- relocation SQL fixture\n")
 		}
 	}
 }
@@ -75,12 +75,12 @@ func relocationConfigFixtures(t *testing.T, root string) {
 	t.Helper()
 	relocationSQLFixture(t, root)
 	for _, server := range []string{"authserver", "worldserver"} {
-		profileFixture(t, root, "configs/"+server+".conf.dist", "# Custom template\r\nSourceDirectory = \"\"\r\n"+
+		writeFixture(t, filepath.Join(root, "configs/"+server+".conf.dist"), "# Custom template\r\nSourceDirectory = \"\"\r\n"+
 			"MySQLExecutable = \"\"\r\nDataDir = \".\"\r\nLogsDir = \"\"\r\nBindIP = \"0.0.0.0\"\r\n"+
 			"LoginDatabaseInfo = \"db;3306;alice;fixture-password;acore_auth\"\r\nCustom.Option = 42\r\n")
 	}
-	profileFixture(t, root, "mysql/data/characters.ibd", "existing character fixture")
-	profileFixture(t, root, "data/maps/0004331.map", "existing map fixture")
+	writeFixture(t, filepath.Join(root, "mysql/data/characters.ibd"), "existing character fixture")
+	writeFixture(t, filepath.Join(root, "data/maps/0004331.map"), "existing map fixture")
 	if err := ensureConfigFiles(root, root, filepath.Join(root, "mysql", "bin", "mysql.exe"), defaultTestOptions()); err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestNewServerConfigsRemainPortableAfterMoving(t *testing.T) {
 	root := filepath.Join(container, "Downloads", "portable server")
 	relocationConfigFixtures(t, root)
 	for _, server := range []string{"authserver", "worldserver"} {
-		content := readPhaseTestFile(t, filepath.Join(root, "configs", server+".conf"))
+		content := readFixture(t, filepath.Join(root, "configs", server+".conf"))
 		if value, _ := configValue(content, "SourceDirectory"); value != `"src"` {
 			t.Fatalf("new %s config contains a location-dependent SQL path: %s", server, value)
 		}
@@ -133,19 +133,19 @@ func TestRelocatedLegacySQLPathsKeepSettingsAndCharacterData(t *testing.T) {
 	originals := make(map[string]string)
 	for _, server := range []string{"authserver", "worldserver"} {
 		name := "configs/" + server + ".conf"
-		content := readPhaseTestFile(t, filepath.Join(root, filepath.FromSlash(name)))
+		content := readFixture(t, filepath.Join(root, filepath.FromSlash(name)))
 		legacy, err := mergeConfigProfile(content, `SourceDirectory = "`+filepath.ToSlash(filepath.Join(root, "src"))+`"`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		profileFixture(t, root, name, legacy)
+		writeFixture(t, filepath.Join(root, name), legacy)
 		originals[name] = legacy
 	}
 	// A still-existing custom source is not reclassified as a moved default.
 	if backups, err := relocatePortableSourcePaths(root, root); err != nil || len(backups) != 0 {
 		t.Fatalf("valid absolute SQL sources were changed: %v, %v", backups, err)
 	}
-	originals["mysql/my.cnf"] = readPhaseTestFile(t, filepath.Join(root, "mysql", "my.cnf"))
+	originals["mysql/my.cnf"] = readFixture(t, filepath.Join(root, "mysql", "my.cnf"))
 	originals["mysql/data/characters.ibd"] = "existing character fixture"
 	originals["data/maps/0004331.map"] = "existing map fixture"
 	relocated := filepath.Join(container, "relocated server")
@@ -165,11 +165,11 @@ func TestRelocatedLegacySQLPathsKeepSettingsAndCharacterData(t *testing.T) {
 				t.Fatal(err)
 			}
 			matches, err := filepath.Glob(filepath.Join(relocated, filepath.FromSlash(name)) + ".backup.*")
-			if err != nil || len(matches) != 1 || readPhaseTestFile(t, matches[0]) != original {
+			if err != nil || len(matches) != 1 || readFixture(t, matches[0]) != original {
 				t.Fatalf("%s original was not backed up exactly: %v, %v", name, matches, err)
 			}
 		}
-		if actual := readPhaseTestFile(t, filepath.Join(relocated, filepath.FromSlash(name))); actual != expected {
+		if actual := readFixture(t, filepath.Join(relocated, filepath.FromSlash(name))); actual != expected {
 			t.Fatalf("unrelated settings or saved data changed at %s", name)
 		}
 	}
@@ -202,18 +202,18 @@ func TestSQLPathRecoveryPreservesCustomAndAmbiguousValues(t *testing.T) {
 	} {
 		t.Run(value, func(t *testing.T) {
 			original := "# user config\nSourceDirectory = " + value + "\nCustom = 42\n"
-			path := profileFixture(t, root, "configs/authserver.conf", original)
+			path := writeFixture(t, filepath.Join(root, "configs/authserver.conf"), original)
 			if backups, err := relocatePortableSourcePaths(root, root); err != nil || len(backups) != 0 {
 				t.Fatalf("custom source migrated: %v, %v", backups, err)
 			}
-			if actual := readPhaseTestFile(t, path); actual != original {
+			if actual := readFixture(t, path); actual != original {
 				t.Fatal("custom source configuration changed")
 			}
 		})
 	}
 	original := `SourceDirectory = "` + missing + `"` + "\nSourceDirectory = \"custom/path\"\n"
-	path := profileFixture(t, root, "configs/authserver.conf", original)
-	if backups, err := relocatePortableSourcePaths(root, root); err != nil || len(backups) != 0 || readPhaseTestFile(t, path) != original {
+	path := writeFixture(t, filepath.Join(root, "configs/authserver.conf"), original)
+	if backups, err := relocatePortableSourcePaths(root, root); err != nil || len(backups) != 0 || readFixture(t, path) != original {
 		t.Fatalf("ambiguous duplicate source changed: %v, %v", backups, err)
 	}
 }
@@ -225,8 +225,8 @@ func TestSQLPathRecoveryRequiresCompleteBundledSQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := `SourceDirectory = "` + filepath.ToSlash(filepath.Join(t.TempDir(), "src")) + `"` + "\n"
-	path := profileFixture(t, root, "configs/authserver.conf", original)
-	if backups, err := relocatePortableSourcePaths(root, root); err != nil || len(backups) != 0 || readPhaseTestFile(t, path) != original {
+	path := writeFixture(t, filepath.Join(root, "configs/authserver.conf"), original)
+	if backups, err := relocatePortableSourcePaths(root, root); err != nil || len(backups) != 0 || readFixture(t, path) != original {
 		t.Fatalf("incomplete bundled SQL was selected: %v, %v", backups, err)
 	}
 }
@@ -235,8 +235,8 @@ func TestSQLPathRecoveryValidatesAllTargetsBeforeWriting(t *testing.T) {
 	root := t.TempDir()
 	relocationSQLFixture(t, root)
 	original := `SourceDirectory = "` + filepath.ToSlash(filepath.Join(t.TempDir(), "src")) + `"` + "\n"
-	auth := profileFixture(t, root, "configs/authserver.conf", original)
-	external := profileFixture(t, t.TempDir(), "worldserver.conf", original)
+	auth := writeFixture(t, filepath.Join(root, "configs/authserver.conf"), original)
+	external := writeFixture(t, filepath.Join(t.TempDir(), "worldserver.conf"), original)
 	if err := os.Symlink(external, filepath.Join(root, "configs", "worldserver.conf")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
