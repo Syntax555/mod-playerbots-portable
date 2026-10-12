@@ -140,12 +140,23 @@ func TestAutomaticProfilesUseSavedDefaultsAndPreserveRealmPhase(t *testing.T) {
 		t.Fatal(err)
 	}
 	profileFixture(t, root, "configs/"+automaticProfileState, string(state))
-	if _, err := migrateConfigProfiles(root); err != nil {
+	backups, err := migrateConfigProfiles(root)
+	if err != nil {
 		t.Fatal(err)
 	}
 	current, _ := os.ReadFile(bots)
 	if !strings.Contains(string(current), "AiPlayerbot.RandomBotJoinBG = 1") || !strings.Contains(string(current), "AiPlayerbot.RandomBotMaxLevel = 70") {
 		t.Fatalf("managed default or TBC phase lost: %s", current)
+	}
+	// Only user-facing configs receive backups; the baseline changed as well.
+	if len(backups) != 1 || !strings.HasPrefix(backups[0], bots+".backup.") {
+		t.Fatalf("backups = %v; want only the playerbots.conf backup", backups)
+	}
+	if matches, err := filepath.Glob(filepath.Join(root, "configs", automaticProfileState+".backup.*")); err != nil || len(matches) != 0 {
+		t.Fatalf("baseline backups were written: %v, %v", matches, err)
+	}
+	if saved, _, err := readManagedProfileState(root); err != nil || saved.Profiles["playerbots.conf"] == old {
+		t.Fatalf("baseline was not updated: %v", err)
 	}
 }
 

@@ -93,7 +93,7 @@ type profileUpdate struct {
 	original []byte
 	updated  []byte
 	mode     os.FileMode
-	backup   string
+	backup   string // empty for launcher state, which rollback restores from memory
 	create   bool
 }
 
@@ -131,7 +131,7 @@ func readConfigForUpdate(root, path string) (original []byte, mode os.FileMode, 
 func applyProfileUpdates(updates []profileUpdate) ([]string, error) {
 	var backups []string
 	for _, update := range updates {
-		if update.create {
+		if update.create || update.backup == "" {
 			continue
 		}
 		if err := writeConfigBackup(update.backup, update.original, update.mode); err != nil {
