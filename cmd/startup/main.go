@@ -1418,7 +1418,9 @@ func ensureMySQLConfigFile(baseDir, workDir, mysqlDir string) (string, error) {
 		return "", fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
 	}
 
-	if err := os.WriteFile(targetPath, []byte(content), 0644); err != nil {
+	// An interrupted first start must not leave a truncated config that is
+	// never regenerated.
+	if err := writeConfigAtomically(targetPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("failed to write %s: %w", targetPath, err)
 	}
 
@@ -1539,7 +1541,7 @@ func ensureConfigFilesWithOptions(baseDir, workDir string, mysqlExePath string, 
 					return fmt.Errorf("failed to create directory for %s: %w", targetConfPath, err)
 				}
 
-				if err := os.WriteFile(targetConfPath, []byte(content), 0644); err != nil {
+				if err := writeConfigAtomically(targetConfPath, []byte(content), 0644); err != nil {
 					return fmt.Errorf("failed to write %s: %w", targetConfPath, err)
 				}
 

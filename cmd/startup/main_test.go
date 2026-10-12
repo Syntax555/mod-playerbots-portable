@@ -542,6 +542,13 @@ MyCustomOption = 42
 		t.Errorf("existing authserver.conf was overwritten! Got: %s, Want: %s", string(authConfBytes), existingAuthContent)
 	}
 
+	// New configs are published atomically without leaving temporary files.
+	for _, directory := range []string{configDir, modulesDir, filepath.Join(baseDir, "mysql")} {
+		if temporary, err := filepath.Glob(filepath.Join(directory, ".profile-update-*")); err != nil || len(temporary) != 0 {
+			t.Errorf("temporary config files remain in %s: %v, %v", directory, temporary, err)
+		}
+	}
+
 	// Verify .conf.dist templates remain preserved in baseDir
 	if !fileExists(filepath.Join(configDir, "worldserver.conf.dist")) {
 		t.Errorf("worldserver.conf.dist template should be preserved")
