@@ -199,7 +199,7 @@ func migrateConfigProfiles(root string) ([]string, error) {
 	if !bytes.Equal(nextState, originalState) {
 		path := filepath.Join(root, "configs", automaticProfileState)
 		updates = append(updates, profileUpdate{path: path, original: originalState, updated: nextState,
-			mode: 0600, backup: path + ".backup." + timestamp, create: originalState == nil})
+			mode: 0600, create: originalState == nil})
 	}
 	return applyProfileUpdates(updates)
 }

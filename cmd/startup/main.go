@@ -1672,9 +1672,7 @@ func main() {
 		os.Exit(1)
 	}
 	for _, backup := range backups {
-		if strings.Contains(filepath.Base(backup), ".conf.backup.") {
-			fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
-		}
+		fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
 	}
 	authHosts, err := applyConfiguredPorts(workDir, &opts)
 	if err != nil {
