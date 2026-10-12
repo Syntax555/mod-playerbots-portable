@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,12 @@ func syncUpdateDirectory(directory string) error {
 	// portable directory fsync through os.File; the write-ahead journal handles
 	// interrupted rename sequences when the launcher starts again.
 	return nil
+}
+
+func transientUpdateFileError(err error) bool {
+	const errorSharingViolation, errorLockViolation = syscall.Errno(32), syscall.Errno(33)
+	var errno syscall.Errno
+	return errors.As(err, &errno) && (errno == syscall.ERROR_ACCESS_DENIED || errno == errorSharingViolation || errno == errorLockViolation)
 }
 
 func ensurePortableUpdateStopped(root string, excludedPID int) error {
