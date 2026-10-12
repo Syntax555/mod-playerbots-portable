@@ -41,7 +41,9 @@ type startupOptions struct {
 	dataDir          string
 	mysqlCnf         string
 	port             int
+	portSet          bool
 	authPort         int
+	authPortSet      bool
 	timeout          int
 	initOnly         bool
 	skipSQL          bool
@@ -407,8 +409,13 @@ func parseArgs(args []string) (startupOptions, error) {
 	}
 	setExpansionSelected := false
 	fs.Visit(func(option *flag.Flag) {
-		if option.Name == "set-expansion" {
+		switch option.Name {
+		case "set-expansion":
 			setExpansionSelected = true
+		case "port":
+			opts.portSet = true
+		case "auth-port":
+			opts.authPortSet = true
 		}
 	})
 	if setExpansionSelected {
@@ -982,7 +989,7 @@ func waitForMySQLReady(ctx context.Context, cmd *exec.Cmd, binaries *mysqlBinari
 	}
 }
 
-func waitForAuthServerReady(ctx context.Context, cmd *exec.Cmd, port int, timeout time.Duration) error {
+func waitForAuthServerReady(ctx context.Context, cmd *exec.Cmd, hosts []string, port int, timeout time.Duration) error {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -1006,9 +1013,7 @@ func waitForAuthServerReady(ctx context.Context, cmd *exec.Cmd, port int, timeou
 				}
 			}
 
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
-			if err == nil {
-				conn.Close()
+			if acceptsConnection(hosts, port, 500*time.Millisecond) {
 				fmt.Println("Authserver is online and ready.")
 				return nil
 			}
@@ -1680,7 +1685,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err := ensureRealmStopped(workDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: stop the realm before updating configuration: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	pathBackups, err := relocatePortableSourcePaths(baseDir, workDir)
@@ -1700,6 +1705,11 @@ func main() {
 		if strings.Contains(filepath.Base(backup), ".conf.backup.") {
 			fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
 		}
+	}
+	authHosts, err := applyConfiguredPorts(workDir, &opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading server ports: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Ensure client data files (maps, vmaps, mmaps, dbc) are present
@@ -1780,7 +1790,7 @@ func main() {
 		authTimeout = 60 * time.Second
 	}
 
-	if err := waitForAuthServerReady(rootCtx, authCmd, opts.authPort, authTimeout); err != nil {
+	if err := waitForAuthServerReady(rootCtx, authCmd, authHosts, opts.authPort, authTimeout); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		stopProcess("authserver", authCmd)
 		_ = shutdownMySQLAndWait(binaries, opts.port, mysqlCmd)
