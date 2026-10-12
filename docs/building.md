@@ -105,6 +105,8 @@ The [release workflow](../.github/workflows/release.yml) validates the launcher 
 
 The public [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest) contains the matching verified packages. Build artifacts are also available from eligible successful Actions runs.
 
+Builds of `main` run one at a time: a running build always finishes, and a newer push replaces any waiting build so the newest commit builds next. A verified build is published when its commit is still part of `main` and is not older than the current Latest.
+
 Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP, recording each file's size and SHA-256 hash. Latest contains three ZIPs, this update manifest and `SHA256SUMS.txt`, which covers all four payloads. Publication replaces the existing `latest` release after verification and creates no additional version tags.
 
 The executables are currently unsigned. Windows Smart App Control may block them; package checksums and automated build checks do not replace a trusted Windows code signature.
