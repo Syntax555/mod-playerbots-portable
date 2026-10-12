@@ -81,7 +81,7 @@ func relocationConfigFixtures(t *testing.T, root string) {
 	}
 	profileFixture(t, root, "mysql/data/characters.ibd", "existing character fixture")
 	profileFixture(t, root, "data/maps/0004331.map", "existing map fixture")
-	if err := ensureConfigFiles(root, root, filepath.Join(root, "mysql", "bin", "mysql.exe")); err != nil {
+	if err := ensureConfigFiles(root, root, filepath.Join(root, "mysql", "bin", "mysql.exe"), defaultTestOptions()); err != nil {
 		t.Fatal(err)
 	}
 }
