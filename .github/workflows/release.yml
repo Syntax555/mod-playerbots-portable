@@ -25,12 +25,16 @@ permissions:
 
 concurrency:
   group: portable-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) }}
+  # Main builds queue: a running build always finishes, and a newer push
+  # replaces any waiting run so the newest commit builds next. Other refs
+  # cancel superseded runs.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   launcher:
     name: Check launcher before server build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:

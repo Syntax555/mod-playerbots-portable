@@ -20,15 +20,14 @@ import publish_latest as publisher
 SHA = "a" * 40
 OLDER_SHA = "b" * 40
 NEWER_SHA = "c" * 40
+# A main head after a force-push that dropped SHA.
+FORCED_SHA = "d" * 40
+# A former main commit that was removed from main's history.
+REWRITTEN_SHA = "e" * 40
+# A side branch commit and the merge that brings it and SHA into main.
+SIDE_SHA = "f" * 40
+MERGE_SHA = "1" * 40
 REPOSITORY = "owner/mod-playerbots-portable"
-
-
-def documentation_comparison(*paths):
-    return {
-        "status": "ahead", "base_commit": {"sha": SHA}, "merge_base_commit": {"sha": SHA},
-        "ahead_by": 1, "behind_by": 0, "total_commits": 1,
-        "files": [{"filename": path, "status": "modified"} for path in paths],
-    }
 
 
 class FakeGitHub:
@@ -37,6 +36,11 @@ class FakeGitHub:
     def __init__(self):
         self.calls = []
         self.main_values = [SHA]
+        self.parents = {
+            OLDER_SHA: [], SHA: [OLDER_SHA], NEWER_SHA: [SHA], FORCED_SHA: [OLDER_SHA],
+            REWRITTEN_SHA: [OLDER_SHA], SIDE_SHA: [OLDER_SHA], MERGE_SHA: [SHA, SIDE_SHA],
+        }
+        # Raw compare responses keyed by (base, head) override the history.
         self.comparisons = {}
         self.fail_upload = None
         self.fail_promotion = False
@@ -69,9 +73,27 @@ class FakeGitHub:
             return self.main_values.pop(0)
         return self.main_values[0]
 
+    def history(self, commit):
+        seen, pending = set(), [commit]
+        while pending:
+            current = pending.pop()
+            if current not in seen:
+                seen.add(current)
+                pending.extend(self.parents.get(current, []))
+        return seen
+
     def compare_commits(self, base, head):
         self.calls.append(("compare_commits", base, head))
-        return copy.deepcopy(self.comparisons.get(head, {"status": "behind"}))
+        if (base, head) in self.comparisons:
+            return copy.deepcopy(self.comparisons[(base, head)])
+        base_history, head_history = self.history(base), self.history(head)
+        common = base_history & head_history
+        merge_base = max(common, key=lambda commit: len(self.history(commit))) if common else None
+        ahead, behind = len(head_history - base_history), len(base_history - head_history)
+        status = ("identical" if not ahead and not behind else "ahead" if not behind
+                  else "behind" if not ahead else "diverged")
+        return {"status": status, "merge_base_commit": {"sha": merge_base},
+                "ahead_by": ahead, "behind_by": behind}
 
     def create_draft(self, tag, sha, notes):
         self.calls.append(("create_draft", tag, sha, notes))
@@ -215,21 +237,28 @@ class PublicationTests(unittest.TestCase):
             self.publish()
         self.assertEqual([], self.client.writes)
 
-    def test_stale_build_makes_no_api_writes(self):
-        self.client.main_values = [OLDER_SHA]
-        result = self.publish()
-        self.assertTrue(result.skipped)
+    def assert_skipped_without_writes(self):
+        self.assertTrue(self.publish().skipped)
         self.assertEqual([], self.client.writes)
+        self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+        self.assertIn(1, self.client.releases)
 
-    def test_current_commit_needs_no_compare_request(self):
+    def test_build_missing_from_main_history_makes_no_api_writes(self):
+        # Main moved back before the build, or a force-push dropped it.
+        for head in (OLDER_SHA, FORCED_SHA):
+            with self.subTest(head=head):
+                self.client = FakeGitHub()
+                self.client.main_values = [head]
+                self.assert_skipped_without_writes()
+
+    def test_main_head_replaces_older_latest(self):
         self.assertFalse(self.publish().skipped)
-        self.assertFalse(any(call[0] == "compare_commits" for call in self.client.calls))
+        self.assertEqual(SHA, self.client.tags["latest"])
+        self.assertEqual([("compare_commits", OLDER_SHA, SHA)] * 3,
+                         [call for call in self.client.calls if call[0] == "compare_commits"])
 
-    def test_documentation_only_descendant_keeps_built_release_identity(self):
+    def test_build_with_newer_main_commits_still_replaces_older_latest(self):
         self.client.main_values = [NEWER_SHA]
-        self.client.comparisons[NEWER_SHA] = documentation_comparison(
-            "README.md", "AGENTS.md", "CONTRIBUTING.md", "docs/era-talents.md", ".github/RELEASE_TEMPLATE.md",
-        )
         result = self.publish()
         self.assertFalse(result.skipped)
         self.assertEqual(SHA, self.client.tags["latest"])
@@ -241,22 +270,48 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(SHA, manifest["revision"])
         self.assertEqual(3, self.client.calls.count(("compare_commits", SHA, NEWER_SHA)))
 
-    def test_documentation_advancement_is_rechecked_at_all_three_guards(self):
-        heads = [NEWER_SHA, "d" * 40, "e" * 40]
-        self.client.main_values = heads.copy()
-        for head in heads:
-            self.client.comparisons[head] = documentation_comparison("docs/configuration.md")
+    def test_build_older_than_latest_makes_no_api_writes(self):
+        self.client.main_values = [NEWER_SHA]
+        self.client.tags["latest"] = NEWER_SHA
+        self.assertTrue(self.publish().skipped)
+        self.assertEqual([], self.client.writes)
+        self.assertEqual(NEWER_SHA, self.client.tags["latest"])
+        self.assertIn(1, self.client.releases)
+
+    def test_same_commit_is_published_again(self):
+        self.client.tags["latest"] = SHA
         self.assertFalse(self.publish().skipped)
-        self.assertEqual([("compare_commits", SHA, head) for head in heads],
-                         [call for call in self.client.calls if call[0] == "compare_commits"])
+        self.assertEqual(SHA, self.client.tags["latest"])
+        self.assertFalse(any(call[0] == "compare_commits" for call in self.client.calls))
+
+    def test_first_publication_needs_no_latest_comparison(self):
+        del self.client.tags["latest"]
+        del self.client.releases[1]
+        self.client.main_values = [NEWER_SHA]
+        self.assertFalse(self.publish().skipped)
+        self.assertEqual(SHA, self.client.tags["latest"])
+        self.assertEqual({("compare_commits", SHA, NEWER_SHA)},
+                         {call for call in self.client.calls if call[0] == "compare_commits"})
+
+    def test_latest_removed_from_main_history_is_replaced(self):
+        self.client.main_values = [NEWER_SHA]
+        self.client.tags["latest"] = REWRITTEN_SHA
+        self.assertFalse(self.publish().skipped)
         self.assertEqual(SHA, self.client.tags["latest"])
 
-    def test_runtime_advancement_at_each_guard_preserves_existing_latest(self):
+    def test_diverged_build_is_skipped_while_latest_remains_on_main(self):
+        # A merge put both commits on main; the build is not newer than Latest.
+        self.client.main_values = [MERGE_SHA]
+        self.client.tags["latest"] = SIDE_SHA
+        self.assertTrue(self.publish().skipped)
+        self.assertEqual([], self.client.writes)
+        self.assertEqual(SIDE_SHA, self.client.tags["latest"])
+
+    def test_history_change_at_each_guard_preserves_existing_latest(self):
         for guard in range(3):
             with self.subTest(guard=guard):
                 self.client = FakeGitHub()
-                self.client.main_values = [SHA] * guard + [NEWER_SHA]
-                self.client.comparisons[NEWER_SHA] = documentation_comparison("cmd/startup/main.go")
+                self.client.main_values = [SHA] * guard + [FORCED_SHA]
                 self.assertTrue(self.publish().skipped)
                 self.assertIn(1, self.client.releases)
                 self.assertEqual(OLDER_SHA, self.client.tags["latest"])
@@ -264,96 +319,25 @@ class PublicationTests(unittest.TestCase):
                 self.assertNotIn(("delete_release", 1), self.client.calls)
                 self.assertFalse(any(call[0] == "promote_release" for call in self.client.calls))
 
-    def test_non_documentation_changes_make_no_api_writes(self):
-        for name in ("cmd/startup/main.go", ".github/workflows/release.yml", "versions.lock.json",
-                     "scripts/publish_latest.py", "THIRD_PARTY_NOTICES.md", "README.txt"):
-            with self.subTest(name=name):
-                self.client = FakeGitHub()
-                self.client.main_values = [NEWER_SHA]
-                self.client.comparisons[NEWER_SHA] = documentation_comparison(name)
-                self.assertTrue(self.publish().skipped)
-                self.assertEqual([], self.client.writes)
-
-    def test_renaming_runtime_or_workflow_files_into_docs_is_rejected(self):
-        for source in ("cmd/startup/main.go", ".github/workflows/release.yml", None):
-            with self.subTest(source=source):
-                self.client = FakeGitHub()
-                self.client.main_values = [NEWER_SHA]
-                comparison = documentation_comparison("docs/example.md")
-                comparison["files"][0]["status"] = "renamed"
-                if source is not None:
-                    comparison["files"][0]["previous_filename"] = source
-                self.client.comparisons[NEWER_SHA] = comparison
-                self.assertTrue(self.publish().skipped)
-                self.assertEqual([], self.client.writes)
-
-    def test_documentation_rename_is_allowed(self):
-        self.client.main_values = [NEWER_SHA]
-        comparison = documentation_comparison("docs/new-guide.md")
-        comparison["files"][0].update(status="renamed", previous_filename="docs/guide.md")
-        self.client.comparisons[NEWER_SHA] = comparison
-        self.assertFalse(self.publish().skipped)
-
-    def test_compare_file_cap_is_rejected_but_smaller_complete_list_is_allowed(self):
-        for count, skipped in ((299, False), (300, True)):
-            with self.subTest(count=count):
-                self.client = FakeGitHub()
-                self.client.main_values = [NEWER_SHA]
-                self.client.comparisons[NEWER_SHA] = documentation_comparison(
-                    *(f"docs/guide-{index}.md" for index in range(count)),
-                )
-                self.assertEqual(skipped, self.publish().skipped)
-                if skipped:
-                    self.assertEqual([], self.client.writes)
-
-    def test_ahead_commit_with_no_net_file_changes_is_allowed(self):
-        self.client.main_values = [NEWER_SHA]
-        self.client.comparisons[NEWER_SHA] = documentation_comparison()
-        self.assertFalse(self.publish().skipped)
-
-    def test_unknown_or_incomplete_compare_metadata_is_rejected(self):
+    def test_invalid_main_or_compare_metadata_is_rejected(self):
+        ancestor = {"status": "ahead", "merge_base_commit": {"sha": SHA}, "ahead_by": 1, "behind_by": 0}
         invalid = [None, [], {}, {"status": "behind"}, {"status": "diverged"}, {"status": "identical"}]
-        fields = {
-            "base_commit": [None, {}, {"sha": OLDER_SHA}],
-            "merge_base_commit": [None, {}, {"sha": OLDER_SHA}],
-            "ahead_by": [None, "1", True, 0], "behind_by": [None, True, 1],
-            "total_commits": [None, True, 2], "files": [None, {}, [None], [{}]],
-        }
-        for field, values in fields.items():
+        for field, values in {"merge_base_commit": [None, {}, {"sha": OLDER_SHA}, {"sha": "main"}],
+                              "behind_by": [None, True, 1, "0"]}.items():
             for value in values:
-                comparison = documentation_comparison("README.md")
-                comparison[field] = value
-                invalid.append(comparison)
-        for field in ("status", "base_commit", "merge_base_commit", "ahead_by", "behind_by", "total_commits", "files"):
-            comparison = documentation_comparison("README.md")
-            del comparison[field]
-            invalid.append(comparison)
+                invalid.append({**ancestor, field: value})
+            invalid.append({key: entry for key, entry in ancestor.items() if key != field})
         for comparison in invalid:
             with self.subTest(comparison=comparison):
                 self.client = FakeGitHub()
                 self.client.main_values = [NEWER_SHA]
-                self.client.comparisons[NEWER_SHA] = comparison
-                self.assertTrue(self.publish().skipped)
-                self.assertEqual([], self.client.writes)
-
-    def test_unknown_file_status_or_invalid_documentation_paths_are_rejected(self):
-        entries = [
-            {"filename": "README.md"}, {"filename": "README.md", "status": "unknown"},
-            {"filename": "README.md", "status": []}, {"filename": None, "status": "modified"},
-            {"filename": "docs/../cmd/startup/main.go", "status": "modified"},
-            {"filename": "docs/", "status": "modified"},
-            {"filename": "docs/guide.md", "status": "modified", "previous_filename": "main.go"},
-            {"filename": "docs/guide.md", "status": "copied"},
-        ]
-        for entry in entries:
-            with self.subTest(entry=entry):
+                self.client.comparisons[(SHA, NEWER_SHA)] = comparison
+                self.assert_skipped_without_writes()
+        for head in (None, "main", "g" * 40):
+            with self.subTest(head=head):
                 self.client = FakeGitHub()
-                self.client.main_values = [NEWER_SHA]
-                comparison = documentation_comparison()
-                comparison["files"] = [entry]
-                self.client.comparisons[NEWER_SHA] = comparison
-                self.assertTrue(self.publish().skipped)
-                self.assertEqual([], self.client.writes)
+                self.client.main_values = [head]
+                self.assert_skipped_without_writes()
 
     def test_compare_request_failure_does_not_publish(self):
         self.client.main_values = [NEWER_SHA]
@@ -602,7 +586,7 @@ class PublicationTests(unittest.TestCase):
 class ClientTests(unittest.TestCase):
     def test_compare_uses_immutable_commit_range_without_pagination(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
-        with patch.object(client, "_request", return_value=documentation_comparison("README.md")) as request:
+        with patch.object(client, "_request", return_value={"status": "ahead"}) as request:
             result = client.compare_commits(SHA, NEWER_SHA)
         request.assert_called_once_with("GET", f"/compare/{SHA}...{NEWER_SHA}")
         self.assertEqual("ahead", result["status"])
