@@ -1162,18 +1162,10 @@ func mysqlBufferPoolSettings(totalRAMBytes uint64) (sizeStr string, instances in
 
 	ramGB := int((totalRAMBytes + (512 * 1024 * 1024)) / (1024 * 1024 * 1024))
 	// Leave memory available for worldserver, bots and the OS on the same host.
-	poolMB := totalRAMBytes / 4 / (1024 * 1024)
-	if poolMB < 512 {
-		poolMB = 512
-	} else if poolMB > 8192 {
-		poolMB = 8192
-	}
+	poolMB := min(max(totalRAMBytes/4/(1024*1024), 512), 8192)
 	poolMB -= poolMB % 256
 
-	instances = int(poolMB / 2048)
-	if instances < 1 {
-		instances = 1
-	}
+	instances = max(int(poolMB/2048), 1)
 	if poolMB%1024 == 0 {
 		return fmt.Sprintf("%dG", poolMB/1024), instances, ramGB
 	}
@@ -1726,10 +1718,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	authTimeout := time.Duration(opts.timeout*2) * time.Second
-	if authTimeout < 60*time.Second {
-		authTimeout = 60 * time.Second
-	}
+	authTimeout := max(time.Duration(opts.timeout*2)*time.Second, 60*time.Second)
 
 	if err := waitForAuthServerReady(rootCtx, authCmd, authHosts, opts.authPort, authTimeout); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

@@ -84,7 +84,7 @@ func requireRegularConfigPath(root, path string) error {
 		return errors.New("configuration path is outside the installation")
 	}
 	current := root
-	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+	for part := range strings.SplitSeq(relative, string(filepath.Separator)) {
 		current = filepath.Join(current, part)
 		info, err := os.Lstat(current)
 		if errors.Is(err, os.ErrNotExist) {
