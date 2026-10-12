@@ -48,6 +48,60 @@ func readPhaseTestFile(t *testing.T, path string) string {
 	return string(content)
 }
 
+func TestConfigValueMatchesAzerothCoreParser(t *testing.T) {
+	content := "# MaxPlayerLevel = 10\r\n[MaxPlayerLevel = 70]\r\n[worldserver]\r\n  MaxPlayerLevel = \"60\"  \r\n" +
+		"MaxPlayerLevel = 80\r\nWorldServerPort=8085\r\nBindIP = \"192.168.1.10\"\r\nEmpty =\r\n"
+	for _, test := range []struct {
+		key, raw string
+		exists   bool
+		number   int
+		invalid  bool
+	}{
+		{key: "MaxPlayerLevel", raw: `"60"`, exists: true, number: 60},
+		{key: "WorldServerPort", raw: "8085", exists: true, number: 8085},
+		{key: "BindIP", raw: `"192.168.1.10"`, exists: true, invalid: true},
+		{key: "Empty", raw: "", exists: true, invalid: true},
+		{key: "Missing"},
+	} {
+		if raw, exists := configValue(content, test.key); raw != test.raw || exists != test.exists {
+			t.Errorf("configValue(%s) = %q, %v; want %q, %v", test.key, raw, exists, test.raw, test.exists)
+		}
+		number, exists, err := configInt(content, test.key)
+		if exists != test.exists || (err != nil) != test.invalid || number != test.number {
+			t.Errorf("configInt(%s) = %d, %v, %v; want %d, %v, invalid %v", test.key, number, exists, err, test.number, test.exists, test.invalid)
+		}
+	}
+}
+
+func TestRealmSettingsAcceptQuotedNumbers(t *testing.T) {
+	directory := t.TempDir()
+	writePhaseTestFile(t, filepath.Join(directory, "configs", "worldserver.conf"), "MaxPlayerLevel = \"70\"\n")
+	if phase, err := loadRealmPhase(directory); err != nil || phase.name != "tbc" {
+		t.Fatalf("quoted level cap read as %+v (%v)", phase, err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closedPort := closed.Addr().(*net.TCPAddr).Port
+	closed.Close()
+	world := filepath.Join(directory, "configs", "worldserver.conf")
+	writePhaseTestFile(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", listener.Addr().(*net.TCPAddr).Port))
+	writePhaseTestFile(t, filepath.Join(directory, "configs", "authserver.conf"), fmt.Sprintf("RealmServerPort = \"%d\"\n", closedPort))
+	if err := ensureRealmStopped(directory); err == nil || !strings.Contains(err.Error(), "is listening") {
+		t.Fatalf("quoted listening port was not checked: %v", err)
+	}
+	writePhaseTestFile(t, world, fmt.Sprintf("WorldServerPort = \"%d\"\n", closedPort))
+	if err := ensureRealmStopped(directory); err != nil {
+		t.Fatalf("quoted port blocked a stopped realm: %v", err)
+	}
+}
+
 func TestExpansionTransitionsPreserveCharactersAndSurviveProfileUpdates(t *testing.T) {
 	directory := newPhaseRealm(t)
 	for _, target := range []struct {
