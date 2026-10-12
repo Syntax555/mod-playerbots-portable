@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -843,18 +844,9 @@ func initializeMySQL(binaries *mysqlBinaries, dataDir string, configFile string)
 
 	fmt.Printf("=== [1/4] Initializing MySQL data directory at %s ===\n", absDataDir)
 
-	var args []string
-	if configFile != "" && fileExists(configFile) {
-		if absCnf, err := filepath.Abs(configFile); err == nil {
-			args = append(args, fmt.Sprintf("--defaults-file=%s", absCnf))
-		} else {
-			args = append(args, fmt.Sprintf("--defaults-file=%s", configFile))
-		}
-	}
-
-	args = append(args,
+	args := append(defaultsFileArgs(configFile),
 		"--initialize-insecure",
-		fmt.Sprintf("--datadir=%s", absDataDir),
+		"--datadir="+absDataDir,
 		"--console",
 	)
 
@@ -877,18 +869,9 @@ func startMySQLServer(binaries *mysqlBinaries, dataDir string, port int, configF
 		return nil, fmt.Errorf("failed to resolve absolute data dir: %w", err)
 	}
 
-	var args []string
-	if configFile != "" && fileExists(configFile) {
-		if absCnf, err := filepath.Abs(configFile); err == nil {
-			args = append(args, fmt.Sprintf("--defaults-file=%s", absCnf))
-		} else {
-			args = append(args, fmt.Sprintf("--defaults-file=%s", configFile))
-		}
-	}
-
-	args = append(args,
-		fmt.Sprintf("--datadir=%s", absDataDir),
-		fmt.Sprintf("--port=%d", port),
+	args := append(defaultsFileArgs(configFile),
+		"--datadir="+absDataDir,
+		"--port="+strconv.Itoa(port),
 		"--bind-address=127.0.0.1",
 		"--mysqlx=0",
 		"--console",
@@ -912,95 +895,87 @@ func startMySQLServer(binaries *mysqlBinaries, dataDir string, port int, configF
 	return cmd, nil
 }
 
-func waitForMySQLReady(ctx context.Context, cmd *exec.Cmd, binaries *mysqlBinaries, port int, timeout time.Duration) error {
+// mysqlRootArgs connects a MySQL client tool as root to the launcher's
+// loopback server over TCP, followed by extra options and commands.
+func mysqlRootArgs(port int, extra ...string) []string {
+	return append([]string{"-u", "root", "-h", "127.0.0.1", "-P", strconv.Itoa(port), "--protocol=tcp"}, extra...)
+}
+
+// defaultsFileArgs selects an existing option file. MySQL requires
+// --defaults-file to be the first argument.
+func defaultsFileArgs(configFile string) []string {
+	if configFile == "" || !fileExists(configFile) {
+		return nil
+	}
+	if absolute, err := filepath.Abs(configFile); err == nil {
+		configFile = absolute
+	}
+	return []string{"--defaults-file=" + configFile}
+}
+
+// waitForReady polls probe every 500 ms until it reports readiness or an
+// error, the launched process exits, or the timeout expires.
+func waitForReady(ctx context.Context, cmd *exec.Cmd, name string, timeout time.Duration, probe func(context.Context) (bool, error)) error {
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	fmt.Printf("Waiting for MySQL server to accept connections on port %d...\n", port)
-
 	for {
 		select {
 		case <-waitCtx.Done():
 			if errors.Is(waitCtx.Err(), context.Canceled) {
-				return errors.New("interrupted waiting for MySQL server")
+				return fmt.Errorf("interrupted waiting for %s", name)
 			}
-			return fmt.Errorf("timed out waiting for MySQL server after %v", timeout)
+			return fmt.Errorf("timed out waiting for %s after %v", name, timeout)
 		case <-ticker.C:
 			if cmd != nil && cmd.Process != nil {
-				alive, exitCode := isProcessAlive(cmd.Process.Pid)
-				if !alive {
-					return fmt.Errorf("MySQL server process exited prematurely (PID: %d, exit code: %d)", cmd.Process.Pid, exitCode)
+				if alive, exitCode := isProcessAlive(cmd.Process.Pid); !alive {
+					return fmt.Errorf("%s process exited prematurely (PID: %d, exit code: %d)", name, cmd.Process.Pid, exitCode)
 				}
 			}
-
-			// Check TCP port connectivity
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
-			if err != nil {
-				continue
-			}
-			conn.Close()
-			if cmd == nil || cmd.Process == nil {
-				return errors.New("MySQL readiness requires an owned server process")
-			}
-			owned, err := ownsMySQLListener(port, cmd.Process)
-			if err != nil {
-				return fmt.Errorf("cannot verify MySQL listener ownership: %w", err)
-			}
-			if !owned {
-				continue
-			}
-
-			// Check via mysqladmin ping
-			args := []string{
-				"--connect-timeout=5",
-				"-u", "root",
-				"-h", "127.0.0.1",
-				"-P", fmt.Sprintf("%d", port),
-				"--protocol=tcp",
-				"ping",
-			}
-			pingCmd := exec.CommandContext(waitCtx, binaries.mysqladmin, args...)
-			if err := pingCmd.Run(); err == nil {
-				fmt.Println("MySQL server is online and ready.")
-				return nil
+			if ready, err := probe(waitCtx); ready || err != nil {
+				return err
 			}
 		}
 	}
 }
 
-func waitForAuthServerReady(ctx context.Context, cmd *exec.Cmd, hosts []string, port int, timeout time.Duration) error {
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	fmt.Printf("Waiting for authserver to initialize and listen on port %d...\n", port)
-
-	for {
-		select {
-		case <-waitCtx.Done():
-			if errors.Is(waitCtx.Err(), context.Canceled) {
-				return errors.New("interrupted waiting for authserver")
-			}
-			return fmt.Errorf("timed out waiting for authserver on port %d after %v", port, timeout)
-		case <-ticker.C:
-			if cmd != nil && cmd.Process != nil {
-				alive, exitCode := isProcessAlive(cmd.Process.Pid)
-				if !alive {
-					return fmt.Errorf("authserver process exited prematurely (PID: %d, exit code: %d)", cmd.Process.Pid, exitCode)
-				}
-			}
-
-			if acceptsConnection(hosts, port, 500*time.Millisecond) {
-				fmt.Println("Authserver is online and ready.")
-				return nil
-			}
+func waitForMySQLReady(ctx context.Context, cmd *exec.Cmd, binaries *mysqlBinaries, port int, timeout time.Duration) error {
+	fmt.Printf("Waiting for MySQL server to accept connections on port %d...\n", port)
+	return waitForReady(ctx, cmd, "MySQL server", timeout, func(ctx context.Context) (bool, error) {
+		if !acceptsConnection([]string{"127.0.0.1"}, port, 500*time.Millisecond) {
+			return false, nil
 		}
-	}
+		if cmd == nil || cmd.Process == nil {
+			return false, errors.New("MySQL readiness requires an owned server process")
+		}
+		owned, err := ownsMySQLListener(port, cmd.Process)
+		if err != nil {
+			return false, fmt.Errorf("cannot verify MySQL listener ownership: %w", err)
+		}
+		if !owned {
+			return false, nil
+		}
+		ping := exec.CommandContext(ctx, binaries.mysqladmin, mysqlRootArgs(port, "--connect-timeout=5", "ping")...)
+		if ping.Run() != nil {
+			return false, nil
+		}
+		fmt.Println("MySQL server is online and ready.")
+		return true, nil
+	})
+}
+
+func waitForAuthServerReady(ctx context.Context, cmd *exec.Cmd, hosts []string, port int, timeout time.Duration) error {
+	fmt.Printf("Waiting for authserver to initialize and listen on port %d...\n", port)
+	return waitForReady(ctx, cmd, "authserver", timeout, func(context.Context) (bool, error) {
+		if !acceptsConnection(hosts, port, 500*time.Millisecond) {
+			return false, nil
+		}
+		fmt.Println("Authserver is online and ready.")
+		return true, nil
+	})
 }
 
 func runEmbeddedSQL(binaries *mysqlBinaries, port int, sqlContent string) error {
@@ -1010,14 +985,7 @@ func runEmbeddedSQL(binaries *mysqlBinaries, port int, sqlContent string) error 
 
 	fmt.Println("\n=== [3/4] Applying create_mysql.sql ===")
 
-	args := []string{
-		"-u", "root",
-		"-h", "127.0.0.1",
-		"-P", fmt.Sprintf("%d", port),
-		"--protocol=tcp",
-	}
-
-	cmd := exec.Command(binaries.mysql, args...)
+	cmd := exec.Command(binaries.mysql, mysqlRootArgs(port)...)
 	cmd.Stdin = strings.NewReader(sqlContent)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1033,15 +1001,7 @@ func runEmbeddedSQL(binaries *mysqlBinaries, port int, sqlContent string) error 
 func sanitizeRealmlistFlags(binaries *mysqlBinaries, port int) {
 	// Reset any stale realm flags (e.g. flag 1 or 3) left behind if worldserver was interrupted/killed mid-boot.
 	query := "UPDATE `acore_auth`.`realmlist` SET `flag` = 0 WHERE `flag` IN (1, 3) OR (`flag` & 1) != 0;"
-	args := []string{
-		"-u", "root",
-		"-h", "127.0.0.1",
-		"-P", fmt.Sprintf("%d", port),
-		"--protocol=tcp",
-		"-e", query,
-	}
-
-	cmd := exec.Command(binaries.mysql, args...)
+	cmd := exec.Command(binaries.mysql, mysqlRootArgs(port, "-e", query)...)
 	_ = cmd.Run()
 }
 
@@ -1089,16 +1049,7 @@ func shutdownMySQL(binaries *mysqlBinaries, port int, process *os.Process) error
 }
 
 func runMySQLShutdown(ctx context.Context, binaries *mysqlBinaries, port int) error {
-	args := []string{
-		"--connect-timeout=5",
-		"-u", "root",
-		"-h", "127.0.0.1",
-		"-P", fmt.Sprintf("%d", port),
-		"--protocol=tcp",
-		"shutdown",
-	}
-
-	shutdownCmd := exec.CommandContext(ctx, binaries.mysqladmin, args...)
+	shutdownCmd := exec.CommandContext(ctx, binaries.mysqladmin, mysqlRootArgs(port, "--connect-timeout=5", "shutdown")...)
 	shutdownCmd.Stdout = os.Stdout
 	shutdownCmd.Stderr = os.Stderr
 	if err := shutdownCmd.Run(); err != nil {
@@ -1409,26 +1360,30 @@ func ensureMySQLConfigFile(baseDir, workDir, mysqlDir string) (string, error) {
 	return targetPath, nil
 }
 
+// mysqlInstallDir returns the MySQL root searched for an existing option file:
+// --mysql-dir, else the parent of the client's bin directory. Config creation
+// and server start must search the same directory.
+func mysqlInstallDir(mysqlDir, mysqlExePath, workDir string) string {
+	if mysqlDir != "" {
+		return mysqlDir
+	}
+	if mysqlExePath != "" {
+		return filepath.Dir(filepath.Dir(mysqlExePath))
+	}
+	return filepath.Join(workDir, "mysql")
+}
+
 func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startupOptions) error {
 	phase, err := loadRealmPhase(workDir)
 	if err != nil {
 		return err
 	}
-	resolvedMySQLDir := ""
-	if opts.mysqlDir != "" {
-		resolvedMySQLDir = opts.mysqlDir
-	} else if mysqlExePath != "" {
-		resolvedMySQLDir = filepath.Dir(filepath.Dir(mysqlExePath))
-	} else {
-		resolvedMySQLDir = filepath.Join(workDir, "mysql")
-	}
-
 	// 1. Ensure MySQL configuration file (my.cnf) exists with fine-tuning settings
 	if opts.mysqlCnf != "" {
 		if !fileExists(opts.mysqlCnf) {
 			return fmt.Errorf("specified MySQL config file does not exist: %s", opts.mysqlCnf)
 		}
-	} else if _, err := ensureMySQLConfigFile(baseDir, workDir, resolvedMySQLDir); err != nil {
+	} else if _, err := ensureMySQLConfigFile(baseDir, workDir, mysqlInstallDir(opts.mysqlDir, mysqlExePath, workDir)); err != nil {
 		return fmt.Errorf("failed to ensure MySQL config file: %w", err)
 	}
 
@@ -1688,7 +1643,7 @@ func main() {
 		}
 	}
 
-	cnfFile := findMySQLConfigFile(opts.mysqlCnf, opts.mysqlDir, baseDir, workDir)
+	cnfFile := findMySQLConfigFile(opts.mysqlCnf, mysqlInstallDir(opts.mysqlDir, binaries.mysql, workDir), baseDir, workDir)
 	if rootCtx.Err() != nil {
 		fmt.Println("Startup canceled.")
 		return

@@ -855,6 +855,77 @@ func TestFindMySQLConfigFile(t *testing.T) {
 	}
 }
 
+func TestMySQLConfigSelectionUsesInstallDirOfClientOnPath(t *testing.T) {
+	workDir := t.TempDir()
+	installDir := t.TempDir()
+	systemConfig := filepath.Join(installDir, "my.ini")
+	if err := os.WriteFile(systemConfig, []byte("[mysqld]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	mysqlExe := filepath.Join(installDir, "bin", "mysql.exe")
+	if err := ensureConfigFiles(workDir, workDir, mysqlExe, defaultTestOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(workDir, "mysql", "my.cnf")) {
+		t.Error("created my.cnf although the MySQL installation provides my.ini")
+	}
+	if got := findMySQLConfigFile("", mysqlInstallDir("", mysqlExe, workDir), workDir, workDir); got != systemConfig {
+		t.Errorf("server start selects %q, config creation accepted %q", got, systemConfig)
+	}
+	if got := mysqlInstallDir("custom", mysqlExe, workDir); got != "custom" {
+		t.Errorf("--mysql-dir was not preferred: %q", got)
+	}
+	if got := mysqlInstallDir("", "", workDir); got != filepath.Join(workDir, "mysql") {
+		t.Errorf("fallback MySQL dir = %q", got)
+	}
+}
+
+func TestMySQLClientArguments(t *testing.T) {
+	got := strings.Join(mysqlRootArgs(3307, "--connect-timeout=5", "ping"), " ")
+	if want := "-u root -h 127.0.0.1 -P 3307 --protocol=tcp --connect-timeout=5 ping"; got != want {
+		t.Errorf("mysqlRootArgs = %q, want %q", got, want)
+	}
+	if args := defaultsFileArgs(filepath.Join(t.TempDir(), "missing.cnf")); args != nil {
+		t.Errorf("missing option file was passed to MySQL: %q", args)
+	}
+	config := filepath.Join(t.TempDir(), "my.cnf")
+	if err := os.WriteFile(config, []byte("[mysqld]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if args := defaultsFileArgs(config); len(args) != 1 || args[0] != "--defaults-file="+config {
+		t.Errorf("defaultsFileArgs = %q", args)
+	}
+}
+
+func TestWaitForReadyStopsOnProbeResult(t *testing.T) {
+	ctx := context.Background()
+	calls := 0
+	if err := waitForReady(ctx, nil, "service", 5*time.Second, func(context.Context) (bool, error) {
+		calls++
+		return calls == 2, nil
+	}); err != nil || calls != 2 {
+		t.Errorf("ready probe: err=%v calls=%d", err, calls)
+	}
+	probeErr := errors.New("foreign listener")
+	if err := waitForReady(ctx, nil, "service", 5*time.Second, func(context.Context) (bool, error) {
+		return false, probeErr
+	}); !errors.Is(err, probeErr) {
+		t.Errorf("probe error was not returned: %v", err)
+	}
+	if err := waitForReady(ctx, nil, "service", 600*time.Millisecond, func(context.Context) (bool, error) {
+		return false, nil
+	}); err == nil || !strings.Contains(err.Error(), "timed out waiting for service") {
+		t.Errorf("timeout error = %v", err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := waitForReady(canceled, nil, "service", time.Second, func(context.Context) (bool, error) {
+		return false, nil
+	}); err == nil || !strings.Contains(err.Error(), "interrupted waiting for service") {
+		t.Errorf("cancellation error = %v", err)
+	}
+}
+
 func TestIsProcessAlive(t *testing.T) {
 	// Current process PID should be alive
 	alive, _ := isProcessAlive(os.Getpid())
