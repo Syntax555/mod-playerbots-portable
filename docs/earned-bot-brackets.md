@@ -115,7 +115,8 @@ Humans unlock Strand of the Ancients and random battlegrounds with earned Wrath,
 and arena skirmishes with earned TBC. Native rated arenas require level 80 and
 earned Wrath; TBC characters can use skirmishes only. TBC arenas select Nagrand,
 Blade's Edge and Ruins of Lordaeron. Wrath also adds Dalaran Sewers and Ring of
-Valor. Ordinary team and rating requirements remain in force.
+Valor. Ordinary team and rating requirements remain in force. A character with
+SelfBot enabled keeps these human queue rights.
 
 Bots do not fill Strand, random battlegrounds or arenas. The pinned AI lacks
 Strand tactics, and its arena gathering uses teleport shortcuts, so those bot
