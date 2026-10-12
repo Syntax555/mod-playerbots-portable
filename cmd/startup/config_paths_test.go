@@ -185,6 +185,66 @@ func TestRelocatedLegacySQLPathsKeepSettingsAndCharacterData(t *testing.T) {
 	runRelocatedSQLProbes(t, second)
 }
 
+func TestPrepareConfigurationUpdatesMovedLegacyRealmInOnePass(t *testing.T) {
+	container := t.TempDir()
+	root := filepath.Join(container, "Downloads", "portable server")
+	relocationConfigFixtures(t, root)
+	world := filepath.Join(root, "configs", "worldserver.conf")
+	legacyWorld, err := mergeConfigProfile(readFixture(t, world), `SourceDirectory = "`+filepath.ToSlash(filepath.Join(root, "src"))+`"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFixture(t, world, legacyWorld)
+	// A module config from a release before its managed defaults existed.
+	writeFixture(t, filepath.Join(root, "configs", "modules", "AutoBalance.conf"), "Custom.Module = 7\n")
+	relocated := filepath.Join(container, "relocated server")
+	if err := os.Rename(root, relocated); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(t.TempDir())
+
+	if err := prepareConfiguration(relocated, relocated, filepath.Join(relocated, "mysql", "bin", "mysql.exe"), defaultTestOptions()); err != nil {
+		t.Fatal(err)
+	}
+	world = filepath.Join(relocated, "configs", "worldserver.conf")
+	if value, _ := configValue(readFixture(t, world), "SourceDirectory"); value != `"src"` {
+		t.Errorf("moved SQL path was not repaired: %s", value)
+	}
+	if matches, err := filepath.Glob(world + ".backup.*"); err != nil || len(matches) != 1 || readFixture(t, matches[0]) != legacyWorld {
+		t.Errorf("legacy worldserver.conf was not backed up: %v, %v", matches, err)
+	}
+	phase, err := loadRealmPhase(relocated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := currentManagedProfiles(phase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := mergeManagedProfile("Custom.Module = 7\n", "", profiles["AutoBalance.conf"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	module := filepath.Join(relocated, "configs", "modules", "AutoBalance.conf")
+	if actual := readFixture(t, module); actual != expected || !strings.Contains(actual, "Custom.Module = 7\n") {
+		t.Errorf("managed module defaults were not migrated: %q", actual)
+	}
+	if matches, err := filepath.Glob(module + ".backup.*"); err != nil || len(matches) != 1 || readFixture(t, matches[0]) != "Custom.Module = 7\n" {
+		t.Errorf("module config was not backed up: %v, %v", matches, err)
+	}
+	if readFixture(t, filepath.Join(relocated, "mysql", "data", "characters.ibd")) != "existing character fixture" {
+		t.Error("character data changed")
+	}
+	if err := prepareConfiguration(relocated, relocated, filepath.Join(relocated, "mysql", "bin", "mysql.exe"), defaultTestOptions()); err != nil {
+		t.Fatal(err)
+	}
+	top, _ := filepath.Glob(filepath.Join(relocated, "configs", "*.backup.*"))
+	modules, _ := filepath.Glob(filepath.Join(relocated, "configs", "modules", "*.backup.*"))
+	if len(top) != 1 || len(modules) != 1 {
+		t.Errorf("second start wrote more backups: %v %v", top, modules)
+	}
+}
+
 func TestSQLPathRecoveryPreservesCustomAndAmbiguousValues(t *testing.T) {
 	root := t.TempDir()
 	relocationSQLFixture(t, root)

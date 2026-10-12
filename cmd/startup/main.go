@@ -100,25 +100,31 @@ func parseArgs(args []string) (startupOptions, error) {
 }
 
 func main() {
-	if handled, err := runPortableUpdateHelper(os.Args[1:]); handled {
+	os.Exit(run(os.Args[1:]))
+}
+
+// run starts the realm and returns the process exit code. Returning instead
+// of exiting lets deferred cleanup stop processes started before a failure.
+func run(args []string) int {
+	if handled, err := runPortableUpdateHelper(args); handled {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error completing update: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
-		return
+		return 0
 	}
 	if runtime.GOOS != "windows" {
 		fmt.Fprintf(os.Stderr, "Error: mod-playerbots startup tool is only supported on Windows (detected OS: %s)\n", runtime.GOOS)
-		os.Exit(1)
+		return 1
 	}
 
-	opts, err := parseArgs(os.Args[1:])
+	opts, err := parseArgs(args)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(0)
+			return 0
 		}
 		fmt.Fprintf(os.Stderr, "Error parsing arguments: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	baseDir := findBaseDir()
@@ -131,7 +137,7 @@ func main() {
 	if baseDir == workDir {
 		if err := recoverPortableUpdate(baseDir); err != nil {
 			fmt.Fprintf(os.Stderr, "Error recovering interrupted update: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 	}
 	if opts.setExpansion != "" || opts.showExpansion {
@@ -146,13 +152,13 @@ func main() {
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error selecting expansion: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("Realm expansion: %s; level cap: %d; progression limit: %d (0 = unlimited).\n", phase.name, phase.level, phase.limit)
 		if opts.setExpansion != "" {
 			fmt.Println("Start startup.exe normally to use this phase. Players and bots still earn their progression; existing characters and databases are preserved.")
 		}
-		return
+		return 0
 	}
 
 	// Set up early root context and signal handling so Ctrl+C at any time shuts down child processes
@@ -177,32 +183,32 @@ func main() {
 
 	if baseDir == workDir && !opts.downloadDataOnly {
 		if !opts.noUpdate {
-			if updating, err := checkPortableUpdate(rootCtx, baseDir, os.Args[1:]); err != nil {
+			if updating, err := checkPortableUpdate(rootCtx, baseDir, args); err != nil {
 				fmt.Fprintf(os.Stderr, "Update check unavailable; starting installed release: %v\n", err)
 			} else if updating {
-				return
+				return 0
 			}
 		}
 	}
 	if rootCtx.Err() != nil {
 		fmt.Println("Startup canceled.")
-		return
+		return 0
 	}
 
 	// Handle -download-data-only mode, which needs no MySQL installation
 	if opts.downloadDataOnly {
 		if err := ensureClientData(rootCtx, workDir, baseDir, opts.dataURL, false); err != nil {
 			fmt.Fprintf(os.Stderr, "Error downloading client data: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("Client data download and extraction complete.")
-		os.Exit(0)
+		return 0
 	}
 
 	binaries, err := findMySQLBinaries(opts.mysqlDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	authserverExe := findExecutable(baseDir, "authserver")
@@ -211,11 +217,11 @@ func main() {
 	if !opts.initOnly {
 		if authserverExe == "" {
 			fmt.Fprintf(os.Stderr, "Error: authserver executable not found in %s or PATH\n", baseDir)
-			os.Exit(1)
+			return 1
 		}
 		if worldserverExe == "" {
 			fmt.Fprintf(os.Stderr, "Error: worldserver executable not found in %s or PATH\n", baseDir)
-			os.Exit(1)
+			return 1
 		}
 	}
 
@@ -224,63 +230,42 @@ func main() {
 		opts.dataDir = filepath.Join(workDir, "mysql", "data")
 	}
 
-	// Ensure config files (e.g. worldserver.conf, authserver.conf, modules/playerbots.conf, mysql/my.cnf) exist in workDir
-	if err := ensureConfigFiles(baseDir, workDir, binaries.mysql, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to ensure config files: %v\n", err)
-		os.Exit(1)
-	}
-	if err := ensureRealmStopped(workDir); err != nil {
+	if err := prepareConfiguration(baseDir, workDir, binaries.mysql, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	pathBackups, err := relocatePortableSourcePaths(baseDir, workDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error updating portable SQL paths: %v\n", err)
-		os.Exit(1)
-	}
-	for _, backup := range pathBackups {
-		fmt.Printf("SQL path updated; previous settings saved to %s\n", backup)
-	}
-	backups, err := migrateConfigProfiles(workDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error updating configuration defaults: %v\n", err)
-		os.Exit(1)
-	}
-	for _, backup := range backups {
-		fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
+		return 1
 	}
 	authHosts, err := applyConfiguredPorts(workDir, &opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading server ports: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// Ensure client data files (maps, vmaps, mmaps, dbc) are present
 	if !opts.initOnly {
 		if err := ensureClientData(rootCtx, workDir, baseDir, opts.dataURL, opts.skipDataCheck); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 	}
 
 	cnfFile := findMySQLConfigFile(opts.mysqlCnf, mysqlInstallDir(opts.mysqlDir, binaries.mysql, workDir), baseDir, workDir)
 	if rootCtx.Err() != nil {
 		fmt.Println("Startup canceled.")
-		return
+		return 0
 	}
 
 	// 1. Initialize data directory if needed
 	if !isDataDirInitialized(opts.dataDir) {
 		if err := initializeMySQL(binaries, opts.dataDir, cnfFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing MySQL: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 	} else {
 		fmt.Printf("MySQL data directory already initialized at %s\n", opts.dataDir)
 	}
 	if rootCtx.Err() != nil {
 		fmt.Println("Startup canceled.")
-		return
+		return 0
 	}
 
 	// 2. Start MySQL Server
@@ -288,31 +273,35 @@ func main() {
 	mysqlCmd, err := startMySQLServer(binaries, opts.dataDir, opts.port, cnfFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting MySQL: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	// Until the supervisors own the servers, stop what was started on return.
+	supervised := false
+	defer func() {
+		if !supervised {
+			stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
+		}
+	}()
 
 	// 3. Wait for MySQL to become ready
 	timeoutDuration := time.Duration(opts.timeout) * time.Second
 	if err := waitForMySQLReady(rootCtx, mysqlCmd, binaries, opts.port, timeoutDuration); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
-		os.Exit(1)
+		return 1
 	}
 
 	// 4. Apply SQL script
 	if !opts.skipSQL {
 		if err := runEmbeddedSQL(binaries, opts.port, createMySQLSQL); err != nil {
 			fmt.Fprintf(os.Stderr, "Error applying SQL: %v\n", err)
-			stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
-			os.Exit(1)
+			return 1
 		}
 	}
 
 	// 5. If init-only, shutdown and exit
 	if opts.initOnly {
 		fmt.Println("\nInit-only mode complete. Shutting down MySQL...")
-		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
-		os.Exit(0)
+		return 0
 	}
 
 	// 6. Start authserver and worldserver (staggered)
@@ -324,25 +313,25 @@ func main() {
 	authCmd, err := startServerProcess("authserver", authserverExe, workDir, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting authserver: %v\n", err)
-		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
-		os.Exit(1)
+		return 1
 	}
+	defer func() {
+		if !supervised {
+			stopProcess("authserver", authCmd)
+		}
+	}()
 
 	authTimeout := max(time.Duration(opts.timeout*2)*time.Second, 60*time.Second)
 
 	if err := waitForAuthServerReady(rootCtx, authCmd, authHosts, opts.authPort, authTimeout); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		stopProcess("authserver", authCmd)
-		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
-		os.Exit(1)
+		return 1
 	}
 
 	worldCmd, err := startServerProcess("worldserver", worldserverExe, workDir, os.Stdin)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting worldserver: %v\n", err)
-		stopProcess("authserver", authCmd)
-		stopMySQLOrWarn(binaries, opts.port, mysqlCmd)
-		os.Exit(1)
+		return 1
 	}
 
 	// 7. Setup supervisors with auto-restart capability
@@ -375,6 +364,7 @@ func main() {
 		return startServerProcess("worldserver", worldserverExe, workDir, os.Stdin)
 	}, 2*time.Second)
 
+	supervised = true
 	wg.Add(3)
 	go mysqlSupervisor.Run(supervisorCtx, mysqlCmd, &wg)
 	go authSupervisor.Run(supervisorCtx, authCmd, &wg)
@@ -395,4 +385,33 @@ func main() {
 		defer process.Release()
 		return shutdownMySQL(binaries, opts.port, process)
 	})
+	return 0
+}
+
+// prepareConfiguration creates missing configs and updates existing ones in
+// the order startup requires: configs exist, the realm is stopped, moved SQL
+// paths are repaired and then managed defaults are migrated.
+func prepareConfiguration(baseDir, workDir, mysqlExePath string, opts startupOptions) error {
+	// Ensure config files (e.g. worldserver.conf, authserver.conf, modules/playerbots.conf, mysql/my.cnf) exist in workDir
+	if err := ensureConfigFiles(baseDir, workDir, mysqlExePath, opts); err != nil {
+		return fmt.Errorf("failed to ensure config files: %w", err)
+	}
+	if err := ensureRealmStopped(workDir); err != nil {
+		return err
+	}
+	pathBackups, err := relocatePortableSourcePaths(baseDir, workDir)
+	if err != nil {
+		return fmt.Errorf("failed to update portable SQL paths: %w", err)
+	}
+	for _, backup := range pathBackups {
+		fmt.Printf("SQL path updated; previous settings saved to %s\n", backup)
+	}
+	backups, err := migrateConfigProfiles(workDir)
+	if err != nil {
+		return fmt.Errorf("failed to update configuration defaults: %w", err)
+	}
+	for _, backup := range backups {
+		fmt.Printf("Configuration updated; previous settings saved to %s\n", backup)
+	}
+	return nil
 }
