@@ -3,8 +3,9 @@
 
 The build must belong to main's history and must not be older than the
 current Latest. Uploads are staged in a draft before the existing release or
-version tags are changed. This script uses only the Python standard library
-and the Actions job's GH_TOKEN.
+version tags are changed, and the previous release is restored if the swap
+fails before the replacement is verified. This script uses only the Python
+standard library and the Actions job's GH_TOKEN.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pathlib import Path
 import re
 import string
 import sys
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlparse
@@ -38,6 +40,8 @@ ZIP_CONTENTS = {
 CHECKSUM_NAME = "SHA256SUMS.txt"
 UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
 SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
+# Seconds to wait before repeating an idempotent request after a transient failure.
+RETRY_DELAYS = (2, 5)
 # Limit cleanup to numbered version tags. Branches and other tag names are kept.
 VERSION_TAG = re.compile(
     r"^v\d+\.\d+(?:\.\d+"
@@ -83,14 +87,23 @@ class GitHubClient:
         self.repository = repository
         self._token = token
         self._base = f"https://api.github.com/repos/{repository}"
+        self.retry_delays = RETRY_DELAYS
 
     def _request(self, method: str, path: str, payload: Any = None) -> Any:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = self._headers()
         if data is not None:
             headers["Content-Type"] = "application/json"
-        request = Request(self._base + path, data=data, headers=headers, method=method)
-        return self._open(request, timeout=60)
+        # Reads and PATCH updates are idempotent, so transient failures repeat.
+        attempts = len(self.retry_delays) + 1 if method in {"GET", "PATCH"} else 1
+        for attempt in range(attempts):
+            request = Request(self._base + path, data=data, headers=headers, method=method)
+            try:
+                return self._open(request, timeout=60)
+            except PublishError as error:
+                if attempt + 1 == attempts or isinstance(error, APIError) and error.status < 500:
+                    raise
+            time.sleep(self.retry_delays[attempt])
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -207,6 +220,18 @@ class GitHubClient:
             "tag_name": "latest", "target_commitish": sha, "name": "Latest",
             "body": notes, "draft": False, "prerelease": False, "make_latest": "true",
         })
+
+    def retag_release(self, release_id: int, tag: str, sha: str | None, make_latest: bool = False) -> None:
+        # GitHub creates a missing tag at target_commitish.
+        payload: dict[str, Any] = {"tag_name": tag}
+        if sha:
+            payload["target_commitish"] = sha
+        if make_latest:
+            payload["make_latest"] = "true"
+        self._request("PATCH", f"/releases/{release_id}", payload)
+
+    def return_to_draft(self, release_id: int, tag: str) -> None:
+        self._request("PATCH", f"/releases/{release_id}", {"tag_name": tag, "draft": True})
 
     def list_releases(self) -> list[dict[str, Any]]:
         return self._pages("/releases")
@@ -399,6 +424,30 @@ def build_is_publishable(client: GitHubClient, sha: str) -> bool:
     return not contains(client, latest, main)
 
 
+def restore_previous(client: GitHubClient, draft_id: int, stage_tag: str, previous: dict[str, Any] | None,
+                     previous_sha: str | None, backup_tag: str) -> list[str]:
+    """Best effort: unpublish the replacement and return the previous release to latest."""
+    failures = []
+
+    def attempt(step: Any) -> bool:
+        try:
+            step()
+        except PublishError as error:
+            failures.append(str(error))
+            return False
+        return True
+
+    # The release tag must be free before the previous release can use it again.
+    attempt(lambda: client.return_to_draft(draft_id, stage_tag))
+    if previous_sha:
+        attempt(lambda: client.set_tag("latest", previous_sha))
+    # The backup tag still holds the previous release until it is restored.
+    if previous is not None and attempt(
+            lambda: client.retag_release(previous["id"], "latest", previous_sha, make_latest=True)):
+        attempt(lambda: client.delete_tag(backup_tag))
+    return failures
+
+
 def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, run_id: str) -> PublishResult:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
         raise PublishError("--sha must be a full 40-character commit SHA")
@@ -410,7 +459,8 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
     if not build_is_publishable(client, sha):
         return PublishResult(skipped=True)
 
-    stage_tag = f"build-{run_id}-{uuid.uuid4().hex[:12]}"
+    token = uuid.uuid4().hex[:12]
+    stage_tag = f"build-{run_id}-{token}"
     draft = client.create_draft(stage_tag, sha, notes)
     draft_id = draft["id"]
     try:
@@ -434,25 +484,37 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
         raise
 
     previous = client.release_by_tag("latest")
+    previous_sha = commit_sha(client.tag_sha("latest"))
     # Final check immediately before the release replacement.
     if not build_is_publishable(client, sha):
         client.delete_release(draft_id)
         client.delete_tag(stage_tag)
         return PublishResult(skipped=True)
+    # The previous release moves to a temporary tag and stays published until
+    # the replacement is public and verified.
+    backup_tag = f"latest-previous-{run_id}-{token}"
+    try:
+        if previous is not None:
+            client.retag_release(previous["id"], backup_tag, previous_sha)
+        client.set_tag("latest", sha)
+        client.promote_release(draft_id, sha, notes)
+        published = client.get_release(draft_id)
+        if (published.get("draft") is not False or published.get("prerelease") is not False
+                or published.get("tag_name") != "latest" or published.get("name") != "Latest"):
+            raise PublishError("GitHub did not publish the expected Latest release")
+        verify_assets(published, assets)
+        if client.tag_sha("latest") != sha:
+            raise PublishError("The latest tag does not point to the built commit")
+        url = published.get("html_url")
+        if not url:
+            raise PublishError("The published release does not have a public URL")
+    except Exception:
+        for failure in restore_previous(client, draft_id, stage_tag, previous, previous_sha, backup_tag):
+            print(f"Could not restore the previous Latest release: {failure}", file=sys.stderr)
+        raise
     if previous is not None:
         client.delete_release(previous["id"])
-    client.set_tag("latest", sha)
-    client.promote_release(draft_id, sha, notes)
-    published = client.get_release(draft_id)
-    if (published.get("draft") is not False or published.get("prerelease") is not False
-            or published.get("tag_name") != "latest" or published.get("name") != "Latest"):
-        raise PublishError("GitHub did not publish the expected Latest release")
-    verify_assets(published, assets)
-    if client.tag_sha("latest") != sha:
-        raise PublishError("The latest tag does not point to the built commit")
-    url = published.get("html_url")
-    if not url:
-        raise PublishError("The published release does not have a public URL")
+        client.delete_tag(backup_tag)
 
     # Numbered history is removed only after the replacement is publicly verified.
     removed_releases = 0
