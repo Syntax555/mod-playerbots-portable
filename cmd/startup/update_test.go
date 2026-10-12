@@ -710,11 +710,13 @@ func TestPortableUpdateRangeReaderBounds(t *testing.T) {
 	}
 }
 
-func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
+// updateTestBuildLauncher builds the current launcher, which runs the update
+// helper when the installed test launcher hands an update to it.
+func updateTestBuildLauncher(t *testing.T) []byte {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("builds an actual launcher for helper integration")
 	}
-	root := t.TempDir()
 	newLauncher := filepath.Join(t.TempDir(), "new-startup.exe")
 	build := exec.Command("go", "build", "-o", newLauncher, ".")
 	if output, err := build.CombinedOutput(); err != nil {
@@ -724,6 +726,13 @@ func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return launcherBytes
+}
+
+// updateTestInstallTestLauncher installs this test binary as the old launcher.
+// It runs TestPortableUpdateHelperParentChild as the parent of the handoff.
+func updateTestInstallTestLauncher(t *testing.T, root string) []byte {
+	t.Helper()
 	oldLauncher, err := os.ReadFile(os.Args[0])
 	if err != nil {
 		t.Fatal(err)
@@ -732,19 +741,20 @@ func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
 	if err := os.Chmod(filepath.Join(root, "startup.exe"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	files := updateTestFiles()
-	files["startup.exe"] = launcherBytes
-	archive, manifest := updateTestArchive(t, files, "")
-	server, _, _ := updateTestRangeServer(t, archive)
-	plan, err := stagePortableUpdate(context.Background(), root, manifest, []string{"--help"}, server.Client(), server.URL, nil)
+	return oldLauncher
+}
+
+// updateTestHandOffFromParent runs the installed test launcher as the parent
+// that hands the staged update to its helper, and returns the log that the
+// parent, the helper and the restarted launcher share.
+func updateTestHandOffFromParent(t *testing.T, root string) string {
+	t.Helper()
+	logPath := filepath.Join(root, "helper-test.log")
+	logfile, err := os.Create(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	logfile, err := os.Create(filepath.Join(root, "helper-test.log"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer logfile.Close()
+	t.Cleanup(func() { logfile.Close() })
 	parent := exec.Command(filepath.Join(root, "startup.exe"), "-test.run=^TestPortableUpdateHelperParentChild$")
 	parent.Env = append(os.Environ(), "PORTABLE_UPDATE_PARENT_CHILD=1", "PORTABLE_UPDATE_TEST_ROOT="+root)
 	parent.Stdout, parent.Stderr = logfile, logfile
@@ -760,9 +770,25 @@ func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
 		}
 	})
 	if err := parent.Wait(); err != nil {
-		content, _ := os.ReadFile(filepath.Join(root, "helper-test.log"))
+		content, _ := os.ReadFile(logPath)
 		t.Fatalf("helper parent failed: %v\n%s", err, content)
 	}
+	return logPath
+}
+
+func TestPortableUpdateSelfReplacementWaitsForParentAndRestarts(t *testing.T) {
+	launcherBytes := updateTestBuildLauncher(t)
+	root := t.TempDir()
+	updateTestInstallTestLauncher(t, root)
+	files := updateTestFiles()
+	files["startup.exe"] = launcherBytes
+	archive, manifest := updateTestArchive(t, files, "")
+	server, _, _ := updateTestRangeServer(t, archive)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, []string{"--help"}, server.Client(), server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updateTestHandOffFromParent(t, root)
 	deadline := time.Now().Add(15 * time.Second)
 	restartEvidence := []byte("no-update")
 	if runtime.GOOS != "windows" {
@@ -820,6 +846,97 @@ func TestPortableUpdateHelperParentChild(t *testing.T) {
 		t.Fatal("updater replaced a launcher whose parent is still running")
 	}
 	updateTestWrite(t, root, "parent-was-running", []byte("helper acknowledged; old launcher still intact"))
+}
+
+func TestPortableUpdateFailedHelperRestartsInstalledRelease(t *testing.T) {
+	launcherBytes := updateTestBuildLauncher(t)
+	root := t.TempDir()
+	oldLauncher := updateTestInstallTestLauncher(t, root)
+	files := updateTestFiles()
+	files["startup.exe"] = launcherBytes
+	archive, manifest := updateTestArchive(t, files, "")
+	server, _, _ := updateTestRangeServer(t, archive)
+	if _, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil); err != nil {
+		t.Fatal(err)
+	}
+	// A folder where a new SQL file belongs fails the helper after it
+	// installed earlier files, so it has to roll them back.
+	updateTestWrite(t, root, "src/data/sql/updates/new.sql/user.txt", []byte("user file"))
+	logPath := updateTestHandOffFromParent(t, root)
+	// The restarted launcher is this test binary, whose own flag parser
+	// reports the added --no-update flag.
+	deadline := time.Now().Add(15 * time.Second)
+	var content []byte
+	for time.Now().Before(deadline) {
+		content, _ = os.ReadFile(logPath)
+		if bytes.Contains(content, []byte("flag provided but not defined: -no-update")) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	for _, evidence := range []string{"Error completing update: update was restored to the previous version", "Starting the installed release without the update check.", "flag provided but not defined: -no-update"} {
+		if !bytes.Contains(content, []byte(evidence)) {
+			t.Fatalf("failed update did not restart the installed release (%q missing):\n%s", evidence, content)
+		}
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "startup.exe")); err != nil || !bytes.Equal(got, oldLauncher) {
+		t.Fatalf("installed launcher was not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("restarted release would find the failed update journal: %v", err)
+	}
+	cached := filepath.Join(root, filepath.FromSlash(portableUpdateCacheDirectory), updateTestDigest(launcherBytes))
+	if digest, err := hashUpdateFile(cached, int64(len(launcherBytes))); err != nil || digest != updateTestDigest(launcherBytes) {
+		t.Fatalf("verified download of the uninstalled launcher was not kept: %v", err)
+	}
+	// Windows keeps the running helper's file; let it exit before cleanup.
+	helper := filepath.Join(root, portableUpdateDirectory, "helper.exe")
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if err := os.Remove(helper); err == nil || errors.Is(err, os.ErrNotExist) {
+			break
+		}
+	}
+}
+
+func TestPortableUpdateFailedHelperKeepsUnrestoredInstallation(t *testing.T) {
+	if got := withoutUpdateCheck([]string{"--skip-sql"}); strings.Join(got, " ") != "--no-update --skip-sql" {
+		t.Fatalf("restart arguments: %q", got)
+	}
+	for _, args := range [][]string{{"--no-update"}, {"-no-update", "--skip-sql"}} {
+		if got := withoutUpdateCheck(args); strings.Join(got, " ") != strings.Join(args, " ") {
+			t.Fatalf("--no-update was added twice: %q", got)
+		}
+	}
+	root := t.TempDir()
+	updateTestWrite(t, root, "startup.exe", []byte("original launcher"))
+	archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+	server, _, _ := updateTestRangeServer(t, archive)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A rollback that failed leaves the journal applying; the helper must
+	// not start servers on mixed files or discard what recovery needs.
+	plan.Phase = "applying"
+	if err := writePortableUpdatePlan(root, plan); err != nil {
+		t.Fatal(err)
+	}
+	if discardIntactUpdate(root) {
+		t.Fatal("partially installed update was treated as intact")
+	}
+	if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, "journal.json")); err != nil {
+		t.Fatalf("recovery journal was removed: %v", err)
+	}
+	plan.Phase = "staged"
+	if err := writePortableUpdatePlan(root, plan); err != nil {
+		t.Fatal(err)
+	}
+	if !discardIntactUpdate(root) {
+		t.Fatal("update that never changed installed files was not cleared")
+	}
+	if content, err := os.ReadFile(filepath.Join(root, "startup.exe")); err != nil || string(content) != "original launcher" {
+		t.Fatalf("installed launcher changed: %v", err)
+	}
 }
 
 func TestPortableUpdateRecoveryStopsWhenOriginalAndBackupAreMissing(t *testing.T) {
