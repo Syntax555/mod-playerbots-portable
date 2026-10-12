@@ -292,6 +292,35 @@ func TestExpansionRejectsListeningRealm(t *testing.T) {
 	}
 }
 
+func TestExpansionRefusesSymlinkTargets(t *testing.T) {
+	directory := newPhaseRealm(t)
+	bots := filepath.Join(directory, "configs", "modules", "playerbots.conf")
+	external := filepath.Join(t.TempDir(), "playerbots.conf")
+	original := readPhaseTestFile(t, bots)
+	writePhaseTestFile(t, external, original)
+	if err := os.Remove(bots); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, bots); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	world := filepath.Join(directory, "configs", "worldserver.conf")
+	before := readPhaseTestFile(t, world)
+	target, _ := parseRealmPhase("tbc")
+	if backups, err := setRealmPhase(directory, target); err == nil || len(backups) != 0 {
+		t.Fatalf("expansion change followed a symlink: %v, %v", backups, err)
+	}
+	if info, err := os.Lstat(bots); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("symlink was replaced: %v", err)
+	}
+	if readPhaseTestFile(t, external) != original || readPhaseTestFile(t, world) != before {
+		t.Fatal("configuration changed before all targets were validated")
+	}
+	if matches, err := filepath.Glob(filepath.Join(directory, "configs", "*.backup.*")); err != nil || len(matches) != 0 {
+		t.Fatalf("refused change wrote backups: %v, %v", matches, err)
+	}
+}
+
 func TestLegacyExpansionInferenceAndInvalidState(t *testing.T) {
 	directory := newPhaseRealm(t)
 	for _, name := range []string{"tbc", "wotlk"} {

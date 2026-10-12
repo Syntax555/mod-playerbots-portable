@@ -1,11 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Port overrides are applied only while creating a missing configuration.
@@ -92,6 +95,37 @@ type profileUpdate struct {
 	mode     os.FileMode
 	backup   string
 	create   bool
+}
+
+// backupTimestamp names the backups written by one configuration change.
+func backupTimestamp() string {
+	return time.Now().UTC().Format("20060102T150405.000000000Z")
+}
+
+// readConfigForUpdate reads a configuration that a transaction may replace,
+// with its permissions. Symbolic links in the path are refused, so an update
+// never replaces a link or writes outside the installation.
+func readConfigForUpdate(root, path string) (original []byte, mode os.FileMode, exists bool, err error) {
+	if err := requireRegularConfigPath(root, path); err != nil {
+		return nil, 0, false, err
+	}
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, 0, false, nil
+	}
+	if err != nil {
+		return nil, 0, false, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, 0, false, err
+	}
+	original, err = io.ReadAll(file)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	return original, info.Mode().Perm(), true, nil
 }
 
 func applyProfileUpdates(updates []profileUpdate) ([]string, error) {
