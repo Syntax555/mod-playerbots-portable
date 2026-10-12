@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -44,6 +45,9 @@ class FakeGitHub:
         self.comparisons = {}
         self.fail_upload = None
         self.fail_promotion = False
+        self.fail_tag_move = False
+        # Numbers of the retag_release calls that fail (1 is the first call).
+        self.fail_retags = set()
         self.corrupt_digest = False
         self.omit_digest = False
         self.corrupt_public = False
@@ -60,12 +64,20 @@ class FakeGitHub:
         }
         self.draft_id = 100
         self.upload_count = 0
+        self.retag_count = 0
 
     @property
     def writes(self):
         return [call for call in self.calls if call[0] in {
             "create_draft", "upload_asset", "delete_release", "set_tag", "delete_tag", "promote_release",
+            "retag_release", "return_to_draft",
         }]
+
+    def claim_tag(self, release_id, tag):
+        # GitHub allows one published release per tag.
+        if any(release["id"] != release_id and release.get("tag_name") == tag and release.get("draft") is False
+               for release in self.releases.values()):
+            raise publisher.APIError(422, "tag_name already_exists")
 
     def main_sha(self):
         self.calls.append(("main_sha",))
@@ -137,6 +149,8 @@ class FakeGitHub:
 
     def set_tag(self, tag, sha):
         self.calls.append(("set_tag", tag, sha))
+        if self.fail_tag_move and sha != OLDER_SHA:
+            raise publisher.APIError(502, "tag move failed")
         self.tags[tag] = sha
 
     def tag_sha(self, tag):
@@ -151,11 +165,26 @@ class FakeGitHub:
         self.calls.append(("promote_release", release_id, sha, notes))
         if self.fail_promotion:
             raise publisher.APIError(502, "promotion failed")
+        self.claim_tag(release_id, "latest")
         self.releases[release_id].update({
             "tag_name": "latest", "target_commitish": sha, "name": "Latest",
             "body": notes, "draft": False, "prerelease": False,
             "html_url": f"https://github.com/{REPOSITORY}/releases/tag/latest",
         })
+
+    def retag_release(self, release_id, tag, sha, make_latest=False):
+        self.retag_count += 1
+        self.calls.append(("retag_release", release_id, tag, sha, make_latest))
+        if self.retag_count in self.fail_retags:
+            raise publisher.APIError(502, "release update failed")
+        self.claim_tag(release_id, tag)
+        self.releases[release_id]["tag_name"] = tag
+        if tag not in self.tags:
+            self.tags[tag] = sha
+
+    def return_to_draft(self, release_id, tag):
+        self.calls.append(("return_to_draft", release_id, tag))
+        self.releases[release_id].update({"tag_name": tag, "draft": True})
 
     def list_releases(self):
         self.calls.append(("list_releases",))
@@ -387,26 +416,65 @@ class PublicationTests(unittest.TestCase):
         self.assertNotIn(self.client.draft_id, self.client.releases)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
 
-    def test_promotion_failure_does_not_prune_version_history(self):
+    def assert_previous_latest_restored(self):
+        previous = self.client.releases[1]
+        self.assertEqual("latest", previous["tag_name"])
+        self.assertIs(False, previous["draft"])
+        self.assertIn(("retag_release", 1, "latest", OLDER_SHA, True), self.client.calls)
+        self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+        self.assertFalse(any(tag.startswith("latest-previous-") for tag in self.client.tags))
+        draft = self.client.releases[self.client.draft_id]
+        self.assertTrue(draft["draft"])
+        self.assertTrue(draft["tag_name"].startswith("build-123456-"))
+        self.assertNotIn(("delete_release", 1), self.client.calls)
+
+    def test_promotion_failure_restores_previous_latest_and_keeps_versions(self):
         self.client.fail_promotion = True
         with self.assertRaisesRegex(publisher.APIError, "promotion failed"):
             self.publish()
+        self.assert_previous_latest_restored()
         self.assertIn(2, self.client.releases)
         self.assertIn(3, self.client.releases)
         self.assertIn("v0.9.0", self.client.tags)
         self.assertIn("v1.0.15", self.client.tags)
         self.assertIn("v1.0.16", self.client.tags)
         self.assertFalse(any(call[0] in {"list_releases", "list_tags"} for call in self.client.calls))
-        self.assertIn(self.client.draft_id, self.client.releases)
-        self.assertTrue(self.client.releases[self.client.draft_id]["draft"])
 
-    def test_incomplete_public_release_does_not_prune_versions(self):
+    def test_tag_move_failure_restores_previous_latest(self):
+        self.client.fail_tag_move = True
+        with self.assertRaisesRegex(publisher.APIError, "tag move failed"):
+            self.publish()
+        self.assert_previous_latest_restored()
+        self.assertFalse(any(call[0] == "promote_release" for call in self.client.calls))
+
+    def test_incomplete_public_release_restores_previous_latest(self):
         self.client.corrupt_public = True
         with self.assertRaisesRegex(publisher.PublishError, "exactly the expected assets"):
             self.publish()
+        self.assert_previous_latest_restored()
         self.assertIn(2, self.client.releases)
         self.assertIn(3, self.client.releases)
         self.assertFalse(any(call[0] in {"list_releases", "list_tags"} for call in self.client.calls))
+
+    def test_release_rename_failure_keeps_previous_latest(self):
+        self.client.fail_retags = {1}
+        with self.assertRaisesRegex(publisher.APIError, "release update failed"):
+            self.publish()
+        self.assert_previous_latest_restored()
+        self.assertFalse(any(call[0] in {"set_tag", "promote_release"} and call[2] == SHA
+                             for call in self.client.calls if len(call) > 2))
+
+    def test_failed_restore_is_reported_and_keeps_previous_release_published(self):
+        self.client.fail_promotion = True
+        self.client.fail_retags = {2}
+        stderr = io.StringIO()
+        with patch.object(sys, "stderr", stderr), self.assertRaisesRegex(publisher.APIError, "promotion failed"):
+            self.publish()
+        self.assertIn("Could not restore the previous Latest release", stderr.getvalue())
+        previous = self.client.releases[1]
+        self.assertIs(False, previous["draft"])
+        self.assertTrue(previous["tag_name"].startswith("latest-previous-123456-"))
+        self.assertIn(previous["tag_name"], self.client.tags)
 
     def test_success_publishes_correct_sha_and_prunes_only_numbered_tags(self):
         result = self.publish()
@@ -426,11 +494,17 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual({"latest", "preview", "build-preserve-me", "version-documentation"},
                          set(self.client.tags))
         calls = self.client.calls
-        old_release_delete = calls.index(("delete_release", 1))
+        backup = next(call for call in calls if call[0] == "retag_release")
+        self.assertEqual((1, OLDER_SHA, False), (backup[1], backup[3], backup[4]))
+        self.assertTrue(backup[2].startswith("latest-previous-123456-"))
         uploaded = [index for index, call in enumerate(calls) if call[0] == "upload_asset"]
-        self.assertLess(max(uploaded), old_release_delete)
+        self.assertLess(max(uploaded), calls.index(backup))
+        self.assertLess(calls.index(backup), calls.index(("set_tag", "latest", SHA)))
         public_verify = [index for index, call in enumerate(calls)
                          if call == ("get_release", self.client.draft_id)][-1]
+        old_release_delete = calls.index(("delete_release", 1))
+        self.assertLess(public_verify, old_release_delete)
+        self.assertLess(old_release_delete, calls.index(("delete_tag", backup[2])))
         self.assertLess(public_verify, calls.index(("delete_release", 2)))
 
     def test_success_without_existing_latest(self):
@@ -654,6 +728,65 @@ class ClientTests(unittest.TestCase):
             "tag_name": "latest", "target_commitish": SHA, "name": "Latest",
             "body": "notes", "draft": False, "prerelease": False, "make_latest": "true",
         })
+
+    def test_release_swap_updates_use_tag_names_and_latest_flag(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        with patch.object(client, "_request") as request:
+            client.retag_release(1, "latest-previous-123-abc", OLDER_SHA)
+            client.retag_release(1, "latest", OLDER_SHA, make_latest=True)
+            client.retag_release(1, "latest", None, make_latest=True)
+            client.return_to_draft(100, "build-123-abc")
+        self.assertEqual([
+            ("PATCH", "/releases/1", {"tag_name": "latest-previous-123-abc", "target_commitish": OLDER_SHA}),
+            ("PATCH", "/releases/1", {"tag_name": "latest", "target_commitish": OLDER_SHA, "make_latest": "true"}),
+            ("PATCH", "/releases/1", {"tag_name": "latest", "make_latest": "true"}),
+            ("PATCH", "/releases/100", {"tag_name": "build-123-abc", "draft": True}),
+        ], [call.args for call in request.call_args_list])
+
+    def transient_failures(self, *failures):
+        responses = list(failures)
+
+        def open_request(request, timeout):
+            self.opened.append(request.get_method())
+            response = responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return io.BytesIO(json.dumps(response).encode())
+
+        self.opened = []
+        return patch.object(publisher, "urlopen", side_effect=open_request)
+
+    @staticmethod
+    def http_error(status):
+        return HTTPError("https://api.github.com/", status, "error", None, io.BytesIO(b'{"message": "failed"}'))
+
+    def test_idempotent_requests_repeat_transient_failures(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        for method in ("GET", "PATCH"):
+            with self.subTest(method=method), patch.object(publisher.time, "sleep") as sleep, \
+                    self.transient_failures(self.http_error(502), URLError("reset"), {"id": 1}):
+                self.assertEqual({"id": 1}, client._request(method, "/releases/1", {} if method == "PATCH" else None))
+                self.assertEqual([method] * 3, self.opened)
+                self.assertEqual([((2,),), ((5,),)], sleep.call_args_list)
+
+    def test_retries_stop_after_three_attempts(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        with patch.object(publisher.time, "sleep"), \
+                self.transient_failures(self.http_error(503), self.http_error(502), self.http_error(500)), \
+                self.assertRaisesRegex(publisher.APIError, "HTTP 500"):
+            client._request("GET", "/releases/1")
+        self.assertEqual(3, len(self.opened))
+
+    def test_client_errors_and_non_idempotent_requests_are_not_repeated(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        for method, failure in (("GET", self.http_error(404)), ("PATCH", self.http_error(422)),
+                                ("POST", self.http_error(502)), ("DELETE", URLError("reset"))):
+            with self.subTest(method=method), patch.object(publisher.time, "sleep") as sleep, \
+                    self.transient_failures(failure, {"id": 1}):
+                with self.assertRaises(publisher.PublishError):
+                    client._request(method, "/releases/1")
+                self.assertEqual([method], self.opened)
+                sleep.assert_not_called()
 
     def test_upload_streams_the_file_and_checks_github_upload_host(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
