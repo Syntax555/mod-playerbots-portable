@@ -309,6 +309,29 @@ assert(#reported == 0)
                             "original guarded callback regression must fail")
         self.run_lua(body)
 
+    def test_checkboxes_show_saved_disabled_options(self):
+        for legacy in (False, True):
+            for saved in ("false", "true"):
+                body = f'''
+MultiBot.GetMainBarMoveLocked = function() return {saved} end
+MultiBot.GetLootMasterUIEnabled = function() return {saved} end
+{"LibStub = nil" if legacy else ""}
+local panel = loadOptions()
+panel:Show()
+local field = "checked"
+if panel._aceRoot then
+  lastTabGroup:SelectTab("layout")
+  field = "value"
+else
+  checkLegacy(panel)
+end
+assert(panel.chkMainBarMoveLocked[field] == {saved} and panel.chkLootMasterUI[field] == {saved})
+'''
+                if saved == "false":
+                    self.assertNotEqual(self.run_lua(body, pristine=True).returncode, 0,
+                                        "original checkbox default override must fail")
+                self.run_lua(body)
+
     def test_later_tab_failure_cleans_attached_and_unattached_widgets(self):
         self.run_lua('''
 local panel = loadOptions()
