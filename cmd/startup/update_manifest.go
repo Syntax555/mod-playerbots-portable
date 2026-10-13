@@ -198,11 +198,15 @@ func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL s
 }
 
 // updateRangeReader never falls back to downloading the entire archive. The first
-// byte request resolves GitHub's rolling URL to one immutable asset URL.
+// byte request resolves GitHub's rolling URL to one immutable asset URL. When
+// that signed link expires, the rolling URL is resolved again (resolve) and the
+// ETag must show that the new link names the same asset.
 type updateRangeReader struct {
 	ctx         context.Context
 	client      *http.Client
+	releaseURL  string
 	assetURL    string
+	resolve     bool
 	size        int64
 	etag        string
 	mu          sync.Mutex
@@ -218,67 +222,83 @@ type updateRangeRetryable struct{ error }
 func (e updateRangeRetryable) Unwrap() error { return e.error }
 
 func newUpdateRangeReader(ctx context.Context, client *http.Client, assetURL string, size int64) (*updateRangeReader, error) {
-	r := &updateRangeReader{ctx: ctx, client: client, assetURL: assetURL, size: size, cacheOff: -1}
-	content, finalURL, etag, err := r.request(0, 1)
+	r := &updateRangeReader{ctx: ctx, client: client, releaseURL: assetURL, assetURL: assetURL, size: size, cacheOff: -1}
+	content, err := r.request(0, 1)
 	if err != nil {
 		return nil, err
 	}
-	r.assetURL = finalURL
-	r.etag = etag
 	r.cacheOff = 0
 	r.cacheData = content
 	return r, nil
 }
 
-// Each retry keeps the resolved asset URL and its ETag precondition, so a
-// retried range still comes from the same immutable release asset.
-func (r *updateRangeReader) request(offset, length int64) ([]byte, string, string, error) {
+// Each retry keeps the asset's ETag precondition, so a retried range still
+// comes from the same immutable release asset.
+func (r *updateRangeReader) request(offset, length int64) ([]byte, error) {
 	started := time.Now()
 	defer func() { r.lastRequest = time.Since(started) }()
 	for attempt := 1; ; attempt++ {
-		content, finalURL, etag, err := r.requestOnce(offset, length)
+		content, err := r.requestOnce(offset, length)
 		var retryable updateRangeRetryable
 		if err == nil || attempt == updateRangeAttempts || !errors.As(err, &retryable) {
-			return content, finalURL, etag, err
+			return content, err
 		}
 		select {
 		case <-r.ctx.Done():
-			return nil, "", "", errors.Join(r.ctx.Err(), err)
+			return nil, errors.Join(r.ctx.Err(), err)
 		case <-time.After(time.Duration(attempt) * updateRangeRetryDelay):
 		}
 	}
 }
 
-func (r *updateRangeReader) requestOnce(offset, length int64) ([]byte, string, string, error) {
-	req, err := http.NewRequestWithContext(r.ctx, http.MethodGet, r.assetURL, nil)
+func (r *updateRangeReader) requestOnce(offset, length int64) ([]byte, error) {
+	requestURL := r.assetURL
+	if r.resolve {
+		requestURL = r.releaseURL
+	}
+	req, err := http.NewRequestWithContext(r.ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+length-1))
 	req.Header.Set("Accept-Encoding", "identity")
-	if r.etag != "" {
+	if r.etag != "" && !r.resolve {
 		req.Header.Set("If-Match", r.etag)
 	}
 	resp, err := r.client.Do(req)
 	if err != nil {
 		if r.ctx.Err() != nil || errors.Is(err, errUntrustedUpdateRedirect) {
-			return nil, "", "", err
+			return nil, err
 		}
-		return nil, "", "", updateRangeRetryable{err}
+		return nil, updateRangeRetryable{err}
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return nil, "", "", updateRangeRetryable{fmt.Errorf("release host returned HTTP %d", resp.StatusCode)}
+		return nil, updateRangeRetryable{fmt.Errorf("release host returned HTTP %d", resp.StatusCode)}
+	case http.StatusUnauthorized, http.StatusForbidden:
+		// GitHub signs each resolved asset link for a few minutes, which a
+		// slow download outlasts.
+		if !r.resolve && r.assetURL != r.releaseURL {
+			r.resolve = true
+			return nil, updateRangeRetryable{fmt.Errorf("release download link expired (HTTP %d)", resp.StatusCode)}
+		}
 	}
 	wantRange := fmt.Sprintf("bytes %d-%d/%d", offset, offset+length-1, r.size)
 	if resp.StatusCode != http.StatusPartialContent || resp.Header.Get("Content-Range") != wantRange || resp.Header.Get("Content-Encoding") != "" || (resp.ContentLength >= 0 && resp.ContentLength != length) {
-		return nil, "", "", errors.New("release host did not provide the requested ZIP range; keeping the installed version")
+		return nil, errors.New("release host did not provide the requested ZIP range; keeping the installed version")
 	}
 	finalURL := resp.Request.URL.String()
 	etag := resp.Header.Get("ETag")
-	if r.cacheOff >= 0 && (finalURL != r.assetURL || (r.etag != "" && etag != r.etag)) {
-		return nil, "", "", errors.New("release asset changed during update")
+	if r.cacheOff >= 0 {
+		sameAsset := finalURL == r.assetURL && (r.etag == "" || etag == r.etag)
+		if r.resolve && r.etag != "" {
+			// A renewed link differs from the expired one.
+			sameAsset = etag == r.etag
+		}
+		if !sameAsset {
+			return nil, errors.New("release asset changed during update")
+		}
 	}
 	content, err := io.ReadAll(io.LimitReader(resp.Body, length+1))
 	if err != nil || int64(len(content)) != length {
@@ -286,11 +306,12 @@ func (r *updateRangeReader) requestOnce(offset, length int64) ([]byte, string, s
 			err = io.ErrUnexpectedEOF
 		}
 		if r.ctx.Err() != nil {
-			return nil, "", "", err
+			return nil, err
 		}
-		return nil, "", "", updateRangeRetryable{err}
+		return nil, updateRangeRetryable{err}
 	}
-	return content, finalURL, etag, nil
+	r.assetURL, r.etag, r.resolve = finalURL, etag, false
+	return content, nil
 }
 
 func (r *updateRangeReader) ReadAt(p []byte, off int64) (int, error) {
@@ -317,7 +338,7 @@ func (r *updateRangeReader) ReadAt(p []byte, off int64) (int, error) {
 			if length > r.size-pos {
 				length = r.size - pos
 			}
-			data, _, _, err := r.request(pos, length)
+			data, err := r.request(pos, length)
 			if err != nil {
 				return n, err
 			}
