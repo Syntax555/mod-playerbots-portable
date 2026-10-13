@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Client artifact regressions: locked patched addons, ZIP integrity and DBC preservation."""
 import copy
-import hashlib
 import importlib.util
 import json
 import os
@@ -622,70 +621,8 @@ class NativeSpellRestorationTests(unittest.TestCase):
                     self.restore(donor=raw, contract=contract)
 
 
-@unittest.skipUnless(CMAKE and shutil.which("git"), "CMake and Git needed for addon source export checks")
+@unittest.skipUnless(CMAKE, "CMake needed for client packaging script checks")
 class ModuleAddonTests(unittest.TestCase):
-    def test_addon_exports_earned_patch_and_rejects_tampering(self):
-        with tempfile.TemporaryDirectory(prefix="module-addon-regression-") as temp:
-            root = Path(temp)
-            source = root / ".module-cache/mod-era-talents"
-            source.mkdir(parents=True)
-            subprocess.run(["git", "init", "-q", str(source)], check=True)
-            addon = source / "client-addon/EraTalents"
-            addon.mkdir(parents=True)
-            (addon / "EraTalents.toc").write_text("## Interface: 30300\nMain.lua\n")
-            (addon / "Main.lua").write_text("return 'baseline'\n")
-            (addon / "test_tooltip.lua").write_text("assert(true)\n")
-            (addon / "build-addon.sh").write_text("#!/bin/sh\nexit 0\n")
-            (addon / "Fonts").mkdir()
-            (addon / "Fonts/dynamic.resource").write_bytes(b"\0font\xff")
-            (source / "LICENSE").write_text("MIT\n")
-            (source / "README.md").write_text("Module README\n")
-            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
-            subprocess.run(["git", "-C", str(source), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
-                            "commit", "-qm", "Pinned fixture"], check=True)
-            revision = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
-            (addon / "Main.lua").write_text("return 'earned'\n")
-            patch = subprocess.check_output(["git", "-C", str(source), "diff"])
-            (root / "patches").mkdir()
-            (root / "patches/earned.patch").write_bytes(patch)
-            (root / "cmake").mkdir()
-            (root / "cmake/PrepareModules.cmake").write_text("# Fixture preparation identity\n")
-            lock = {"schemaVersion": 1, "core": {"source": "core"},
-                    "modules": [{"name": "mod-era-talents", "url": URL, "revision": revision, "patches": ["patches/earned.patch"]}],
-                    "clientAddons": [{"name": "EraTalents", "url": URL, "revision": revision, "toc": "EraTalents.toc",
-                                      "license": "LICENSE", "interface": 30300, "sourceModule": "mod-era-talents",
-                                      "sourcePath": "client-addon/EraTalents"}]}
-            (root / "versions.lock.json").write_text(json.dumps(lock))
-            prepared = root / ".module-cache/prepared-addons/EraTalents"
-            prepared.mkdir(parents=True)
-            for path in addon.iterdir():
-                if path.is_dir():
-                    shutil.copytree(path, prepared / path.name)
-                else:
-                    shutil.copyfile(path, prepared / path.name)
-            for name in ("LICENSE", "README.md"):
-                shutil.copyfile(source / name, prepared / name)
-            (prepared / "SOURCE_REVISION.txt").write_text(revision + "\n")
-            prepare_hash = hashlib.sha256((root / "cmake/PrepareModules.cmake").read_bytes()).hexdigest()
-            header = f"prepare: {prepare_hash}\n{URL}\n{revision}\n"
-            stamp = header + "interface: 30300\nmodule: mod-era-talents\npath: client-addon/EraTalents\n" + header
-            stamp += f"patches/earned.patch: {hashlib.sha256(patch).hexdigest()}\n"
-            stamp += f"export: {hashlib.sha256((ROOT / 'cmake/ExportClientAddon.py').read_bytes()).hexdigest()}\n"
-            (prepared / ".portable-source").write_text(stamp)
-            command = [CMAKE, f"-DPORTABLE_SOURCE_DIR={root}", "-DPACKAGE_VERSION=fixture", "-P", str(ROOT / "cmake/PackageClientAddons.cmake")]
-            result = subprocess.run(command, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            with zipfile.ZipFile(root / "output/EraTalents-fixture.zip") as archive:
-                self.assertEqual(archive.read("EraTalents/Main.lua"), b"return 'earned'\n")
-                self.assertEqual(archive.read("EraTalents/Fonts/dynamic.resource"), b"\0font\xff")
-                self.assertNotIn("EraTalents/test_tooltip.lua", archive.namelist())
-                self.assertNotIn("EraTalents/build-addon.sh", archive.namelist())
-            self.assertTrue((prepared / "test_tooltip.lua").is_file())
-            (prepared / "Main.lua").write_text("return 'tampered'\n")
-            result = subprocess.run(command, capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("corrupt asset", result.stderr)
-
     def test_old_source_without_client_patch_is_supported(self):
         with tempfile.TemporaryDirectory(prefix="old-client-regression-") as temp:
             root = Path(temp)

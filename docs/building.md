@@ -41,7 +41,6 @@ Outputs:
 
 - `output/mod-playerbots-portable-dev.zip`: portable server bundle.
 - `output/MultiBot-Chatless-dev.zip`: optional client interface.
-- `output/EraTalents-dev.zip`: historical-talents addon only.
 
 The complete `EraTalents-client-dev.zip` also requires the merged client MPQ. It is built separately on Linux; see [building the client package](era-talents.md#building-the-client-package). Use a client package built from the same pinned sources as your server.
 

@@ -67,7 +67,7 @@ def text_patch(relative: str, before: str, after: str) -> bytes:
 
 
 class AddonFixture:
-    def __init__(self, root: Path, *, module_source=False):
+    def __init__(self, root: Path):
         self.root = root
         self.root.mkdir()
         cmake = self.root / "cmake"
@@ -99,26 +99,15 @@ class AddonFixture:
                         "LICENSE": b"Fixture upstream license\n",
                         "README.md": b"Fixture module and addon guide\n"}
         self.module = self.root / ".module-cache/mod-fixture"
-        if module_source:
-            module_files.update({f"client-addon/MultiBot/{path}": value
-                                 for path, value in self.addon_files.items()})
         module_revision = commit(self.module, module_files)
         module = {"name": "mod-fixture", "url": MODULE_URL,
                   "revision": module_revision, "patches": []}
-        if module_source:
-            self.cached = self.module
-            addon_revision = module_revision
-            addon_url = MODULE_URL
-        else:
-            self.cached = self.root / ".module-cache/client-addon-MultiBot"
-            addon_revision = commit(self.cached, self.addon_files)
-            addon_url = ADDON_URL
-        addon = {"name": "MultiBot", "url": addon_url,
+        self.cached = self.root / ".module-cache/client-addon-MultiBot"
+        addon_revision = commit(self.cached, self.addon_files)
+        addon = {"name": "MultiBot", "url": ADDON_URL,
                  "revision": addon_revision, "archiveName": "MultiBot-Chatless",
                  "interface": 30300, "toc": "MultiBot.toc", "license": "LICENSE",
                  "patches": []}
-        if module_source:
-            addon.update(sourceModule="mod-fixture", sourcePath="client-addon/MultiBot")
         self.lock = {"schemaVersion": 1,
                      "core": {"name": "core", "url": "https://github.com/example/core.git",
                               "revision": core_revision, "source": "core", "patches": []},
@@ -140,13 +129,12 @@ class AddonFixture:
     def write_lock(self):
         (self.root / "versions.lock.json").write_text(json.dumps(self.lock), encoding="utf-8")
 
-    def patch(self, name: str, value: bytes, *, module=False):
+    def patch(self, name: str, value: bytes):
         relative = f"patches/{name}.patch"
         path = self.root / relative
         path.parent.mkdir(exist_ok=True)
         path.write_bytes(value)
-        entry = self.lock["modules"][0] if module else self.addon
-        entry["patches"].append(relative)
+        self.addon["patches"].append(relative)
         self.write_lock()
         return relative
 
@@ -169,9 +157,7 @@ class AddonFixture:
                     "-RepositoryRoot", str(self.root), "-Python", sys.executable])
 
     def manifest(self):
-        patches = [*self.lock["modules"][0]["patches"], *self.addon.get("patches", [])]
-        if "sourceModule" not in self.addon:
-            patches = self.addon.get("patches", [])
+        patches = self.addon.get("patches", [])
         return {"schemaVersion": 1, "name": "MultiBot", "repository": self.addon["url"],
                 "revision": self.addon["revision"], "interface": 30300,
                 "patches": {path: digest((self.root / path).read_bytes()) for path in patches}}
@@ -186,8 +172,8 @@ class ClientAddonPatchTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def fixture(self, *, module_source=False):
-        return AddonFixture(self.directory / "repository", module_source=module_source)
+    def fixture(self):
+        return AddonFixture(self.directory / "repository")
 
     def successful(self, result):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -238,21 +224,6 @@ class ClientAddonPatchTests(unittest.TestCase):
         stamp = (fixture.prepared / ".portable-source").read_text()
         self.assertIn(f"{patch}: {manifest['patches'][patch]}\n", stamp)
         self.successful(fixture.package())
-
-    def test_source_module_patch_applies_before_addon_patch(self):
-        fixture = self.fixture(module_source=True)
-        module_patch = fixture.patch("module", text_patch("client-addon/MultiBot/UI/Main.lua", "upstream", "module"),
-                                     module=True)
-        addon_patch = fixture.patch("addon", text_patch("UI/Main.lua", "module", "release"))
-        self.successful(fixture.prepare())
-        export = self.directory / "independent"
-        self.successful(fixture.export(export))
-        self.assertEqual((export / "UI/Main.lua").read_bytes(), MAIN.replace(b"upstream", b"release"))
-        self.assertEqual((fixture.prepared / "UI/Main.lua").read_bytes(), (export / "UI/Main.lua").read_bytes())
-        self.assertEqual(json.loads((export / "SOURCE_MANIFEST.json").read_text()), fixture.manifest())
-        self.assertEqual(set(fixture.manifest()["patches"]), {module_patch, addon_patch})
-        self.successful(fixture.package())
-        self.assertEqual(git(fixture.module, "show", "HEAD:client-addon/MultiBot/UI/Main.lua"), MAIN.decode().strip())
 
     def test_missing_and_unsafe_patch_paths_are_rejected(self):
         fixture = self.fixture()
