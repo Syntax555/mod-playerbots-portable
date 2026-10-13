@@ -34,7 +34,8 @@ try {
             throw "Unexpected source/debug/installer file in portable ZIP: $name"
         }
         if ($name -match '^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$' -or
-            $name -match '^mysql/(include|docs)(/|$)|^mysql/bin/(?!mysqld[.]exe$|mysql[.]exe$|mysqladmin[.]exe$)[^/]+[.]exe$' -or
+            $name -match '^mysql/(include|docs|lib/mecab|lib/plugin/debug)(/|$)|^mysql/bin/[^/]+-debug[.]dll$' -or
+            $name -match '^mysql/bin/(?!mysqld[.]exe$|mysql[.]exe$|mysqladmin[.]exe$)[^/]+[.]exe$' -or
             $name -match '^(dbimport|map_extractor|vmap4_extractor|vmap4_assembler|mmaps_generator)[.]exe$|^mmaps-config[.]yaml$|^(configs/)?dbimport[.]conf[.]dist$') {
             throw "Redundant development/client file in portable ZIP: $name"
         }

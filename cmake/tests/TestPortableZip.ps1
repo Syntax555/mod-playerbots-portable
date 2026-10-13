@@ -205,6 +205,10 @@ try {
     }
     Write-FixtureText (Join-Path $dist 'mysql/bin/mysqldump.exe')
     Write-FixtureText (Join-Path $dist 'mysql/bin/dependency.dll')
+    Write-FixtureText (Join-Path $dist 'mysql/lib/plugin/runtime_plugin.dll')
+    $mysqlDevelopmentFiles = @('mysql/include/mysql.h', 'mysql/docs/INFO_BIN', 'mysql/lib/plugin/debug/plugin.dll',
+        'mysql/lib/mecab/dic/ipadic_utf-8/sys.dic', 'mysql/bin/libprotobuf-debug.dll', 'mysql/lib/libmysql.lib')
+    foreach ($name in $mysqlDevelopmentFiles) { Write-FixtureText (Join-Path $dist $name) }
     $optionalFiles = @('dbimport.exe', 'map_extractor.exe', 'vmap4_extractor.exe',
         'vmap4_assembler.exe', 'mmaps_generator.exe', 'mmaps-config.yaml',
         'configs/dbimport.conf.dist', 'dbimport.conf.dist')
@@ -213,6 +217,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Fixture pruning failed.' }
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'mysql/bin/mysqldump.exe'))) 'Unused MySQL executable survived pruning'
     Assert-Condition (Test-Path -LiteralPath (Join-Path $dist 'mysql/bin/dependency.dll')) 'MySQL runtime dependency was pruned'
+    Assert-Condition (Test-Path -LiteralPath (Join-Path $dist 'mysql/lib/plugin/runtime_plugin.dll')) 'MySQL runtime plugin was pruned'
+    foreach ($name in $mysqlDevelopmentFiles) {
+        Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "MySQL development file survived pruning: $name"
+    }
+    foreach ($directory in @('mysql/include', 'mysql/docs', 'mysql/lib/plugin/debug', 'mysql/lib/mecab')) {
+        Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $directory))) "MySQL development directory survived pruning: $directory"
+    }
     foreach ($name in $optionalFiles) {
         Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Unused tool survived pruning: $name"
     }
@@ -258,7 +269,9 @@ try {
     }
 
     foreach ($redundant in @('addons/MultiBot/Core.lua', 'defaults/worldserver.conf',
-        'CONTRIBUTING.md', 'docs/building.md', 'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe') + $optionalFiles) {
+        'CONTRIBUTING.md', 'docs/building.md', 'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe',
+        'mysql/docs/INFO_BIN', 'mysql/lib/mecab/dic/ipadic_utf-8/sys.dic', 'mysql/lib/plugin/debug/plugin.dll',
+        'mysql/bin/libprotobuf-debug.dll', 'mysql/bin/abseil_dll-debug.dll') + $optionalFiles) {
         Test-NegativeZip "redundant file $redundant" 'Redundant development/client' -ExtraEntries @(@{ Name = $redundant; Bytes = [byte[]]@(1) })
     }
     foreach ($live in @('configs/worldserver.conf', 'mysql/data/user.db', 'mysql/my.cnf',

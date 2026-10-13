@@ -27,7 +27,16 @@ foreach(executable IN LISTS mysql_executables)
     endif()
 endforeach()
 
-# Match the 7-Zip exclusions when the CMake ZIP fallback is used as well.
+# MySQL headers, documentation and debug plugins are build inputs only. The
+# MeCab full-text dictionaries serve a parser plugin that is never installed,
+# and the *-debug.dll libraries need the debug C runtime and load nowhere.
+file(REMOVE_RECURSE "${PORTABLE_DIST_DIR}/mysql/include" "${PORTABLE_DIST_DIR}/mysql/docs"
+    "${PORTABLE_DIST_DIR}/mysql/lib/plugin/debug" "${PORTABLE_DIST_DIR}/mysql/lib/mecab")
+file(GLOB mysql_debug_libraries "${PORTABLE_DIST_DIR}/mysql/bin/*-debug.dll")
+if(mysql_debug_libraries)
+    file(REMOVE ${mysql_debug_libraries})
+endif()
+
 file(GLOB_RECURSE development_files
     "${PORTABLE_DIST_DIR}/*.pdb" "${PORTABLE_DIST_DIR}/*.lib"
     "${PORTABLE_DIST_DIR}/*.exp" "${PORTABLE_DIST_DIR}/*.ilk")

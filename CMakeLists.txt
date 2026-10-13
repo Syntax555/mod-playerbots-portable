@@ -189,17 +189,14 @@ if(WIN32)
         )
     endif()
 
-    # Copy and prune MySQL server directory
+    # Copy the MySQL server; PrunePortableDistribution removes its development files.
     if(IS_DIRECTORY "${MYSQL_ROOT_DIR}")
         ExternalProject_Add_Step(azerothcore copy_mysql_distribution
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${MYSQL_ROOT_DIR}"
                 "${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
-            COMMAND ${CMAKE_COMMAND}
-                "-DMYSQL_DIST_DIR=${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
-                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CleanMySQLDist.cmake"
             DEPENDEES install
-            COMMENT "Copying and pruning MySQL server distribution in ${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
+            COMMENT "Copying MySQL server distribution to ${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
         )
     endif()
 
@@ -233,7 +230,7 @@ if(WIN32)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrunePortableDistribution.cmake"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${PACKAGE_OUTPUT_DIR}"
             COMMAND ${CMAKE_COMMAND} -E rm -f "${PORTABLE_ZIP_FILE}"
-            COMMAND "${SEVEN_ZIP_EXECUTABLE}" a -tzip -mx=9 -mmt=on -xr!*.pdb -xr!*.lib "${PORTABLE_ZIP_FILE}" "*"
+            COMMAND "${SEVEN_ZIP_EXECUTABLE}" a -tzip -mx=9 -mmt=on "${PORTABLE_ZIP_FILE}" "*"
             WORKING_DIRECTORY "${CMAKE_INSTALL_PREFIX_CLEAN}"
             COMMENT "Creating portable zip package with maximum compression: ${PORTABLE_ZIP_FILE}"
         )
