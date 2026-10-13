@@ -20,8 +20,10 @@ file(GLOB old_module_sql "${PORTABLE_DIST_DIR}/src/modules/*/data/sql")
 foreach(sql_dir IN LISTS old_module_sql)
     file(REMOVE_RECURSE "${sql_dir}")
 endforeach()
+# The updater reads base/, archive/, custom/ and updates/; old/ is history it
+# never scans or records, so it stays out of the package.
 file(COPY "${core}/data/sql" DESTINATION "${PORTABLE_DIST_DIR}/src/data"
-    FILES_MATCHING PATTERN "*.sql")
+    FILES_MATCHING PATTERN "*.sql" REGEX "/data/sql/old$" EXCLUDE)
 file(COPY "${core}/LICENSE" DESTINATION "${PORTABLE_DIST_DIR}/licenses")
 file(RENAME "${PORTABLE_DIST_DIR}/licenses/LICENSE" "${PORTABLE_DIST_DIR}/licenses/azerothcore-wotlk.txt")
 

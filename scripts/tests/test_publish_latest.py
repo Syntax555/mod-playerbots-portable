@@ -580,7 +580,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_manifest_rejects_duplicate_client_and_development_exports(self):
         for name in ("addons/MultiBot/Core.lua", "defaults/worldserver.conf", "CONTRIBUTING.md", "docs/building.md",
-                     publisher.UPDATE_MANIFEST_NAME):
+                     "src/data/sql/old/db_world/historical.sql", publisher.UPDATE_MANIFEST_NAME):
             with self.subTest(name=name):
                 self.setUp()
                 self.rewrite_server(extra={name: "redundant file"})

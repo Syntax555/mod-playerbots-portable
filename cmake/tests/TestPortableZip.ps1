@@ -121,7 +121,8 @@ try {
     foreach ($app in @('authserver', 'worldserver')) {
         Write-FixtureText (Join-Path $core "src/server/apps/$app/$app.conf.dist")
     }
-    foreach ($name in @('base/db_auth/base.sql', 'base/db_world/base.sql', 'updates/db_world/current.sql')) {
+    foreach ($name in @('base/db_auth/base.sql', 'base/db_world/base.sql', 'updates/db_world/current.sql',
+        'old/db_world/historical.sql')) {
         Write-FixtureText (Join-Path $core "data/sql/$name") "SELECT 1;`n"
     }
     # SQL from the pristine submodule must never reach the package.
@@ -175,6 +176,7 @@ try {
     foreach ($path in @($oldCoreSql, $oldModuleSql)) {
         Assert-Condition ([System.IO.File]::ReadAllText($path) -ceq "SELECT 1;`n") "Assembly retained stale equal-timestamp SQL: $path"
     }
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'src/data/sql/old'))) 'Assembly exported historical SQL the updater never reads'
     foreach ($name in $preserved) {
         Assert-Condition ([System.IO.File]::ReadAllText((Join-Path $dist $name)) -ceq "preserve $name") "Assembly modified $name"
     }
@@ -281,7 +283,7 @@ try {
             $name = [System.Text.Encoding]::UTF8.GetBytes('incorrect historical source terms')
         }
     }
-    foreach ($obsolete in @('src/data/sql/updates/db_world/obsolete.sql',
+    foreach ($obsolete in @('src/data/sql/updates/db_world/obsolete.sql', 'src/data/sql/old/db_world/historical.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql')) {
         Test-NegativeZip "obsolete SQL $obsolete" 'Unexpected SQL file' -ExtraEntries @(@{ Name = $obsolete; Bytes = [byte[]]@(1) })
