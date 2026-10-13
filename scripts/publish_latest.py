@@ -3,8 +3,8 @@
 
 The build must belong to main's history and must not be older than the
 current Latest. Uploads are staged in a draft before the existing release or
-version tags are changed, and the previous release is restored if the swap
-fails before the replacement is verified. This script uses only the Python
+its tag is changed, and the previous release is restored if the swap fails
+before the replacement is verified. This script uses only the Python
 standard library and the Actions job's GH_TOKEN.
 """
 
@@ -42,12 +42,9 @@ UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
 SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
 # Seconds to wait before repeating an idempotent request after a transient failure.
 RETRY_DELAYS = (2, 5)
-# Limit cleanup to numbered version tags. Branches and other tag names are kept.
-VERSION_TAG = re.compile(
-    r"^v\d+\.\d+(?:\.\d+"
-    r"(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?"
-    r"(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?)?$"
-)
+# Temporary tags created by publish(): a staging draft and the previous release.
+STAGING_TAG = re.compile(r"build-[0-9]+-[0-9a-f]{12}")
+BACKUP_TAG = re.compile(r"latest-previous-[0-9]+-[0-9a-f]{12}")
 
 
 class PublishError(RuntimeError):
@@ -72,8 +69,8 @@ class Asset:
 class PublishResult:
     skipped: bool = False
     url: str = ""
-    removed_releases: int = 0
-    removed_tags: int = 0
+    assets: int = 0
+    removed_staging: int = 0
 
 
 class GitHubClient:
@@ -235,9 +232,6 @@ class GitHubClient:
 
     def list_releases(self) -> list[dict[str, Any]]:
         return self._pages("/releases")
-
-    def list_tags(self) -> list[dict[str, Any]]:
-        return self._pages("/tags")
 
 
 def digest(path: Path) -> str:
@@ -448,6 +442,15 @@ def restore_previous(client: GitHubClient, draft_id: int, stage_tag: str, previo
     return failures
 
 
+def is_interrupted_publication(release: dict[str, Any]) -> bool:
+    """Match only the temporary releases that publish() creates under exact tag names."""
+    tag = release.get("tag_name")
+    if not isinstance(tag, str) or release.get("name") != "Latest":
+        return False
+    return (release.get("draft") is True and STAGING_TAG.fullmatch(tag) is not None
+            or BACKUP_TAG.fullmatch(tag) is not None)
+
+
 def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, run_id: str) -> PublishResult:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
         raise PublishError("--sha must be a full 40-character commit SHA")
@@ -516,19 +519,17 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
         client.delete_release(previous["id"])
         client.delete_tag(backup_tag)
 
-    # Numbered history is removed only after the replacement is publicly verified.
-    removed_releases = 0
-    for release in client.list_releases():
-        if VERSION_TAG.fullmatch(release.get("tag_name", "")):
-            client.delete_release(release["id"])
-            removed_releases += 1
-    removed_tags = 0
-    for tag in client.list_tags():
-        if VERSION_TAG.fullmatch(tag.get("name", "")):
-            client.delete_tag(tag["name"])
-            removed_tags += 1
     client.delete_tag(stage_tag)
-    return PublishResult(url=url, removed_releases=removed_releases, removed_tags=removed_tags)
+
+    # Interrupted runs can leave staging drafts or a previous release under its
+    # temporary tag. Remove only those, after the replacement is verified.
+    removed_staging = 0
+    for release in client.list_releases():
+        if release.get("id") != draft_id and is_interrupted_publication(release):
+            client.delete_release(release["id"])
+            client.delete_tag(release["tag_name"])
+            removed_staging += 1
+    return PublishResult(url=url, assets=len(assets), removed_staging=removed_staging)
 
 
 def main() -> int:
@@ -548,7 +549,9 @@ def main() -> int:
         print("Skipped a superseded build; the current release is unchanged.")
     else:
         print(f"Published Latest: {result.url}")
-        print(f"Verified 3 ZIPs and {CHECKSUM_NAME}.")
+        print(f"Verified {result.assets} release assets.")
+        if result.removed_staging:
+            print(f"Removed {result.removed_staging} releases left by interrupted publications.")
     return 0
 
 

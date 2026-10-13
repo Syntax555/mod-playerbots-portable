@@ -53,15 +53,20 @@ class FakeGitHub:
         self.corrupt_public = False
         self.releases = {
             1: {"id": 1, "tag_name": "latest", "name": "Latest", "draft": False},
-            2: {"id": 2, "tag_name": "v1.0.15"},
-            3: {"id": 3, "tag_name": "v1.0.16"},
-            4: {"id": 4, "tag_name": "preview"},
+            4: {"id": 4, "tag_name": "preview", "draft": False},
+            # Left by interrupted publications.
+            5: {"id": 5, "tag_name": "build-99-0123456789ab", "name": "Latest", "draft": True},
+            8: {"id": 8, "tag_name": "latest-previous-77-0123456789ab", "name": "Latest", "draft": False},
+            # Maintainer releases that merely resemble staging names.
+            6: {"id": 6, "tag_name": "build-notes", "draft": False},
+            7: {"id": 7, "tag_name": "maintainer-draft", "draft": True},
+            9: {"id": 9, "tag_name": "build-12-0123456789ab", "name": "Latest", "draft": False},
         }
         self.tags = {
-            "latest": OLDER_SHA, "v1.0.15": OLDER_SHA, "v1.0.16": OLDER_SHA,
-            "v0.9.0": OLDER_SHA, "preview": OLDER_SHA,
-            "build-preserve-me": OLDER_SHA, "version-documentation": OLDER_SHA,
+            "latest": OLDER_SHA, "v1.0.16": OLDER_SHA, "preview": OLDER_SHA, "build-notes": OLDER_SHA,
+            "build-preserve-me": OLDER_SHA, "latest-previous-77-0123456789ab": OLDER_SHA,
         }
+        self.staging_leftovers = {5, 8}
         self.draft_id = 100
         self.upload_count = 0
         self.retag_count = 0
@@ -189,10 +194,6 @@ class FakeGitHub:
     def list_releases(self):
         self.calls.append(("list_releases",))
         return copy.deepcopy(list(self.releases.values()))
-
-    def list_tags(self):
-        self.calls.append(("list_tags",))
-        return [{"name": tag} for tag in self.tags]
 
 
 class PublicationTests(unittest.TestCase):
@@ -376,15 +377,14 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual([], self.client.writes)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
 
-    def test_upload_failure_keeps_existing_release_and_versions(self):
+    def test_upload_failure_keeps_existing_release(self):
         self.client.fail_upload = 2
         with self.assertRaisesRegex(publisher.APIError, "upload failed"):
             self.publish()
         self.assertIn(1, self.client.releases)
-        self.assertIn(2, self.client.releases)
-        self.assertIn(3, self.client.releases)
+        self.assertLessEqual(self.client.staging_leftovers, set(self.client.releases))
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
-        self.assertFalse(any(call[0] in {"set_tag", "promote_release", "list_tags", "list_releases"}
+        self.assertFalse(any(call[0] in {"set_tag", "promote_release", "list_releases"}
                              for call in self.client.calls))
         self.assertNotIn(self.client.draft_id, self.client.releases)
         self.assertFalse(any(tag.startswith("build-123456-") for tag in self.client.tags))
@@ -422,23 +422,20 @@ class PublicationTests(unittest.TestCase):
         self.assertIs(False, previous["draft"])
         self.assertIn(("retag_release", 1, "latest", OLDER_SHA, True), self.client.calls)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
-        self.assertFalse(any(tag.startswith("latest-previous-") for tag in self.client.tags))
+        self.assertFalse(any(tag.startswith("latest-previous-123456-") for tag in self.client.tags))
         draft = self.client.releases[self.client.draft_id]
         self.assertTrue(draft["draft"])
         self.assertTrue(draft["tag_name"].startswith("build-123456-"))
         self.assertNotIn(("delete_release", 1), self.client.calls)
 
-    def test_promotion_failure_restores_previous_latest_and_keeps_versions(self):
+    def test_promotion_failure_restores_previous_latest_and_keeps_other_releases(self):
         self.client.fail_promotion = True
         with self.assertRaisesRegex(publisher.APIError, "promotion failed"):
             self.publish()
         self.assert_previous_latest_restored()
-        self.assertIn(2, self.client.releases)
-        self.assertIn(3, self.client.releases)
-        self.assertIn("v0.9.0", self.client.tags)
-        self.assertIn("v1.0.15", self.client.tags)
+        self.assertLessEqual({4, 5, 6, 7, 8, 9}, set(self.client.releases))
         self.assertIn("v1.0.16", self.client.tags)
-        self.assertFalse(any(call[0] in {"list_releases", "list_tags"} for call in self.client.calls))
+        self.assertFalse(any(call[0] == "list_releases" for call in self.client.calls))
 
     def test_tag_move_failure_restores_previous_latest(self):
         self.client.fail_tag_move = True
@@ -452,9 +449,8 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(publisher.PublishError, "exactly the expected assets"):
             self.publish()
         self.assert_previous_latest_restored()
-        self.assertIn(2, self.client.releases)
-        self.assertIn(3, self.client.releases)
-        self.assertFalse(any(call[0] in {"list_releases", "list_tags"} for call in self.client.calls))
+        self.assertLessEqual(self.client.staging_leftovers, set(self.client.releases))
+        self.assertFalse(any(call[0] == "list_releases" for call in self.client.calls))
 
     def test_release_rename_failure_keeps_previous_latest(self):
         self.client.fail_retags = {1}
@@ -476,12 +472,12 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(previous["tag_name"].startswith("latest-previous-123456-"))
         self.assertIn(previous["tag_name"], self.client.tags)
 
-    def test_success_publishes_correct_sha_and_prunes_only_numbered_tags(self):
+    def test_success_publishes_correct_sha_and_removes_only_interrupted_staging(self):
         result = self.publish()
         self.assertFalse(result.skipped)
         self.assertEqual(f"https://github.com/{REPOSITORY}/releases/tag/latest", result.url)
-        self.assertEqual(2, result.removed_releases)
-        self.assertEqual(3, result.removed_tags)
+        self.assertEqual(5, result.assets)
+        self.assertEqual(2, result.removed_staging)
         self.assertEqual(SHA, self.client.tags["latest"])
         release = self.client.releases[self.client.draft_id]
         self.assertFalse(release["draft"])
@@ -490,8 +486,8 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(SHA, release["target_commitish"])
         self.assertEqual(set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME},
                          {asset["name"] for asset in release["assets"]})
-        self.assertEqual({4, self.client.draft_id}, set(self.client.releases))
-        self.assertEqual({"latest", "preview", "build-preserve-me", "version-documentation"},
+        self.assertEqual({4, 6, 7, 9, self.client.draft_id}, set(self.client.releases))
+        self.assertEqual({"latest", "v1.0.16", "preview", "build-notes", "build-preserve-me"},
                          set(self.client.tags))
         calls = self.client.calls
         backup = next(call for call in calls if call[0] == "retag_release")
@@ -505,7 +501,20 @@ class PublicationTests(unittest.TestCase):
         old_release_delete = calls.index(("delete_release", 1))
         self.assertLess(public_verify, old_release_delete)
         self.assertLess(old_release_delete, calls.index(("delete_tag", backup[2])))
-        self.assertLess(public_verify, calls.index(("delete_release", 2)))
+        for leftover in sorted(self.client.staging_leftovers):
+            self.assertLess(public_verify, calls.index(("delete_release", leftover)))
+        self.assertIn(("delete_tag", "latest-previous-77-0123456789ab"), calls)
+
+    def test_previous_release_left_under_backup_tag_is_replaced(self):
+        # A cancelled run moved the previous release aside and stopped before
+        # promotion, so no release currently uses the latest tag.
+        del self.client.releases[1]
+        result = self.publish()
+        self.assertFalse(result.skipped)
+        self.assertEqual("latest", self.client.releases[self.client.draft_id]["tag_name"])
+        self.assertNotIn(8, self.client.releases)
+        self.assertNotIn("latest-previous-77-0123456789ab", self.client.tags)
+        self.assertFalse(any(call[0] == "retag_release" for call in self.client.calls))
 
     def test_success_without_existing_latest(self):
         del self.client.releases[1]
@@ -673,11 +682,11 @@ class ClientTests(unittest.TestCase):
             client.delete_tag("build-123456-staging")
         request.assert_called_once_with("GET", "/git/ref/tags/build-123456-staging")
 
-    def test_existing_version_tag_is_deleted(self):
+    def test_existing_tag_is_deleted(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         with patch.object(client, "tag_sha", return_value=OLDER_SHA), patch.object(client, "_request") as request:
-            client.delete_tag("v1.0.16")
-        request.assert_called_once_with("DELETE", "/git/refs/tags/v1.0.16")
+            client.delete_tag("latest-previous-1-0123456789ab")
+        request.assert_called_once_with("DELETE", "/git/refs/tags/latest-previous-1-0123456789ab")
 
     def test_tag_removed_during_cleanup_accepts_422_only_after_confirming_absence(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
@@ -693,23 +702,20 @@ class ClientTests(unittest.TestCase):
             with self.assertRaisesRegex(publisher.APIError, "Protected ref"):
                 client.delete_tag("v1.0.16")
 
-    def test_pagination_fetches_every_numbered_release_and_tag(self):
+    def test_pagination_fetches_every_release(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         calls = []
 
         def request(method, path, payload=None):
             calls.append((method, path))
             if path.endswith("page=1"):
-                return [{"name": f"v1.0.{number}"} for number in range(100)]
-            return [{"name": "v1.0.100"}]
+                return [{"id": number} for number in range(100)]
+            return [{"id": 100}]
 
         with patch.object(client, "_request", side_effect=request):
             self.assertEqual(101, len(client.list_releases()))
-            self.assertEqual(101, len(client.list_tags()))
-        self.assertEqual([
-            ("GET", "/releases?per_page=100&page=1"), ("GET", "/releases?per_page=100&page=2"),
-            ("GET", "/tags?per_page=100&page=1"), ("GET", "/tags?per_page=100&page=2"),
-        ], calls)
+        self.assertEqual([("GET", "/releases?per_page=100&page=1"), ("GET", "/releases?per_page=100&page=2")],
+                         calls)
 
     def test_tag_update_is_forced_and_tag_creation_uses_full_ref(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
@@ -810,13 +816,21 @@ class ClientTests(unittest.TestCase):
             with self.assertRaisesRegex(publisher.PublishError, "unexpected asset upload URL"):
                 client.upload_asset({"upload_url": "https://untrusted.invalid/upload"}, asset)
 
-    def test_version_cleanup_regex_preserves_nonversion_tags(self):
-        for tag in ("v1.0.16", "v2.1", "v2.1.3-rc.1", "v1.0.0+metadata"):
-            with self.subTest(tag=tag):
-                self.assertIsNotNone(publisher.VERSION_TAG.fullmatch(tag))
-        for tag in ("latest", "main", "preview", "v1", "v1.0-guide", "release-v1.0.16", "build-123"):
-            with self.subTest(tag=tag):
-                self.assertIsNone(publisher.VERSION_TAG.fullmatch(tag))
+    def test_interrupted_publication_matches_only_publisher_staging_names(self):
+        for tag, draft in (("build-123-0123456789ab", True), ("latest-previous-123-0123456789ab", False),
+                           ("latest-previous-123-0123456789ab", True)):
+            with self.subTest(tag=tag, draft=draft):
+                self.assertTrue(publisher.is_interrupted_publication(
+                    {"tag_name": tag, "name": "Latest", "draft": draft}))
+        for release in ({"tag_name": "build-123-0123456789ab", "name": "Latest", "draft": False},
+                        {"tag_name": "build-123-0123456789ab", "name": "Notes", "draft": True},
+                        {"tag_name": "build-123", "name": "Latest", "draft": True},
+                        {"tag_name": "build-123-0123456789AB", "name": "Latest", "draft": True},
+                        {"tag_name": "latest", "name": "Latest", "draft": False},
+                        {"tag_name": "v1.0.16", "name": "Latest", "draft": True},
+                        {"tag_name": None, "name": "Latest", "draft": True}):
+            with self.subTest(release=release):
+                self.assertFalse(publisher.is_interrupted_publication(release))
 
 
 if __name__ == "__main__":
