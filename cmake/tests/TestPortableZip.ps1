@@ -151,7 +151,8 @@ try {
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons/OldAddon/OldAddon.lua',
-        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'CONTRIBUTING.md', 'docs/building.md')) {
+        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'CONTRIBUTING.md', 'docs/building.md',
+        'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
         Write-FixtureText (Join-Path $dist $name) 'obsolete export'
     }
     $preserved = @('mysql/data/user.db', 'mysql/my.cnf', 'configs/worldserver.conf',
@@ -170,7 +171,8 @@ try {
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons', 'defaults',
-        'licenses/MultiBot', 'CONTRIBUTING.md', 'docs/building.md')) {
+        'licenses/MultiBot', 'CONTRIBUTING.md', 'docs/building.md',
+        'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
         Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Assembly retained $name"
     }
     foreach ($path in @($oldCoreSql, $oldModuleSql)) {

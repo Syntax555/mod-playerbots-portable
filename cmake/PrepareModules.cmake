@@ -217,6 +217,22 @@ foreach(_index RANGE 0 ${_last_module})
     message(STATUS "Prepared pinned module: ${_name}")
 endforeach()
 
+# Generated copies that the lock no longer names are removed: AzerothCore
+# compiles every directory under modules/, and packaging would omit their
+# SQL and configuration. Directories without a preparation stamp are kept.
+function(portable_remove_unlocked parent kind)
+    file(GLOB _entries LIST_DIRECTORIES TRUE "${parent}/*")
+    foreach(_entry IN LISTS _entries)
+        get_filename_component(_entry_name "${_entry}" NAME)
+        if(IS_DIRECTORY "${_entry}" AND EXISTS "${_entry}/.portable-source"
+            AND NOT _entry_name IN_LIST ARGN)
+            file(REMOVE_RECURSE "${_entry}")
+            message(STATUS "Removed ${kind} no longer in versions.lock.json: ${_entry_name}")
+        endif()
+    endforeach()
+endfunction()
+portable_remove_unlocked("${PORTABLE_CORE_SOURCE_DIR}/modules" "module" ${PORTABLE_MODULE_NAMES})
+
 # Client addons are packaged for the player to copy into the WoW client.
 # They never participate in the server build or download at server startup.
 set(PORTABLE_CLIENT_ADDON_NAMES)
@@ -355,3 +371,5 @@ if(_addon_count GREATER 0)
         message(STATUS "Pinned client addon ready: ${_addon_name}")
     endforeach()
 endif()
+portable_remove_unlocked("${PORTABLE_SOURCE_DIR}/.module-cache/prepared-addons" "client addon"
+    ${PORTABLE_CLIENT_ADDON_NAMES})

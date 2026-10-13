@@ -11,6 +11,13 @@ endif()
 if(NOT IS_DIRECTORY "${core}/data/sql")
     message(FATAL_ERROR "Prepared AzerothCore SQL is missing: run cmake -P cmake/PrepareModules.cmake")
 endif()
+# Patches, documentation and module templates are source exports; replace them
+# so renamed or removed files cannot survive. User *.conf files stay untouched.
+file(REMOVE_RECURSE "${PORTABLE_DIST_DIR}/patches" "${PORTABLE_DIST_DIR}/docs")
+file(GLOB old_module_templates "${PORTABLE_DIST_DIR}/configs/modules/*.conf.dist")
+if(old_module_templates)
+    file(REMOVE ${old_module_templates})
+endif()
 file(MAKE_DIRECTORY "${PORTABLE_DIST_DIR}/src/data" "${PORTABLE_DIST_DIR}/configs/modules"
     "${PORTABLE_DIST_DIR}/licenses" "${PORTABLE_DIST_DIR}/patches")
 # These are generated source exports, not the live MySQL data or configuration.
@@ -96,7 +103,6 @@ file(REMOVE "${PORTABLE_DIST_DIR}/CONTRIBUTING.md")
 file(COPY "${PORTABLE_SOURCE_DIR}/licenses/" DESTINATION "${PORTABLE_DIST_DIR}/licenses")
 file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"
     PATTERN "building.md" EXCLUDE)
-file(REMOVE "${PORTABLE_DIST_DIR}/docs/building.md")
 # Compare manifest contents rather than timestamps when assembling again.
 configure_file("${PORTABLE_SOURCE_DIR}/versions.lock.json"
     "${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)
