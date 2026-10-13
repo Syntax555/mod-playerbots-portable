@@ -22,36 +22,6 @@ index 21e3c5e..c5b36c9 100644
                  return PLAYER_ROLE_TANK;
              else
                  return PLAYER_ROLE_DAMAGE;
-diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
-index 47186ab..bc29a05 100644
---- a/src/Ai/Base/Actions/TrainerAction.cpp
-+++ b/src/Ai/Base/Actions/TrainerAction.cpp
-@@ -78,7 +78,7 @@ bool TrainerAction::isPossible()
- 
-         if (sPlayerbotAIConfig.naturalProgression)
-         {
--            uint32 const price = uint32(floor(trainerSpell->MoneyCost * bot->GetReputationPriceDiscount(target)));
-+            uint32 const price = trainer->GetSpellCost(bot, target, trainerSpell);
-             if (price > AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells)) ||
-                 !bot->HasEnoughMoney(price))
-                 continue;
-@@ -123,7 +123,6 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
-     if (!trainer)
-         return;
- 
--    float reputationDiscount = bot->GetReputationPriceDiscount(creature);
-     uint32 totalCost = 0;
- 
-     for (auto& spell : trainer->GetSpells())
-@@ -147,7 +146,7 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
-         if (!spellInfo)
-             continue;
- 
--        uint32 cost = static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount));
-+        uint32 const cost = trainer->GetSpellCost(bot, creature, trainerSpell);
-         totalCost += cost;
- 
-         std::ostringstream out;
 diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
 index abd207c..efbdfdf 100644
 --- a/src/Ai/Base/Actions/WorldBuffAction.cpp
@@ -82,19 +52,6 @@ index abd207c..efbdfdf 100644
          if (!isBear)
          {
              // If not bear, then treat it as "cat" spec = 3
-diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index ef1f0fa..00a6fea 100644
---- a/src/Ai/Base/Value/MaintenanceValues.cpp
-+++ b/src/Ai/Base/Value/MaintenanceValues.cpp
-@@ -131,7 +131,7 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
-                         !trainer->CanTeachSpell(bot, &spell))
-                         continue;
- 
--                    uint32 const price = uint32(floor(spell.MoneyCost * bot->GetReputationPriceDiscount(npc)));
-+                    uint32 const price = trainer->GetSpellCost(bot, npc, &spell);
-                     if (price <= spellBudget && bot->HasEnoughMoney(price))
-                         return {guid, NaturalMaintenanceType::TRAIN};
-                 }
 diff --git a/src/Ai/Base/Value/SpellIdValue.cpp b/src/Ai/Base/Value/SpellIdValue.cpp
 index e632688..ac8c494 100644
 --- a/src/Ai/Base/Value/SpellIdValue.cpp
@@ -715,68 +672,6 @@ index 7bfd542..c6dca14 100644
          {
              cpBonus = commandingPresenceBonus[rank];
              break;
-diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-index cc1dcf2..6e21e8f 100644
---- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-+++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-@@ -5,6 +5,7 @@
-  */
- 
- #include "RpgSubActions.h"
-+
- #include "BudgetValues.h"
- #include "ChooseRpgTargetAction.h"
- #include "EmoteAction.h"
-@@ -13,10 +14,12 @@
- #include "GuildCreateActions.h"
- #include "LastMovementValue.h"
- #include "MovementActions.h"
-+#include "PlayerbotFactory.h"
- #include "PlayerbotTextMgr.h"
- #include "Playerbots.h"
- #include "PossibleRpgTargetsValue.h"
- #include "SocialMgr.h"
-+#include "Trainer.h"
- 
- void RpgHelper::OnExecute(std::string nextAction)
- {
-@@ -278,19 +281,17 @@ bool RpgTrainAction::isPossible()
- {
-     GuidPosition gp = rpg->guidP();
- 
--    CreatureTemplate const* cinfo = gp.GetCreatureTemplate();
--    if (!cinfo)
-+    Creature* npc = gp.GetCreature();
-+    if (!npc)
-         return false;
- 
--    Trainer::Trainer* trainer = sObjectMgr->GetTrainer(cinfo->Entry);
-+    Trainer::Trainer* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
-     if (!trainer)
-         return false;
- 
-     if (!trainer->IsTrainerValidForPlayer(bot))
-         return false;
- 
--    FactionTemplateEntry const* factionTemplate = sFactionTemplateStore.LookupEntry(cinfo->faction);
--    float reputationDiscount = bot->GetReputationPriceDiscount(factionTemplate);
-     uint32 currentGold = AI_VALUE2(uint32, "free money for", (uint32)NeedMoneyFor::spells);
- 
-     for (auto& spell : trainer->GetSpells())
-@@ -299,10 +300,11 @@ bool RpgTrainAction::isPossible()
-         if (!trainerSpell)
-             continue;
- 
--        if (!trainer->CanTeachSpell(bot, trainerSpell))
-+        if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, trainerSpell) ||
-+            !trainer->CanTeachSpell(bot, trainerSpell))
-             continue;
- 
--        if (currentGold < static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount)))
-+        if (currentGold < trainer->GetSpellCost(bot, npc, trainerSpell))
-             continue;
- 
-         // we only check if at least one spell can be learned from the trainer;
 diff --git a/src/Bot/Factory/AiFactory.cpp b/src/Bot/Factory/AiFactory.cpp
 index bb1fa52..d9b1a19 100644
 --- a/src/Bot/Factory/AiFactory.cpp

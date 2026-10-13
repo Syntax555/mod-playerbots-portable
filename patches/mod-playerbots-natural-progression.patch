@@ -904,7 +904,7 @@ index c1efb7f1..cb2c4e13 100644
          SpellCastTargets targets;
          targets.SetUnitTarget(bot);
 diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
-index c32c9d99..47186abe 100644
+index c32c9d99..bc29a05b 100644
 --- a/src/Ai/Base/Actions/TrainerAction.cpp
 +++ b/src/Ai/Base/Actions/TrainerAction.cpp
 @@ -76,6 +76,14 @@ bool TrainerAction::isPossible()
@@ -913,7 +913,7 @@ index c32c9d99..47186abe 100644
  
 +        if (sPlayerbotAIConfig.naturalProgression)
 +        {
-+            uint32 const price = uint32(floor(trainerSpell->MoneyCost * bot->GetReputationPriceDiscount(target)));
++            uint32 const price = trainer->GetSpellCost(bot, target, trainerSpell);
 +            if (price > AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells)) ||
 +                !bot->HasEnoughMoney(price))
 +                continue;
@@ -945,7 +945,23 @@ index c32c9d99..47186abe 100644
  }
  
  void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId)
-@@ -139,7 +154,17 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
+@@ -108,7 +123,6 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
+     if (!trainer)
+         return;
+ 
+-    float reputationDiscount = bot->GetReputationPriceDiscount(creature);
+     uint32 totalCost = 0;
+ 
+     for (auto& spell : trainer->GetSpells())
+@@ -132,14 +146,24 @@ void TrainerAction::Iterate(Creature* creature, bool learnSpells, uint32 spellId
+         if (!spellInfo)
+             continue;
+ 
+-        uint32 cost = static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount));
++        uint32 const cost = trainer->GetSpellCost(bot, creature, trainerSpell);
+         totalCost += cost;
+ 
+         std::ostringstream out;
          out << chat->FormatSpell(spellInfo) << chat->formatMoney(cost);
  
          if (learnSpells)
@@ -964,7 +980,7 @@ index c32c9d99..47186abe 100644
  
          botAI->TellMaster(out);
      }
-@@ -187,7 +212,7 @@ void TrainerAction::TellFooter(uint32 totalCost)
+@@ -187,7 +211,7 @@ void TrainerAction::TellFooter(uint32 totalCost)
  
  bool MaintenanceAction::Execute(Event /*event*/)
  {
@@ -973,7 +989,7 @@ index c32c9d99..47186abe 100644
      {
          botAI->TellError("maintenance command is not allowed, please check the configuration.");
          return false;
-@@ -288,7 +313,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
+@@ -288,7 +312,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
  
  bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
  {
@@ -982,7 +998,7 @@ index c32c9d99..47186abe 100644
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "bis_autogear_unavailable_error",
-@@ -311,7 +336,7 @@ bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
+@@ -311,7 +335,7 @@ bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
  
  bool BisGearAction::Execute(Event event)
  {
@@ -991,7 +1007,7 @@ index c32c9d99..47186abe 100644
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "bis_command_unavailable_error",
-@@ -568,7 +593,7 @@ static uint32 GetWornItemLevelAverage(Player* player)
+@@ -568,7 +592,7 @@ static uint32 GetWornItemLevelAverage(Player* player)
  
  bool AutoGearAction::Execute(Event event)
  {
@@ -1079,7 +1095,7 @@ index e7c36e43..31116fb9 100644
  
      Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index eace9db9..29b2aa0d 100644
+index eace9db9..0ae5a4a8 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -5,9 +5,151 @@
@@ -1175,7 +1191,7 @@ index eace9db9..29b2aa0d 100644
 +                        !trainer->CanTeachSpell(bot, &spell))
 +                        continue;
 +
-+                    uint32 const price = uint32(floor(spell.MoneyCost * bot->GetReputationPriceDiscount(npc)));
++                    uint32 const price = trainer->GetSpellCost(bot, npc, &spell);
 +                    if (price <= spellBudget && bot->HasEnoughMoney(price))
 +                        return {guid, NaturalMaintenanceType::TRAIN};
 +                }
@@ -1759,10 +1775,31 @@ index 12dbf300..6e852d72 100644
          WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
          packet << (uint8)i;
 diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-index e914db17..cc1dcf21 100644
+index e914db17..6e21e8fe 100644
 --- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 +++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-@@ -177,7 +177,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include "RpgSubActions.h"
++
+ #include "BudgetValues.h"
+ #include "ChooseRpgTargetAction.h"
+ #include "EmoteAction.h"
+@@ -13,10 +14,12 @@
+ #include "GuildCreateActions.h"
+ #include "LastMovementValue.h"
+ #include "MovementActions.h"
++#include "PlayerbotFactory.h"
+ #include "PlayerbotTextMgr.h"
+ #include "Playerbots.h"
+ #include "PossibleRpgTargetsValue.h"
+ #include "SocialMgr.h"
++#include "Trainer.h"
+ 
+ void RpgHelper::OnExecute(std::string nextAction)
+ {
+@@ -177,7 +180,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
  
      uint32 path = nodes[urand(0, nodes.size() - 1)];
      uint32 money = bot->GetMoney();
@@ -1772,7 +1809,7 @@ index e914db17..cc1dcf21 100644
  
      TaxiPathEntry const* entry = sTaxiPathStore.LookupEntry(path);
      if (!entry)
-@@ -203,7 +204,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
+@@ -203,7 +207,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
      LOG_INFO("playerbots", "Bot {} <{}> is flying from {} to {} ({} location available)",
               bot->GetGUID().ToString().c_str(), bot->GetName(), nodeFrom->name[0], nodeTo->name[0], nodes.size());
  
@@ -1782,6 +1819,43 @@ index e914db17..cc1dcf21 100644
  
      rpg->AfterExecute();
  
+@@ -276,19 +281,17 @@ bool RpgTrainAction::isPossible()
+ {
+     GuidPosition gp = rpg->guidP();
+ 
+-    CreatureTemplate const* cinfo = gp.GetCreatureTemplate();
+-    if (!cinfo)
++    Creature* npc = gp.GetCreature();
++    if (!npc)
+         return false;
+ 
+-    Trainer::Trainer* trainer = sObjectMgr->GetTrainer(cinfo->Entry);
++    Trainer::Trainer* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
+     if (!trainer)
+         return false;
+ 
+     if (!trainer->IsTrainerValidForPlayer(bot))
+         return false;
+ 
+-    FactionTemplateEntry const* factionTemplate = sFactionTemplateStore.LookupEntry(cinfo->faction);
+-    float reputationDiscount = bot->GetReputationPriceDiscount(factionTemplate);
+     uint32 currentGold = AI_VALUE2(uint32, "free money for", (uint32)NeedMoneyFor::spells);
+ 
+     for (auto& spell : trainer->GetSpells())
+@@ -297,10 +300,11 @@ bool RpgTrainAction::isPossible()
+         if (!trainerSpell)
+             continue;
+ 
+-        if (!trainer->CanTeachSpell(bot, trainerSpell))
++        if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, trainerSpell) ||
++            !trainer->CanTeachSpell(bot, trainerSpell))
+             continue;
+ 
+-        if (currentGold < static_cast<uint32>(floor(trainerSpell->MoneyCost * reputationDiscount)))
++        if (currentGold < trainer->GetSpellCost(bot, npc, trainerSpell))
+             continue;
+ 
+         // we only check if at least one spell can be learned from the trainer;
 diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
 index 84feab56..fd36928b 100644
 --- a/src/Ai/World/Rpg/NewRpgInfo.h
