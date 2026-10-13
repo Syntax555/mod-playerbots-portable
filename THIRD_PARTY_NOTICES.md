@@ -47,6 +47,7 @@ applicable.
 | [MySQL Community](https://www.mysql.com/products/community/) | GPL version 2 with the package's additional permissions and third-party terms. | `licenses/mysql/`, preserving package license and `INFO_BIN`/`INFO_SRC` files where present |
 | [OpenSSL](https://www.openssl.org/) | Apache-2.0; provider notices are preserved separately. | `licenses/openssl/` |
 | [Boost](https://www.boost.org/) | Boost Software License 1.0. | `licenses/boost/LICENSE_1_0.txt` |
+| [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) | Distributable code under the Microsoft Visual Studio license terms. | Runtime DLLs at the ZIP root and in `mysql/bin`; no separate notice file |
 
 The core also contains third-party libraries with their own license notices.
 Their available license files and notices are preserved under

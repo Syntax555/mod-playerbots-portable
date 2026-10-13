@@ -80,6 +80,8 @@ def export_addon(repository: Path, name: str, destination: Path) -> None:
         with tarfile.open(archive_path) as archive:
             if any(not entry.isfile() and not entry.isdir() for entry in archive.getmembers()):
                 raise ValueError("Linked or special file in locked addon source")
+            if not hasattr(tarfile, "data_filter"):
+                raise ValueError("Python 3.12 or newer is required for safe archive extraction")
             archive.extractall(raw, filter="data")
 
         for path, file in patches:

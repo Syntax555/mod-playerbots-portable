@@ -6,7 +6,7 @@ The [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releas
 
 - Windows 10/11 x64.
 - Visual Studio 2022 with the Desktop development with C++ workload.
-- CMake 3.22 or newer, Go 1.26.6 or newer, Python 3, PowerShell 7 and Git.
+- CMake 3.22 or newer, Go 1.26.6 or newer, Python 3.12 or newer, PowerShell 7 and Git.
 - Boost 1.84 or newer, MySQL Server 8.0 x64 and OpenSSL 3 x64.
 
 The Windows resource compiler requires CMake 3.22 or newer with the Visual Studio generator. Use x64 dependencies throughout.

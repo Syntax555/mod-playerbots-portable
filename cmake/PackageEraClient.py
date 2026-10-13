@@ -124,6 +124,8 @@ def export_module(repository: Path, module, destination: Path, git: str):
             relative_path(member.name.rstrip("/"))
             if not (member.isdir() or member.isfile()):
                 raise ValueError(f"Unsupported source archive entry: {member.name}")
+        if not hasattr(tarfile, "data_filter"):
+            raise ValueError("Python 3.12 or newer is required for safe archive extraction")
         source.extractall(destination, filter="data")
     archive.unlink()
     patches = {}

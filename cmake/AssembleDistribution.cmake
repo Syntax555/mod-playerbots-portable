@@ -106,12 +106,23 @@ file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"
 # Compare manifest contents rather than timestamps when assembling again.
 configure_file("${PORTABLE_SOURCE_DIR}/versions.lock.json"
     "${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)
-foreach(document README.md LICENSE THIRD_PARTY_NOTICES.md)
+foreach(document README.md THIRD_PARTY_NOTICES.md)
     if(EXISTS "${PORTABLE_SOURCE_DIR}/${document}")
         configure_file("${PORTABLE_SOURCE_DIR}/${document}"
             "${PORTABLE_DIST_DIR}/${document}" COPYONLY)
     endif()
 endforeach()
+# The MIT License covers the launcher and build tooling, not the distribution
+# it sits in. The packaged copy states that scope above the unchanged text.
+file(READ "${PORTABLE_SOURCE_DIR}/LICENSE" launcher_license)
+string(REPLACE "\r\n" "\n" launcher_license "${launcher_license}")
+string(REGEX REPLACE "\n+$" "" launcher_license "${launcher_license}")
+set(license_scope "This MIT License covers only the portable launcher (startup.exe) and the
+build tooling of mod-playerbots-portable. The server, modules, addons, MySQL,
+OpenSSL, Boost and the other bundled components keep their own licenses; see
+THIRD_PARTY_NOTICES.md and licenses/.")
+file(CONFIGURE OUTPUT "${PORTABLE_DIST_DIR}/LICENSE"
+    CONTENT "@license_scope@\n\n@launcher_license@" @ONLY NEWLINE_STYLE LF)
 if(NOT PORTABLE_RELEASE_REVISION)
     find_program(PORTABLE_GIT_EXECUTABLE git REQUIRED)
     execute_process(COMMAND "${PORTABLE_GIT_EXECUTABLE}" -C "${PORTABLE_SOURCE_DIR}" rev-parse HEAD
