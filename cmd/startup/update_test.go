@@ -1320,6 +1320,68 @@ func TestPortableUpdateRangeRetriesStopForPermanentErrors(t *testing.T) {
 	}
 }
 
+// GitHub redirects the rolling release URL to an asset link that is signed for
+// a few minutes. A download that outlasts it resolves the release URL again.
+func TestPortableUpdateRenewsExpiredAssetLinks(t *testing.T) {
+	files := updateTestFiles()
+	large := make([]byte, 2<<20)
+	if _, err := rand.Read(large); err != nil {
+		t.Fatal(err)
+	}
+	files["bin/large.dll"] = large
+	archive, manifest := updateTestArchive(t, files, "")
+	release := "/download/latest/" + portableUpdatePackage
+	for _, mode := range []string{"same-asset", "replaced-asset"} {
+		t.Run(mode, func(t *testing.T) {
+			var links, linkRequests atomic.Int64
+			server, _, _ := updateTestFaultyRangeServer(t, archive, func(_ int64, w http.ResponseWriter, req *http.Request) bool {
+				if req.URL.Path == release {
+					linkRequests.Store(0)
+					http.Redirect(w, req, fmt.Sprintf("/asset/%d", links.Add(1)), http.StatusFound)
+					return true
+				}
+				// Each signed link serves three ranges and then expires.
+				if req.URL.Path != fmt.Sprintf("/asset/%d", links.Load()) || linkRequests.Add(1) > 3 {
+					http.Error(w, "Request has expired", http.StatusForbidden)
+					return true
+				}
+				if mode == "replaced-asset" && links.Load() > 1 {
+					var start, end int64
+					fmt.Sscanf(req.Header.Get("Range"), "bytes=%d-%d", &start, &end)
+					w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(archive)))
+					w.Header().Set("ETag", `"newer-release-asset"`)
+					w.WriteHeader(http.StatusPartialContent)
+					w.Write(archive[start : end+1])
+					return true
+				}
+				return false
+			})
+			root := t.TempDir()
+			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL+release, nil)
+			if mode == "replaced-asset" {
+				if err == nil || !strings.Contains(err.Error(), "release asset changed during update") {
+					t.Fatalf("renewed link to another asset was accepted: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expired asset link aborted the update: %v", err)
+			}
+			if links.Load() < 2 {
+				t.Fatal("test download did not outlast its first asset link")
+			}
+			if err := applyPortableUpdate(root, plan, nil); err != nil {
+				t.Fatal(err)
+			}
+			for name, content := range files {
+				if got, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); err != nil || !bytes.Equal(got, content) {
+					t.Fatalf("update with renewed links installed wrong %s: %v", name, err)
+				}
+			}
+		})
+	}
+}
+
 func TestPortableUpdateSequentialRangesGrow(t *testing.T) {
 	archive := make([]byte, 8<<20)
 	if _, err := rand.Read(archive); err != nil {
