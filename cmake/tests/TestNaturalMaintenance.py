@@ -64,6 +64,7 @@ production = {
     'travel': '\n'.join(function(travel_source, signature) for signature in (
         'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)',
         'void PostponeVisit(PlayerbotAI* ai)')),
+    'guard': function(values_source, 'bool CanRunNaturalMaintenance(PlayerbotAI* botAI)'),
     'value': function(values_source, 'NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()'),
     'action': function(action_source, 'bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)'),
     'trigger': function(trigger_source, 'bool NewRpgNaturalMaintenanceTrigger::IsActive()'),
@@ -401,6 +402,7 @@ struct PlayerbotAI
     NewRpgInfo rpgInfo;
     bool gameClientMaster = false;
     Player* GetBot() { return bot; }
+    AiObjectContext* GetAiObjectContext() { return context; }
     bool HasGameClientMaster() const { return gameClientMaster; }
     Creature* GetCreature(ObjectGuid guid)
     {
@@ -565,6 +567,7 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
 }
 
 @@CLASSES@@
+@@GUARD@@
 @@VALUE@@
 @@ACTION@@
 @@TRIGGER@@
@@ -1151,7 +1154,7 @@ int main()
 
 def build(directory, parts, name):
     text = prelude
-    for key in ('types', 'classes', 'travel', 'value', 'action', 'trigger', 'usage'):
+    for key in ('types', 'classes', 'travel', 'guard', 'value', 'action', 'trigger', 'usage'):
         text = text.replace('@@' + key.upper() + '@@', parts[key])
     (directory / (name + '.cpp')).write_text(text + tests)
     executable = directory / name
@@ -1162,8 +1165,10 @@ def build(directory, parts, name):
 
 
 mutations = [
-    ('maintenance during combat', 'value', 'bot->IsInCombat() || ', ''),
-    ('maintenance with a game-client master', 'value', 'botAI->HasGameClientMaster() || ', ''),
+    ('maintenance during combat', 'guard', '!bot->IsInCombat() && ', ''),
+    ('maintenance with a game-client master', 'guard', '!botAI->HasGameClientMaster() && ', ''),
+    ('value without the shared guard', 'value', 'if (!CanRunNaturalMaintenance(botAI))', 'if (false)'),
+    ('action without the shared guard', 'action', 'if (!CanRunNaturalMaintenance(botAI))', 'if (false)'),
     ('trainer lesson above the spell budget', 'value', 'price <= spellBudget && ', ''),
     ('supply above its budget', 'value', 'if (price <= budget && bot->HasEnoughMoney(price))',
      'if (budget && bot->HasEnoughMoney(price))'),

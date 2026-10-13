@@ -118,7 +118,7 @@ index 58fd57e..74b0a56 100644
      bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
  
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 29b2aa0..ef1f0fa 100644
+index a44dcb5..050d67c 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -9,6 +9,8 @@
@@ -130,10 +130,10 @@ index 29b2aa0..ef1f0fa 100644
  #include "ItemUsageValue.h"
  #include "PlayerbotFactory.h"
  #include "Playerbots.h"
-@@ -18,7 +20,42 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -24,7 +26,42 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
+ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
  {
-     if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
-         botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
+     if (!CanRunNaturalMaintenance(botAI))
 +    {
 +        EarnedAuctionTravel::AbortTrip(botAI);
          return {};
@@ -173,7 +173,7 @@ index 29b2aa0..ef1f0fa 100644
  
      bool const canSell = AI_VALUE(bool, "can sell");
      bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
-@@ -182,6 +219,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
+@@ -188,6 +225,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
  
  bool CanSellValue::Calculate()
  {
@@ -184,7 +184,7 @@ index 29b2aa0..ef1f0fa 100644
              AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_AH))) > 1;
  }
 diff --git a/src/Ai/Base/Value/MaintenanceValues.h b/src/Ai/Base/Value/MaintenanceValues.h
-index 323fa08..a01d1bb 100644
+index 63b7f78..f87521a 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.h
 +++ b/src/Ai/Base/Value/MaintenanceValues.h
 @@ -7,6 +7,7 @@
@@ -214,7 +214,7 @@ index 323fa08..a01d1bb 100644
 +    WorldPosition destination;
  };
  
- class NaturalMaintenanceValue : public CalculatedValue<NaturalMaintenanceTask>
+ // Natural upkeep runs only for a living, idle bot that may move and has no game-client master.
 diff --git a/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp b/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
 index 52a9b8c..4bd88a9 100644
 --- a/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
@@ -280,7 +280,7 @@ index 6556dfb..9ddfd5d 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4eea62..efda066 100644
+index f5818a8..6c38081 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -14,6 +14,8 @@
@@ -292,9 +292,9 @@ index d4eea62..efda066 100644
  #include "G3D/Vector2.h"
  #include "GossipDef.h"
  #include "IVMapMgr.h"
-@@ -45,11 +47,85 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
-     if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
-         botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
+@@ -44,11 +46,85 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+     Value<NaturalMaintenanceTask>* value = context->GetValue<NaturalMaintenanceTask>("natural maintenance");
+     if (!CanRunNaturalMaintenance(botAI))
      {
 +        EarnedAuctionTravel::AbortTrip(botAI);
          value->Set({});
@@ -378,7 +378,7 @@ index d4eea62..efda066 100644
      Creature* npc = botAI->GetCreature(task.target);
      if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
      {
-@@ -102,6 +178,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+@@ -101,6 +177,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
              }
              break;
          case NaturalMaintenanceType::NONE:

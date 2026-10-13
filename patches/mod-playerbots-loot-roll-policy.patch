@@ -1,4 +1,5 @@
 diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRollAction.cpp
+index c5b07c7..bae289a 100644
 --- a/src/Ai/Base/Actions/LootRollAction.cpp
 +++ b/src/Ai/Base/Actions/LootRollAction.cpp
 @@ -5,10 +5,13 @@
@@ -15,7 +16,7 @@ diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRo
  #include "ObjectMgr.h"
  #include "PlayerbotAIConfig.h"
  #include "Playerbots.h"
-@@ -93,6 +96,22 @@
+@@ -93,6 +96,22 @@ bool LootRollAction::Execute(Event /*event*/)
          else if (vote == GREED && !sPlayerbotAIConfig.lootGreedRollLevel)
              vote = PASS;
  
@@ -38,7 +39,7 @@ diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRo
          switch (group->GetLootMethod())
          {
              case MASTER_LOOT:
-@@ -145,42 +164,7 @@
+@@ -145,43 +164,6 @@ RollVote LootRollAction::CalculateRollVote(ItemTemplate const* proto, ItemUsage
  
  bool MasterLootRollAction::isUseful() { return !IsRealPlayer(botAI->GetMaster()); }
  
@@ -78,7 +79,19 @@ diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRo
 -
 -    return true;
 -}
-+bool MasterLootRollAction::Execute(Event event) { return LootRollAction::Execute(event); }
- 
+-
  bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
  {
+     // Get the bitmask for the bot's class
+diff --git a/src/Ai/Base/Actions/LootRollAction.h b/src/Ai/Base/Actions/LootRollAction.h
+index 586d8c2..193d679 100644
+--- a/src/Ai/Base/Actions/LootRollAction.h
++++ b/src/Ai/Base/Actions/LootRollAction.h
+@@ -35,7 +35,6 @@ public:
+     MasterLootRollAction(PlayerbotAI* botAI) : LootRollAction(botAI, "master loot roll") {}
+ 
+     bool isUseful() override;
+-    bool Execute(Event event) override;
+ };
+ 
+ class RollAction : public Action
