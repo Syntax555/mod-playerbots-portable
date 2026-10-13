@@ -4,13 +4,20 @@ on:
   workflow_run:
     workflows: ['Build portable ZIP']
     types: [completed]
+    branches: [main]
 
 permissions:
   actions: read
   contents: write
 
 concurrency:
-  group: latest-release
+  # Only publishable builds share the queue, so the skipped run of a failed,
+  # cancelled or pull request build cannot replace a pending publication.
+  group: >-
+    ${{ github.event.workflow_run.conclusion == 'success' &&
+    github.event.workflow_run.head_repository.full_name == github.repository &&
+    (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+    'latest-release' || format('latest-release-ignored-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
