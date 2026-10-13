@@ -55,20 +55,18 @@ index d47202e..4a9dbb1 100644
      if (!master)
          return false;
 diff --git a/src/Ai/Base/Actions/SellAction.cpp b/src/Ai/Base/Actions/SellAction.cpp
-index e395227..72c2706 100644
+index e395227..1401d3c 100644
 --- a/src/Ai/Base/Actions/SellAction.cpp
 +++ b/src/Ai/Base/Actions/SellAction.cpp
-@@ -5,7 +5,9 @@
-  */
+@@ -6,6 +6,7 @@
  
  #include "SellAction.h"
-+
  #include "ChatHelper.h"
 +#include "EarnedAuction.h"
  #include "Event.h"
  #include "ItemPackets.h"
  #include "ItemUsageValue.h"
-@@ -74,15 +76,23 @@ private:
+@@ -74,15 +75,23 @@ private:
  class SellVendorItemsVisitor : public SellItemsVisitor
  {
  public:
@@ -94,7 +92,7 @@ index e395227..72c2706 100644
  
          return SellItemsVisitor::Visit(item);
      }
-@@ -100,7 +110,7 @@ bool SellAction::Execute(Event event)
+@@ -100,7 +109,7 @@ bool SellAction::Execute(Event event)
  
      if (text == "vendor")
      {
@@ -280,19 +278,19 @@ index 6556dfb..9ddfd5d 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index f5818a8..6c38081 100644
+index 5f82e99..afdfe69 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-@@ -14,6 +14,8 @@
+@@ -10,6 +10,8 @@
  #include "BudgetValues.h"
  #include "ChatHelper.h"
  #include "DBCStores.h"
 +#include "EarnedAuction.h"
 +#include "EarnedAuctionTravel.h"
- #include "G3D/Vector2.h"
  #include "GossipDef.h"
  #include "IVMapMgr.h"
-@@ -44,11 +46,85 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+ #include "MaintenanceValues.h"
+@@ -42,11 +44,85 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
      Value<NaturalMaintenanceTask>* value = context->GetValue<NaturalMaintenanceTask>("natural maintenance");
      if (!CanRunNaturalMaintenance(botAI))
      {
@@ -378,7 +376,7 @@ index f5818a8..6c38081 100644
      Creature* npc = botAI->GetCreature(task.target);
      if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
      {
-@@ -101,6 +177,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+@@ -99,6 +175,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
              }
              break;
          case NaturalMaintenanceType::NONE:
@@ -1523,59 +1521,26 @@ index 2676563..f0a162c 100644
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index f0619c6..7967326 100644
+index f0619c6..6fd2f11 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
-@@ -5,17 +5,19 @@
-  */
- 
- #include "Playerbots.h"
-+
-+#include <mysqld_error.h>
-+
-+#include "AllMapScript.h"
- #include "BattleGroundTactics.h"
- #include "BattlefieldScript.h"
-+#include "BuiltInConfig.h"
- #include "Channel.h"
- #include "CheckMountStateAction.h"
- #include "Config.h"
--#include "BuiltInConfig.h"
- #include "DBUpdater.h"
- #include "DatabaseEnv.h"
--#include "PlayerbotsDatabase.h"
--#include <mysqld_error.h>
--#include "AllMapScript.h"
+@@ -16,6 +16,7 @@
+ #include "PlayerbotsDatabase.h"
+ #include <mysqld_error.h>
+ #include "AllMapScript.h"
 +#include "EarnedAuctionTravel.h"
  #include "GlobalScript.h"
  #include "GuildTaskMgr.h"
  #include "PlayerScript.h"
-@@ -24,6 +26,7 @@
- #include "PlayerbotGuildMgr.h"
- #include "PlayerbotSpellRepository.h"
- #include "PlayerbotWorldThreadProcessor.h"
-+#include "PlayerbotsDatabase.h"
- #include "RandomPlayerbotMgr.h"
- #include "ScriptMgr.h"
- #include "ServerScript.h"
-@@ -495,11 +498,11 @@ public:
- class PlayerbotsWorldScript : public WorldScript
- {
+@@ -497,6 +498,7 @@ class PlayerbotsWorldScript : public WorldScript
  public:
--    PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
--        WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED,
--        WORLDHOOK_ON_UPDATE,
--        WORLDHOOK_ON_SHUTDOWN
--    }) {}
-+    PlayerbotsWorldScript()
-+        : WorldScript("PlayerbotsWorldScript", {WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED, WORLDHOOK_ON_STARTUP,
-+                                                WORLDHOOK_ON_UPDATE, WORLDHOOK_ON_SHUTDOWN})
-+    {
-+    }
- 
-     void OnBeforeWorldInitialized() override
-     {
-@@ -534,6 +537,8 @@ public:
+     PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
+         WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED,
++        WORLDHOOK_ON_STARTUP,
+         WORLDHOOK_ON_UPDATE,
+         WORLDHOOK_ON_SHUTDOWN
+     }) {}
+@@ -534,6 +536,8 @@ public:
          LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
      }
  

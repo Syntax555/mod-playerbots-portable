@@ -1,12 +1,10 @@
 diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRollAction.cpp
-index c5b07c7..bae289a 100644
+index c5b07c7..8f11114 100644
 --- a/src/Ai/Base/Actions/LootRollAction.cpp
 +++ b/src/Ai/Base/Actions/LootRollAction.cpp
-@@ -5,10 +5,13 @@
-  */
+@@ -6,9 +6,11 @@
  
  #include "LootRollAction.h"
-+
  #include "Event.h"
 +#include "GameObject.h"
  #include "Group.h"
@@ -16,7 +14,7 @@ index c5b07c7..bae289a 100644
  #include "ObjectMgr.h"
  #include "PlayerbotAIConfig.h"
  #include "Playerbots.h"
-@@ -93,6 +96,22 @@ bool LootRollAction::Execute(Event /*event*/)
+@@ -93,6 +95,22 @@ bool LootRollAction::Execute(Event /*event*/)
          else if (vote == GREED && !sPlayerbotAIConfig.lootGreedRollLevel)
              vote = PASS;
  
@@ -39,7 +37,7 @@ index c5b07c7..bae289a 100644
          switch (group->GetLootMethod())
          {
              case MASTER_LOOT:
-@@ -145,43 +164,6 @@ RollVote LootRollAction::CalculateRollVote(ItemTemplate const* proto, ItemUsage
+@@ -145,43 +163,6 @@ RollVote LootRollAction::CalculateRollVote(ItemTemplate const* proto, ItemUsage
  
  bool MasterLootRollAction::isUseful() { return !IsRealPlayer(botAI->GetMaster()); }
  

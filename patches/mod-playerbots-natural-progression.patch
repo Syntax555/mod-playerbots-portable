@@ -764,7 +764,7 @@ index 41d7397..5f33cb5 100644
      // {
      context->GetValue<uint32>("death count")->Set(dCount + 1);
 diff --git a/src/Ai/Base/Actions/SayAction.cpp b/src/Ai/Base/Actions/SayAction.cpp
-index a7d18f0..97527fe 100644
+index a7d18f0..4749a93 100644
 --- a/src/Ai/Base/Actions/SayAction.cpp
 +++ b/src/Ai/Base/Actions/SayAction.cpp
 @@ -221,6 +221,9 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32& type, uint32& guid1, std:
@@ -777,18 +777,16 @@ index a7d18f0..97527fe 100644
      std::map<std::string, std::string> placeholders;
      const auto thunderfury = sObjectMgr->GetItemTemplate(19019);
      placeholders["%thunderfury_link"] = GET_PLAYERBOT_AI(bot)->GetChatHelper()->FormatItem(thunderfury);
-@@ -249,7 +252,10 @@ bool ChatReplyAction::HandleThunderfuryReply(Player* bot, ChatChannelSource chat
+@@ -249,6 +252,9 @@ bool ChatReplyAction::HandleThunderfuryReply(Player* bot, ChatChannelSource chat
  
  bool ChatReplyAction::HandleToxicLinksReply(Player* bot, ChatChannelSource chatChannelSource)
  {
--    //quests
 +    if (!sPlayerbotAIConfig.toxicLinksRepliesChance)
 +        return false;
 +
-+    // quests
+     //quests
      std::vector<uint32> incompleteQuests;
      for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
-     {
 diff --git a/src/Ai/Base/Actions/TameAction.cpp b/src/Ai/Base/Actions/TameAction.cpp
 index a202d68..38142b8 100644
 --- a/src/Ai/Base/Actions/TameAction.cpp
@@ -1299,14 +1297,11 @@ index 80db837..63b7f78 100644
  {
  public:
 diff --git a/src/Ai/Base/Value/NewPlayerNearbyValue.cpp b/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
-index 014a716..a417e3f 100644
+index 014a716..2014259 100644
 --- a/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
 +++ b/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
-@@ -5,16 +5,45 @@
-  */
- 
+@@ -7,14 +7,42 @@
  #include "NewPlayerNearbyValue.h"
-+
  #include "Playerbots.h"
  
 +bool NewPlayerNearbyValue::CanGreet(PlayerbotAI* botAI)
@@ -1583,30 +1578,23 @@ index 42b8d88..cfd45bc 100644
          return;
  
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4bfafe..f5818a8 100644
+index d4bfafe..5f82e99 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-@@ -5,12 +5,19 @@
-  */
- 
+@@ -7,10 +7,12 @@
  #include "NewRpgAction.h"
-+
-+#include <cmath>
-+#include <cstdlib>
-+
  #include "AreaDefines.h"
  #include "BroadcastHelper.h"
 +#include "BudgetValues.h"
  #include "ChatHelper.h"
  #include "DBCStores.h"
-+#include "G3D/Vector2.h"
  #include "GossipDef.h"
  #include "IVMapMgr.h"
 +#include "MaintenanceValues.h"
  #include "MotionMaster.h"
  #include "MoveSpline.h"
  #include "NewRpgInfo.h"
-@@ -24,15 +31,83 @@
+@@ -24,6 +26,7 @@
  #include "Player.h"
  #include "PlayerbotAI.h"
  #include "PlayerbotTextMgr.h"
@@ -1614,13 +1602,10 @@ index d4bfafe..f5818a8 100644
  #include "QuestDef.h"
  #include "Random.h"
  #include "SharedDefines.h"
- #include "Timer.h"
- #include "TravelMgr.h"
- #include "WaypointMovementGenerator.h"
--#include "G3D/Vector2.h"
--#include <cmath>
--#include <cstdlib>
-+
+@@ -34,6 +37,76 @@
+ #include <cmath>
+ #include <cstdlib>
+ 
 +bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
 +{
 +    Value<NaturalMaintenanceTask>* value = context->GetValue<NaturalMaintenanceTask>("natural maintenance");
@@ -1690,10 +1675,11 @@ index d4bfafe..f5818a8 100644
 +        botAI->rpgInfo.naturalMaintenanceRejected = task.target;
 +    return result;
 +}
- 
++
  void TellRpgStatusAction::WhisperStatusChange(Player* owner, std::string const& statusName)
  {
-@@ -670,7 +745,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
+     std::string msg = PlayerbotTextMgr::instance().GetBotTextOrDefault(
+@@ -670,7 +743,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
  
      bot->GetSession()->SendLearnNewTaxiNode(flightMaster);
  
@@ -1780,18 +1766,10 @@ index 12dbf30..834a0b0 100644
          WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
          packet << (uint8)i;
 diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-index e914db1..6e21e8f 100644
+index e914db1..3049729 100644
 --- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 +++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-@@ -5,6 +5,7 @@
-  */
- 
- #include "RpgSubActions.h"
-+
- #include "BudgetValues.h"
- #include "ChooseRpgTargetAction.h"
- #include "EmoteAction.h"
-@@ -13,10 +14,12 @@
+@@ -13,10 +13,12 @@
  #include "GuildCreateActions.h"
  #include "LastMovementValue.h"
  #include "MovementActions.h"
@@ -1804,7 +1782,7 @@ index e914db1..6e21e8f 100644
  
  void RpgHelper::OnExecute(std::string nextAction)
  {
-@@ -177,7 +180,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
+@@ -177,7 +179,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
  
      uint32 path = nodes[urand(0, nodes.size() - 1)];
      uint32 money = bot->GetMoney();
@@ -1814,7 +1792,7 @@ index e914db1..6e21e8f 100644
  
      TaxiPathEntry const* entry = sTaxiPathStore.LookupEntry(path);
      if (!entry)
-@@ -203,7 +207,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
+@@ -203,7 +206,8 @@ bool RpgTaxiAction::Execute(Event /*event*/)
      LOG_INFO("playerbots", "Bot {} <{}> is flying from {} to {} ({} location available)",
               bot->GetGUID().ToString().c_str(), bot->GetName(), nodeFrom->name[0], nodeTo->name[0], nodes.size());
  
@@ -1824,7 +1802,7 @@ index e914db1..6e21e8f 100644
  
      rpg->AfterExecute();
  
-@@ -276,19 +281,17 @@ bool RpgTrainAction::isPossible()
+@@ -276,19 +280,17 @@ bool RpgTrainAction::isPossible()
  {
      GuidPosition gp = rpg->guidP();
  
@@ -1847,7 +1825,7 @@ index e914db1..6e21e8f 100644
      uint32 currentGold = AI_VALUE2(uint32, "free money for", (uint32)NeedMoneyFor::spells);
  
      for (auto& spell : trainer->GetSpells())
-@@ -297,10 +300,11 @@ bool RpgTrainAction::isPossible()
+@@ -297,10 +299,11 @@ bool RpgTrainAction::isPossible()
          if (!trainerSpell)
              continue;
  
@@ -2308,35 +2286,19 @@ index 23300d0..b705e50 100644
      if (level < 55)
          return; // Only apply for level 55+ bots
 diff --git a/src/Bot/Factory/RandomPlayerbotFactory.cpp b/src/Bot/Factory/RandomPlayerbotFactory.cpp
-index bee5aa2..f060935 100644
+index bee5aa2..add4ef4 100644
 --- a/src/Bot/Factory/RandomPlayerbotFactory.cpp
 +++ b/src/Bot/Factory/RandomPlayerbotFactory.cpp
-@@ -5,19 +5,22 @@
+@@ -5,6 +5,9 @@
   */
  
  #include "RandomPlayerbotFactory.h"
--#include "PlayerbotsDatabase.h"
 +
 +#include <set>
 +
+ #include "PlayerbotsDatabase.h"
  #include "AccountMgr.h"
  #include "ArenaTeamMgr.h"
- #include "CharacterCache.h"
--#include "ObjectAccessor.h"
--#include "Player.h"
- #include "DatabaseEnv.h"
- #include "Log.h"
-+#include "ObjectAccessor.h"
-+#include "Player.h"
- #include "PlayerbotAI.h"
- #include "PlayerbotAIConfig.h"
- #include "PlayerbotOperations.h"
- #include "PlayerbotWorldThreadProcessor.h"
- #include "Playerbots.h"
-+#include "PlayerbotsDatabase.h"
- #include "RaceMgr.h"
- #include "RandomPlayerbotMgr.h"
- #include "ScriptMgr.h"
 @@ -57,7 +60,8 @@ bool RandomPlayerbotFactory::IsValidRaceClassCombination(uint8 race, uint8 cls,
          return false;
  
@@ -2358,23 +2320,20 @@ index bee5aa2..f060935 100644
      const bool alliance = static_cast<bool>(urand(0, 1));
  
      std::vector<uint8> raceOptions;
-@@ -79,11 +87,10 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
+@@ -79,9 +87,10 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
  
          // Try to get 50/50 faction distribution for random bot population balance.
          // Without this check, races from the faction with more class options would dominate.
 -        if (alliance == IsAlliance(race))
--        {
++        if (sPlayerbotAIConfig.naturalProgression || alliance == IsAlliance(race))
+         {
 -            if (IsValidRaceClassCombination(race, cls, sWorld->getIntConfig(CONFIG_EXPANSION)))
--                raceOptions.push_back(race);
--        }
-+        if ((sPlayerbotAIConfig.naturalProgression || alliance == IsAlliance(race)) &&
-+            IsValidRaceClassCombination(race, cls, sWorld->getIntConfig(CONFIG_EXPANSION)) &&
-+            sScriptMgr->CanAccountCreateCharacter(session->GetAccountId(), race, cls))
-+            raceOptions.push_back(race);
++            if (IsValidRaceClassCombination(race, cls, sWorld->getIntConfig(CONFIG_EXPANSION)) &&
++                sScriptMgr->CanAccountCreateCharacter(session->GetAccountId(), race, cls))
+                 raceOptions.push_back(race);
+         }
      }
- 
-     if (raceOptions.empty())
-@@ -92,6 +99,18 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
+@@ -92,6 +101,18 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
          return nullptr;
      }
  
@@ -2393,7 +2352,7 @@ index bee5aa2..f060935 100644
      const uint8 race = raceOptions[urand(0, raceOptions.size() - 1)];
      const uint8 gender = urand(0, 1) ? GENDER_MALE : GENDER_FEMALE;
      const auto raceAndGender = CombineRaceAndGender(race, gender);
-@@ -440,7 +459,8 @@ uint32 RandomPlayerbotFactory::CalculateTotalAccountCount()
+@@ -440,7 +461,8 @@ uint32 RandomPlayerbotFactory::CalculateTotalAccountCount()
  uint32 RandomPlayerbotFactory::CalculateAvailableCharsPerAccount()
  {
      // Death Knight availability according to their login eligibility, and if WotLK is enabled at all.
@@ -2403,7 +2362,7 @@ index bee5aa2..f060935 100644
  
      uint32 availableChars = noDK ? 9 : 10;
  
-@@ -681,7 +701,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
+@@ -681,7 +703,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
          sPlayerbotAIConfig.randomBotAccounts.push_back(accountId);
  
          uint32 count = AccountMgr::GetCharactersCount(accountId);
@@ -2412,7 +2371,7 @@ index bee5aa2..f060935 100644
          {
              continue;
          }
-@@ -722,8 +742,24 @@ void RandomPlayerbotFactory::CreateRandomBots()
+@@ -722,8 +744,24 @@ void RandomPlayerbotFactory::CreateRandomBots()
                                                  time_t(0), LOCALE_enUS, 0, false, false, 0);
          sessionBots.push_back(session);
  
@@ -2602,7 +2561,7 @@ index 848ba21..c30584a 100644
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
 diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
-index 8bcebe3..4f7fd91 100644
+index 8bcebe3..a5ba144 100644
 --- a/src/Bot/RandomBotLevelMgr.cpp
 +++ b/src/Bot/RandomBotLevelMgr.cpp
 @@ -293,6 +293,9 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
@@ -2682,8 +2641,8 @@ index 8bcebe3..4f7fd91 100644
      RandomBotLevelPlayerScript()
          : PlayerScript("RandomBotLevelPlayerScript",
 -              { PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT })
-+                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_GIVE_EXP,
-+                        PLAYERHOOK_ON_CAN_GIVE_LEVEL})
++              { PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_LEVEL_CHANGED, PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_GIVE_EXP,
++                PLAYERHOOK_ON_CAN_GIVE_LEVEL })
 +    {
 +    }
 +
