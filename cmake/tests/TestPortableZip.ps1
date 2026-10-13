@@ -8,6 +8,8 @@ $PSNativeCommandUseErrorActionPreference = $false
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $cmakeRoot = Split-Path $PSScriptRoot -Parent
 $verifier = Join-Path $cmakeRoot 'VerifyPortableZip.ps1'
+# Shared with the publisher and the launcher updater.
+$unmanagedPaths = Get-Content (Join-Path (Split-Path $cmakeRoot -Parent) 'scripts/tests/unmanaged-paths.json') -Raw | ConvertFrom-Json
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('portable-zip-tests-' + [guid]::NewGuid().ToString('N'))
 $source = Join-Path $temporaryRoot 'source with spaces'
 # Packaging always reads the generated core checkout, never the submodule.
@@ -282,10 +284,13 @@ try {
         'mysql/bin/libprotobuf-debug.dll', 'mysql/bin/abseil_dll-debug.dll') + $optionalFiles) {
         Test-NegativeZip "redundant file $redundant" 'Redundant development/client' -ExtraEntries @(@{ Name = $redundant; Bytes = [byte[]]@(1) })
     }
-    foreach ($live in @('configs/worldserver.conf', 'mysql/data/user.db', 'mysql/my.cnf',
-        'mysql/my.ini', 'logs/world.log', 'data/dbc/Spell.dbc', 'configs/.portable-profiles.json', 'configs/realm-phase.txt')) {
+    foreach ($live in $unmanagedPaths.userData) {
         Test-NegativeZip "protected user file $live" 'Live user data/configuration' -ExtraEntries @(@{ Name = $live; Bytes = [byte[]]@(1) })
     }
+    $packagedZip = Join-Path $temporaryRoot 'packaged-names.zip'
+    $packagedExtras = @($unmanagedPaths.packaged | Where-Object { -not $script:baseline.ContainsKey($_) } | ForEach-Object { @{ Name = $_; Bytes = [byte[]]@(1) } })
+    New-FixtureZip $packagedZip -ExtraEntries $packagedExtras
+    Test-Zip 'ordinary package files beside user data names' $packagedZip
     Test-NegativeZip 'missing release identity' 'missing portable-release.json' -Omit @('portable-release.json')
     Test-NegativeZip 'missing third-party notices' 'missing THIRD_PARTY_NOTICES.md' -Omit @('THIRD_PARTY_NOTICES.md')
     Test-NegativeZip 'changed third-party notices' 'differs from build sources' -Replacements @{ 'THIRD_PARTY_NOTICES.md' = [System.Text.Encoding]::UTF8.GetBytes('other terms') }
