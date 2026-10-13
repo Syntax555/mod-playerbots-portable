@@ -118,7 +118,7 @@ index 58fd57e..74b0a56 100644
      bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
  
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 32e34d2..a3edce0 100644
+index 243de52..9bcd1d5 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -9,6 +9,8 @@
@@ -174,7 +174,7 @@ index 32e34d2..a3edce0 100644
      bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
      uint32 const spellBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells));
      uint32 const consumableBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::consumables));
-@@ -168,6 +204,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
+@@ -172,6 +208,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
  
  bool CanSellValue::Calculate()
  {
@@ -281,7 +281,7 @@ index 6556dfb..9ddfd5d 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d046a78..b7739f4 100644
+index d4eea62..78399be 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -14,6 +14,8 @@
@@ -293,7 +293,7 @@ index d046a78..b7739f4 100644
  #include "G3D/Vector2.h"
  #include "GossipDef.h"
  #include "IVMapMgr.h"
-@@ -45,11 +47,84 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+@@ -45,11 +47,85 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
      if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
          botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
      {
@@ -355,7 +355,8 @@ index d046a78..b7739f4 100644
 +        {
 +            if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL) || MoveWorldObjectTo(task.target))
 +                return true;
-+            EarnedAuctionTravel::AbortTrip(botAI);
++            // An unreachable mailbox or auctioneer must not hold back repairs, sales and training.
++            EarnedAuctionTravel::PostponeVisit(botAI);
 +            value->Set({});
 +            return false;
 +        }
@@ -372,13 +373,13 @@ index d046a78..b7739f4 100644
 +            info.earnedAuctionVisitMailbox = !mailbox;
 +        }
 +        else
-+            EarnedAuctionTravel::AbortTrip(botAI);
++            EarnedAuctionTravel::PostponeVisit(botAI);
 +        return queued;
 +    }
      Creature* npc = botAI->GetCreature(task.target);
      if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
      {
-@@ -101,6 +176,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+@@ -102,6 +178,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
              }
              break;
          case NaturalMaintenanceType::NONE:
@@ -389,7 +390,7 @@ index d046a78..b7739f4 100644
      }
      bot->SetSelection(oldSelection);
 diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
-index 84feab5..5ccfd6d 100644
+index fd36928..9076d52 100644
 --- a/src/Ai/World/Rpg/NewRpgInfo.h
 +++ b/src/Ai/World/Rpg/NewRpgInfo.h
 @@ -76,6 +76,17 @@ struct NewRpgInfo
@@ -1080,10 +1081,10 @@ index 0000000..f0c80c5
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravel.cpp b/src/Bot/EarnedAuctionTravel.cpp
 new file mode 100644
-index 0000000..11db0a6
+index 0000000..c75c32c
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravel.cpp
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,175 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1209,7 +1210,13 @@ index 0000000..11db0a6
 +
 +void AbortTrip(PlayerbotAI* ai)
 +{
-+    if (!ai || !ai->rpgInfo.earnedAuctionTravelActive)
++    if (ai && ai->rpgInfo.earnedAuctionTravelActive)
++        PostponeVisit(ai);
++}
++
++void PostponeVisit(PlayerbotAI* ai)
++{
++    if (!ai)
 +        return;
 +    FinishTrip(ai);
 +    ai->rpgInfo.earnedAuctionLastVisit = getMSTime();
@@ -1255,10 +1262,10 @@ index 0000000..11db0a6
 +}  // namespace EarnedAuctionTravel
 diff --git a/src/Bot/EarnedAuctionTravel.h b/src/Bot/EarnedAuctionTravel.h
 new file mode 100644
-index 0000000..a2e8b61
+index 0000000..b5cdae8
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravel.h
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,25 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1281,6 +1288,7 @@ index 0000000..a2e8b61
 +bool ContinueTrip(PlayerbotAI* ai);
 +void FinishTrip(PlayerbotAI* ai);
 +void AbortTrip(PlayerbotAI* ai);
++void PostponeVisit(PlayerbotAI* ai);
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravelPolicy.h b/src/Bot/EarnedAuctionTravelPolicy.h

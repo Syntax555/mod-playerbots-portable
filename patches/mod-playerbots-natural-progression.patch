@@ -1079,10 +1079,10 @@ index e7c36e43..31116fb9 100644
  
      Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index eace9db9..32e34d27 100644
+index eace9db9..243de52b 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
-@@ -5,9 +5,137 @@
+@@ -5,9 +5,141 @@
   */
  
  #include "MaintenanceValues.h"
@@ -1145,11 +1145,15 @@ index eace9db9..32e34d27 100644
 +    if (!canSell && !needsRepair && !spellBudget && !needsFood && !needsDrink && !ammoSubclass)
 +        return {};
 +
++    // An unreachable or failed NPC must not block the others while it stays nearest.
++    ObjectGuid const rejected = botAI->rpgInfo.naturalMaintenanceRejected;
++    botAI->rpgInfo.naturalMaintenanceRejected.Clear();
++
 +    // The nearby list is sorted by distance. Expensive inventory/trainer scans run only every 30 seconds.
 +    for (ObjectGuid const guid : AI_VALUE(GuidVector, "possible new rpg targets"))
 +    {
 +        Creature* npc = botAI->GetCreature(guid);
-+        if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
++        if (guid == rejected || !npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
 +            continue;
 +
 +        if (canSell && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
@@ -1544,7 +1548,7 @@ index 42b8d88e..cfd45bcd 100644
          return;
  
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4bfafe7..6d25b5b8 100644
+index d4bfafe7..d4eea62d 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -5,12 +5,19 @@
@@ -1567,7 +1571,7 @@ index d4bfafe7..6d25b5b8 100644
  #include "MotionMaster.h"
  #include "MoveSpline.h"
  #include "NewRpgInfo.h"
-@@ -24,15 +31,81 @@
+@@ -24,15 +31,84 @@
  #include "Player.h"
  #include "PlayerbotAI.h"
  #include "PlayerbotTextMgr.h"
@@ -1608,6 +1612,7 @@ index d4bfafe7..6d25b5b8 100644
 +        if (MoveWorldObjectTo(task.target))
 +            return true;
 +
++        botAI->rpgInfo.naturalMaintenanceRejected = task.target;
 +        value->Set({});
 +        return false;
 +    }
@@ -1647,12 +1652,14 @@ index d4bfafe7..6d25b5b8 100644
 +            break;
 +    }
 +    bot->SetSelection(oldSelection);
++    if (!result)
++        botAI->rpgInfo.naturalMaintenanceRejected = task.target;
 +    return result;
 +}
  
  void TellRpgStatusAction::WhisperStatusChange(Player* owner, std::string const& statusName)
  {
-@@ -670,7 +743,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
+@@ -670,7 +746,7 @@ bool NewRpgTravelFlightAction::Execute(Event /*event*/)
  
      bot->GetSession()->SendLearnNewTaxiNode(flightMaster);
  
@@ -1765,6 +1772,20 @@ index e914db17..cc1dcf21 100644
  
      rpg->AfterExecute();
  
+diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
+index 84feab56..fd36928b 100644
+--- a/src/Ai/World/Rpg/NewRpgInfo.h
++++ b/src/Ai/World/Rpg/NewRpgInfo.h
+@@ -83,6 +83,9 @@ struct NewRpgInfo
+     WorldPosition moveFarPos;
+     // END MOVE_FAR
+ 
++    // Natural maintenance skips an NPC for one search after failing to reach or use it.
++    ObjectGuid naturalMaintenanceRejected;
++
+     using RpgData = std::variant<
+         Idle,
+         GoGrind,
 diff --git a/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp b/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
 index 3658aa89..35bfd15d 100644
 --- a/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
