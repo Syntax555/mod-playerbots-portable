@@ -263,7 +263,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Launcher vet failed.' }
 
       - name: Install Boost
-        uses: MarkusJx/install-boost@v2
+        # Third-party action pinned by commit; Dependabot proposes updates.
+        uses: MarkusJx/install-boost@f9d34f6fe427b8f2ae424d7bf2a3ebccb0dae5a3 # v2.6.0
         id: install-boost
         with:
           boost_version: 1.84.0
