@@ -107,6 +107,6 @@ The public [Latest release](https://github.com/Syntax555/mod-playerbots-portable
 
 Builds of `main` run one at a time: a running build always finishes, and a newer push replaces any waiting build so the newest commit builds next. A verified build is published when its commit is still part of `main` and is not older than the current Latest.
 
-Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP, recording each file's size and SHA-256 hash. Latest contains three ZIPs, this update manifest and `SHA256SUMS.txt`, which covers all four payloads. Publication keeps the previous release published under a temporary tag until the replacement is public and verified, restores it if the swap fails, and creates no additional version tags.
+Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP, recording each file's size and SHA-256 hash. Latest contains three ZIPs, this update manifest and `SHA256SUMS.txt`, which covers all four payloads. Publication keeps the previous release published under a temporary tag until the replacement is public and verified, restores it if the swap fails, and creates no additional version tags. After verification it removes only the staging releases left by interrupted publications.
 
 The executables are currently unsigned. Windows Smart App Control may block them; package checksums and automated build checks do not replace a trusted Windows code signature.
