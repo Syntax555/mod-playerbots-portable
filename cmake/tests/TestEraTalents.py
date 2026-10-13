@@ -486,6 +486,9 @@ int main() {
     training_code = '\n'.join(line for line in (src / 'EraEarnedTraining.cpp').read_text().splitlines()
                                if not line.startswith('#include'))
     learn_hook = function((src / 'EraTalentPin.cpp').read_text(), '    void OnPlayerLearnSpell(')
+    talents_header = (src / 'EraTalents.h').read_text()
+    totem_start = talents_header.index('struct QuestTotem')
+    quest_totems = talents_header[totem_start:talents_header.index('};', talents_header.index('kQuestTotems'))+2]
     (fake / 'Define.h').write_text('#pragma once\n#include <cstdint>\nusing uint8=uint8_t; using uint32=uint32_t;\n')
     training_fixture = r'''
 #include <algorithm>
@@ -525,6 +528,7 @@ auto* sSpellMgr=&spells;
 uint32 GetTalentSpellCost(uint32 id) { return spells.talentRoots.contains(id) ? 1 : 0; }
 namespace EraTalents {
 constexpr uint32 ERA_CUSTOM_BAND_LOW=920000, ERA_CUSTOM_BAND_HIGH=950000;
+''' + quest_totems + r'''
 uint8 CurrentRank(Player* p,EraId,uint32 id) { return p->talents[id]; }
 int reconciles=0;
 void ReconcileBaselineSpells(Player*,EraId) { ++reconciles; }
