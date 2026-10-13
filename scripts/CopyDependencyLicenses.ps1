@@ -4,6 +4,8 @@ param(
     [string]$MySQLRootDir = $env:MYSQL_ROOT_DIR,
     [string]$OpenSSLRootDir = $env:OPENSSL_ROOT_DIR,
     [string]$BoostRootDir = $env:BOOST_ROOT_DIR,
+    # Release of the OpenSSL package; used only when the package lacks its license.
+    [string]$OpenSSLVersion = $env:OPENSSL_VERSION,
     [switch]$NoNetwork
 )
 
@@ -70,16 +72,20 @@ if ([System.IO.Path]::GetFileName($opensslRoot) -match '^(?:x64|x86|win64|win32|
 }
 $opensslNotices = @(Get-NoticeFiles $opensslPackageRoot)
 $upstreamLicense = $null
-$upstreamLicenseUrl = 'https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.7/LICENSE.txt'
+$upstreamLicenseUrl = $null
 if (-not (Test-LicenseText $opensslNotices 'Apache2')) {
+    if ($OpenSSLVersion -notmatch '^[0-9]+[.][0-9]+[.][0-9]+$') {
+        throw 'OpenSSL package lacks its Apache license. Pass -OpenSSLVersion to use the upstream license of that release.'
+    }
     $header = Join-Path $opensslRoot 'include/openssl/opensslv.h'
     if (-not (Test-Path -LiteralPath $header -PathType Leaf)) {
         throw "OpenSSL license is missing and its version header is unavailable: $header"
     }
     $versionHeader = [System.IO.File]::ReadAllText($header)
-    if ($versionHeader -notmatch 'OPENSSL_VERSION_TEXT\s+"OpenSSL\s+3[.]5[.]7(?:\s|\")') {
-        throw 'OpenSSL package lacks its Apache license. The available fallback applies only to OpenSSL 3.5.7.'
+    if ($versionHeader -notmatch ('OPENSSL_VERSION_TEXT\s+"OpenSSL\s+' + [regex]::Escape($OpenSSLVersion) + '(?:\s|\")')) {
+        throw "OpenSSL package lacks its Apache license. The available fallback applies only to OpenSSL $OpenSSLVersion."
     }
+    $upstreamLicenseUrl = "https://raw.githubusercontent.com/openssl/openssl/openssl-$OpenSSLVersion/LICENSE.txt"
     if ($NoNetwork) { throw 'OpenSSL Apache license is missing; network fallback is disabled.' }
     # Preserve provider notices separately. The upstream license supplies only
     # OpenSSL's terms and does not license any additional provider material.

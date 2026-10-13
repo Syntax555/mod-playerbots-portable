@@ -214,6 +214,12 @@ jobs:
     env:
       # ExternalProject starts another cmake --build, which needs its own limit.
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      # Bundled runtime dependencies. Change a version together with the
+      # SHA-256 of its exact download.
+      MYSQL_VERSION: '8.0.40'
+      MYSQL_ZIP_SHA256: '7c3f1c09ba1b4a82df32a8d889533fceaf2692383e386a04ee708a12de66f129'
+      OPENSSL_VERSION: '3.5.7'
+      OPENSSL_ZIP_SHA256: '2591459a06a6df2d2e2b23b02a28d7c180b95c02fb4965099a708b7365a74014'
 
     steps:
       - name: Determine package name
@@ -278,7 +284,7 @@ jobs:
           path: |
             C:\tools\mysql\current
             C:\tools\openssl\current
-          key: win-deps-mysql-8.0.40-openssl-3.5.7
+          key: win-deps-mysql-${{ env.MYSQL_VERSION }}-${{ env.MYSQL_ZIP_SHA256 }}-openssl-${{ env.OPENSSL_VERSION }}-${{ env.OPENSSL_ZIP_SHA256 }}
 
       - name: Setup build and bundled runtime dependencies
         shell: pwsh
@@ -287,22 +293,30 @@ jobs:
           $boostRoot = '${{ steps.install-boost.outputs.BOOST_ROOT }}'
           "BOOST_ROOT_DIR=$boostRoot" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
+          # Shipped binaries come only from archives that match the pinned hash.
+          function Save-VerifiedArchive([string]$Name, [string]$Url, [string]$Sha256) {
+              $path = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($Url))
+              curl.exe --fail -sSL --retry 3 $Url -o $path
+              if ($LASTEXITCODE -ne 0) { throw "$Name download failed." }
+              $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+              if ($actual -ne $Sha256) { throw "$Name download has SHA-256 $actual; expected $Sha256." }
+              return $path
+          }
+
           if (-not (Test-Path 'C:\tools\mysql\current\bin\mysqld.exe')) {
-              $mysqlZip = Join-Path $env:RUNNER_TEMP 'mysql-8.0.40-winx64.zip'
-              curl.exe --fail -sSL --retry 3 'https://cdn.mysql.com/archives/mysql-8.0/mysql-8.0.40-winx64.zip' -o $mysqlZip
-              if ($LASTEXITCODE -ne 0) { throw 'MySQL download failed.' }
+              $mysqlName = "mysql-$env:MYSQL_VERSION-winx64"
+              $mysqlSeries = $env:MYSQL_VERSION -replace '^(\d+[.]\d+)[.].*$', '$1'
+              $mysqlZip = Save-VerifiedArchive 'MySQL' "https://cdn.mysql.com/archives/mysql-$mysqlSeries/$mysqlName.zip" $env:MYSQL_ZIP_SHA256
               New-Item -ItemType Directory -Force 'C:\tools\mysql' | Out-Null
               Expand-Archive $mysqlZip 'C:\tools\mysql' -Force
               if (Test-Path 'C:\tools\mysql\current') { Remove-Item 'C:\tools\mysql\current' -Recurse -Force }
-              Move-Item 'C:\tools\mysql\mysql-8.0.40-winx64' 'C:\tools\mysql\current'
+              Move-Item "C:\tools\mysql\$mysqlName" 'C:\tools\mysql\current'
               Get-ChildItem 'C:\tools\mysql\current' -Recurse -Filter '*.pdb' | Remove-Item -Force
           }
           'MYSQL_ROOT_DIR=C:\tools\mysql\current' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
           if (-not (Test-Path 'C:\tools\openssl\current\x64\include\openssl\opensslv.h')) {
-              $opensslZip = Join-Path $env:RUNNER_TEMP 'openssl-3.5.7.zip'
-              curl.exe --fail -sSL --retry 3 'https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-3.5.7.zip' -o $opensslZip
-              if ($LASTEXITCODE -ne 0) { throw 'OpenSSL download failed.' }
+              $opensslZip = Save-VerifiedArchive 'OpenSSL' "https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-$env:OPENSSL_VERSION.zip" $env:OPENSSL_ZIP_SHA256
               New-Item -ItemType Directory -Force 'C:\tools\openssl\current' | Out-Null
               Expand-Archive $opensslZip 'C:\tools\openssl\current' -Force
           }
@@ -329,7 +343,7 @@ jobs:
 
       - name: Preserve dependency licenses
         shell: pwsh
-        run: ./scripts/CopyDependencyLicenses.ps1 -DistDir dist
+        run: ./scripts/CopyDependencyLicenses.ps1 -DistDir dist -OpenSSLVersion $env:OPENSSL_VERSION
 
       - name: Check Windows resources before C++ compilation
         if: steps.package_features.outputs.resource_preflight == 'true'
