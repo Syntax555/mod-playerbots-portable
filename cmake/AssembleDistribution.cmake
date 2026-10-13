@@ -107,10 +107,8 @@ file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"
 configure_file("${PORTABLE_SOURCE_DIR}/versions.lock.json"
     "${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)
 foreach(document README.md THIRD_PARTY_NOTICES.md)
-    if(EXISTS "${PORTABLE_SOURCE_DIR}/${document}")
-        configure_file("${PORTABLE_SOURCE_DIR}/${document}"
-            "${PORTABLE_DIST_DIR}/${document}" COPYONLY)
-    endif()
+    configure_file("${PORTABLE_SOURCE_DIR}/${document}"
+        "${PORTABLE_DIST_DIR}/${document}" COPYONLY)
 endforeach()
 # The MIT License covers the launcher and build tooling, not the distribution
 # it sits in. The packaged copy states that scope above the unchanged text.

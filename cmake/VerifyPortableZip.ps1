@@ -75,7 +75,7 @@ try {
         'configs/modules/mod_dungeon_clear.conf.dist',
         'configs/modules/mod-quest-loot-party.conf.dist',
         'configs/modules/MultiBotBridge.conf.dist', 'configs/modules/mod_token_turnin.conf.dist',
-        'portable-release.json', 'versions.lock.json', 'README.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
+        'portable-release.json', 'versions.lock.json', 'README.md', 'THIRD_PARTY_NOTICES.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
         'LICENSE', 'licenses/azerothcore-wotlk.txt'
     )
@@ -104,18 +104,12 @@ try {
     }
     $textSources = [ordered]@{
         'README.md' = 'README.md'
+        'THIRD_PARTY_NOTICES.md' = 'THIRD_PARTY_NOTICES.md'
         'docs/vanilla-config-audit.md' = 'docs/vanilla-config-audit.md'
         'docs/module-versions.md' = 'docs/module-versions.md'
         'docs/changing-expansions.md' = 'docs/changing-expansions.md'
         'docs/earned-bot-brackets.md' = 'docs/earned-bot-brackets.md'
         'docs/earned-auctions.md' = 'docs/earned-auctions.md'
-
-    }
-    foreach ($document in @('THIRD_PARTY_NOTICES.md')) {
-        if (Test-Path (Join-Path $RepositoryRoot $document) -PathType Leaf) {
-            if (-not $files.Contains($document)) { throw "Portable ZIP is missing $document" }
-            $textSources[$document] = $document
-        }
     }
     if (@($lock.modules | Where-Object { $_.name -eq 'mod-era-talents' }).Count -gt 0) {
         foreach ($name in @('docs/era-talents.md', 'configs/modules/mod_era_talents.conf.dist')) {
