@@ -491,6 +491,69 @@ func TestPortableUpdateInterruptedCommitRestoresCompletePreviousVersion(t *testi
 	}
 }
 
+// Recovery runs from the installed startup.exe. After a crash late in an
+// update, that is the new launcher, which Windows cannot delete while it runs.
+func TestPortableUpdateRecoveryRestoresTheRunningLauncher(t *testing.T) {
+	root := t.TempDir()
+	old := []byte("old working launcher")
+	updateTestWrite(t, root, "startup.exe", old)
+	launcher, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := updateTestFiles()
+	files["startup.exe"] = launcher
+	archive, manifest := updateTestArchive(t, files, "")
+	server, _, _ := updateTestRangeServer(t, archive)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.Phase, plan.ParentPID = "applying", 2147483647
+	for i := range plan.Operations {
+		op := &plan.Operations[i]
+		if op.File.Path != "startup.exe" {
+			continue
+		}
+		op.State = "applying"
+		if err := os.Rename(filepath.Join(root, op.File.Path), filepath.Join(root, portableUpdateDirectory, op.Backup)); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(filepath.Join(root, portableUpdateDirectory, op.Stage), filepath.Join(root, op.File.Path)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(filepath.Join(root, "startup.exe"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePortableUpdatePlan(root, plan); err != nil {
+		t.Fatal(err)
+	}
+	recovery := exec.Command(filepath.Join(root, "startup.exe"), "-test.run=^TestPortableUpdateRecoveryChild$")
+	recovery.Env = append(os.Environ(), "PORTABLE_UPDATE_RECOVERY_ROOT="+root)
+	if output, err := recovery.CombinedOutput(); err != nil {
+		t.Fatalf("installed new launcher could not restore the previous version: %v\n%s", err, output)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "startup.exe")); err != nil || !bytes.Equal(got, old) {
+		t.Fatalf("previous launcher not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recovered update kept its journal: %v", err)
+	}
+	cached := filepath.Join(root, filepath.FromSlash(portableUpdateCacheDirectory), updateTestDigest(launcher))
+	if digest, err := hashUpdateFile(cached, int64(len(launcher))); err != nil || digest != updateTestDigest(launcher) {
+		t.Fatalf("rolled-back verified launcher was not kept for the next attempt: %v", err)
+	}
+}
+
+func TestPortableUpdateRecoveryChild(t *testing.T) {
+	if root := os.Getenv("PORTABLE_UPDATE_RECOVERY_ROOT"); root != "" {
+		if err := recoverPortableUpdate(root); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestPortableUpdateFailureAfterInstalledFilesRestoresPreviousVersion(t *testing.T) {
 	root := t.TempDir()
 	oldIdentity, err := json.Marshal(portableReleaseIdentity{Schema: 1, Revision: strings.Repeat("a", 40), Package: portableUpdatePackage, Version: "latest"})

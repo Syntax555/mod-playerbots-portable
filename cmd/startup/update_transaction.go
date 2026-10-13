@@ -423,6 +423,10 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 		if err != nil {
 			return err
 		}
+		stage, err := safeUpdateChild(root, portableUpdateDirectory+"/"+op.Stage)
+		if err != nil {
+			return err
+		}
 		if info, err := os.Lstat(backup); err == nil {
 			if !info.Mode().IsRegular() {
 				return errors.New("unsafe rollback backup")
@@ -430,7 +434,7 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 			if digest, err := hashUpdateFile(backup, op.OriginalSize); err != nil || digest != op.OriginalSHA256 {
 				return fmt.Errorf("rollback backup failed original-file verification: %s", op.File.Path)
 			}
-			if err := removeUpdateFile(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := unstageUpdateFile(target, stage); err != nil {
 				return err
 			}
 			if err := renameUpdateFile(backup, target); err != nil {
@@ -445,7 +449,7 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 				if digest != op.File.SHA256 {
 					return errors.New("new update file changed before rollback")
 				}
-				if err := removeUpdateFile(target); err != nil {
+				if err := unstageUpdateFile(target, stage); err != nil {
 					return err
 				}
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -465,6 +469,28 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 	}
 	plan.Phase = "rolled-back"
 	return writePortableUpdatePlan(root, plan)
+}
+
+// unstageUpdateFile moves an installed update file back to its staging name
+// instead of deleting it. Recovery runs from the installed startup.exe, which
+// may be the new launcher that the interrupted update had already installed;
+// Windows cannot delete a running program but can rename it. Discarding the
+// update then keeps the file as a download for the next attempt.
+func unstageUpdateFile(target, stage string) error {
+	info, err := os.Lstat(target)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("rollback destination is not a regular file: %s", target)
+	}
+	if err := os.MkdirAll(filepath.Dir(stage), 0700); err != nil {
+		return err
+	}
+	return renameUpdateFile(target, stage)
 }
 
 func finishPortableUpdate(root string, plan *portableUpdatePlan) error {
