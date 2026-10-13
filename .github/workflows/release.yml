@@ -62,6 +62,9 @@ jobs:
           GOOS=windows GOARCH=amd64 go test -c -o "$RUNNER_TEMP/startup.test.exe" ./cmd/startup
           GOOS=windows GOARCH=amd64 go vet ./...
 
+      - name: Check that every fixture runs in CI
+        run: python3 cmake/tests/run_fixtures.py check
+
       - name: Test distribution assembly and ZIP validation
         shell: pwsh
         run: ./cmake/tests/TestPortableZip.ps1
@@ -96,26 +99,7 @@ jobs:
         run: |
           git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
-          python3 - <<'PYTHON'
-          import pathlib, subprocess, sys
-          fixtures = (
-              'TestEarnedProgression', 'TestMasterFlightLearning', 'TestBotQuestAreaTriggers',
-              'TestLootRollPolicy', 'TestWorldBuffEvents', 'TestLfgProgression',
-              'TestEarnedDungeonParties', 'TestEarnedDungeonEvents', 'TestRaidClearEarnedPlay',
-              'TestHistoricalClassQuests', 'TestMultiBotTrainerMoney',
-              'TestMultiBotOptionalPresets', 'TestMultiBotEraTalents', 'TestFormationMovement',
-              'TestFrostmaneHold', 'TestNaturalTaxiRoutes', 'TestWarlockSoulShards',
-              'TestNaturalMaintenance',
-          )
-          for name in fixtures:
-              path = pathlib.Path('cmake/tests') / (name + '.py')
-              print(f'::group::{name}', flush=True)
-              result = subprocess.run([sys.executable, str(path)])
-              print('::endgroup::', flush=True)
-              if result.returncode:
-                  print(f'::error file={path}::{name} failed (exit {result.returncode})', flush=True)
-                  sys.exit(result.returncode)
-          PYTHON
+          python3 cmake/tests/run_fixtures.py gameplay
 
   era_client:
     name: Build and verify historical client patch
@@ -128,6 +112,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+
+      - name: Read the locked client locale source
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_ENV"
+          import json
+          source = json.load(open('versions.lock.json'))['clientPatch']['localizations']['deDE']
+          repository = source['url'].removeprefix('https://github.com/').removesuffix('.git')
+          print(f"LOCALE_REVISION={source['revision']}")
+          print(f"LOCALE_RAW_URL=https://raw.githubusercontent.com/{repository}/{source['revision']}")
+          PYTHON
 
       - name: Install native client patch tools
         run: |
@@ -163,12 +157,12 @@ jobs:
 
       - name: Verify world buff spell contracts in the packaged client
         run: |
-          curl --fail --location --output output/SpellDuration.dbc https://raw.githubusercontent.com/Haeniken/TrinityCore-3.3.5-data-multilang/b21c94991a28d3fde14f2e73b993fa74492063b7/dbc/SpellDuration.dbc
+          curl --fail --location --output output/SpellDuration.dbc "$LOCALE_RAW_URL/dbc/SpellDuration.dbc"
           python3 cmake/tests/TestWorldBuffEvents.py --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip" --duration-dbc output/SpellDuration.dbc
 
       - name: Verify historical class quest spells in the packaged client
         run: |
-          python3 cmake/tests/TestHistoricalClassQuests.py --base-dbc .module-cache/client-locales/b21c94991a28d3fde14f2e73b993fa74492063b7/deDE/Spell.enUS.dbc --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip"
+          python3 cmake/tests/TestHistoricalClassQuests.py --base-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip"
 
       - name: Upload verified historical client ZIP
         uses: actions/upload-artifact@v7
