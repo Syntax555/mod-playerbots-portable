@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index 1a49c2f..4f32674 100644
+index 1a49c2f..dac4fa6 100644
 --- a/README.md
 +++ b/README.md
 @@ -2,11 +2,12 @@
@@ -17,7 +17,7 @@ index 1a49c2f..4f32674 100644
  
  Individual Progression gives every character its own expansion timeline on a single WotLK realm,
  but it does not touch the talent system: a "Vanilla" character still gets WotLK's 71-point trees
-@@ -25,52 +26,39 @@ data.
+@@ -25,52 +26,40 @@ data.
    stock passive is reused; where WotLK retuned or removed it the module ships its own server-side
    version — restored abilities (the Vanilla seal/judgement system, Bloodthirst, Conflagrate, the
    Vanilla Vampiric Embrace, TBC Mangle, the full Vanilla/TBC totem set, …), procs and per-rank
@@ -39,7 +39,8 @@ index 1a49c2f..4f32674 100644
 +  forces a stage, and ordinary relogs or bot refreshes never give a free respec.
 +* **Bots too (optional).** With mod-playerbots installed and `EraTalents.BotTalents = 1`, bots
 +  use their own earned IndividualProgression milestones for Vanilla/TBC trees. Level alone never
-+  advances an expansion. Authored builds spend newly earned points without routine free resets.
++  advances an expansion. Random bots' authored builds spend newly earned points without routine
++  free resets; altbots and SelfBot characters keep unspent points for their owner.
  
  ## Requirements
 -* **AzerothCore 3.3.5a** — patches cut against the mod-playerbots fork at `413bea61`
@@ -98,7 +99,7 @@ index 1a49c2f..4f32674 100644
  
  ### Client install (each player)
  Two pieces, both required for the intended experience:
-@@ -78,36 +66,37 @@ Two pieces, both required for the intended experience:
+@@ -78,36 +67,37 @@ Two pieces, both required for the intended experience:
    `World of Warcraft/Interface/AddOns/EraTalents/`. It **is** the talent window in Vanilla/TBC (the
    normal talent button/key opens it).
  * **`patch-V.mpq`** — copy to `World of Warcraft/Data/`. This is IP's own client patch with this
@@ -124,7 +125,7 @@ index 1a49c2f..4f32674 100644
 -| `EraTalents.GlyphGate` | 1 | Glyphs are WotLK-only for Vanilla/TBC-era characters (players by IP era, bots by level band; DKs exempt). |
 -| `EraTalents.AdvanceGossip` | 1 | Anduin/Thrall offer "Progress to the next expansion" when eligible. |
 -| `EraTalents.AdvanceGossip.TextTBC` / `.TextWotLK` | (see file) | Confirm-popup wording. |
-+| `EraTalents.BotTalents` | 0 | Bots use their own earned IP era and incrementally spend level-earned points. |
++| `EraTalents.BotTalents` | 0 | Bots use their own earned IP era; random bots incrementally spend level-earned points. |
 +| `EraTalents.GlyphGate` | 1 | Blocks glyph use before earned Wrath while preserving existing paid glyph rows. |
 +| `EraTalents.AdvanceGossip` | 0 | Compatibility key; force-advance gossip is disabled. |
  
@@ -181,10 +182,10 @@ index a672ec0..e0cb63e 100755
  if [[ -d "$AC/modules/mod-multibot-bridge" ]]; then apply_dir "$HERE/patches/multibot-bridge"; else echo "    (mod-multibot-bridge not present — bridge patch skipped)"; fi
  echo "==> done"
 diff --git a/conf/mod_era_talents.conf.dist b/conf/mod_era_talents.conf.dist
-index cb370e9..eee83b0 100644
+index cb370e9..9444018 100644
 --- a/conf/mod_era_talents.conf.dist
 +++ b/conf/mod_era_talents.conf.dist
-@@ -1,31 +1,16 @@
+@@ -1,31 +1,17 @@
  # mod-era-talents/conf/mod_era_talents.conf.dist
  [worldserver]
 -EraTalents.Enable = 1
@@ -195,7 +196,8 @@ index cb370e9..eee83b0 100644
 -# trees. Default 0 = today's behavior byte-for-byte. See the 2026-08-26 bot design spec.
 +# Humans and bots use their own earned IndividualProgression milestones, never level bands
 +# or a group leader's stage. Talent budgets come only from real earned levels (51/61 points).
-+# Bot builds spend new points incrementally; routine refreshes never reset their builds.
++# Random-bot builds spend new points incrementally; routine refreshes never reset them.
++# Altbots and SelfBot characters keep unspent points for their owner.
  EraTalents.BotTalents = 0
 -#    EraTalents.GlyphGate
 -#        Description: Glyphs are a WotLK-era system. When enabled, characters whose era is
@@ -1550,7 +1552,7 @@ index 0000000..50f36bf
 +
 +#endif
 diff --git a/src/EraTalentBots.cpp b/src/EraTalentBots.cpp
-index b14b581..cb9043a 100644
+index b14b581..2be2e35 100644
 --- a/src/EraTalentBots.cpp
 +++ b/src/EraTalentBots.cpp
 @@ -1,10 +1,12 @@
@@ -1569,14 +1571,16 @@ index b14b581..cb9043a 100644
  #ifdef MOD_PLAYERBOTS
  #include "Playerbots.h"          // GET_PLAYERBOT_AI — the bot test
  #include "PlayerbotFactory.h"    // native re-init on a band crossing (hard dep, like roster->IP)
-@@ -34,23 +36,21 @@ namespace EraTalentBots
+@@ -33,24 +35,23 @@ namespace EraTalentBots
+     // reapply), and EraFor would misread a logging-in bot as a player (glyph gate stripped
      // WotLK-band bots' glyphs at login via EraFromIP==Vanilla).
      // Public (declared in the header) since 2026-09-07: EraAdvanceGossip.cpp uses it too.
++    // A SelfBot also carries an AI, but a human plays it from a client, so it stays a player.
  #ifdef MOD_PLAYERBOTS
 -    bool IsBot(Player* p) { return p && (p->GetSession()->IsBot() || GET_PLAYERBOT_AI(p) != nullptr); }
 +bool IsBot(Player* p)
 +{
-+    return p && ((p->GetSession() && p->GetSession()->IsHeadless()) || GET_PLAYERBOT_AI(p) != nullptr);
++    return p && ((p->GetSession() && p->GetSession()->IsHeadless()) || (GET_PLAYERBOT_AI(p) && !IsSelfBot(p)));
 +}
  #else
      bool IsBot(Player*) { return false; }   // no bot AI exists in this build
@@ -1600,7 +1604,7 @@ index b14b581..cb9043a 100644
  
      bool IsEraManaged(Player* p)
      {
-@@ -58,7 +58,7 @@ namespace EraTalentBots
+@@ -58,7 +59,7 @@ namespace EraTalentBots
              return false;
          if (IsBot(p) && !sEraTalentsConfig->BotTalents())
              return false;
@@ -1609,7 +1613,21 @@ index b14b581..cb9043a 100644
      }
  }
  
-@@ -191,26 +191,6 @@ namespace
+@@ -71,6 +72,13 @@ namespace
+     // Every entry point bails here FIRST (module-hooks gotcha: guard before any deref).
+     bool Gated(Player* p) { return !sEraTalentsConfig->Enabled() || !sEraTalentsConfig->BotTalents() || !IsBot(p); }
+ 
++    // Only generated characters on random-bot accounts allocate their own points. A human's
++    // character keeps them for its owner, also while it runs as an altbot.
++    bool SpendsOwnPoints(Player* bot)
++    {
++        return bot->GetSession() && sPlayerbotAIConfig.IsInRandomAccountList(bot->GetSession()->GetAccountId());
++    }
++
+     // Spec-tab cache backing the patch-0020 AiFactory::GetPlayerSpecTabs bridge. That function
+     // runs on per-second AI paths (raid triggers, chat formatting, gear scoring) while the era
+     // rows live in the characters DB — NEVER query per call. One SELECT on first miss, then
+@@ -191,26 +199,6 @@ namespace
                  bot->GetName(), uint32(level), uint32(doomed.size()));
      }
  
@@ -1636,7 +1654,7 @@ index b14b581..cb9043a 100644
      // TBC faction DPS seals — the shared arm behind OnBotLevelChanged and the patch-0020
      // post-trainer-walk bridge. The factory's trainer walk (InitAvailableSpells) is class-only
      // gated, so a TBC-band paladin bot learns BOTH Seal of Blood (946080, Horde/BE) and Seal of
-@@ -430,7 +410,9 @@ namespace EraTalentBots
+@@ -430,7 +418,9 @@ namespace EraTalentBots
              return false;
  
          EraId era = BotEra(bot);
@@ -1647,7 +1665,7 @@ index b14b581..cb9043a 100644
  
          // Randomize/bracket moves land here for every managed bot: enforce the glyph era
          // rule alongside the talent teardown (no-op for WotLK-band bots and DKs).
-@@ -441,15 +423,28 @@ namespace EraTalentBots
+@@ -441,15 +431,28 @@ namespace EraTalentBots
          if (sEraTalentContent->NodesFor(uint8(era), bot->getClass()).empty())
              return false;                                            // DK-in-Vanilla guard
  
@@ -1677,7 +1695,7 @@ index b14b581..cb9043a 100644
 +                    specTab = 3;
 +            }
 +        }
-+        if (EraTalents::AvailablePoints(bot, era) > 0)
++        if (EraTalents::AvailablePoints(bot, era) > 0 && SpendsOwnPoints(bot))
 +            SpendBuild(bot, era, specTab);
 +        else
 +            EraTalents::ReconcileBaselineSpells(bot, era);
@@ -1685,7 +1703,7 @@ index b14b581..cb9043a 100644
          bot->SetFreeTalentPoints(0);
          bot->SendTalentsInfoData(false);
          LOG_DEBUG("module", "[mod-era-talents] bot build: {} class {} tab{} {}pts",
-@@ -461,119 +456,40 @@ namespace EraTalentBots
+@@ -461,119 +464,43 @@ namespace EraTalentBots
      {
          if (Gated(bot))
              return;
@@ -1819,8 +1837,11 @@ index b14b581..cb9043a 100644
 -            SpendBuild(bot, era, bestTab);
 -            InvalidateSpecTabs(bot);   // rows grew -> re-read on next AI query
 +            // Native Wrath talents spend only the real level-earned remainder; never reset.
-+            PlayerbotFactory factory(bot, bot->GetLevel());
-+            factory.InitTalentsTree(true, true, false);
++            if (SpendsOwnPoints(bot))
++            {
++                PlayerbotFactory factory(bot, bot->GetLevel());
++                factory.InitTalentsTree(true, true, false);
++            }
 +            EraTalents::ReconcileBaselineSpells(bot, era);
          }
 -
@@ -1829,7 +1850,7 @@ index b14b581..cb9043a 100644
      }
  
      void OnLogout(Player* p)
-@@ -694,7 +610,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
+@@ -694,7 +621,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
      // patched GetPlayerSpecTabs calls this for any Player*; we decide who it serves.
      if (!p || !tabs3 || !EraTalentBots::IsEraManaged(p))
          return false;
@@ -1838,7 +1859,7 @@ index b14b581..cb9043a 100644
  
      std::array<uint32, 3> t{ 0, 0, 0 };
      bool cached = false;
-@@ -723,8 +639,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
+@@ -723,8 +650,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
          g_specTabsCache[p->GetGUID()] = t;
      }
  
@@ -1848,7 +1869,7 @@ index b14b581..cb9043a 100644
      tabs3[0] = t[0];
      tabs3[1] = t[1];
      tabs3[2] = t[2];
-@@ -738,10 +653,10 @@ uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId)
+@@ -738,10 +664,10 @@ uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId)
      if (bot->HasSpell(stockSpellId))
          return stockSpellId;    // knows the stock id: native bots, WotLK band, knob off,
                                  // and era-gated stock grants (Shield Slam) all end here
@@ -1864,11 +1885,16 @@ index b14b581..cb9043a 100644
  
      // Lookup under the lock, copy the VALUE out; the scan below runs unlocked (it touches only
 diff --git a/src/EraTalentBots.h b/src/EraTalentBots.h
-index b1e8468..b2f2570 100644
+index b1e8468..e1a984d 100644
 --- a/src/EraTalentBots.h
 +++ b/src/EraTalentBots.h
-@@ -8,15 +8,9 @@ namespace EraTalentBots
-     // True for any playerbot (session flag OR attached AI — see the .cpp comment on login order).
+@@ -5,18 +5,13 @@ class Player;
+ 
+ namespace EraTalentBots
+ {
+-    // True for any playerbot (session flag OR attached AI — see the .cpp comment on login order).
++    // True for a playerbot without its own client (session flag OR attached AI — see the .cpp
++    // comment on login order). A SelfBot is a human player.
      bool IsBot(Player* p);
  
 -    // THE bot era source: level band, NEVER EraFromIP (IP quest progression is 0 for every
@@ -1885,7 +1911,7 @@ index b1e8468..b2f2570 100644
      EraId EraFor(Player* p);
  
      // THE "is this character's talent set era-managed" rule (its Vanilla/TBC era tree replaces
-@@ -26,27 +20,19 @@ namespace EraTalentBots
+@@ -26,27 +21,20 @@ namespace EraTalentBots
      // without playerbots, so it reduces to the real-player rule).
      bool IsEraManaged(Player* p);
  
@@ -1896,8 +1922,9 @@ index b1e8468..b2f2570 100644
 -    // NOT run native talent init). Otherwise returns false (caller runs the native path).
 -    // Inert (returns false, touches nothing) unless EraTalents.Enable AND
 -    // EraTalents.BotTalents are on and the player is a bot.
-+    // Extend a bot's existing build with newly level-earned points. An actual expansion
-+    // transition refunds the previous tree once in EraTransition; routine refreshes retain it.
++    // Extend a random bot's existing build with newly level-earned points; an altbot keeps its
++    // points for its owner. An actual expansion transition refunds the previous tree once in
++    // EraTransition; routine refreshes retain it.
 +    // Returns true while a managed era or pending transition owns the talent pool.
      bool FactoryReconcile(Player* bot, int specTab);
  

@@ -68,9 +68,10 @@ and module text follows the translations available in those components.
 
 The server validates talent purchases against earned era, level-earned budget,
 row depth, rank and prerequisites. Native Wrath purchases are blocked while a
-historical tree is active. Bots add points to their existing build and use the
-full native tree after earning Wrath. `AiPlayerbot.LimitTalentsExpansion = 0`
-disables the level-based factory limit for that allocation.
+historical tree is active. Random bots add points to their existing build and use
+the full native tree after earning Wrath. `AiPlayerbot.LimitTalentsExpansion = 0`
+disables the level-based factory limit for that allocation. Altbots and SelfBot
+characters keep unspent points for their owner to spend.
 
 Historical trainer spells require ordinary paid purchases with gold, level and
 prerequisite checks. Talent and class-quest spells require their earned sources.
