@@ -1,10 +1,17 @@
 """Publish verified build artifacts as the repository's rolling Latest release.
 
 The build must belong to main's history and must not be older than the
-current Latest. Uploads are staged in a draft before the existing release or
-its tag is changed, and the previous release is restored if the swap fails
-before the replacement is verified. This script uses only the Python
-standard library and the Actions job's GH_TOKEN.
+current Latest. Uploads are staged in a draft, and the replacement is
+published and verified under its staging tag before the previous release is
+removed. This script uses only the Python standard library and the Actions
+job's GH_TOKEN.
+
+GitHub refuses the Actions token any ref change, and any release change that
+names a target commit, when that commit's workflow files differ from main's.
+Every ref this script creates or moves therefore points at the build commit,
+which is checked against main first. Releases are retagged by name only, and
+the previous release, which may predate main's workflow files, is never
+changed: it is deleted once its replacement is public and verified.
 """
 
 from __future__ import annotations
@@ -41,7 +48,8 @@ UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
 SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
 # Seconds to wait before repeating an idempotent request after a transient failure.
 RETRY_DELAYS = (2, 5)
-# Temporary tags created by publish(): a staging draft and the previous release.
+# Temporary tags created by publish(): the staged replacement, and the previous
+# release as moved aside by earlier versions of this script.
 STAGING_TAG = re.compile(r"build-[0-9]+-[0-9a-f]{12}")
 BACKUP_TAG = re.compile(r"latest-previous-[0-9]+-[0-9a-f]{12}")
 
@@ -51,9 +59,11 @@ class PublishError(RuntimeError):
 
 
 class APIError(PublishError):
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, step: str = ""):
         self.status = status
-        super().__init__(f"GitHub API returned HTTP {status}: {message}")
+        self.message = message
+        prefix = f"{step}: " if step else ""
+        super().__init__(f"{prefix}GitHub API returned HTTP {status}: {message}")
 
 
 @dataclass(frozen=True)
@@ -64,12 +74,23 @@ class Asset:
     sha256: str
 
 
+def step(description: str, call: Any, *args: Any) -> Any:
+    """Run one API step and name it in any failure."""
+    try:
+        return call(*args)
+    except APIError as error:
+        raise APIError(error.status, error.message, description) from None
+    except PublishError as error:
+        raise PublishError(f"{description}: {error}") from None
+
+
 @dataclass(frozen=True)
 class PublishResult:
     skipped: bool = False
     url: str = ""
     assets: int = 0
     removed_staging: int = 0
+    removed_tags: int = 0
 
 
 class GitHubClient:
@@ -180,6 +201,18 @@ class GitHubClient:
     def delete_release(self, release_id: int) -> None:
         self._request("DELETE", f"/releases/{release_id}")
 
+    def workflow_files(self, commit: str) -> dict[str, str]:
+        """Return the blob or tree id of each entry in the commit's .github/workflows."""
+        try:
+            entries = self._request("GET", f"/contents/.github/workflows?ref={commit}")
+        except APIError as error:
+            if error.status == 404:
+                return {}
+            raise
+        if not isinstance(entries, list):
+            raise PublishError("GitHub returned an invalid workflow directory listing")
+        return {str(entry.get("path")): str(entry.get("sha")) for entry in entries}
+
     def tag_sha(self, tag: str) -> str | None:
         try:
             return self._request("GET", f"/git/ref/tags/{quote(tag, safe='')}")["object"]["sha"]
@@ -188,11 +221,24 @@ class GitHubClient:
                 return None
             raise
 
+    def create_tag(self, tag: str, sha: str) -> None:
+        self._request("POST", "/git/refs", {"ref": f"refs/tags/{tag}", "sha": sha})
+
     def set_tag(self, tag: str, sha: str) -> None:
         if self.tag_sha(tag) is None:
-            self._request("POST", "/git/refs", {"ref": f"refs/tags/{tag}", "sha": sha})
+            self.create_tag(tag, sha)
         else:
             self._request("PATCH", f"/git/refs/tags/{quote(tag, safe='')}", {"sha": sha, "force": True})
+
+    def temporary_tags(self) -> list[str]:
+        """Return the tags with the publisher's temporary prefixes."""
+        names = []
+        for prefix in ("build-", "latest-previous-"):
+            refs = self._request("GET", f"/git/matching-refs/tags/{prefix}")
+            if not isinstance(refs, list):
+                raise PublishError("GitHub returned an invalid tag listing")
+            names.extend(str(ref.get("ref", "")).removeprefix("refs/tags/") for ref in refs)
+        return names
 
     def delete_tag(self, tag: str) -> None:
         # GitHub does not create the temporary ref when creating a draft.
@@ -211,23 +257,16 @@ class GitHubClient:
                 return
             raise
 
-    def promote_release(self, release_id: int, sha: str, notes: str) -> dict[str, Any]:
+    # Release updates name only existing tags and never send target_commitish,
+    # which GitHub checks against main's workflow files even when unchanged.
+    def promote_release(self, release_id: int, tag: str, notes: str) -> dict[str, Any]:
         return self._request("PATCH", f"/releases/{release_id}", {
-            "tag_name": "latest", "target_commitish": sha, "name": "Latest",
-            "body": notes, "draft": False, "prerelease": False, "make_latest": "true",
+            "tag_name": tag, "name": "Latest", "body": notes,
+            "draft": False, "prerelease": False, "make_latest": "true",
         })
 
-    def retag_release(self, release_id: int, tag: str, sha: str | None, make_latest: bool = False) -> None:
-        # GitHub creates a missing tag at target_commitish.
-        payload: dict[str, Any] = {"tag_name": tag}
-        if sha:
-            payload["target_commitish"] = sha
-        if make_latest:
-            payload["make_latest"] = "true"
-        self._request("PATCH", f"/releases/{release_id}", payload)
-
-    def return_to_draft(self, release_id: int, tag: str) -> None:
-        self._request("PATCH", f"/releases/{release_id}", {"tag_name": tag, "draft": True})
+    def retag_release(self, release_id: int, tag: str) -> None:
+        self._request("PATCH", f"/releases/{release_id}", {"tag_name": tag})
 
     def list_releases(self) -> list[dict[str, Any]]:
         return self._pages("/releases")
@@ -400,45 +439,27 @@ def contains(client: GitHubClient, base: str, head: str) -> bool:
             and type(behind) is int and behind == 0)
 
 
+def workflows_match_main(client: GitHubClient, sha: str, main: str) -> bool:
+    """Whether GitHub lets the Actions token point refs at the build commit."""
+    return sha == main or client.workflow_files(sha) == client.workflow_files(main)
+
+
 def build_is_publishable(client: GitHubClient, sha: str) -> bool:
     """Accept a build from main's history unless it is older than Latest.
 
     Main builds queue, so newer commits may follow a finished build; it still
     replaces an older Latest. A build that finishes after a newer one was
     published is skipped. If history was rewritten and the Latest commit is no
-    longer on main, any build from main replaces it.
+    longer on main, any build from main replaces it. A build whose workflow
+    files differ from main's cannot be tagged and waits for the newer build.
     """
     main = commit_sha(client.main_sha())
     if main is None or not contains(client, sha, main):
         return False
     latest = commit_sha(client.tag_sha("latest"))
-    if latest is None or contains(client, latest, sha):
-        return True
-    return not contains(client, latest, main)
-
-
-def restore_previous(client: GitHubClient, draft_id: int, stage_tag: str, previous: dict[str, Any] | None,
-                     previous_sha: str | None, backup_tag: str) -> list[str]:
-    """Best effort: unpublish the replacement and return the previous release to latest."""
-    failures = []
-
-    def attempt(step: Any) -> bool:
-        try:
-            step()
-        except PublishError as error:
-            failures.append(str(error))
-            return False
-        return True
-
-    # The release tag must be free before the previous release can use it again.
-    attempt(lambda: client.return_to_draft(draft_id, stage_tag))
-    if previous_sha:
-        attempt(lambda: client.set_tag("latest", previous_sha))
-    # The backup tag still holds the previous release until it is restored.
-    if previous is not None and attempt(
-            lambda: client.retag_release(previous["id"], "latest", previous_sha, make_latest=True)):
-        attempt(lambda: client.delete_tag(backup_tag))
-    return failures
+    if latest is not None and not contains(client, latest, sha) and contains(client, latest, main):
+        return False
+    return workflows_match_main(client, sha, main)
 
 
 def is_interrupted_publication(release: dict[str, Any]) -> bool:
@@ -446,8 +467,48 @@ def is_interrupted_publication(release: dict[str, Any]) -> bool:
     tag = release.get("tag_name")
     if not isinstance(tag, str) or release.get("name") != "Latest":
         return False
-    return (release.get("draft") is True and STAGING_TAG.fullmatch(tag) is not None
-            or BACKUP_TAG.fullmatch(tag) is not None)
+    return STAGING_TAG.fullmatch(tag) is not None or BACKUP_TAG.fullmatch(tag) is not None
+
+
+def superseded(client: GitHubClient, sha: str) -> bool:
+    """After a refused write: whether main moved on, so the newer build publishes instead."""
+    try:
+        return not build_is_publishable(client, sha)
+    except PublishError:
+        return False
+
+
+def remove_release(client: GitHubClient, release: dict[str, Any]) -> None:
+    step(f"deleting release {release['tag_name']}", client.delete_release, release["id"])
+    step(f"deleting tag {release['tag_name']}", client.delete_tag, release["tag_name"])
+
+
+def remove_failed_run_leftovers(client: GitHubClient) -> tuple[int, int]:
+    """Delete drafts and unused temporary tags of failed or cancelled runs.
+
+    Drafts never serve downloads. Published releases under temporary tags are
+    kept until a replacement is verified, since one may be the only Latest.
+    """
+    releases = step("listing releases", client.list_releases)
+    drafts = [release for release in releases if release.get("draft") is True and is_interrupted_publication(release)]
+    for release in drafts:
+        remove_release(client, release)
+    used = {release.get("tag_name") for release in releases if release not in drafts}
+    orphans = [tag for tag in step("listing temporary tags", client.temporary_tags)
+               if (STAGING_TAG.fullmatch(tag) or BACKUP_TAG.fullmatch(tag)) and tag not in used]
+    for tag in orphans:
+        step(f"deleting tag {tag}", client.delete_tag, tag)
+    return len(drafts), len(orphans)
+
+
+def discard_replacement(client: GitHubClient, release_id: int, stage_tag: str) -> None:
+    """Remove this run's unverified replacement; the next run removes what remains."""
+    for description, call, value in (("deleting the staged release", client.delete_release, release_id),
+                                     (f"deleting tag {stage_tag}", client.delete_tag, stage_tag)):
+        try:
+            step(description, call, value)
+        except PublishError as error:
+            print(f"Warning: could not remove this run's staged release: {error}", file=sys.stderr)
 
 
 def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, run_id: str) -> PublishResult:
@@ -460,75 +521,97 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
     notes = render_notes(notes_path, client.repository, sha)
     if not build_is_publishable(client, sha):
         return PublishResult(skipped=True)
+    # Publications run one at a time, so earlier drafts and unused temporary
+    # tags belong to failed or cancelled runs.
+    removed_staging, removed_tags = remove_failed_run_leftovers(client)
 
-    token = uuid.uuid4().hex[:12]
-    stage_tag = f"build-{run_id}-{token}"
-    draft = client.create_draft(stage_tag, sha, notes)
+    stage_tag = f"build-{run_id}-{uuid.uuid4().hex[:12]}"
+    try:
+        draft = step("creating the staging draft", client.create_draft, stage_tag, sha, notes)
+    except PublishError:
+        if superseded(client, sha):
+            return PublishResult(skipped=True, removed_staging=removed_staging, removed_tags=removed_tags)
+        raise
     draft_id = draft["id"]
     try:
         for asset in assets:
-            client.upload_asset(draft, asset)
-        verified_draft = client.get_release(draft_id)
+            step(f"uploading {asset.name}", client.upload_asset, draft, asset)
+        verified_draft = step("reading the staging draft", client.get_release, draft_id)
         if not verified_draft.get("draft") or verified_draft.get("tag_name") != stage_tag:
             raise PublishError("GitHub did not preserve the staged draft release")
         verify_assets(verified_draft, assets)
         if not build_is_publishable(client, sha):
-            client.delete_release(draft_id)
-            client.delete_tag(stage_tag)
-            return PublishResult(skipped=True)
+            discard_replacement(client, draft_id, stage_tag)
+            return PublishResult(skipped=True, removed_staging=removed_staging, removed_tags=removed_tags)
+        previous = step("reading the Latest release", client.release_by_tag, "latest")
+        # Final check immediately before the release replacement.
+        if not build_is_publishable(client, sha):
+            discard_replacement(client, draft_id, stage_tag)
+            return PublishResult(skipped=True, removed_staging=removed_staging, removed_tags=removed_tags)
     except Exception:
         # This cleanup touches only this run's unpublished staging objects.
-        try:
-            client.delete_release(draft_id)
-            client.delete_tag(stage_tag)
-        except PublishError:
-            pass
+        discard_replacement(client, draft_id, stage_tag)
         raise
 
-    previous = client.release_by_tag("latest")
-    previous_sha = commit_sha(client.tag_sha("latest"))
-    # Final check immediately before the release replacement.
-    if not build_is_publishable(client, sha):
-        client.delete_release(draft_id)
-        client.delete_tag(stage_tag)
-        return PublishResult(skipped=True)
-    # The previous release moves to a temporary tag and stays published until
-    # the replacement is public and verified.
-    backup_tag = f"latest-previous-{run_id}-{token}"
+    # The replacement is published and verified under its staging tag while the
+    # previous release still serves tag latest.
     try:
-        if previous is not None:
-            client.retag_release(previous["id"], backup_tag, previous_sha)
-        client.set_tag("latest", sha)
-        client.promote_release(draft_id, sha, notes)
-        published = client.get_release(draft_id)
-        if (published.get("draft") is not False or published.get("prerelease") is not False
-                or published.get("tag_name") != "latest" or published.get("name") != "Latest"):
+        step(f"creating tag {stage_tag}", client.create_tag, stage_tag, sha)
+        step("publishing the new release", client.promote_release, draft_id, stage_tag, notes)
+        staged = step("reading the new release", client.get_release, draft_id)
+        if (staged.get("draft") is not False or staged.get("prerelease") is not False
+                or staged.get("tag_name") != stage_tag or staged.get("name") != "Latest"):
             raise PublishError("GitHub did not publish the expected Latest release")
-        verify_assets(published, assets)
-        if client.tag_sha("latest") != sha:
-            raise PublishError("The latest tag does not point to the built commit")
-        url = published.get("html_url")
-        if not url:
-            raise PublishError("The published release does not have a public URL")
+        verify_assets(staged, assets)
+        # Main may have gained workflow changes since the last check; GitHub
+        # would then refuse the remaining steps.
+        if not build_is_publishable(client, sha):
+            discard_replacement(client, draft_id, stage_tag)
+            return PublishResult(skipped=True, removed_staging=removed_staging, removed_tags=removed_tags)
+        step(f"moving tag latest to {sha}", client.set_tag, "latest", sha)
     except Exception:
-        for failure in restore_previous(client, draft_id, stage_tag, previous, previous_sha, backup_tag):
-            print(f"Could not restore the previous Latest release: {failure}", file=sys.stderr)
+        discard_replacement(client, draft_id, stage_tag)
+        if superseded(client, sha):
+            return PublishResult(skipped=True, removed_staging=removed_staging, removed_tags=removed_tags)
         raise
+    # Tag names are unique, so the previous release goes before the verified
+    # replacement takes tag latest. Until then the replacement already serves
+    # releases/latest/download, and a run that stops here is completed by the next one.
     if previous is not None:
-        client.delete_release(previous["id"])
-        client.delete_tag(backup_tag)
-
-    client.delete_tag(stage_tag)
-
-    # Interrupted runs can leave staging drafts or a previous release under its
-    # temporary tag. Remove only those, after the replacement is verified.
-    removed_staging = 0
-    for release in client.list_releases():
-        if release.get("id") != draft_id and is_interrupted_publication(release):
-            client.delete_release(release["id"])
-            client.delete_tag(release["tag_name"])
-            removed_staging += 1
-    return PublishResult(url=url, assets=len(assets), removed_staging=removed_staging)
+        try:
+            step("deleting the previous release", client.delete_release, previous["id"])
+        except PublishError:
+            # The deletion may have completed although its response was lost.
+            current = step("reading the Latest release", client.release_by_tag, "latest")
+            if current is not None and current.get("id") == previous["id"]:
+                raise
+    try:
+        step("moving the new release to tag latest", client.retag_release, draft_id, "latest")
+    except PublishError:
+        print("Tag latest has no release until this job is re-run or the next build publishes; "
+              "releases/latest/download serves the verified replacement meanwhile.", file=sys.stderr)
+        raise
+    published = step("reading the new release", client.get_release, draft_id)
+    if published.get("draft") is not False or published.get("tag_name") != "latest":
+        raise PublishError("GitHub did not move the new release to tag latest")
+    verify_assets(published, assets)
+    if step("reading tag latest", client.tag_sha, "latest") != sha:
+        raise PublishError("The latest tag does not point to the built commit")
+    url = published.get("html_url")
+    if not url:
+        raise PublishError("The published release does not have a public URL")
+    # Latest is published and verified; leftovers that cannot be removed now
+    # are removed by the next run, so they only produce warnings.
+    try:
+        step(f"deleting tag {stage_tag}", client.delete_tag, stage_tag)
+        # Interrupted runs can leave published releases under temporary tags.
+        for release in step("listing releases", client.list_releases):
+            if release.get("id") != draft_id and is_interrupted_publication(release):
+                remove_release(client, release)
+                removed_staging += 1
+    except PublishError as error:
+        print(f"Warning: cleanup after publication stopped: {error}", file=sys.stderr)
+    return PublishResult(url=url, assets=len(assets), removed_staging=removed_staging, removed_tags=removed_tags)
 
 
 def main() -> int:
@@ -543,14 +626,19 @@ def main() -> int:
         result = publish(client, args.sha, args.artifacts, args.notes, args.run_id)
     except (PublishError, OSError) as error:
         print(f"Publication failed: {error}", file=sys.stderr)
+        if isinstance(error, APIError) and error.status == 403 and "not accessible by integration" in error.message:
+            print("GitHub refuses the Actions token ref and release changes at commits whose workflow files "
+                  "differ from main's; check which commit the failed step targets.", file=sys.stderr)
         return 1
     if result.skipped:
         print("Skipped a superseded build; the current release is unchanged.")
     else:
         print(f"Published Latest: {result.url}")
         print(f"Verified {result.assets} release assets.")
-        if result.removed_staging:
-            print(f"Removed {result.removed_staging} releases left by interrupted publications.")
+    if result.removed_staging:
+        print(f"Removed {result.removed_staging} releases left by interrupted publications.")
+    if result.removed_tags:
+        print(f"Removed {result.removed_tags} unused temporary tags.")
     return 0
 
 
