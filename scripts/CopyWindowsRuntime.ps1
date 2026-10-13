@@ -17,7 +17,8 @@ if (-not $VisualStudioPath) {
 $crt = Get-ChildItem "$VisualStudioPath\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory |
     Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $crt) { throw 'Visual C++ x64 CRT directory not found.' }
-foreach ($required in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
+# worldserver.exe also imports msvcp140_atomic_wait.dll.
+foreach ($required in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_atomic_wait.dll')) {
     if (-not (Test-Path (Join-Path $crt.FullName $required))) { throw "Visual C++ runtime is missing $required" }
 }
 Copy-Item "$($crt.FullName)\*.dll" $DistDir -Force

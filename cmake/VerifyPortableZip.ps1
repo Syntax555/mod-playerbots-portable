@@ -63,9 +63,12 @@ try {
     $required = @(
         'startup.exe', 'authserver.exe', 'worldserver.exe',
         'mysql/bin/mysqld.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqladmin.exe',
-        'libmysql.dll', 'libcrypto-3-x64.dll', 'libssl-3-x64.dll',
-        'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
+        # A --version smoke test exits before the servers load legacy.dll, and a
+        # Visual C++ runtime installed on the build machine hides missing copies.
+        'libmysql.dll', 'libcrypto-3-x64.dll', 'libssl-3-x64.dll', 'legacy.dll',
+        'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_atomic_wait.dll',
         'mysql/bin/vcruntime140.dll', 'mysql/bin/vcruntime140_1.dll', 'mysql/bin/msvcp140.dll',
+        'licenses/boost/LICENSE_1_0.txt',
         'configs/authserver.conf.dist', 'configs/worldserver.conf.dist',
         'configs/modules/playerbots.conf.dist', 'configs/modules/AutoBalance.conf.dist',
         'configs/modules/individualProgression.conf.dist', 'configs/modules/mod_ahbot.conf.dist',
@@ -78,6 +81,11 @@ try {
     )
     foreach ($name in $required) {
         if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+    }
+    foreach ($directory in @('licenses/mysql/', 'licenses/openssl/')) {
+        if (-not ($files | Where-Object { $_.StartsWith($directory, [System.StringComparison]::OrdinalIgnoreCase) })) {
+            throw "Portable ZIP is missing the dependency notices in $directory"
+        }
     }
     $reader = [System.IO.StreamReader]::new($entries['portable-release.json'].Open())
     try { $identity = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
