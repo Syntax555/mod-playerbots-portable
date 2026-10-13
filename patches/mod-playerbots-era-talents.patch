@@ -20,20 +20,18 @@ index 21e3c5e..f8cdee2 100644
              else
                  return PLAYER_ROLE_DAMAGE;
 diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
-index abd207c..9335087 100644
+index abd207c..4446faa 100644
 --- a/src/Ai/Base/Actions/WorldBuffAction.cpp
 +++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
-@@ -5,7 +5,9 @@
-  */
+@@ -6,6 +6,7 @@
  
  #include "WorldBuffAction.h"
-+
  #include "AiFactory.h"
 +#include "EraTalentBridge.h"
  #include "Event.h"
  #include "Playerbots.h"
  
-@@ -54,7 +56,8 @@ std::vector<uint32> WorldBuffAction::NeedWorldBuffs(Unit* unit)
+@@ -54,7 +55,8 @@ std::vector<uint32> WorldBuffAction::NeedWorldBuffs(Unit* unit)
      // If this is a druid in the Feral tab, decide Bear vs. Cat
      if (botClass == CLASS_DRUID && tab == 1)  // 1 = feral
      {
@@ -189,47 +187,29 @@ index 8bf1b45..66d7af7 100644
              botAI->HasAura("blessing of sanctuary", target) ||
              botAI->HasAura("greater blessing of sanctuary", target);
 diff --git a/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp b/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
-index 632895b..1d4d426 100644
+index 632895b..6b3309d 100644
 --- a/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
 +++ b/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
-@@ -5,8 +5,13 @@
-  */
- 
+@@ -7,6 +7,7 @@
  #include "PaladinGreaterBlessingAction.h"
-+
-+#include <algorithm>
-+#include <limits>
-+
  #include "AiFactory.h"
  #include "AiObjectContext.h"
 +#include "EraTalentBridge.h"
  #include "Event.h"
  #include "GenericBuffUtils.h"
  #include "PaladinHelper.h"
-@@ -14,8 +19,6 @@
- #include "SharedDefines.h"
- #include "SpellAuraEffects.h"
- #include "Value.h"
--#include <algorithm>
--#include <limits>
- 
- namespace ai::gbless
- {
-@@ -71,17 +74,17 @@ namespace
-             return PALADIN_BLESSING_CAPABILITY_NONE;
+@@ -72,16 +73,16 @@ namespace
  
          uint8 capabilities = PALADIN_BLESSING_CAPABILITY_NONE;
--        if (player->HasAura(SPELL_IMPROVED_MIGHT_R1) ||
+         if (player->HasAura(SPELL_IMPROVED_MIGHT_R1) ||
 -            player->HasAura(SPELL_IMPROVED_MIGHT_R2))
-+        if (player->HasAura(SPELL_IMPROVED_MIGHT_R1) || player->HasAura(SPELL_IMPROVED_MIGHT_R2) ||
-+            player->HasAura(EraKnown(player, SPELL_IMPROVED_MIGHT_R1)))
++            player->HasAura(SPELL_IMPROVED_MIGHT_R2) || player->HasAura(EraKnown(player, SPELL_IMPROVED_MIGHT_R1)))
          {
              capabilities |= PALADIN_BLESSING_CAPABILITY_IMPROVED_MIGHT;
          }
--        if (player->HasAura(SPELL_IMPROVED_WISDOM_R1) ||
+         if (player->HasAura(SPELL_IMPROVED_WISDOM_R1) ||
 -            player->HasAura(SPELL_IMPROVED_WISDOM_R2))
-+        if (player->HasAura(SPELL_IMPROVED_WISDOM_R1) || player->HasAura(SPELL_IMPROVED_WISDOM_R2) ||
-+            player->HasAura(EraKnown(player, SPELL_IMPROVED_WISDOM_R1)))
++            player->HasAura(SPELL_IMPROVED_WISDOM_R2) || player->HasAura(EraKnown(player, SPELL_IMPROVED_WISDOM_R1)))
          {
              capabilities |= PALADIN_BLESSING_CAPABILITY_IMPROVED_WISDOM;
          }
@@ -238,7 +218,7 @@ index 632895b..1d4d426 100644
              capabilities |= PALADIN_BLESSING_CAPABILITY_SANCTUARY;
  
          return capabilities;
-@@ -935,13 +938,14 @@ static int32 GetBlessingCastStrength(Player* caster, BlessingType type, uint32 s
+@@ -935,13 +936,14 @@ static int32 GetBlessingCastStrength(Player* caster, BlessingType type, uint32 s
      switch (category)
      {
          case BASE_MIGHT:
@@ -789,7 +769,7 @@ index b705e50..dc93f62 100644
      {
          bot->resetTalents(true);
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index e04b15a..b97eaee 100644
+index e04b15a..f24b5dd 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -16,6 +16,7 @@
@@ -800,21 +780,16 @@ index e04b15a..b97eaee 100644
  #include "EventProcessor.h"
  #include "ExternalEventHelper.h"
  #include "GameObjectData.h"
-@@ -2317,11 +2318,10 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
-             }
+@@ -2318,7 +2319,8 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
              break;
          case CLASS_DRUID:
--            if (tab == DRUID_TAB_FERAL && (player->GetShapeshiftForm() == FORM_BEAR ||
+             if (tab == DRUID_TAB_FERAL && (player->GetShapeshiftForm() == FORM_BEAR ||
 -                                           player->GetShapeshiftForm() == FORM_DIREBEAR || player->HasAura(16931)))
--            {
-+            if (tab == DRUID_TAB_FERAL &&
-+                (player->GetShapeshiftForm() == FORM_BEAR || player->GetShapeshiftForm() == FORM_DIREBEAR ||
-+                 player->HasAura(EraTalentBots_ResolveSpellId(player, 16931))))
++                                           player->GetShapeshiftForm() == FORM_DIREBEAR ||
++                                           player->HasAura(EraTalentBots_ResolveSpellId(player, 16931))))
+             {
                  return true;
--            }
-             break;
-     }
-     return false;
+             }
 diff --git a/src/Mgr/Item/StatsWeightCalculator.cpp b/src/Mgr/Item/StatsWeightCalculator.cpp
 index 891b278..395a70d 100644
 --- a/src/Mgr/Item/StatsWeightCalculator.cpp

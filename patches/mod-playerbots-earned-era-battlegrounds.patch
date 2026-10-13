@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 56f79338..aa7199c1 100644
+index 56f7933..aa7199c 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -1650,6 +1650,13 @@ AiPlayerbot.RandomBotJoinBG = 1
@@ -17,7 +17,7 @@ index 56f79338..aa7199c1 100644
  AiPlayerbot.RandomBotAutoJoinBG = 0
  
 diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
-index e6bcae0d..e33adb13 100644
+index e6bcae0..e33adb1 100644
 --- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 +++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 @@ -24,7 +24,8 @@ bool BGJoinAction::Execute(Event /*event*/)
@@ -152,7 +152,7 @@ index e6bcae0d..e33adb13 100644
          packet << uint8(BattlegroundMgr::BGArenaType(queueTypeId)) << uint8(0) << uint32(_bgTypeId) << uint16(0x1F90)
 diff --git a/src/Bot/BattlegroundQueuePolicy.cpp b/src/Bot/BattlegroundQueuePolicy.cpp
 new file mode 100644
-index 00000000..bd078a0f
+index 0000000..bd078a0
 --- /dev/null
 +++ b/src/Bot/BattlegroundQueuePolicy.cpp
 @@ -0,0 +1,40 @@
@@ -197,7 +197,7 @@ index 00000000..bd078a0f
 +#endif
 +}
 diff --git a/src/Bot/BattlegroundQueuePolicy.h b/src/Bot/BattlegroundQueuePolicy.h
-index 4f4b3f2b..43dddb52 100644
+index 4f4b3f2..43dddb5 100644
 --- a/src/Bot/BattlegroundQueuePolicy.h
 +++ b/src/Bot/BattlegroundQueuePolicy.h
 @@ -9,10 +9,30 @@
@@ -233,7 +233,7 @@ index 4f4b3f2b..43dddb52 100644
  #endif
 diff --git a/src/Bot/EarnedBattlegroundQueueState.h b/src/Bot/EarnedBattlegroundQueueState.h
 new file mode 100644
-index 00000000..fc6e2817
+index 0000000..fc6e281
 --- /dev/null
 +++ b/src/Bot/EarnedBattlegroundQueueState.h
 @@ -0,0 +1,84 @@
@@ -322,7 +322,7 @@ index 00000000..fc6e2817
 +
 +#endif
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 36220f6d..7e7ec0de 100644
+index 36220f6..7e7ec0d 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
 @@ -921,6 +921,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
@@ -566,26 +566,18 @@ index 36220f6d..7e7ec0de 100644
  }
  
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index cbca8d2c..a12ab939 100644
+index cbca8d2..3e900cb 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
-@@ -7,12 +7,14 @@
+@@ -7,6 +7,7 @@
  #ifndef PLAYERBOTS_RANDOMPLAYERBOTMGR_H
  #define PLAYERBOTS_RANDOMPLAYERBOTMGR_H
  
-+#include <unordered_set>
-+
 +#include "EarnedBattlegroundQueueState.h"
  #include "GameTime.h"
  #include "NewRpgInfo.h"
  #include "ObjectGuid.h"
- #include "PlayerbotCommandServer.h"
- #include "PlayerbotMgr.h"
--#include <unordered_set>
- 
- struct BattlegroundInfo
- {
-@@ -154,6 +156,10 @@ public:
+@@ -154,6 +155,10 @@ public:
      std::map<uint32, std::map<uint32, std::map<uint32, uint32>>> Supporters;
      std::map<TeamId, std::vector<uint32>> LfgDungeons;
      void CheckBgQueue();
@@ -596,7 +588,7 @@ index cbca8d2c..a12ab939 100644
      void CheckLfgQueue();
      void CheckPlayers();
      void LogBattlegroundInfo();
-@@ -181,6 +187,9 @@ protected:
+@@ -181,6 +186,9 @@ protected:
      void OnBotLoginInternal(Player* const bot) override;
  
  private:
@@ -607,7 +599,7 @@ index cbca8d2c..a12ab939 100644
      {
          this->playersLevel = sPlayerbotAIConfig.randombotStartingLevel;
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 51af4fe1..8d081276 100644
+index 51af4fe..8d08127 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -86,6 +86,7 @@ bool PlayerbotAIConfig::Initialize()
@@ -619,7 +611,7 @@ index 51af4fe1..8d081276 100644
      {
          LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index f0a162cb..21c41cf4 100644
+index f0a162c..21c41cf 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -112,6 +112,7 @@ public:
@@ -631,49 +623,27 @@ index f0a162cb..21c41cf4 100644
      bool EnableICCBuffs;
      bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index 79673264..d7ea7e76 100644
+index 6fd2f11..e73f02e 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
-@@ -11,6 +11,8 @@
- #include "AllMapScript.h"
+@@ -7,6 +7,8 @@
+ #include "Playerbots.h"
  #include "BattleGroundTactics.h"
  #include "BattlefieldScript.h"
 +#include "BattlegroundMgr.h"
 +#include "BattlegroundQueuePolicy.h"
- #include "BuiltInConfig.h"
  #include "Channel.h"
  #include "CheckMountStateAction.h"
-@@ -129,21 +131,59 @@ public:
- class PlayerbotsPlayerScript : public PlayerScript
- {
- public:
--    PlayerbotsPlayerScript() : PlayerScript("PlayerbotsPlayerScript", {
--        PLAYERHOOK_ON_LOGIN,
--        PLAYERHOOK_ON_BEFORE_LOGOUT,
--        PLAYERHOOK_ON_AFTER_UPDATE,
--        PLAYERHOOK_ON_CREATURE_KILL_CREDIT,
--        PLAYERHOOK_ON_BEFORE_PETITION_SIGN,
--        PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS,
--        PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE,
--        PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT,
--        PLAYERHOOK_CAN_PLAYER_USE_GROUP_CHAT,
--        PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
--        PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
--        PLAYERHOOK_ON_GIVE_EXP,
--        PLAYERHOOK_ON_BEFORE_TELEPORT
--    }) {}
-+    PlayerbotsPlayerScript()
-+        : PlayerScript("PlayerbotsPlayerScript",
-+                       {PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_BEFORE_LOGOUT, PLAYERHOOK_ON_AFTER_UPDATE,
-+                        PLAYERHOOK_ON_CREATURE_KILL_CREDIT, PLAYERHOOK_ON_BEFORE_PETITION_SIGN,
-+                        PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS, PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE,
-+                        PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT, PLAYERHOOK_CAN_PLAYER_USE_GROUP_CHAT,
-+                        PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT, PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
-+                        PLAYERHOOK_ON_GIVE_EXP, PLAYERHOOK_ON_BEFORE_TELEPORT,
-+                        PLAYERHOOK_CAN_JOIN_IN_BATTLEGROUND_QUEUE, PLAYERHOOK_CAN_JOIN_IN_ARENA_QUEUE})
-+    {
-+    }
-+
+ #include "Config.h"
+@@ -140,9 +142,53 @@ public:
+         PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
+         PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
+         PLAYERHOOK_ON_GIVE_EXP,
++        PLAYERHOOK_CAN_JOIN_IN_BATTLEGROUND_QUEUE,
++        PLAYERHOOK_CAN_JOIN_IN_ARENA_QUEUE,
+         PLAYERHOOK_ON_BEFORE_TELEPORT
+     }) {}
+ 
 +    bool CanQueueWithBots(Player* player, uint8 joinAsGroup, BattlegroundQueueTypeId queue,
 +                          GroupJoinBattlegroundResult& err)
 +    {
@@ -715,6 +685,7 @@ index 79673264..d7ea7e76 100644
 +    {
 +        return CanQueueWithBots(player, joinAsGroup, BATTLEGROUND_QUEUE_2v2, err);
 +    }
- 
++
      void OnPlayerLogin(Player* player) override
      {
+         if (!player->GetSession()->IsHeadless())
