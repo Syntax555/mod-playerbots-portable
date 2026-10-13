@@ -44,6 +44,16 @@ def compile_run(directory, name, source, includes=()):
     subprocess.run([str(binary)], check=True)
 
 
+def rejects(directory, name, source, label):
+    cpp = directory / (name + '.cpp')
+    binary = directory / name
+    cpp.write_text(source)
+    subprocess.run(['g++', '-std=c++20', '-pthread', str(cpp), '-o', str(binary)], check=True)
+    if subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
+        raise SystemExit(f'Era talent fixture did not reject the mutation: {label}')
+    print(f'Era talent mutation rejected: {label}')
+
+
 with tempfile.TemporaryDirectory(prefix='portable-era-talents-') as temporary:
     directory = Path(temporary)
     era_policy = function((src / 'EraTalentIP.cpp').read_text(), 'EraId EraFromIP(')
@@ -762,6 +772,18 @@ int main() {
     compile_run(directory, 'era-learning', learn_fixture)
 
     bot_source = (src / 'EraTalentBots.cpp').read_text()
+    playerbots = core / 'modules/mod-playerbots/src'
+    selfbot_command = (playerbots / 'Bot/PlayerbotMgr.cpp').read_text()
+    # The SelfBot double below mirrors the command: the human's own AI is its master.
+    assert ('PlayerbotsMgr::instance().AddPlayerbotData(master, true);\n'
+            '            GET_PLAYERBOT_AI(master)->SetMaster(master);') in selfbot_command
+    bot_policy_code = '\n'.join((
+        function((playerbots / 'Bot/PlayerbotAI.cpp').read_text(), 'bool IsSelfBot(Player* player)'),
+        function((playerbots / 'PlayerbotAIConfig.cpp').read_text(), 'bool PlayerbotAIConfig::IsInRandomAccountList('),
+        'namespace EraTalentBots {', function(bot_source, 'bool IsBot(Player* p)'), '}',
+        'using EraTalentBots::IsBot;',
+        function(bot_source, '    bool Gated(Player* p)'),
+        function(bot_source, '    bool SpendsOwnPoints(Player* bot)')))
     factory_code = function(bot_source, '    bool FactoryReconcile(')
     bot_login_code = function(bot_source, '    void OnBotLogin(')
     bot_level_code = function(bot_source, '    void OnBotLevelChanged(')
@@ -777,25 +799,43 @@ constexpr uint8 CLASS_DRUID=11;
 #define LOG_DEBUG(...) ((void)0)
 enum EraId : uint8 { ERA_VANILLA=0, ERA_TBC=1, ERA_WOTLK=2 };
 struct Guid { uint32 GetCounter() const { return 2; } };
+constexpr uint32 RANDOM_ACCOUNT=7, HUMAN_ACCOUNT=1;
+struct Session {
+    bool headless=true; uint32 account=RANDOM_ACCOUNT;
+    bool IsHeadless() const { return headless; }
+    uint32 GetAccountId() const { return account; }
+};
+struct Player;
+struct PlayerbotAI { Player* master=nullptr; Player* GetMaster() const { return master; } };
 struct Player {
     uint8 cls=1, level=1; EraId era=ERA_VANILLA, stored=ERA_VANILLA;
-    bool bot=true, combat=false, cat=false, bear=false;
+    bool combat=false, cat=false, bear=false;
+    Session session; PlayerbotAI* ai=nullptr;
     int spent=0, builds=0, lastSpec=-1, freePoints=0, infos=0, invalidates=0, reconciles=0, reapplies=0;
     int nativeSpent=0, nativeBuilds=0, money=123456, xp=987, gear=17;
     std::array<uint32,3> tabs{};
     uint8 getClass() const { return cls; }
     uint8 GetLevel() const { return level; }
     Guid GetGUID() const { return {}; }
+    Session* GetSession() { return &session; }
     bool IsInCombat() const { return combat; }
     char const* GetName() const { return "earned-bot"; }
     void SetFreeTalentPoints(int value) { freePoints=value; }
     void SendTalentsInfoData(bool pet) { assert(!pet); ++infos; }
 };
+#define GET_PLAYERBOT_AI(player) ((player)->ai)
+struct PlayerbotAIConfig {
+    std::vector<uint32> randomBotAccounts{RANDOM_ACCOUNT};
+    bool IsInRandomAccountList(uint32 id);
+    static PlayerbotAIConfig& instance() { static PlayerbotAIConfig config; return config; }
+};
+#define sPlayerbotAIConfig PlayerbotAIConfig::instance()
+using std::find;
 bool EraHasTalentTrees(EraId era) { return era!=ERA_WOTLK; }
 bool EraHasTalentTrees(Player* p,EraId era) { return p->cls!=6 && EraHasTalentTrees(era); }
 struct Config { bool enabled=true, bots=true; bool Enabled() const { return enabled; } bool BotTalents() const { return bots; } } config;
 auto* sEraTalentsConfig=&config;
-bool Gated(Player* p) { return !p || !p->bot || !config.enabled || !config.bots; }
+''' + bot_policy_code + r'''
 struct Content { std::vector<int> NodesFor(uint8,uint8 cls) { return cls==6 ? std::vector<int>{} : std::vector<int>{1}; } } content;
 auto* sEraTalentContent=&content;
 namespace EraTransition {
@@ -869,17 +909,46 @@ int main() {
     assert(druid.lastSpec==3 && druid.spent==11);
     Player dk; dk.cls=6; dk.level=55;
     assert(!EraTalentBots::FactoryReconcile(&dk,0) && dk.spent==0);
-    Player human; human.bot=false;
-    assert(!EraTalentBots::FactoryReconcile(&human,0));
+    Player human; human.session={false,HUMAN_ACCOUNT};
+    assert(!IsBot(&human) && !EraTalentBots::FactoryReconcile(&human,0));
     Player wrath; wrath.era=wrath.stored=ERA_WOTLK; wrath.level=70; wrath.nativeSpent=60;
     EraTalentBots::OnBotLevelChanged(&wrath);
     assert(wrath.nativeSpent==61 && wrath.nativeBuilds==1 && wrath.builds==0);
     wrath.level=80; EraTalentBots::OnBotLevelChanged(&wrath);
     assert(wrath.nativeSpent==71 && wrath.nativeBuilds==2);
-    std::cout << "Era bots: maintenance/login retain builds, levels extend earned points, pending/combat transitions stop mutation and native factory never resets passed\n";
+
+    // A logging-in random bot has no AI yet; a random bot led by a player still builds itself.
+    PlayerbotAI ledAI{&human}; Player led; led.level=20; led.ai=&ledAI;
+    assert(IsBot(&p) && IsBot(&led) && EraTalentBots::FactoryReconcile(&led,2) && led.spent==11);
+    // A SelfBot is the human at a client: no bot path, and every earned point stays unspent.
+    for (EraId era : {ERA_VANILLA,ERA_TBC,ERA_WOTLK}) {
+        Player self; self.session={false,HUMAN_ACCOUNT}; self.era=self.stored=era; self.level=70;
+        PlayerbotAI selfAI{&self}; self.ai=&selfAI;
+        assert(!IsBot(&self) && !EraTalentBots::FactoryReconcile(&self,0));
+        EraTalentBots::OnBotLevelChanged(&self); EraTalentBots::OnBotLogin(&self);
+        assert(self.spent==0 && self.builds==0 && self.nativeBuilds==0 && self.reconciles==0);
+    }
+    // A controlled altbot keeps the bot path but leaves its owner's points to the owner.
+    PlayerbotAI ownerAI{&human};
+    for (EraId era : {ERA_VANILLA,ERA_TBC,ERA_WOTLK}) {
+        Player alt; alt.session.account=HUMAN_ACCOUNT; alt.ai=&ownerAI; alt.era=alt.stored=era;
+        alt.level=70; alt.nativeSpent=10;
+        assert(IsBot(&alt) && EraTalentBots::FactoryReconcile(&alt,0)==(era!=ERA_WOTLK));
+        EraTalentBots::OnBotLevelChanged(&alt); EraTalentBots::OnBotLogin(&alt);
+        assert(alt.spent==0 && alt.builds==0 && alt.nativeBuilds==0 && alt.nativeSpent==10 && alt.reconciles>0);
+    }
+    std::cout << "Era bots: maintenance/login retain builds, levels extend earned points, pending/combat transitions stop mutation, native factory never resets and SelfBot/altbot points stay with their owner passed\n";
 }
 '''
     compile_run(directory, 'era-bots', bot_fixture)
+    for label, old, new in (
+            ('SelfBot on the bot path', '(GET_PLAYERBOT_AI(p) && !IsSelfBot(p))', 'GET_PLAYERBOT_AI(p) != nullptr'),
+            ('altbot historical points spent', ' && SpendsOwnPoints(bot))', ')'),
+            ('altbot native points spent', 'if (SpendsOwnPoints(bot))', 'if (bot)')):
+        mutated = bot_fixture.replace(old, new)
+        if mutated == bot_fixture:
+            raise SystemExit(f'{label} mutation was not applied')
+        rejects(directory, 'era-bots-mutated', mutated, label)
 
     transition_code = '\n'.join(line for line in (src / 'EraTransition.cpp').read_text().splitlines()
                                  if not line.startswith('#include'))
