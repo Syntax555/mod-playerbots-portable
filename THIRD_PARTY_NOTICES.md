@@ -53,8 +53,8 @@ Their available license files and notices are preserved under
 `licenses/core-dependencies/`, using paths from the pinned upstream `deps/`
 directory. Additional notices remain in individual upstream source files.
 These libraries and the bundled runtime dependencies are not covered by this
-project's MIT license. Runtime dependency versions are pinned in the
-[release workflow](.github/workflows/release.yml).
+project's MIT license. Runtime dependency versions and download checksums are
+pinned in the [release workflow](.github/workflows/release.yml).
 
 ## Attribution
 

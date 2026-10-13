@@ -74,9 +74,10 @@ try {
 
     # A provider license alone does not satisfy OpenSSL's license requirement.
     Remove-Item -LiteralPath $apacheFile
-    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -NoNetwork } 'network fallback is disabled'
+    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -OpenSSLVersion '' -NoNetwork } 'Pass -OpenSSLVersion'
+    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -OpenSSLVersion '3.5.7' -NoNetwork } 'network fallback is disabled'
     Write-Fixture (Join-Path $openssl 'include/openssl/opensslv.h') '#define OPENSSL_VERSION_TEXT "OpenSSL 3.5.8 9 Jun 2026"'
-    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -NoNetwork } 'only to OpenSSL 3.5.7'
+    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -OpenSSLVersion '3.5.7' -NoNetwork } 'only to OpenSSL 3.5.7'
     Write-Fixture (Join-Path $openssl 'include/openssl/opensslv.h') '#define OPENSSL_VERSION_TEXT "OpenSSL 3.5.7 9 Jun 2026"'
 
     # Exercise fallback without network access, retaining separate provider terms.
@@ -90,12 +91,12 @@ try {
         $global:DependencyLicenseFixtureCalls++
         return [pscustomobject]@{ Content = $global:DependencyLicenseFixtureResponse }
     }
-    & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost
+    & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -OpenSSLVersion '3.5.7'
     if ($global:DependencyLicenseFixtureCalls -ne 1) { throw 'OpenSSL fallback was not requested exactly once.' }
     Assert-SameBytes (Join-Path $opensslPackage 'LICENSE.txt') (Join-Path $dist 'licenses/openssl/LICENSE.txt')
     if ([System.IO.File]::ReadAllText((Join-Path $dist 'licenses/openssl/upstream/LICENSE.txt')) -cne $apacheText) { throw 'Upstream fallback text changed.' }
     $global:DependencyLicenseFixtureResponse = '<html>Not a license</html>'
-    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost } 'did not contain the Apache version 2 license'
+    Assert-Fails { & $scriptPath -DistDir $dist -MySQLRootDir $mysql -OpenSSLRootDir $openssl -BoostRootDir $boost -OpenSSLVersion '3.5.7' } 'did not contain the Apache version 2 license'
 
     Write-Host 'Dependency license packaging checks passed.'
 } finally {
