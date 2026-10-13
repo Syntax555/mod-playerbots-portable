@@ -86,12 +86,11 @@ necessary for platform and encounter validation.
 go test ./...
 go vet ./...
 cmake -P cmake/PrepareModules.cmake
-python3 cmake/tests/TestHistoricalClassQuests.py
-python3 cmake/tests/TestEarnedDungeonParties.py
-python3 cmake/tests/TestWorldBuffEvents.py
-python3 cmake/tests/TestLfgProgression.py
-python3 cmake/tests/TestMultiBotEraTalents.py
+python3 cmake/tests/run_fixtures.py gameplay
 ```
+
+`python3 cmake/tests/run_fixtures.py check` fails when a fixture in
+`cmake/tests` does not run in CI.
 
 The release workflow also verifies historical spell mechanics in the generated
 MPQ, client locales, dependency notices, package inventories and update recovery.
