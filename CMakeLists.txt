@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.22)
 
 project(PlayerbotsWorkspace NONE)
 
@@ -92,8 +92,10 @@ if(MYSQL_ROOT_DIR)
     list(APPEND ACORE_CMAKE_ARGS
         "-DMYSQL_ROOT_DIR=${MYSQL_ROOT_DIR}"
         "-DMYSQL_INCLUDE_DIR=${MYSQL_ROOT_DIR}/include"
-        "-DMYSQL_LIBRARY=${MYSQL_ROOT_DIR}/lib/libmysql.lib"
     )
+    if(WIN32)
+        list(APPEND ACORE_CMAKE_ARGS "-DMYSQL_LIBRARY=${MYSQL_ROOT_DIR}/lib/libmysql.lib")
+    endif()
 endif()
 
 if(BOOST_ROOT_DIR)
@@ -107,9 +109,13 @@ if(OPENSSL_ROOT_DIR)
     list(APPEND ACORE_CMAKE_ARGS
         "-DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
         "-DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include"
-        "-DOPENSSL_CRYPTO_LIBRARY=${OPENSSL_ROOT_DIR}/lib/libcrypto.lib"
-        "-DOPENSSL_SSL_LIBRARY=${OPENSSL_ROOT_DIR}/lib/libssl.lib"
     )
+    if(WIN32)
+        list(APPEND ACORE_CMAKE_ARGS
+            "-DOPENSSL_CRYPTO_LIBRARY=${OPENSSL_ROOT_DIR}/lib/libcrypto.lib"
+            "-DOPENSSL_SSL_LIBRARY=${OPENSSL_ROOT_DIR}/lib/libssl.lib"
+        )
+    endif()
 endif()
 
 # 4. Superbuild AzerothCore and all pinned modules.
@@ -149,66 +155,41 @@ if(WIN32)
             message(FATAL_ERROR "Missing required portable runtime dependency: ${required_path}")
         endif()
     endforeach()
-    # Collect DLLs to copy
+    # The servers load these from their own directory.
     set(DLL_COPY_COMMANDS)
-    if(EXISTS "${MYSQL_ROOT_DIR}/lib/libmysql.dll")
+    foreach(runtime_dll
+        "${MYSQL_ROOT_DIR}/lib/libmysql.dll"
+        "${OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll"
+        "${OPENSSL_ROOT_DIR}/bin/libssl-3-x64.dll"
+        "${OPENSSL_ROOT_DIR}/lib/ossl-modules/legacy.dll"
+    )
+        get_filename_component(runtime_dll_name "${runtime_dll}" NAME)
         list(APPEND DLL_COPY_COMMANDS
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${MYSQL_ROOT_DIR}/lib/libmysql.dll"
-                "${CMAKE_INSTALL_PREFIX_CLEAN}/libmysql.dll"
+                "${runtime_dll}" "${CMAKE_INSTALL_PREFIX_CLEAN}/${runtime_dll_name}"
         )
-    endif()
-
-    if(EXISTS "${OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll")
-        list(APPEND DLL_COPY_COMMANDS
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll"
-                "${CMAKE_INSTALL_PREFIX_CLEAN}/libcrypto-3-x64.dll"
-        )
-    endif()
-
-    if(EXISTS "${OPENSSL_ROOT_DIR}/bin/libssl-3-x64.dll")
-        list(APPEND DLL_COPY_COMMANDS
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${OPENSSL_ROOT_DIR}/bin/libssl-3-x64.dll"
-                "${CMAKE_INSTALL_PREFIX_CLEAN}/libssl-3-x64.dll"
-        )
-    endif()
-
-    list(APPEND DLL_COPY_COMMANDS
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${OPENSSL_ROOT_DIR}/lib/ossl-modules/legacy.dll"
-            "${CMAKE_INSTALL_PREFIX_CLEAN}/legacy.dll"
+    endforeach()
+    ExternalProject_Add_Step(azerothcore copy_runtime_dlls
+        ${DLL_COPY_COMMANDS}
+        DEPENDEES install
+        COMMENT "Copying runtime Windows DLLs (MySQL, OpenSSL) to ${CMAKE_INSTALL_PREFIX_CLEAN}"
     )
 
-    if(DLL_COPY_COMMANDS)
-        ExternalProject_Add_Step(azerothcore copy_runtime_dlls
-            ${DLL_COPY_COMMANDS}
-            DEPENDEES install
-            COMMENT "Copying runtime Windows DLLs (MySQL, OpenSSL) to ${CMAKE_INSTALL_PREFIX_CLEAN}"
-        )
-    endif()
-
     # Copy the MySQL server; PrunePortableDistribution removes its development files.
-    if(IS_DIRECTORY "${MYSQL_ROOT_DIR}")
-        ExternalProject_Add_Step(azerothcore copy_mysql_distribution
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${MYSQL_ROOT_DIR}"
-                "${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
-            DEPENDEES install
-            COMMENT "Copying MySQL server distribution to ${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
-        )
-    endif()
+    ExternalProject_Add_Step(azerothcore copy_mysql_distribution
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${MYSQL_ROOT_DIR}"
+            "${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
+        DEPENDEES install
+        COMMENT "Copying MySQL server distribution to ${CMAKE_INSTALL_PREFIX_CLEAN}/mysql"
+    )
 
-    # Build Go startup launcher
-    if(GO_EXECUTABLE)
-        ExternalProject_Add_Step(azerothcore build_startup_tool
-            COMMAND ${GO_EXECUTABLE} build -o "${CMAKE_INSTALL_PREFIX_CLEAN}/startup.exe" "./cmd/startup"
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            DEPENDEES install
-            COMMENT "Building startup executable: ${CMAKE_INSTALL_PREFIX_CLEAN}/startup.exe"
-        )
-    endif()
+    ExternalProject_Add_Step(azerothcore build_startup_tool
+        COMMAND ${GO_EXECUTABLE} build -o "${CMAKE_INSTALL_PREFIX_CLEAN}/startup.exe" "./cmd/startup"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        DEPENDEES install
+        COMMENT "Building startup executable: ${CMAKE_INSTALL_PREFIX_CLEAN}/startup.exe"
+    )
 
     # 6. Portable ZIP Packaging Target
     set(PORTABLE_ZIP_FILE "${PACKAGE_OUTPUT_DIR}/mod-playerbots-portable-${PACKAGE_VERSION}.zip")
@@ -257,18 +238,11 @@ if(WIN32)
         DEPENDS azerothcore
         COMMENT "Building and packaging the portable distribution"
     )
-
-    add_custom_target(package_portable
-        DEPENDS package_zip
-        COMMENT "Alias for package_zip target"
-    )
 else()
-    if(GO_EXECUTABLE)
-        ExternalProject_Add_Step(azerothcore build_startup_tool
-            COMMAND ${GO_EXECUTABLE} build -o "${CMAKE_INSTALL_PREFIX_CLEAN}/startup" "./cmd/startup"
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            DEPENDEES install
-            COMMENT "Building startup executable: ${CMAKE_INSTALL_PREFIX_CLEAN}/startup"
-        )
-    endif()
+    ExternalProject_Add_Step(azerothcore build_startup_tool
+        COMMAND ${GO_EXECUTABLE} build -o "${CMAKE_INSTALL_PREFIX_CLEAN}/startup" "./cmd/startup"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        DEPENDEES install
+        COMMENT "Building startup executable: ${CMAKE_INSTALL_PREFIX_CLEAN}/startup"
+    )
 endif()
