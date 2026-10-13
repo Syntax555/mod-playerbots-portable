@@ -561,10 +561,10 @@ index 0251481..d842407 100644
 +void AddSC_era_advance_gossip() {}
 diff --git a/src/EraEarnedTraining.cpp b/src/EraEarnedTraining.cpp
 new file mode 100644
-index 0000000..c4a6061
+index 0000000..0fae22b
 --- /dev/null
 +++ b/src/EraEarnedTraining.cpp
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,236 @@
 +/*
 + * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
 + *
@@ -604,28 +604,19 @@ index 0000000..c4a6061
 +{
 +    if (player->getClass() != CLASS_SHAMAN)
 +        return true;
-+    struct QuestTotem
-+    {
-+        uint32 spells[3];
-+        uint32 quests[3];
-+    };
-+    static constexpr QuestTotem questTotems[] = {
-+        {{8071, 931020, 947020}, {1518, 1521, 9451}},
-+        {{3599, 931100, 0}, {1527, 9555, 0}},
-+        {{5394, 931180, 947170}, {96, 9509, 0}},
-+    };
 +    uint32 root = ChainRoot(spellId);
-+    for (QuestTotem const& totem : questTotems)
++    for (EraTalents::QuestTotem const& totem : EraTalents::kQuestTotems)
 +    {
++        uint32 const variants[] = { totem.stockId, totem.vanillaId, totem.tbcId };
 +        bool matches = false;
-+        for (uint32 variant : totem.spells)
++        for (uint32 variant : variants)
 +            matches = matches || (variant && variant == root);
 +        if (!matches)
 +            continue;
 +        for (uint32 quest : totem.quests)
 +            if (quest && player->GetQuestRewardStatus(quest))
 +                return true;
-+        for (uint32 variant : totem.spells)
++        for (uint32 variant : variants)
 +            if (variant && player->HasSpell(variant))
 +                return true;
 +        return false;
@@ -2424,7 +2415,7 @@ index 09bfcf7..e4e7755 100644
  
          // Vanilla shaman + a 2H axe/mace: allow ONLY with the Two-Handed Axes and Maces talent
 diff --git a/src/EraTalents.cpp b/src/EraTalents.cpp
-index b19f3ec..bef7385 100644
+index b19f3ec..6eebaa1 100644
 --- a/src/EraTalents.cpp
 +++ b/src/EraTalents.cpp
 @@ -1,20 +1,24 @@
@@ -2874,7 +2865,21 @@ index b19f3ec..bef7385 100644
  
              // (4) Omen of Clarity grant change: node 18708 grants the custom castable clone 932512
              //     (Vanilla 10-min activated buff) instead of stock 16864 (WotLK hidden passive). A druid
-@@ -1833,104 +1716,16 @@ namespace EraTalents
+@@ -1697,13 +1580,6 @@ namespace EraTalents
+             // knows any era's clone, or completed a granting quest (all races). Higher ranks stay
+             // trainer-taught (their stock/clone counterparts have rows rooted on r1 — 6363 roots on
+             // 3599, so a missing 3599 also bricks the whole TBC/WotLK Searing chain).
+-            // tbcId 0 = TBC keeps the stock id.
+-            struct QuestTotem { uint32 stockId; uint32 vanillaId; uint32 tbcId; uint32 quests[3]; };
+-            static const QuestTotem kQuestTotems[] = {
+-                { 8071, 931020, 947020, { 1518, 1521, 9451 } },  // Stoneskin      <- Call of Earth (Orc/Tauren/Draenei)
+-                { 3599, 931100,      0, { 1527, 9555,    0 } },  // Searing        <- Call of Fire   (TBC/WotLK: stock)
+-                { 5394, 931180, 947170, {   96, 9509,    0 } },  // Healing Stream <- Call of Water
+-            };
+             auto grantQuestTotems = [&](EraId e)
+             {
+                 for (auto const& qt : kQuestTotems)
+@@ -1833,104 +1709,16 @@ namespace EraTalents
              }
          }
  
@@ -2988,10 +2993,10 @@ index b19f3ec..bef7385 100644
  
          // Generic band sweep (Phase 9.5) runs for ALL classes, after every strip arm above (the priest
 diff --git a/src/EraTalents.h b/src/EraTalents.h
-index bd86d57..2f6e4a1 100644
+index bd86d57..f683494 100644
 --- a/src/EraTalents.h
 +++ b/src/EraTalents.h
-@@ -6,62 +6,55 @@
+@@ -6,62 +6,64 @@
  class Player;
  namespace EraTalents
  {
@@ -3013,12 +3018,14 @@ index bd86d57..2f6e4a1 100644
 -    bool TryLearn(Player* p, uint32 talentId, std::string& err);
 -    void Reset(Player* p, EraId era);           // strip passives + DELETE this era's rows
 -    void ReapplyOnLogin(Player* p, EraId era);  // idempotent re-grant from stored rows
-+int SpentPoints(Player* p, EraId era);
-+uint8 CurrentRank(Player* p, EraId era, uint32 talentId);
-+int AvailablePoints(Player* p, EraId era);
-+bool TryLearn(Player* p, uint32 talentId, std::string& err);
-+void Reset(Player* p, EraId era);           // strip passives + DELETE this era's rows
-+void ReapplyOnLogin(Player* p, EraId era);  // idempotent re-grant from stored rows
++// Quest-taught first totems, shared by paid-training checks and the baseline reconcile.
++// tbcId 0 = TBC keeps the stock id.
++struct QuestTotem { uint32 stockId; uint32 vanillaId; uint32 tbcId; uint32 quests[3]; };
++inline constexpr QuestTotem kQuestTotems[] = {
++    { 8071, 931020, 947020, { 1518, 1521, 9451 } },  // Stoneskin      <- Call of Earth (Orc/Tauren/Draenei)
++    { 3599, 931100,      0, { 1527, 9555,    0 } },  // Searing        <- Call of Fire   (TBC/WotLK: stock)
++    { 5394, 931180, 947170, {   96, 9509,    0 } },  // Healing Stream <- Call of Water
++};
  
 -    // The in-memory rank state backing CurrentRank/SpentPoints (talentId -> rank). Lazily
 -    // loaded with ONE SELECT per (character, era) and kept coherent by TryLearn/Reset — the
@@ -3028,12 +3035,12 @@ index bd86d57..2f6e4a1 100644
 -    // mutex-guarded cache would escape the lock (prod segfault 2026-08-26).
 -    std::unordered_map<uint32, uint8> Ranks(Player* p, EraId era);
 -    void EvictCache(Player* p);                 // logout: drop every era's entry for this guid
-+// World startup preloads existing ranks once. Map readers return copies under a mutex,
-+// and writes enqueue immutable FIFO SQL while holding the same mutation lock. State stays
-+// cached across logout so relog cannot race a pending write; character deletion evicts it.
-+std::unordered_map<uint32, uint8> Ranks(Player* p, EraId era);
-+void DeleteCache(uint32 guid);
-+void EvictCache(Player* p);
++int SpentPoints(Player* p, EraId era);
++uint8 CurrentRank(Player* p, EraId era, uint32 talentId);
++int AvailablePoints(Player* p, EraId era);
++bool TryLearn(Player* p, uint32 talentId, std::string& err);
++void Reset(Player* p, EraId era);           // strip passives + DELETE this era's rows
++void ReapplyOnLogin(Player* p, EraId era);  // idempotent re-grant from stored rows
  
 -    // RAII deferred-write window for bot factory builds (world-thread only, non-reentrant —
 -    // a nested scope deactivates itself). TryLearn inside the scope updates only the rank
@@ -3053,6 +3060,20 @@ index bd86d57..2f6e4a1 100644
 -        EraId   _era;
 -        bool    _active;
 -    };
++// World startup preloads existing ranks once. Map readers return copies under a mutex,
++// and writes enqueue immutable FIFO SQL while holding the same mutation lock. State stays
++// cached across logout so relog cannot race a pending write; character deletion evicts it.
++std::unordered_map<uint32, uint8> Ranks(Player* p, EraId era);
++void DeleteCache(uint32 guid);
++void EvictCache(Player* p);
+ 
+-    // Reconcile spells that are baseline-obtainable in later eras but talent-only in Vanilla.
+-    // Runs for ALL classes (each gate row self-selects on classId). Two flavors:
+-    //   * AUTO-baseline (priest Holy Nova): force-grants rank 1 in TBC/WotLK.
+-    //   * TRAINER-baseline (warrior Shield Slam, mage Ice Block, priest Divine Spirit): strip-only
+-    //     — left untouched in TBC/WotLK (trained normally there).
+-    // In Vanilla both flavors strip all ranks unless the corresponding era talent has been learned.
+-    void ReconcileBaselineSpells(Player* p, EraId era);
 +// Deferred build writes preserve the incrementally earned rank state in one transaction.
 +// A scope updates the cache immediately, then reconciles the final spellbook once.
 +class BotBuildScope
@@ -3068,14 +3089,7 @@ index bd86d57..2f6e4a1 100644
 +    EraId _era;
 +    bool _active;
 +};
- 
--    // Reconcile spells that are baseline-obtainable in later eras but talent-only in Vanilla.
--    // Runs for ALL classes (each gate row self-selects on classId). Two flavors:
--    //   * AUTO-baseline (priest Holy Nova): force-grants rank 1 in TBC/WotLK.
--    //   * TRAINER-baseline (warrior Shield Slam, mage Ice Block, priest Divine Spirit): strip-only
--    //     — left untouched in TBC/WotLK (trained normally there).
--    // In Vanilla both flavors strip all ranks unless the corresponding era talent has been learned.
--    void ReconcileBaselineSpells(Player* p, EraId era);
++
 +// Enforce era/talent ownership, retain hidden era mechanics, and translate only acquired
 +// spell variants. Baseline usable spells remain paid trainer purchases in every era.
 +void ReconcileBaselineSpells(Player* p, EraId era);
