@@ -304,8 +304,8 @@ def addon_files(source: Path, module: Path):
     result = {}
     for relative in ADDON_RUNTIME.runtime_paths(source, "EraTalents.toc"):
         result[f"Interface/AddOns/EraTalents/{relative}"] = (source / relative).read_bytes()
-    for name in ("LICENSE", "README.md"):
-        result[f"Interface/AddOns/EraTalents/{name}"] = (module / name).read_bytes()
+    # The module README documents the server build; README.txt covers installation.
+    result["Interface/AddOns/EraTalents/LICENSE"] = (module / "LICENSE").read_bytes()
     return result
 
 
@@ -341,7 +341,7 @@ def verify_zip(path: Path, lock):
     required = ("Data/patch-V.mpq", "README.txt", "SOURCE_MANIFEST.json", "licenses/mod-era-talents.txt",
                 "licenses/mod-individual-progression.txt", "licenses/StormLib.txt",
                 "Interface/AddOns/EraTalents/EraTalents.toc", "Interface/AddOns/EraTalents/LICENSE",
-                "Interface/AddOns/EraTalents/README.md", "Interface/AddOns/EraTalents/SOURCE_REVISION.txt")
+                "Interface/AddOns/EraTalents/SOURCE_REVISION.txt")
     for name in required:
         if not files.get(name):
             raise ValueError(f"Missing client ZIP asset: {name}")
