@@ -142,6 +142,8 @@ if(WIN32)
         "${MYSQL_ROOT_DIR}/lib/libmysql.dll"
         "${OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll"
         "${OPENSSL_ROOT_DIR}/bin/libssl-3-x64.dll"
+        # The servers stop at startup without the OpenSSL legacy provider.
+        "${OPENSSL_ROOT_DIR}/lib/ossl-modules/legacy.dll"
     )
         if(NOT EXISTS "${required_path}")
             message(FATAL_ERROR "Missing required portable runtime dependency: ${required_path}")
@@ -173,13 +175,11 @@ if(WIN32)
         )
     endif()
 
-    if(EXISTS "${OPENSSL_ROOT_DIR}/lib/ossl-modules/legacy.dll")
-        list(APPEND DLL_COPY_COMMANDS
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${OPENSSL_ROOT_DIR}/lib/ossl-modules/legacy.dll"
-                "${CMAKE_INSTALL_PREFIX_CLEAN}/legacy.dll"
-        )
-    endif()
+    list(APPEND DLL_COPY_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OPENSSL_ROOT_DIR}/lib/ossl-modules/legacy.dll"
+            "${CMAKE_INSTALL_PREFIX_CLEAN}/legacy.dll"
+    )
 
     if(DLL_COPY_COMMANDS)
         ExternalProject_Add_Step(azerothcore copy_runtime_dlls

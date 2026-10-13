@@ -196,10 +196,13 @@ try {
     # Stub the Windows runtime files; this suite tests packaging, not PE execution.
     $runtimeFiles = @('startup.exe', 'authserver.exe', 'worldserver.exe',
         'mysql/bin/mysqld.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqladmin.exe',
-        'libmysql.dll', 'libcrypto-3-x64.dll', 'libssl-3-x64.dll',
-        'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
+        'libmysql.dll', 'libcrypto-3-x64.dll', 'libssl-3-x64.dll', 'legacy.dll',
+        'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_atomic_wait.dll',
         'mysql/bin/vcruntime140.dll', 'mysql/bin/vcruntime140_1.dll', 'mysql/bin/msvcp140.dll')
     foreach ($name in $runtimeFiles) { Write-FixtureText (Join-Path $dist $name) }
+    # CopyDependencyLicenses.ps1 supplies these notices in a real build.
+    $dependencyNotices = @('licenses/boost/LICENSE_1_0.txt', 'licenses/mysql/LICENSE', 'licenses/openssl/LICENSE.txt')
+    foreach ($name in $dependencyNotices) { Write-FixtureText (Join-Path $dist $name) }
     foreach ($profile in $profiles | Where-Object { $_ -ne 'worldserver' }) {
         Write-FixtureText (Join-Path $dist "configs/modules/$profile.conf.dist")
     }
@@ -279,6 +282,10 @@ try {
         Test-NegativeZip "protected user file $live" 'Live user data/configuration' -ExtraEntries @(@{ Name = $live; Bytes = [byte[]]@(1) })
     }
     Test-NegativeZip 'missing release identity' 'missing portable-release.json' -Omit @('portable-release.json')
+    foreach ($name in @('legacy.dll', 'msvcp140_atomic_wait.dll') + $dependencyNotices) {
+        Test-NegativeZip "missing server runtime or notice $name" 'Portable ZIP is missing' -Omit @($name)
+    }
+    Test-NegativeZip 'empty MySQL notice' 'dependency notices in licenses/mysql/' -Replacements @{ 'licenses/mysql/LICENSE' = [byte[]]@() }
     $wrongIdentity = @{ schema = 1; revision = ('b' * 40); package = 'mod-playerbots-portable-latest.zip'; version = 'latest' } | ConvertTo-Json
     Test-NegativeZip 'release identity belongs to another commit' 'Invalid or mismatched portable release identity' -Replacements @{ 'portable-release.json' = [System.Text.Encoding]::UTF8.GetBytes($wrongIdentity) }
     Test-NegativeZip 'missing one core database while another remains' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')

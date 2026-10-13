@@ -2,10 +2,10 @@ if(NOT PORTABLE_DIST_DIR OR NOT IS_DIRECTORY "${PORTABLE_DIST_DIR}")
     message(FATAL_ERROR "PORTABLE_DIST_DIR must point to a built distribution")
 endif()
 
-foreach(executable startup.exe authserver.exe worldserver.exe
+foreach(required startup.exe authserver.exe worldserver.exe legacy.dll msvcp140_atomic_wait.dll
     mysql/bin/mysqld.exe mysql/bin/mysql.exe mysql/bin/mysqladmin.exe)
-    if(NOT EXISTS "${PORTABLE_DIST_DIR}/${executable}")
-        message(FATAL_ERROR "Cannot package an incomplete build: missing ${executable}")
+    if(NOT EXISTS "${PORTABLE_DIST_DIR}/${required}")
+        message(FATAL_ERROR "Cannot package an incomplete build: missing ${required}")
     endif()
 endforeach()
 
