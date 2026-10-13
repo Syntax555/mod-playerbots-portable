@@ -37,7 +37,7 @@ def source_files():
             "licenses/mod-era-talents.txt": b"MIT", "licenses/mod-individual-progression.txt": b"AGPL",
             "licenses/StormLib.txt": b"MIT", "Interface/AddOns/EraTalents/EraTalents.toc": b"## Interface: 30300\nMain.lua\n",
             "Interface/AddOns/EraTalents/Main.lua": b"return true",
-            "Interface/AddOns/EraTalents/LICENSE": b"MIT", "Interface/AddOns/EraTalents/README.md": b"Addon README",
+            "Interface/AddOns/EraTalents/LICENSE": b"MIT",
             "Interface/AddOns/EraTalents/SOURCE_REVISION.txt": (REVISION + "\n").encode()}
 
 
