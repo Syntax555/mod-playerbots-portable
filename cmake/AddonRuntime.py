@@ -132,4 +132,4 @@ if __name__ == "__main__":
     try:
         main()
     except (ValueError, OSError) as error:
-        raise SystemExit(f"Addon runtime export failed: {error}")
+        raise SystemExit(f"Addon runtime export failed: {error}") from None

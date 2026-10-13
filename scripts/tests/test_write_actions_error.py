@@ -16,7 +16,7 @@ POWERSHELL = shutil.which("pwsh")
 class ActionsErrorTests(unittest.TestCase):
     def run_script(self, script: str) -> subprocess.CompletedProcess:
         return subprocess.run([POWERSHELL, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-                               f". '{HELPER}'; {script}"], capture_output=True, text=True, timeout=120)
+                               f". '{HELPER}'; {script}"], capture_output=True, text=True, timeout=120, check=False)
 
     def test_message_and_title_are_escaped(self):
         result = self.run_script("Write-ActionsError -Title 'Step: one, two' -Message \"50% done`r`nnext\"")

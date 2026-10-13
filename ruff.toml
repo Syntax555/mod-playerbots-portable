@@ -1,0 +1,9 @@
+# Lint settings for the packaging, release and fixture scripts.
+[lint.isort]
+# The house style sorts plain and from-imports together by module name.
+force-sort-within-sections = true
+lines-after-imports = 2
+
+[lint.per-file-ignores]
+# Invalid manifest types raise ValueError, which main() reports as a packaging failure.
+"cmake/PackageEraClient.py" = ["TRY004"]

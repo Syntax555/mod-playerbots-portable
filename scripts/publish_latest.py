@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Publish verified build artifacts as the repository's rolling Latest release.
 
 The build must belong to main's history and must not be older than the
@@ -250,7 +249,7 @@ def zip_inventory(archive: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
         name = entry.filename.removeprefix("./")
         if ((not name and entry.filename != "./") or name.startswith("/")
                 or re.search(r'[\\:<>"|?*\x00-\x1f]|(^|/)\.{1,2}(/|$)|//|[. ](/|$)', name)
-                or re.search(r'(^|/)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|/|$)', name, re.I)):
+                or re.search(r'(^|/)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|/|$)', name, re.IGNORECASE)):
             raise PublishError(f"Unsafe path in portable ZIP: {entry.filename}")
         normalized = name.rstrip("/").casefold()
         if normalized in seen:
@@ -289,9 +288,9 @@ def update_manifest(package: Asset, expected_revision: str | None) -> dict[str, 
             raise PublishError("The server package has an invalid or mismatched portable release identity")
         files = []
         for name, entry in sorted(entries.items()):
-            if (re.search(r"^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$", name, re.I)
-                    or re.search(r"^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$|(^|/)[.]git(/|$)|^src/data/sql/old/", name, re.I)
-                    or re.search(r"^(dbimport|map_extractor|vmap4_extractor|vmap4_assembler|mmaps_generator)[.]exe$|^mmaps-config[.]yaml$|^(configs/)?dbimport[.]conf[.]dist$", name, re.I)
+            if (re.search(r"^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$", name, re.IGNORECASE)
+                    or re.search(r"^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$|(^|/)[.]git(/|$)|^src/data/sql/old/", name, re.IGNORECASE)
+                    or re.search(r"^(dbimport|map_extractor|vmap4_extractor|vmap4_assembler|mmaps_generator)[.]exe$|^mmaps-config[.]yaml$|^(configs/)?dbimport[.]conf[.]dist$", name, re.IGNORECASE)
                     or name == UPDATE_MANIFEST_NAME):
                 raise PublishError(f"Unmanaged user or redundant development file in portable ZIP: {name}")
             hasher = hashlib.sha256()

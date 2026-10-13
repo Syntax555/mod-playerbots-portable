@@ -15,6 +15,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 import zipfile
 
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import publish_latest as publisher
 
@@ -374,9 +375,9 @@ class PublicationTests(unittest.TestCase):
 
     def test_compare_request_failure_does_not_publish(self):
         self.client.main_values = [NEWER_SHA]
-        with patch.object(self.client, "compare_commits", side_effect=publisher.APIError(403, "Forbidden")):
-            with self.assertRaisesRegex(publisher.APIError, "HTTP 403"):
-                self.publish()
+        with patch.object(self.client, "compare_commits", side_effect=publisher.APIError(403, "Forbidden")), \
+                self.assertRaisesRegex(publisher.APIError, "HTTP 403"):
+            self.publish()
         self.assertEqual([], self.client.writes)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
 
@@ -726,9 +727,9 @@ class ClientTests(unittest.TestCase):
     def test_tag_delete_validation_failure_is_not_hidden(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         with patch.object(client, "tag_sha", return_value=OLDER_SHA), patch.object(
-                client, "_request", side_effect=publisher.APIError(422, "Protected ref")):
-            with self.assertRaisesRegex(publisher.APIError, "Protected ref"):
-                client.delete_tag("v1.0.16")
+                client, "_request", side_effect=publisher.APIError(422, "Protected ref")), \
+                self.assertRaisesRegex(publisher.APIError, "Protected ref"):
+            client.delete_tag("v1.0.16")
 
     def test_pagination_fetches_every_release(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
