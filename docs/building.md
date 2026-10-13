@@ -76,8 +76,8 @@ The server bundle includes the source manifest, patches and applicable license f
 
 ## Integration checks
 
-The gameplay fixtures run on Linux and require prepared sources, Python and
-GCC with AddressSanitizer and UndefinedBehaviorSanitizer support.
+The gameplay fixtures run on Linux and require prepared sources, Python with
+PyYAML and GCC with AddressSanitizer and UndefinedBehaviorSanitizer support.
 Client Lua checks also require Lua 5.1. They execute selected native handlers
 with controlled adapters; a complete server build and live realm tests remain
 necessary for platform and encounter validation.

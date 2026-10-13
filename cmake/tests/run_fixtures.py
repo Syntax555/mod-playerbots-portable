@@ -27,6 +27,7 @@ GAMEPLAY = (
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestFormationMovement",
     "TestFrostmaneHold", "TestNaturalTaxiRoutes", "TestWarlockSoulShards", "TestNaturalMaintenance",
+    "TestEraGeneratedArtifacts",
 )
 
 
