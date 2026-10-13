@@ -30,6 +30,8 @@ REWRITTEN_SHA = "e" * 40
 SIDE_SHA = "f" * 40
 MERGE_SHA = "1" * 40
 REPOSITORY = "owner/mod-playerbots-portable"
+# Shared with the server ZIP check and the launcher updater.
+UNMANAGED_PATHS = json.loads(Path(__file__).with_name("unmanaged-paths.json").read_text(encoding="utf-8"))
 
 
 class FakeGitHub:
@@ -568,8 +570,7 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(all(not entry["path"].startswith("./") for entry in manifest["files"]))
 
     def test_manifest_rejects_mutable_user_data_before_api_calls(self):
-        for name in ("configs/worldserver.conf", "mysql/data/user.db", "mysql/my.cnf", "mysql/my.ini",
-                     "data/dbc/Spell.dbc", "logs/world.log", "configs/.portable-profiles.json", "configs/realm-phase.txt"):
+        for name in UNMANAGED_PATHS["userData"]:
             with self.subTest(name=name):
                 self.setUp()
                 self.rewrite_server(extra={name: "private user data"})
@@ -577,6 +578,16 @@ class PublicationTests(unittest.TestCase):
                     self.publish()
                 self.assertEqual([], self.client.calls)
                 self.assertFalse((self.directory / publisher.UPDATE_MANIFEST_NAME).exists())
+
+    def test_manifest_keeps_ordinary_package_files_beside_user_data_names(self):
+        path = next(self.directory.rglob(publisher.SERVER_PACKAGE_NAME))
+        with zipfile.ZipFile(path) as archive:
+            present = set(archive.namelist())
+        packaged = [name for name in UNMANAGED_PATHS["packaged"] if name not in present]
+        self.rewrite_server(extra={name: f"package file: {name}" for name in packaged})
+        self.assertFalse(self.publish().skipped)
+        manifest = json.loads((self.directory / publisher.UPDATE_MANIFEST_NAME).read_text())
+        self.assertLessEqual(set(packaged), {entry["path"] for entry in manifest["files"]})
 
     def test_manifest_rejects_duplicate_client_and_development_exports(self):
         for name in ("addons/MultiBot/Core.lua", "defaults/worldserver.conf", "CONTRIBUTING.md", "docs/building.md",

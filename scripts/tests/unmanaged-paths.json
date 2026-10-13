@@ -1,0 +1,29 @@
+{
+  "description": "Shared samples for the publisher, the server ZIP check and the launcher updater. userData paths hold live configuration, databases, client data or logs and must never be shipped or replaced; packaged paths are ordinary package files.",
+  "userData": [
+    "configs/worldserver.conf",
+    "configs/modules/playerbots.conf",
+    "Configs/AuthServer.CONF",
+    "mysql/my.ini",
+    "mysql/my.cnf",
+    "mysql/data/ibdata1",
+    "mysql/data",
+    "data/dbc/Spell.dbc",
+    "data/maps/0004331.map",
+    "logs/Server.log",
+    ".portable-update/state.json",
+    "configs/.portable-profiles.json",
+    "configs/realm-phase.txt"
+  ],
+  "packaged": [
+    "configs/worldserver.conf.dist",
+    "configs/modules/playerbots.conf.dist",
+    "mysql/bin/mysqld.exe",
+    "mysql/share/english/errmsg.sys",
+    "mysql/database-notes.txt",
+    "data-notes/readme.txt",
+    "logs-readme.txt",
+    "configs/realm-phase.txt.dist",
+    "docs/updating-notes.md"
+  ]
+}
