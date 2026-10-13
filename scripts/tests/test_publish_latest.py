@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -658,6 +659,22 @@ class PublicationTests(unittest.TestCase):
         self.assertIn(f"https://github.com/{REPOSITORY}/blob/{SHA}", body)
         self.assertIn(f"https://github.com/{REPOSITORY}/commit/{SHA}", body)
         self.assertIn(SHA[:12], body)
+
+    def test_release_template_links_existing_documents_and_published_assets(self):
+        root = Path(__file__).resolve().parents[2]
+        template = root / ".github" / "RELEASE_TEMPLATE.md"
+        notes = publisher.render_notes(template, REPOSITORY, SHA)
+        source_url = f"https://github.com/{REPOSITORY}/blob/{SHA}/"
+        documents = re.findall(re.escape(source_url) + r"([^)#\s]+)", notes)
+        self.assertTrue(documents)
+        for document in documents:
+            with self.subTest(document=document):
+                self.assertTrue((root / document).is_file())
+        downloads = re.findall(rf"https://github[.]com/{re.escape(REPOSITORY)}/releases/latest/download/([^)\s]+)", notes)
+        published = set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME}
+        self.assertTrue(downloads)
+        self.assertLessEqual(set(downloads), published)
+        self.assertLessEqual(set(publisher.ZIP_CONTENTS), set(downloads))
 
     def test_invalid_source_sha_or_run_id_makes_no_api_calls(self):
         for sha, run_id in [("main", "123"), (SHA, "not-a-run"), (SHA, "../../123")]:
