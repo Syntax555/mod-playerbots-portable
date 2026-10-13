@@ -25,8 +25,10 @@ bot in the Blizzard inspect window. EraTalents displays its own Vanilla or TBC
 tree and allocated ranks there; Wrath uses the native inspect view. Historical
 inspection is read-only and still requires normal inspect access and range.
 The separate MultiBot talent window and its Custom/Glyph tabs are not opened
-through this route. Install both updated addons together; mixed addon or MPQ
-generations cannot supply a reliable historical view.
+through this route. On a realm with native trees (`EraTalents.Enable = 0`), the
+server sends no EraTalents data and the button keeps MultiBot's talent window.
+Install both updated addons together; mixed addon or MPQ generations cannot
+supply a reliable historical view.
 
 ## Optional upstream addons
 
