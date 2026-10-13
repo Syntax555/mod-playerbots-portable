@@ -7,6 +7,7 @@ real-header compilation and release builds separately check integration with the
 
 import argparse
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -1078,3 +1079,123 @@ int main() {
 }
 '''
     compile_run(directory, 'era-transitions', transition_fixture)
+
+    # Production content loading over the shipped generated trees; the old per-call scan is the oracle.
+    content_fake = directory / 'content-fake'
+    content_fake.mkdir()
+    (content_fake / 'Define.h').write_text('#pragma once\n#include <cstdint>\n'
+                                           'using uint8=uint8_t; using uint16=uint16_t; using uint32=uint32_t;\n')
+    (content_fake / 'Log.h').write_text('#pragma once\n#define LOG_INFO(...) ((void)0)\n')
+    (content_fake / 'QueryResult.h').write_text('#pragma once\n')
+    (content_fake / 'Field.h').write_text('#pragma once\n')
+    (content_fake / 'DatabaseEnv.h').write_text(r'''
+#pragma once
+#include <memory>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <vector>
+struct Field {
+    std::string value;
+    template<class T> T Get() const {
+        if constexpr (std::is_same_v<T,std::string>) return value; else return T(std::stoul(value));
+    }
+};
+struct ResultSet {
+    std::vector<std::vector<Field>> rows; size_t index=0;
+    Field* Fetch() { return rows[index].data(); }
+    bool NextRow() { return ++index<rows.size(); }
+    Field const& operator[](size_t column) const { return rows[index][column]; }
+};
+using QueryResult=std::shared_ptr<ResultSet>;
+struct FakeWorldDatabase {
+    std::vector<std::vector<Field>> nodes, ranks;
+    QueryResult Query(char const* sql) {
+        std::string_view query(sql);
+        auto const& rows=query.find("era_talent_rank")!=query.npos ? ranks
+                       : query.find("era_talent_meta")!=query.npos ? meta : nodes;
+        return rows.empty() ? nullptr : std::make_shared<ResultSet>(ResultSet{rows});
+    }
+    std::vector<std::vector<Field>> meta{{{"fixture"}}};
+} WorldDatabase;
+''')
+    rows, ranks = [], []
+    for file in sorted((module / 'client-addon/EraTalents/data/generated').glob('*.lua')):
+        value = file.read_text()
+        era, cls = re.search(r'EraTalentsData\[(\d+)\]\[(\d+)\] =', value).groups()
+        for line in re.findall(r'^    \{ id=\d+,.*$', value, re.MULTILINE):
+            node = dict(re.findall(r'\b(id|tab|tier|col|maxRank|prereqTalent|prereqPoints)=(\d+)', line))
+            rows.append([node['id'], era, cls, node['tab'], node['tier'], node['col'], node['maxRank'],
+                         node['prereqTalent'], node['prereqPoints']])
+            grants = re.search(r'grant=\{([^}]*)\}', line)
+            for rank, spell in re.findall(r'\[(\d+)\]=(\d+)', grants.group(1) if grants else ''):
+                ranks.append([node['id'], rank, spell])
+    if len(rows) < 900:
+        raise SystemExit(f'Only {len(rows)} generated talent nodes were found')
+
+    tables = {}
+    for name, values in (('nodes', rows), ('ranks', ranks)):
+        tables[name] = directory / f'era-content-{name}.txt'
+        tables[name].write_text(''.join(' '.join(row) + '\n' for row in values))
+    content_fixture = r'''
+#include <cassert>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include "Define.h"
+#define private public
+#include "EraTalentContent.h"
+#undef private
+#include "EraTalentContent.cpp"
+std::vector<std::vector<Field>> Table(char const* path) {
+    std::vector<std::vector<Field>> table;
+    std::ifstream input(path);
+    for (std::string line; std::getline(input, line);) {
+        std::istringstream values(line);
+        table.emplace_back();
+        for (std::string value; values >> value;)
+            table.back().push_back({value});
+    }
+    return table;
+}
+int main() {
+    WorldDatabase.nodes=Table("''' + str(tables['nodes']) + r'''");
+    WorldDatabase.ranks=Table("''' + str(tables['ranks']) + r'''");
+    assert(WorldDatabase.nodes.size()==''' + str(len(rows)) + r''' && WorldDatabase.ranks.size()==''' + str(len(ranks)) + r''');
+    EraTalentContent& content=*sEraTalentContent;
+    for (int load=0; load<2; ++load) {
+        content.Load();
+        assert(content.Count()==WorldDatabase.nodes.size() && content.GenerationStamp()=="fixture");
+        size_t indexed=0;
+        for (unsigned era=0; era<=3; ++era)
+            for (unsigned cls=0; cls<=15; ++cls) {
+                std::vector<const EraTalentNode*> scan;
+                for (auto const& kv : content._nodes)
+                    if (kv.second.eraId==era && kv.second.classId==cls)
+                        scan.push_back(&kv.second);
+                auto const& nodes=content.NodesFor(uint8(era), uint8(cls));
+                assert(nodes==scan && &nodes==&content.NodesFor(uint8(era), uint8(cls)));
+                indexed+=nodes.size();
+            }
+        assert(indexed==content.Count());
+    }
+    assert(!content.NodesFor(0,8).empty() && !content.NodesFor(1,11).empty() && content.NodesFor(0,6).empty());
+    std::cout << "Era content: indexed era/class trees match the authored node scan in order after every load passed\n";
+}
+'''
+    compile_run(directory, 'era-content', content_fixture, (content_fake, src))
+    mutated = content_fixture.replace('#include "EraTalentContent.cpp"', (src / 'EraTalentContent.cpp').read_text()
+                                      .replace('    _nodesByEraClass.clear();\n', ''))
+    if 'EraTalentContent::Load' not in mutated or '_nodesByEraClass.clear' in mutated:
+        raise SystemExit('stale content index mutation was not applied')
+    cpp = directory / 'era-content-mutated.cpp'
+    cpp.write_text(mutated)
+    binary = directory / 'era-content-mutated'
+    subprocess.run(['g++', '-std=c++20', '-I', str(content_fake), '-I', str(src), str(cpp), '-o', str(binary)],
+                   check=True)
+    if subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
+        raise SystemExit('Era content fixture did not reject a stale index after reloading')
+    print('Era talent mutation rejected: stale content index after reloading')

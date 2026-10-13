@@ -1947,6 +1947,64 @@ index b1e8468..e1a984d 100644
      void BuildTrainerLevelIndex();
  }
  
+diff --git a/src/EraTalentContent.cpp b/src/EraTalentContent.cpp
+index b6e84ba..212c826 100644
+--- a/src/EraTalentContent.cpp
++++ b/src/EraTalentContent.cpp
+@@ -10,6 +10,7 @@ EraTalentContent* EraTalentContent::instance() { static EraTalentContent i; retu
+ 
+ void EraTalentContent::Load()
+ {
++    _nodesByEraClass.clear();
+     _nodes.clear();
+     if (QueryResult r = WorldDatabase.Query(
+             "SELECT id,eraId,classId,tab,tierRow,col,maxRank,prereqTalentId,prereqPoints FROM era_talent"))
+@@ -45,6 +46,8 @@ void EraTalentContent::Load()
+                 it->second.rankSpell[rank - 1] = spell;
+         } while (r->NextRow());
+     }
++    for (auto const& kv : _nodes)
++        _nodesByEraClass[uint16((kv.second.eraId << 8) | kv.second.classId)].push_back(&kv.second);
+     _generationStamp.clear();
+     if (QueryResult r = WorldDatabase.Query(
+             "SELECT v FROM era_talent_meta WHERE k='generation'"))
+@@ -59,11 +62,9 @@ const EraTalentNode* EraTalentContent::Node(uint32 talentId) const
+     return it == _nodes.end() ? nullptr : &it->second;
+ }
+ 
+-std::vector<const EraTalentNode*> EraTalentContent::NodesFor(uint8 eraId, uint8 classId) const
++std::vector<const EraTalentNode*> const& EraTalentContent::NodesFor(uint8 eraId, uint8 classId) const
+ {
+-    std::vector<const EraTalentNode*> out;
+-    for (auto const& kv : _nodes)
+-        if (kv.second.eraId == eraId && kv.second.classId == classId)
+-            out.push_back(&kv.second);
+-    return out;
++    static std::vector<const EraTalentNode*> const none;
++    auto it = _nodesByEraClass.find(uint16((eraId << 8) | classId));
++    return it == _nodesByEraClass.end() ? none : it->second;
+ }
+diff --git a/src/EraTalentContent.h b/src/EraTalentContent.h
+index c599718..7562e13 100644
+--- a/src/EraTalentContent.h
++++ b/src/EraTalentContent.h
+@@ -25,11 +25,15 @@ public:
+     static EraTalentContent* instance();
+     void Load();
+     const EraTalentNode* Node(uint32 talentId) const;
+-    std::vector<const EraTalentNode*> NodesFor(uint8 eraId, uint8 classId) const;
++    // Empty when the (era, class) has no authored tree. Bot role and spell queries call this
++    // on every AI tick, so it reads an index instead of scanning every node.
++    std::vector<const EraTalentNode*> const& NodesFor(uint8 eraId, uint8 classId) const;
+     size_t Count() const { return _nodes.size(); }
+     std::string const& GenerationStamp() const { return _generationStamp; }
+ private:
+     std::unordered_map<uint32, EraTalentNode> _nodes;
++    // Built by Load at startup and read-only afterwards, like _nodes; keyed era << 8 | class.
++    std::unordered_map<uint16, std::vector<const EraTalentNode*>> _nodesByEraClass;
+     std::string _generationStamp;
+ };
+ #define sEraTalentContent EraTalentContent::instance()
 diff --git a/src/EraTalentIP.cpp b/src/EraTalentIP.cpp
 index 5765773..8c62388 100644
 --- a/src/EraTalentIP.cpp
