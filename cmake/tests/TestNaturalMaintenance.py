@@ -62,7 +62,8 @@ production = {
         declaration(trigger_header, 'class NewRpgNaturalMaintenanceTrigger : public Trigger'),
     ]),
     'travel': '\n'.join(function(travel_source, signature) for signature in (
-        'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)')),
+        'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)',
+        'void PostponeVisit(PlayerbotAI* ai)')),
     'value': function(values_source, 'NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()'),
     'action': function(action_source, 'bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)'),
     'trigger': function(trigger_source, 'bool NewRpgNaturalMaintenanceTrigger::IsActive()'),
@@ -525,6 +526,7 @@ namespace EarnedAuctionTravel
 void FinishTrip(PlayerbotAI* ai);
 bool ContinueTrip(PlayerbotAI* ai);
 void AbortTrip(PlayerbotAI* ai);
+void PostponeVisit(PlayerbotAI* ai);
 bool Ready(PlayerbotAI* ai) { return EarnedAuction::IsEnabled(ai) && !ai->GetBot()->IsInCombat(); }
 bool CompatibleAuctioneer(PlayerbotAI*, Creature* npc)
 {
@@ -910,6 +912,8 @@ void SupplyTests()
     s.Budget(NeedMoneyFor::spells, 23);
     assert(!s.Tick(0) && world.actions.empty());
     s.Budget(NeedMoneyFor::spells, 24);
+    // The vendor that just failed is skipped for one search.
+    assert(s.Evaluate().type == Type::NONE);
     assert(buys(reagent, NeedMoneyFor::spells) && s.Tick(0));
     assert(world.actions.back() == std::make_pair(std::string("buy"), "item:" + std::to_string(reagent.ItemId)));
 }
@@ -1002,6 +1006,72 @@ void AuctionTravelTests()
     }
 }
 
+void StarvationTests()
+{
+    {
+        // An unreachable mailbox postpones the visit, so the bot still repairs nearby.
+        Scenario s;
+        Creature& smith = s.Npc(UNIT_NPC_FLAG_REPAIR, 20.0f);
+        GameObject& mailbox = s.Mailbox(10.0f);
+        mailbox.reachable = false;
+        s.Flag("should repair", true);
+        s.Flag("can repair", true);
+        s.DueAuctionVisit();
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+        assert(!s.Tick() && s.value->Get().type == Type::NONE && world.visits.empty());
+        assert(s.ai.rpgInfo.earnedAuctionLastVisit == now &&
+               s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
+        assert(s.ai.rpgInfo.earnedAuctionVisitMailbox);
+        now += 30 * IN_MILLISECONDS;
+        assert(s.Is(s.value->Get(), Type::REPAIR, smith));
+        assert(s.Tick(0) && s.Tick(0) && world.actions.back().first == "repair");
+        now += EarnedAuctionTravel::TravelBackoffMs;
+        mailbox.reachable = true;
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+    }
+    {
+        // The same applies to an unreachable auctioneer and to a visit the world thread rejects.
+        Scenario s;
+        Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 50.0f);
+        Creature& auctioneer = s.Npc(UNIT_NPC_FLAG_AUCTIONEER, 10.0f);
+        auctioneer.reachable = false;
+        s.Flag("can sell", true);
+        s.DueAuctionVisit();
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+        assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer));
+        assert(!s.Tick() && s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
+        assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+        auctioneer.reachable = true;
+        world.queueAccepts = false;
+        s.DueAuctionVisit();
+        assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer) && s.Tick(0));
+        assert(!s.Tick(0) && world.visits.size() == 1 && !s.ai.rpgInfo.earnedAuctionVisitMailbox);
+        assert(s.ai.rpgInfo.earnedAuctionLastVisit == now &&
+               s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
+        assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+    }
+    {
+        // An unreachable or failed NPC is skipped for one search, so another NPC can serve.
+        Scenario s;
+        Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 10.0f);
+        Creature& smith = s.Npc(UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_REPAIR, 40.0f);
+        vendor.reachable = false;
+        s.Flag("can sell", true);
+        assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+        assert(!s.Tick() && s.ai.rpgInfo.naturalMaintenanceRejected == vendor.guid);
+        now += 30 * IN_MILLISECONDS;
+        assert(s.Is(s.value->Get(), Type::SELL, smith) && s.ai.rpgInfo.naturalMaintenanceRejected.IsEmpty());
+        assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+        vendor.reachable = true;
+        world.actionResult = false;
+        assert(s.Tick(0) && !s.Tick(0) && world.actions.back().first == "sell");
+        assert(s.ai.rpgInfo.naturalMaintenanceRejected == vendor.guid);
+        assert(s.Is(s.Evaluate(), Type::SELL, smith));
+        world.actionResult = true;
+        assert(s.Tick(0) && s.Tick(0) && s.ai.rpgInfo.naturalMaintenanceRejected.IsEmpty());
+    }
+}
+
 int main()
 {
     GuardTests();
@@ -1010,7 +1080,8 @@ int main()
     SupplyTests();
     AuctionVisitTests();
     AuctionTravelTests();
-    std::cout << "Natural maintenance: guards, priorities, budgets and auction visits passed\n";
+    StarvationTests();
+    std::cout << "Natural maintenance: guards, priorities, budgets, auction visits and failed targets passed\n";
 }
 '''
 
@@ -1041,6 +1112,17 @@ mutations = [
      'if (!bot->HasEnoughMoney(price))'),
     ('visit clock not advanced', 'action', 'info.earnedAuctionLastVisit = getMSTime();', ''),
     ('trip guard does not back off', 'travel', 'ai->rpgInfo.earnedAuctionVisitDelay = TravelBackoffMs;', ''),
+    ('unreachable mailbox retried', 'action',
+     'EarnedAuctionTravel::PostponeVisit(botAI);\n            value->Set({});',
+     'EarnedAuctionTravel::AbortTrip(botAI);\n            value->Set({});'),
+    ('rejected visit retried', 'action', 'else\n            EarnedAuctionTravel::PostponeVisit(botAI);',
+     'else\n            EarnedAuctionTravel::AbortTrip(botAI);'),
+    ('unreachable NPC not remembered', 'action',
+     'botAI->rpgInfo.naturalMaintenanceRejected = task.target;\n        value->Set({});', 'value->Set({});'),
+    ('failed NPC not remembered', 'action',
+     'if (!result)\n        botAI->rpgInfo.naturalMaintenanceRejected = task.target;\n', ''),
+    ('rejected NPC chosen again', 'value', 'guid == rejected || ', '(rejected.IsEmpty() && guid.IsEmpty()) || '),
+    ('NPC rejected for more than one search', 'value', 'botAI->rpgInfo.naturalMaintenanceRejected.Clear();', ''),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temporary:

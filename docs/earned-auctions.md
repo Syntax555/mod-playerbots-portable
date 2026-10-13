@@ -42,10 +42,11 @@ one silver available after purchase reserves. Nearby auctioneers and mailboxes
 are searched within 150 yards.
 
 A trip has a ten-minute budget including its final approach. New plans wait
-fifteen minutes; failed routes, unavailable NPCs and timeouts end the trip and
-return the bot to ordinary activity. Trading depends on pathfinding and NPC
-availability. Bots may vendor surplus when bags reach 80% usage or their budget
-cannot cover a conservative whole-stack deposit estimate.
+fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable nearby
+auctioneers or mailboxes postpone the visit for fifteen minutes and return the
+bot to ordinary activity, including repairs, sales and training. Trading depends
+on pathfinding and NPC availability. Bots may vendor surplus when bags reach 80%
+usage or their budget cannot cover a conservative whole-stack deposit estimate.
 
 ## Mail delivery
 
