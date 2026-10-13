@@ -118,7 +118,7 @@ index 58fd57e..74b0a56 100644
      bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
  
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 243de52..9bcd1d5 100644
+index 29b2aa0..ef1f0fa 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -9,6 +9,8 @@
@@ -130,7 +130,7 @@ index 243de52..9bcd1d5 100644
  #include "ItemUsageValue.h"
  #include "PlayerbotFactory.h"
  #include "Playerbots.h"
-@@ -18,9 +20,43 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -18,7 +20,42 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
  {
      if (!sPlayerbotAIConfig.naturalProgression || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
          botAI->HasGameClientMaster() || !AI_VALUE(bool, "can move around"))
@@ -138,8 +138,7 @@ index 243de52..9bcd1d5 100644
 +        EarnedAuctionTravel::AbortTrip(botAI);
          return {};
 +    }
- 
-     bool const canSell = AI_VALUE(bool, "can sell");
++
 +    if (EarnedAuction::IsEnabled(botAI))
 +    {
 +        auto& info = botAI->rpgInfo;
@@ -171,10 +170,10 @@ index 243de52..9bcd1d5 100644
 +                return {{}, NaturalMaintenanceType::AUCTION_TRAVEL, 0, 0, destination};
 +        }
 +    }
+ 
+     bool const canSell = AI_VALUE(bool, "can sell");
      bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
-     uint32 const spellBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::spells));
-     uint32 const consumableBudget = AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::consumables));
-@@ -172,6 +208,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
+@@ -182,6 +219,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
  
  bool CanSellValue::Calculate()
  {
@@ -281,7 +280,7 @@ index 6556dfb..9ddfd5d 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4eea62..78399be 100644
+index d4eea62..efda066 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -14,6 +14,8 @@
@@ -311,12 +310,12 @@ index d4eea62..78399be 100644
 +            return false;
 +        }
 +        float const distance = bot->GetExactDist(task.destination);
-+        if (distance <= 150.0f)
++        bool const arrived = distance <= INTERACTION_DISTANCE;
++        // Each search scans every unit within 150 yards, so search every few seconds and on arrival.
++        if (arrived || (distance <= 150.0f && GetMSTimeDiffToNow(lastAuctioneerSearch) >= 2 * IN_MILLISECONDS))
 +        {
-+            Value<GuidVector>* targets = context->GetValue<GuidVector>("possible new rpg targets");
-+            if (distance <= INTERACTION_DISTANCE)
-+                targets->Reset();
-+            for (ObjectGuid guid : targets->Get())
++            lastAuctioneerSearch = getMSTime();
++            for (ObjectGuid guid : AI_VALUE(GuidVector, "possible new rpg targets"))
 +            {
 +                if (EarnedAuctionTravel::CompatibleAuctioneer(botAI, botAI->GetCreature(guid)))
 +                {
@@ -324,7 +323,7 @@ index d4eea62..78399be 100644
 +                    return true;
 +                }
 +            }
-+            if (distance <= INTERACTION_DISTANCE)
++            if (arrived)
 +            {
 +                EarnedAuctionTravel::AbortTrip(botAI);
 +                value->Set({});
@@ -389,6 +388,20 @@ index d4eea62..78399be 100644
              break;
      }
      bot->SetSelection(oldSelection);
+diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.h b/src/Ai/World/Rpg/Action/NewRpgAction.h
+index 5b00a59..8dd9bff 100644
+--- a/src/Ai/World/Rpg/Action/NewRpgAction.h
++++ b/src/Ai/World/Rpg/Action/NewRpgAction.h
+@@ -104,6 +104,9 @@ class NewRpgNaturalMaintenanceAction : public NewRpgBaseAction
+ public:
+     NewRpgNaturalMaintenanceAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg natural maintenance") {}
+     bool Execute(Event event) override;
++
++private:
++    uint32 lastAuctioneerSearch = 0;
+ };
+ 
+ class NewRpgDoQuestAction : public NewRpgBaseAction
 diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
 index fd36928..9076d52 100644
 --- a/src/Ai/World/Rpg/NewRpgInfo.h

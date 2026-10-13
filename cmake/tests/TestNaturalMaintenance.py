@@ -276,6 +276,7 @@ struct ObjectMgr
 {
     std::map<uint32, Trainer::Trainer> trainers;
     std::map<uint32, ItemTemplate> items;
+    mutable int itemLookups = 0;
     Trainer::Trainer* GetTrainer(uint32 entry)
     {
         auto const found = trainers.find(entry);
@@ -283,6 +284,7 @@ struct ObjectMgr
     }
     ItemTemplate const* GetItemTemplate(uint32 id) const
     {
+        ++itemLookups;
         auto const found = items.find(id);
         return found == items.end() ? nullptr : &found->second;
     }
@@ -1072,6 +1074,66 @@ void StarvationTests()
     }
 }
 
+void CostTests()
+{
+    {
+        // Vendor stock is not inspected unless a supply is wanted, and known lessons get no price quote.
+        Scenario s;
+        Creature& npc = s.Npc(UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_TRAINER, 10.0f);
+        std::vector<ItemTemplate*> food;
+        for (int i = 0; i < 3; ++i)
+            s.Stock(npc, *food.emplace_back(&s.Template(ITEM_CLASS_CONSUMABLE, ITEM_SUBCLASS_FOOD, 50, 11)));
+        ItemTemplate& arrows = s.Template(ITEM_CLASS_PROJECTILE, ITEM_SUBCLASS_ARROW, 10);
+        s.Stock(npc, arrows);
+        s.Lesson(npc, 10, 5, true);
+        s.Lesson(npc, 11, 5, true);
+        s.Budget(NeedMoneyFor::spells, 100);
+        assert(s.Evaluate().type == Type::NONE);
+        Trainer::Trainer const& trainer = objectMgr.trainers[npc.entry];
+        assert(trainer.teaches == 2 && !trainer.costs);
+        assert(!objectMgr.itemLookups && !s.bot.usableChecks && !world.consumableChecks);
+
+        // Only stock in a wanted supply category pays for usability and consumable checks.
+        s.bot.cls = CLASS_HUNTER;
+        s.Ranged(ITEM_SUBCLASS_WEAPON_BOW);
+        s.Budget(NeedMoneyFor::ammo, 100);
+        s.Count("ammo", 0);
+        NaturalMaintenanceTask const ammo = s.Evaluate();
+        assert(s.Is(ammo, Type::BUY, npc) && ammo.itemId == arrows.ItemId);
+        assert(s.bot.usableChecks == 1 && !world.consumableChecks);
+        s.Budget(NeedMoneyFor::consumables, 100);
+        s.Count("food", 0);
+        s.bot.unusable.insert(food[0]->ItemId);
+        s.bot.usableChecks = 0;
+        NaturalMaintenanceTask const meal = s.Evaluate();
+        assert(s.Is(meal, Type::BUY, npc) && meal.itemId == food[1]->ItemId);
+        assert(s.bot.usableChecks == 2 && world.consumableChecks == 2);
+    }
+    {
+        // A due auction visit does not evaluate vendor surplus first.
+        Scenario s;
+        GameObject& mailbox = s.Mailbox(10.0f);
+        s.DueAuctionVisit();
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox) && !s.context.reads.count("can sell"));
+        s.ai.rpgInfo.earnedAuctionVisitDelay = 3600 * IN_MILLISECONDS;
+        assert(s.Evaluate().type == Type::NONE && s.context.reads["can sell"] == 1);
+    }
+    {
+        // A market approach searches for the auctioneer every two seconds and on arrival.
+        Scenario s;
+        WorldPosition market(0, 400.0f, 0.0f);
+        world.market = &market;
+        world.farStep = 10.0f;
+        s.DueAuctionVisit();
+        assert(s.Evaluate().type == Type::AUCTION_TRAVEL);
+        world.scans = 0;
+        int ticks = 0;
+        while (s.Tick(100))
+            assert(++ticks < 60);
+        assert(s.bot.GetExactDist(market) <= INTERACTION_DISTANCE && world.scans == 2);
+    }
+}
+
 int main()
 {
     GuardTests();
@@ -1081,7 +1143,8 @@ int main()
     AuctionVisitTests();
     AuctionTravelTests();
     StarvationTests();
-    std::cout << "Natural maintenance: guards, priorities, budgets, auction visits and failed targets passed\n";
+    CostTests();
+    std::cout << "Natural maintenance: guards, priorities, budgets, auction visits, failed targets and scan costs passed\n";
 }
 '''
 
@@ -1123,6 +1186,20 @@ mutations = [
      'if (!result)\n        botAI->rpgInfo.naturalMaintenanceRejected = task.target;\n', ''),
     ('rejected NPC chosen again', 'value', 'guid == rejected || ', '(rejected.IsEmpty() && guid.IsEmpty()) || '),
     ('NPC rejected for more than one search', 'value', 'botAI->rpgInfo.naturalMaintenanceRejected.Clear();', ''),
+    ('vendor stock scanned without a wanted supply', 'value',
+     'if (!needsSupplies || !npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))', 'if (!npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))'),
+    ('usability checked before the supply match', 'value',
+     'if (!proto || item->ExtendedCost)\n', 'if (!proto || item->ExtendedCost || bot->CanUseItem(proto) != EQUIP_ERR_OK)\n'),
+    ('consumable type for every stock item', 'value',
+     '(needsFood || needsDrink) && proto->Class == ITEM_CLASS_CONSUMABLE', 'proto'),
+    ('lesson price quoted before teachability', 'value',
+     'if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) ||',
+     'if (!trainer->GetSpellCost(bot, npc, &spell) ||\n                        '
+     '!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) ||'),
+    ('vendor surplus evaluated before an auction visit', 'value', '    if (EarnedAuction::IsEnabled(botAI))\n',
+     '    if ((AI_VALUE(bool, "can sell") && false) || EarnedAuction::IsEnabled(botAI))\n'),
+    ('auctioneer search on every approach tick', 'action',
+     '>= 2 * IN_MILLISECONDS', '+ 1 >= 1'),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temporary:

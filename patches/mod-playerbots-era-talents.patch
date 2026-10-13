@@ -83,18 +83,18 @@ index abd207c..efbdfdf 100644
          {
              // If not bear, then treat it as "cat" spec = 3
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index a3edce0..154feac 100644
+index ef1f0fa..00a6fea 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
-@@ -120,7 +120,7 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
-             {
-                 for (Trainer::Spell const& spell : trainer->GetSpells())
-                 {
+@@ -131,7 +131,7 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+                         !trainer->CanTeachSpell(bot, &spell))
+                         continue;
+ 
 -                    uint32 const price = uint32(floor(spell.MoneyCost * bot->GetReputationPriceDiscount(npc)));
 +                    uint32 const price = trainer->GetSpellCost(bot, npc, &spell);
-                     if (price <= spellBudget && bot->HasEnoughMoney(price) &&
-                         PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) &&
-                         trainer->CanTeachSpell(bot, &spell))
+                     if (price <= spellBudget && bot->HasEnoughMoney(price))
+                         return {guid, NaturalMaintenanceType::TRAIN};
+                 }
 diff --git a/src/Ai/Base/Value/SpellIdValue.cpp b/src/Ai/Base/Value/SpellIdValue.cpp
 index e632688..ac8c494 100644
 --- a/src/Ai/Base/Value/SpellIdValue.cpp
@@ -901,7 +901,7 @@ index b705e50..d16facf 100644
      {
          bot->resetTalents(true);
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index 163e236..9d5eb72 100644
+index e04b15a..08e9758 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -58,6 +58,8 @@
