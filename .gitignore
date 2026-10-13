@@ -1,6 +1,5 @@
 /build
 /dist
-/deps
 /output
 /.module-cache
 /*.cer
