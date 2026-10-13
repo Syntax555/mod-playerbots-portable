@@ -1,7 +1,8 @@
 diff --git a/client-addon/EraTalents/Comms.lua b/client-addon/EraTalents/Comms.lua
+index c4d6ab1..89ba1fa 100644
 --- a/client-addon/EraTalents/Comms.lua
 +++ b/client-addon/EraTalents/Comms.lua
-@@ -82,6 +82,7 @@
+@@ -82,6 +82,7 @@ function ET.CheckGeneration(serverStamp)
        clientStamp or L["MISSING"], serverStamp)
      if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage(msg) end
    end
@@ -9,7 +10,17 @@ diff --git a/client-addon/EraTalents/Comms.lua b/client-addon/EraTalents/Comms.l
  end
  
  function ET.OnAddonMsg(prefix, message)
+@@ -110,7 +111,7 @@ end
+ function ET.Send(payload)
+   SendAddonMessage(ET.PREFIX, payload, "WHISPER", UnitName("player"))
+ end
+-function ET.RequestSync() ET.Send("HELLO") end
++function ET.RequestSync() ET.helloSentAt = GetTime(); ET.Send("HELLO") end
+ function ET.Learn(id) ET.Send("LEARN " .. id) end
+ function ET.RequestInspect(guid) ET.Send("INSPECT " .. guid) end
+ 
 diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspect.lua
+index 451b7b7..b9938ed 100644
 --- a/client-addon/EraTalents/Inspect.lua
 +++ b/client-addon/EraTalents/Inspect.lua
 @@ -7,6 +7,7 @@
@@ -20,7 +31,7 @@ diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspe
  
  -- Stock children the overlay replaces. The scroll frame (talent buttons + branches) and points bar
  -- are never re-shown by Blizzard code, so Hide/Show is safe (OnShow guard below as a backstop). The
-@@ -38,29 +39,84 @@
+@@ -38,31 +39,94 @@ local function EnsureView()
    return ET.inspectView
  end
  
@@ -41,6 +52,13 @@ diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspe
 +  ET.inspectStatus:Show()
 +end
 +
++-- A server running EraTalents answers every HELLO with GEN. Without one inside this window
++-- the realm uses native trees, so bot inspection keeps MultiBot's and the stock views.
++local SERVER_REPLY_SECONDS = 5
++function ET.ServesBotInspect()
++  return ET.state.serverGen ~= nil or not ET.helloSentAt or GetTime() - ET.helloSentAt <= SERVER_REPLY_SECONDS
++end
++
  function ET.RefreshInspect()
    if not InspectTalentFrame then return end
    local guid = ET.inspect.current
@@ -49,7 +67,7 @@ diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspe
 -  local tree = byClass and byClass[e.classId]
 -  if tree and InspectTalentFrame:IsShown() then
 +  local shown = guid and InspectTalentFrame:IsShown()
-+  local waiting = shown and not e and (ET.state.serverGen or ET.inspect.botTarget == guid)
++  local waiting = shown and not e and (ET.state.serverGen or (ET.inspect.botTarget == guid and ET.ServesBotInspect()))
 +  local historical = shown and e and e.managed
 +  if waiting or historical then
 +    SetStockSuppressed(true)
@@ -95,11 +113,12 @@ diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspe
 +    if ET.inspectStatus then ET.inspectStatus:Hide() end
      SetStockSuppressed(false)
    end
-+end
-+
+ end
+ 
 +-- Used by MultiBot's talent button. Stock InspectUnit retains its native unit,
 +-- distance and faction checks; ISYNC identifies the inspected character by GUID.
 +function ET.OpenBotInspect(unit, toggle)
++  if not ET.ServesBotInspect() then return false end
 +  if not unit or not UnitExists(unit) or not CanInspect(unit) then return false end
 +  local guid = UnitGUID(unit)
 +  if not guid then return false end
@@ -111,10 +130,12 @@ diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspe
 +  ET.inspect.botTarget = guid
 +  ET.RefreshInspect()
 +  return true
- end
- 
++end
++
  local function OnInspectTarget()
-@@ -80,6 +136,7 @@
+   if not (InspectFrame and InspectFrame:IsShown()) then return end   -- CanInspect refused: no frame
+   local unit = InspectFrame.unit
+@@ -80,6 +144,7 @@ local function AttachInspect()
    -- InspectFrame_Show hides the frame before re-showing it, so every fresh inspect re-requests.
    InspectFrame:HookScript("OnHide", function()
      ET.inspect.current = nil
@@ -123,9 +144,10 @@ diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspe
      if ET.inspectView then ET.inspectView.guid = nil end   -- reopening = a fresh inspect: primary tree again
      ET.RefreshInspect()
 diff --git a/client-addon/EraTalents/Locales.lua b/client-addon/EraTalents/Locales.lua
+index b0ad288..d00a777 100644
 --- a/client-addon/EraTalents/Locales.lua
 +++ b/client-addon/EraTalents/Locales.lua
-@@ -5,6 +5,12 @@
+@@ -5,6 +5,12 @@ ET.locale = (GetLocale and GetLocale()) or "enUS"
  
  local deDE = {
    ["Talents"] = "Talente",

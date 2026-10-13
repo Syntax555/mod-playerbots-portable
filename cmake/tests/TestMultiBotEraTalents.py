@@ -245,7 +245,7 @@ IsAddOnLoaded=function() return true end
 local sent={}
 SendAddonMessage=function(prefix,message,channel,recipient)
   assert(prefix=="ERATAL" and channel=="WHISPER" and recipient=="Master")
-  assert(message:match("^INSPECT "),"inspection must never send LEARN or a preset")
+  assert(message:match("^INSPECT ") or message=="HELLO","inspection must never send LEARN or a preset")
   table.insert(sent,message)
 end
 GetSpellInfo=function(id) if id==932999 then return "EraTalents Gen a1b2c3d4" end; return "Spell "..id end
@@ -339,6 +339,25 @@ assert(not InspectFrame:IsShown() and ET.inspect.current==nil and next(ET.inspec
 local closedCalls=calls
 MultiBot.talent.setTalents()
 assert(not InspectFrame:IsShown() and calls==closedCalls,"a stale retry must not reopen closed inspection")
+-- A realm without EraTalents never answers HELLO with GEN. Inside the reply window a bot
+-- request still waits; afterwards the stock tree and MultiBot's own talent window return.
+local now=100
+GetTime=function() return now end
+ET.state.serverGen=nil; ET.state.clientGen=nil
+ET.RequestSync(); assert(sent[#sent]=="HELLO")
+button.doLeft(button)
+assert(InspectFrame:IsShown() and suppressed() and ET.inspectStatus:IsShown(),"a reply inside the window is still awaited")
+now=now+6; ET.RefreshInspect()
+assert(not suppressed() and not ET.inspectStatus:IsShown(),"a silent server restores the stock inspect tree")
+close()
+assert(not ET.OpenBotInspect("party1",true) and not InspectFrame:IsShown(),"bot inspection without a server stays native")
+local rendered=0
+MultiBot.talent.renderTalentBuild=function() rendered=rendered+1 end
+MultiBot.auto.talent=false; button.doLeft(button)
+assert(InspectFrame:IsShown() and MultiBot.auto.talent and not suppressed(),"a realm without EraTalents keeps MultiBot's inspect path")
+MultiBot.talent.setTalents()
+assert(rendered==1,"a realm without EraTalents renders MultiBot's talent window")
+close(); ET.CheckGeneration("a1b2c3d4")
 allowed=false; assert(not ET.OpenBotInspect("party1",false)); assert(not ET.OpenBotInspect("missing",false))
 print("MultiBot era talents: "..locale.." selected-character trees, native Wrath, read-only ranks, stale replies and client-data guards passed")
 '''
@@ -371,7 +390,10 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
                 raise AssertionError('Reverted production behavior unexpectedly passed')
             expected_errors = ('assertion failed', 'MultiBot must use authoritative inspect',
                                'must not reveal native Wrath talents',
-                               'a stale retry must not reopen closed inspection')
+                               'a stale retry must not reopen closed inspection',
+                               'a silent server restores the stock inspect tree',
+                               'bot inspection without a server stays native',
+                               "a realm without EraTalents renders MultiBot's talent window")
             if not any(message in result.stderr for message in expected_errors):
                 raise AssertionError('Mutation failed for an unrelated fixture error: ' + result.stderr)
         else:
@@ -417,6 +439,13 @@ def main() -> None:
             raise AssertionError('Expected production generation guard')
         inspect.write_text(safe_inspect.replace(guard, '', 1))
         client_fixture(era, bot, packets, directory, expect_failure=True)
+        for silent_guard, replacement in (
+                ('(ET.inspect.botTarget == guid and ET.ServesBotInspect())', 'ET.inspect.botTarget == guid'),
+                ('  if not ET.ServesBotInspect() then return false end\n', '')):
+            if silent_guard not in safe_inspect:
+                raise AssertionError('Expected production server reply guard')
+            inspect.write_text(safe_inspect.replace(silent_guard, replacement, 1))
+            client_fixture(era, bot, packets, directory, expect_failure=True)
         inspect.write_text(safe_inspect)
         frame = bot / 'UI/MultiBotTalentFrame.lua'
         safe_frame = frame.read_text()
@@ -424,6 +453,11 @@ def main() -> None:
         if retry_guard not in safe_frame:
             raise AssertionError('Expected production stale-retry guard')
         frame.write_text(safe_frame.replace(retry_guard, '', 1))
+        client_fixture(era, bot, packets, directory, expect_failure=True)
+        native_guard = '    if era.ServesBotInspect and not era.ServesBotInspect() then\n        return false\n    end\n'
+        if native_guard not in safe_frame:
+            raise AssertionError('Expected production native-realm fallback')
+        frame.write_text(safe_frame.replace(native_guard, '', 1))
         client_fixture(era, bot, packets, directory, expect_failure=True)
         frame.write_text(safe_frame)
         subprocess.run(['git', 'apply', '--reverse', str(BOT_PATCH)], cwd=bot,
