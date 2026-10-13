@@ -102,7 +102,7 @@ try {
         historicalClassData = @{ sources = @(@{ name = 'Historical fixture'; url = 'https://github.com/example/data.git'; revision = $revision }); notice = 'licenses/historical-class-data/NOTICE.txt'; license = 'licenses/GPL-3.0.txt'; licenses = @('licenses/GPL-2.0.txt') }
     }
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
-    foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
+    foreach ($name in @('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
         'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'patches/core-fixture.patch', 'docs/world-buffs.md',
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',
@@ -287,6 +287,8 @@ try {
         Test-NegativeZip "protected user file $live" 'Live user data/configuration' -ExtraEntries @(@{ Name = $live; Bytes = [byte[]]@(1) })
     }
     Test-NegativeZip 'missing release identity' 'missing portable-release.json' -Omit @('portable-release.json')
+    Test-NegativeZip 'missing third-party notices' 'missing THIRD_PARTY_NOTICES.md' -Omit @('THIRD_PARTY_NOTICES.md')
+    Test-NegativeZip 'changed third-party notices' 'differs from build sources' -Replacements @{ 'THIRD_PARTY_NOTICES.md' = [System.Text.Encoding]::UTF8.GetBytes('other terms') }
     Test-NegativeZip 'unscoped launcher license' 'covers only the launcher' -Replacements @{ 'LICENSE' = [System.Text.Encoding]::UTF8.GetBytes("fixture`n") }
     foreach ($name in @('legacy.dll', 'msvcp140_atomic_wait.dll') + $dependencyNotices) {
         Test-NegativeZip "missing server runtime or notice $name" 'Portable ZIP is missing' -Omit @($name)

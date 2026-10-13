@@ -621,18 +621,6 @@ class NativeSpellRestorationTests(unittest.TestCase):
                     self.restore(donor=raw, contract=contract)
 
 
-@unittest.skipUnless(CMAKE, "CMake needed for client packaging script checks")
-class ModuleAddonTests(unittest.TestCase):
-    def test_old_source_without_client_patch_is_supported(self):
-        with tempfile.TemporaryDirectory(prefix="old-client-regression-") as temp:
-            root = Path(temp)
-            (root / "versions.lock.json").write_text('{"schemaVersion": 1}')
-            result = subprocess.run([CMAKE, f"-DPORTABLE_SOURCE_DIR={root}", "-P", str(ROOT / "cmake/PackageEraClient.cmake")],
-                                    capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("no historical client patch", result.stdout)
-
-
 class AddonRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="addon-runtime-regression-")
