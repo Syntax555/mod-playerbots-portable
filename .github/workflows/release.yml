@@ -95,6 +95,7 @@ jobs:
               'TestHistoricalClassQuests', 'TestMultiBotTrainerMoney',
               'TestMultiBotOptionalPresets', 'TestMultiBotEraTalents', 'TestFormationMovement',
               'TestFrostmaneHold', 'TestNaturalTaxiRoutes', 'TestWarlockSoulShards',
+              'TestNaturalMaintenance',
           )
           for name in fixtures:
               path = pathlib.Path('cmake/tests') / (name + '.py')
