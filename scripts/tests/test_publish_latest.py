@@ -50,27 +50,40 @@ class FakeGitHub:
         self.fail_upload = None
         self.fail_promotion = False
         self.fail_tag_move = False
+        self.fail_tag_creation = False
+        # Main gains workflow changes while the latest tag is being moved.
+        self.workflow_change_at_tag_move = False
         # Numbers of the retag_release calls that fail (1 is the first call).
         self.fail_retags = set()
+        # Workflow file versions per commit; the previous Latest predates main's.
+        self.workflows = {OLDER_SHA: "older"}
+        self.current_main = self.main_values[0]
         self.corrupt_digest = False
         self.omit_digest = False
         self.corrupt_public = False
         self.releases = {
-            1: {"id": 1, "tag_name": "latest", "name": "Latest", "draft": False},
+            1: {"id": 1, "tag_name": "latest", "target_commitish": OLDER_SHA, "name": "Latest", "draft": False},
             4: {"id": 4, "tag_name": "preview", "draft": False},
             # Left by interrupted publications.
             5: {"id": 5, "tag_name": "build-99-0123456789ab", "name": "Latest", "draft": True},
             8: {"id": 8, "tag_name": "latest-previous-77-0123456789ab", "name": "Latest", "draft": False},
+            # Published under its staging tag by a run that stopped before the swap.
+            9: {"id": 9, "tag_name": "build-12-0123456789ab", "name": "Latest", "draft": False},
             # Maintainer releases that merely resemble staging names.
             6: {"id": 6, "tag_name": "build-notes", "draft": False},
             7: {"id": 7, "tag_name": "maintainer-draft", "draft": True},
-            9: {"id": 9, "tag_name": "build-12-0123456789ab", "name": "Latest", "draft": False},
         }
         self.tags = {
             "latest": OLDER_SHA, "v1.0.16": OLDER_SHA, "preview": OLDER_SHA, "build-notes": OLDER_SHA,
             "build-preserve-me": OLDER_SHA, "latest-previous-77-0123456789ab": OLDER_SHA,
+            "build-12-0123456789ab": OLDER_SHA,
         }
-        self.staging_leftovers = {5, 8}
+        self.fail_deletes = set()
+        # Release ids whose deletion GitHub applies although the response is lost.
+        self.lost_delete_responses = set()
+        # Fields GitHub reports differently from what was requested.
+        self.draft_override = {}
+        self.promoted_override = {}
         self.draft_id = 100
         self.upload_count = 0
         self.retag_count = 0
@@ -78,9 +91,19 @@ class FakeGitHub:
     @property
     def writes(self):
         return [call for call in self.calls if call[0] in {
-            "create_draft", "upload_asset", "delete_release", "set_tag", "delete_tag", "promote_release",
-            "retag_release", "return_to_draft",
+            "create_draft", "upload_asset", "delete_release", "set_tag", "create_tag", "delete_tag",
+            "promote_release", "retag_release",
         }]
+
+    def workflow_version(self, commit):
+        return self.workflows.get(commit, "current")
+
+    def refuse_foreign_workflows(self, commit):
+        # GitHub's rule for tokens without the workflows permission, measured in
+        # this repository: a ref or release target whose workflow files differ
+        # from main's is refused, even when the ref already points there.
+        if self.workflow_version(commit) != self.workflow_version(self.current_main):
+            raise publisher.APIError(403, "Resource not accessible by integration")
 
     def claim_tag(self, release_id, tag):
         # GitHub allows one published release per tag.
@@ -91,8 +114,14 @@ class FakeGitHub:
     def main_sha(self):
         self.calls.append(("main_sha",))
         if len(self.main_values) > 1:
-            return self.main_values.pop(0)
-        return self.main_values[0]
+            self.current_main = self.main_values.pop(0)
+        else:
+            self.current_main = self.main_values[0]
+        return self.current_main
+
+    def workflow_files(self, commit):
+        self.calls.append(("workflow_files", commit))
+        return {".github/workflows/release.yml": self.workflow_version(commit)}
 
     def history(self, commit):
         seen, pending = set(), [commit]
@@ -118,12 +147,13 @@ class FakeGitHub:
 
     def create_draft(self, tag, sha, notes):
         self.calls.append(("create_draft", tag, sha, notes))
+        self.refuse_foreign_workflows(sha)
+        # A draft does not create its tag.
         self.releases[self.draft_id] = {
             "id": self.draft_id, "tag_name": tag, "target_commitish": sha, "name": "Latest",
             "body": notes, "draft": True, "prerelease": False, "assets": [],
-            "html_url": f"https://github.com/{REPOSITORY}/releases/tag/{tag}",
+            "html_url": f"https://github.com/{REPOSITORY}/releases/tag/{tag}", **self.draft_override,
         }
-        self.tags[tag] = sha
         return copy.deepcopy(self.releases[self.draft_id])
 
     def upload_asset(self, release, asset):
@@ -154,46 +184,84 @@ class FakeGitHub:
 
     def delete_release(self, release_id):
         self.calls.append(("delete_release", release_id))
+        if release_id in self.fail_deletes:
+            raise publisher.APIError(502, "release deletion failed")
         del self.releases[release_id]
+        if release_id in self.lost_delete_responses:
+            raise publisher.PublishError("GitHub request failed; check the job's network access")
 
     def set_tag(self, tag, sha):
         self.calls.append(("set_tag", tag, sha))
-        if self.fail_tag_move and sha != OLDER_SHA:
+        if self.fail_tag_move:
             raise publisher.APIError(502, "tag move failed")
+        if self.workflow_change_at_tag_move:
+            self.main_values = [NEWER_SHA]
+            self.current_main = NEWER_SHA
+            self.workflows[NEWER_SHA] = "newer"
+        self.refuse_foreign_workflows(sha)
+        self.tags[tag] = sha
+
+    def create_tag(self, tag, sha):
+        self.calls.append(("create_tag", tag, sha))
+        if self.fail_tag_creation:
+            raise publisher.APIError(502, "tag creation failed")
+        self.refuse_foreign_workflows(sha)
+        if tag in self.tags:
+            raise publisher.APIError(422, "Reference already exists")
         self.tags[tag] = sha
 
     def tag_sha(self, tag):
         self.calls.append(("tag_sha", tag))
         return self.tags.get(tag)
 
+    def temporary_tags(self):
+        self.calls.append(("temporary_tags",))
+        return [tag for tag in self.tags if tag.startswith(("build-", "latest-previous-"))]
+
     def delete_tag(self, tag):
         self.calls.append(("delete_tag", tag))
         self.tags.pop(tag, None)
+        # GitHub turns a published release whose tag is deleted back into a draft.
+        for release in self.releases.values():
+            if release.get("tag_name") == tag:
+                release["draft"] = True
 
-    def promote_release(self, release_id, sha, notes):
-        self.calls.append(("promote_release", release_id, sha, notes))
+    def check_release_target(self, release_id):
+        # GitHub documents that an update without a new target_commitish checks
+        # the release's existing target. The probe only measured an unchanged
+        # tag_name as allowed, so the fake applies the stricter documented rule.
+        target = self.releases[release_id].get("target_commitish")
+        if target:
+            self.refuse_foreign_workflows(target)
+
+    def require_tag(self, tag):
+        # Publishing to a missing tag would make GitHub create it at the
+        # release target; the publisher creates every published tag itself.
+        if tag not in self.tags:
+            raise publisher.APIError(422, f"fake requires existing tag {tag}")
+
+    def promote_release(self, release_id, tag, notes):
+        self.calls.append(("promote_release", release_id, tag, notes))
         if self.fail_promotion:
             raise publisher.APIError(502, "promotion failed")
-        self.claim_tag(release_id, "latest")
+        self.check_release_target(release_id)
+        self.require_tag(tag)
+        self.claim_tag(release_id, tag)
         self.releases[release_id].update({
-            "tag_name": "latest", "target_commitish": sha, "name": "Latest",
-            "body": notes, "draft": False, "prerelease": False,
-            "html_url": f"https://github.com/{REPOSITORY}/releases/tag/latest",
+            "tag_name": tag, "name": "Latest", "body": notes, "draft": False, "prerelease": False,
+            "html_url": f"https://github.com/{REPOSITORY}/releases/tag/{tag}", **self.promoted_override,
         })
 
-    def retag_release(self, release_id, tag, sha, make_latest=False):
+    def retag_release(self, release_id, tag):
         self.retag_count += 1
-        self.calls.append(("retag_release", release_id, tag, sha, make_latest))
+        self.calls.append(("retag_release", release_id, tag))
         if self.retag_count in self.fail_retags:
             raise publisher.APIError(502, "release update failed")
+        self.check_release_target(release_id)
+        if self.releases[release_id]["draft"] is False:
+            self.require_tag(tag)
         self.claim_tag(release_id, tag)
-        self.releases[release_id]["tag_name"] = tag
-        if tag not in self.tags:
-            self.tags[tag] = sha
-
-    def return_to_draft(self, release_id, tag):
-        self.calls.append(("return_to_draft", release_id, tag))
-        self.releases[release_id].update({"tag_name": tag, "draft": True})
+        self.releases[release_id].update({"tag_name": tag, "html_url": f"https://github.com/{REPOSITORY}/releases/tag/{tag}"})
 
     def list_releases(self):
         self.calls.append(("list_releases",))
@@ -288,7 +356,7 @@ class PublicationTests(unittest.TestCase):
     def test_main_head_replaces_older_latest(self):
         self.assertFalse(self.publish().skipped)
         self.assertEqual(SHA, self.client.tags["latest"])
-        self.assertEqual([("compare_commits", OLDER_SHA, SHA)] * 3,
+        self.assertEqual([("compare_commits", OLDER_SHA, SHA)] * 4,
                          [call for call in self.client.calls if call[0] == "compare_commits"])
 
     def test_build_with_newer_main_commits_still_replaces_older_latest(self):
@@ -302,7 +370,10 @@ class PublicationTests(unittest.TestCase):
         self.assertNotIn(NEWER_SHA, release["body"])
         manifest = json.loads((self.directory / publisher.UPDATE_MANIFEST_NAME).read_text())
         self.assertEqual(SHA, manifest["revision"])
-        self.assertEqual(3, self.client.calls.count(("compare_commits", SHA, NEWER_SHA)))
+        self.assertEqual(4, self.client.calls.count(("compare_commits", SHA, NEWER_SHA)))
+        stage = next(call for call in self.client.calls if call[0] == "create_draft")[1]
+        # Every ref the swap creates points at the build commit, not at main.
+        self.assertIn(("create_tag", stage, SHA), self.client.calls)
 
     def test_build_older_than_latest_makes_no_api_writes(self):
         self.client.main_values = [NEWER_SHA]
@@ -381,15 +452,19 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual([], self.client.writes)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
 
+    def assert_no_staging_drafts(self):
+        self.assertFalse([release for release in self.client.releases.values()
+                          if release["draft"] and publisher.is_interrupted_publication(release)])
+
     def test_upload_failure_keeps_existing_release(self):
         self.client.fail_upload = 2
         with self.assertRaisesRegex(publisher.APIError, "upload failed"):
             self.publish()
         self.assertIn(1, self.client.releases)
-        self.assertLessEqual(self.client.staging_leftovers, set(self.client.releases))
+        self.assertIn(8, self.client.releases)
+        self.assert_no_staging_drafts()
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
-        self.assertFalse(any(call[0] in {"set_tag", "promote_release", "list_releases"}
-                             for call in self.client.calls))
+        self.assertFalse(any(call[0] in {"set_tag", "promote_release"} for call in self.client.calls))
         self.assertNotIn(self.client.draft_id, self.client.releases)
         self.assertFalse(any(tag.startswith("build-123456-") for tag in self.client.tags))
 
@@ -420,105 +495,287 @@ class PublicationTests(unittest.TestCase):
         self.assertNotIn(self.client.draft_id, self.client.releases)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
 
-    def assert_previous_latest_restored(self):
+    def publish_and_report(self, error=publisher.PublishError, message=""):
+        stderr = io.StringIO()
+        with patch.object(sys, "stderr", stderr), self.assertRaisesRegex(error, message):
+            self.publish()
+        return stderr.getvalue()
+
+    def assert_previous_latest_kept(self, tag_moved=False):
+        # The previous release may predate main's workflow files, so it is
+        # never changed; it keeps serving its own assets under tag latest.
         previous = self.client.releases[1]
         self.assertEqual("latest", previous["tag_name"])
         self.assertIs(False, previous["draft"])
-        self.assertIn(("retag_release", 1, "latest", OLDER_SHA, True), self.client.calls)
-        self.assertEqual(OLDER_SHA, self.client.tags["latest"])
-        self.assertFalse(any(tag.startswith("latest-previous-123456-") for tag in self.client.tags))
-        draft = self.client.releases[self.client.draft_id]
-        self.assertTrue(draft["draft"])
-        self.assertTrue(draft["tag_name"].startswith("build-123456-"))
-        self.assertNotIn(("delete_release", 1), self.client.calls)
+        self.assertFalse(any(call[0] in {"retag_release", "delete_release"} and call[1] == 1
+                             for call in self.client.calls))
+        self.assertEqual(SHA if tag_moved else OLDER_SHA, self.client.tags["latest"])
+        self.assertFalse(any(tag.startswith("build-123456-") for tag in self.client.tags))
+        self.assertNotIn(self.client.draft_id, self.client.releases)
+        self.assert_no_staging_drafts()
+        self.assertFalse(any(OLDER_SHA in call for call in self.client.writes))
 
-    def test_promotion_failure_restores_previous_latest_and_keeps_other_releases(self):
+    def test_promotion_failure_keeps_previous_latest_and_other_releases(self):
         self.client.fail_promotion = True
-        with self.assertRaisesRegex(publisher.APIError, "promotion failed"):
-            self.publish()
-        self.assert_previous_latest_restored()
-        self.assertLessEqual({4, 5, 6, 7, 8, 9}, set(self.client.releases))
+        stderr = self.publish_and_report(publisher.APIError, "^publishing the new release: .*promotion failed")
+        self.assertEqual("", stderr)
+        self.assert_previous_latest_kept()
+        self.assertLessEqual({4, 6, 7, 8, 9}, set(self.client.releases))
         self.assertIn("v1.0.16", self.client.tags)
-        self.assertFalse(any(call[0] == "list_releases" for call in self.client.calls))
 
-    def test_tag_move_failure_restores_previous_latest(self):
+    def test_tag_move_failure_leaves_previous_latest_untouched(self):
         self.client.fail_tag_move = True
-        with self.assertRaisesRegex(publisher.APIError, "tag move failed"):
-            self.publish()
-        self.assert_previous_latest_restored()
+        self.publish_and_report(publisher.APIError, f"^moving tag latest to {SHA}: .*tag move failed")
+        self.assert_previous_latest_kept()
+        # The tag moves only after the replacement is verified under its staging tag.
+        calls = self.client.calls
+        self.assertLess(calls.index(next(call for call in calls if call[0] == "promote_release")),
+                        calls.index(("set_tag", "latest", SHA)))
+
+    def test_staging_tag_failure_keeps_previous_latest(self):
+        self.client.fail_tag_creation = True
+        stderr = self.publish_and_report(publisher.APIError, "^creating tag build-123456-")
+        self.assertEqual("", stderr)
+        self.assert_previous_latest_kept()
         self.assertFalse(any(call[0] == "promote_release" for call in self.client.calls))
 
-    def test_incomplete_public_release_restores_previous_latest(self):
+    def test_incomplete_public_release_keeps_previous_latest(self):
         self.client.corrupt_public = True
-        with self.assertRaisesRegex(publisher.PublishError, "exactly the expected assets"):
-            self.publish()
-        self.assert_previous_latest_restored()
-        self.assertLessEqual(self.client.staging_leftovers, set(self.client.releases))
-        self.assertFalse(any(call[0] == "list_releases" for call in self.client.calls))
+        self.publish_and_report(publisher.PublishError, "exactly the expected assets")
+        self.assert_previous_latest_kept()
+        self.assertIn(8, self.client.releases)
 
-    def test_release_rename_failure_keeps_previous_latest(self):
+    def test_failed_removal_of_unverified_replacement_is_reported(self):
+        self.client.corrupt_public = True
+        self.client.fail_deletes = {self.client.draft_id}
+        stderr = self.publish_and_report(publisher.PublishError, "exactly the expected assets")
+        self.assertIn("Warning: could not remove this run's staged release: deleting the staged release:", stderr)
+        self.assertEqual("latest", self.client.releases[1]["tag_name"])
+
+    def test_previous_release_deletion_failure_keeps_both_releases_published(self):
+        self.client.fail_deletes = {1}
+        self.publish_and_report(publisher.APIError, "^deleting the previous release: ")
+        self.assertEqual("latest", self.client.releases[1]["tag_name"])
+        replacement = self.client.releases[self.client.draft_id]
+        self.assertIs(False, replacement["draft"])
+        self.assertTrue(replacement["tag_name"].startswith("build-123456-"))
+
+    def test_interrupted_swap_is_completed_by_the_next_run(self):
         self.client.fail_retags = {1}
-        with self.assertRaisesRegex(publisher.APIError, "release update failed"):
-            self.publish()
-        self.assert_previous_latest_restored()
-        self.assertFalse(any(call[0] in {"set_tag", "promote_release"} and call[2] == SHA
-                             for call in self.client.calls if len(call) > 2))
+        self.publish_and_report(publisher.APIError, "^moving the new release to tag latest: ")
+        stranded = self.client.releases[self.client.draft_id]
+        self.assertNotIn(1, self.client.releases)
+        self.assertIs(False, stranded["draft"])
+        self.assertTrue(stranded["tag_name"].startswith("build-123456-"))
+        self.client.draft_id += 1
+        result = publisher.publish(self.client, SHA, self.directory, self.notes, "123457")
+        self.assertFalse(result.skipped)
+        self.assertEqual("latest", self.client.releases[self.client.draft_id]["tag_name"])
+        self.assertNotIn(stranded["id"], self.client.releases)
+        self.assertNotIn(stranded["tag_name"], self.client.tags)
 
-    def test_failed_restore_is_reported_and_keeps_previous_release_published(self):
+    def test_previous_latest_left_aside_stays_published_when_publication_fails(self):
+        # An earlier run moved the previous release to a temporary tag.
+        del self.client.releases[1]
         self.client.fail_promotion = True
-        self.client.fail_retags = {2}
+        self.publish_and_report(publisher.APIError, "promotion failed")
+        self.assertIs(False, self.client.releases[9]["draft"])
+        self.assertIs(False, self.client.releases[8]["draft"])
+        self.assertFalse(any(call[0] == "retag_release" for call in self.client.calls))
+        self.assert_no_staging_drafts()
+
+    def test_previous_latest_with_older_workflow_files_is_replaced(self):
+        # GitHub refuses refs and release updates aimed at the previous commit.
+        result = self.publish()
+        self.assertFalse(result.skipped)
+        self.assertEqual("older", self.client.workflow_version(OLDER_SHA))
+        self.assertFalse(any(OLDER_SHA in call for call in self.client.writes))
+        self.assertEqual([("delete_release", 1)], [call for call in self.client.writes if 1 in call[1:2]])
+
+    def test_build_with_other_workflow_files_than_main_is_skipped_before_writes(self):
+        self.client.main_values = [NEWER_SHA]
+        self.client.workflows[NEWER_SHA] = "newer"
+        self.assert_skipped_without_writes()
+        self.assertIn(("workflow_files", SHA), self.client.calls)
+        self.assertIn(("workflow_files", NEWER_SHA), self.client.calls)
+
+    def test_build_with_newer_main_and_same_workflow_files_compares_both_listings(self):
+        self.client.main_values = [NEWER_SHA]
+        self.assertFalse(self.publish().skipped)
+        self.assertIn(("workflow_files", NEWER_SHA), self.client.calls)
+
+    def test_workflow_change_during_tag_move_skips_and_discards_draft(self):
+        self.client.workflow_change_at_tag_move = True
+        result = self.publish()
+        self.assertTrue(result.skipped)
+        self.assert_previous_latest_kept()
+
+    def test_workflow_change_before_tag_move_skips_before_deleting_previous(self):
+        def promote(release_id, tag, notes):
+            original(release_id, tag, notes)
+            self.client.main_values = [NEWER_SHA]
+            self.client.workflows[NEWER_SHA] = "newer"
+        original = self.client.promote_release
+        self.client.promote_release = promote
+        self.assertTrue(self.publish().skipped)
+        self.assert_previous_latest_kept()
+        self.assertFalse(any(call[0] == "set_tag" for call in self.client.calls))
+
+    def test_workflow_change_before_draft_creation_skips(self):
+        def create_draft(tag, sha, notes):
+            self.client.main_values = [NEWER_SHA]
+            self.client.current_main = NEWER_SHA
+            self.client.workflows[NEWER_SHA] = "newer"
+            return original(tag, sha, notes)
+        original = self.client.create_draft
+        self.client.create_draft = create_draft
+        self.assertTrue(self.publish().skipped)
+        self.assert_previous_latest_kept()
+
+    def test_unexpected_staged_or_promoted_release_state_keeps_previous_latest(self):
+        cases = [("draft_override", {"tag_name": "other"}, "did not preserve the staged draft"),
+                 ("draft_override", {"draft": False}, "did not preserve the staged draft"),
+                 ("promoted_override", {"draft": True}, "did not publish the expected Latest"),
+                 ("promoted_override", {"prerelease": True}, "did not publish the expected Latest"),
+                 ("promoted_override", {"name": "Other"}, "did not publish the expected Latest")]
+        for attribute, override, message in cases:
+            with self.subTest(override=override):
+                self.client = FakeGitHub()
+                setattr(self.client, attribute, override)
+                self.publish_and_report(publisher.PublishError, message)
+                self.assertEqual("latest", self.client.releases[1]["tag_name"])
+                self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+                self.assertNotIn(("delete_release", 1), self.client.calls)
+
+    def test_previous_release_deleted_with_lost_response_still_completes_swap(self):
+        self.client.lost_delete_responses = {1}
+        result = self.publish()
+        self.assertFalse(result.skipped)
+        self.assertEqual("latest", self.client.releases[self.client.draft_id]["tag_name"])
+
+    def test_failed_final_retag_explains_the_missing_latest_release(self):
+        self.client.fail_retags = {1}
+        stderr = self.publish_and_report(publisher.APIError, "^moving the new release to tag latest: ")
+        self.assertIn("Tag latest has no release until this job is re-run", stderr)
+
+    def test_skip_reports_a_staged_release_it_cannot_remove(self):
+        self.client.main_values = [SHA, OLDER_SHA]
+        self.client.fail_deletes = {self.client.draft_id}
         stderr = io.StringIO()
-        with patch.object(sys, "stderr", stderr), self.assertRaisesRegex(publisher.APIError, "promotion failed"):
+        with patch.object(sys, "stderr", stderr):
+            self.assertTrue(self.publish().skipped)
+        self.assertIn("Warning: could not remove this run's staged release", stderr.getvalue())
+
+    def test_drafts_of_failed_runs_are_removed_before_staging(self):
+        self.client.fail_upload = 1
+        with self.assertRaises(publisher.APIError):
             self.publish()
-        self.assertIn("Could not restore the previous Latest release", stderr.getvalue())
-        previous = self.client.releases[1]
-        self.assertIs(False, previous["draft"])
-        self.assertTrue(previous["tag_name"].startswith("latest-previous-123456-"))
-        self.assertIn(previous["tag_name"], self.client.tags)
+        calls = self.client.calls
+        self.assertLess(calls.index(("delete_release", 5)), next(
+            index for index, call in enumerate(calls) if call[0] == "create_draft"))
+        # A published release under a temporary tag can be the only Latest,
+        # and deleting its tag would turn it back into a draft.
+        for leftover in (8, 9):
+            self.assertIs(False, self.client.releases[leftover]["draft"])
+            self.assertIn(self.client.releases[leftover]["tag_name"], self.client.tags)
+
+    def test_unused_temporary_tags_are_removed_before_staging(self):
+        # A run cancelled between creating and using its staging tag.
+        self.client.tags["build-77-0123456789ab"] = SHA
+        result = self.publish()
+        self.assertEqual(1, result.removed_tags)
+        calls = self.client.calls
+        self.assertLess(calls.index(("delete_tag", "build-77-0123456789ab")),
+                        calls.index(next(call for call in calls if call[0] == "create_draft")))
+        # Tags that releases still use, and tags of other names, stay until their release goes.
+        self.assertLess(calls.index(next(call for call in calls if call[0] == "create_draft")),
+                        calls.index(("delete_tag", "latest-previous-77-0123456789ab")))
+        self.assertIn("build-preserve-me", self.client.tags)
+
+    def test_main_explains_refused_token_operations(self):
+        error = publisher.APIError(403, "Resource not accessible by integration", "moving tag latest to " + SHA)
+        stderr = io.StringIO()
+        arguments = ["publish_latest.py", "--sha", SHA, "--artifacts", "out", "--notes", "notes.md", "--run-id", "1"]
+        with patch.object(sys, "argv", arguments), patch.object(sys, "stderr", stderr), \
+                patch.dict("os.environ", {"GITHUB_REPOSITORY": REPOSITORY, "GH_TOKEN": "token"}), \
+                patch.object(publisher, "publish", side_effect=error):
+            self.assertEqual(1, publisher.main())
+        self.assertIn(f"Publication failed: moving tag latest to {SHA}: GitHub API returned HTTP 403", stderr.getvalue())
+        self.assertIn("workflow files differ from main's", stderr.getvalue())
+        stderr = io.StringIO()
+        with patch.object(sys, "argv", arguments), patch.object(sys, "stderr", stderr), \
+                patch.dict("os.environ", {"GITHUB_REPOSITORY": REPOSITORY, "GH_TOKEN": "token"}), \
+                patch.object(publisher, "publish", side_effect=publisher.APIError(403, "Forbidden")):
+            self.assertEqual(1, publisher.main())
+        self.assertNotIn("workflow files", stderr.getvalue())
+
+    def test_cleanup_failure_after_verified_publication_only_warns(self):
+        self.client.fail_deletes = {8}
+        stderr = io.StringIO()
+        with patch.object(sys, "stderr", stderr):
+            result = self.publish()
+        self.assertFalse(result.skipped)
+        self.assertEqual("latest", self.client.releases[self.client.draft_id]["tag_name"])
+        self.assertIn("Warning: cleanup after publication stopped: deleting release latest-previous-77-", stderr.getvalue())
 
     def test_success_publishes_correct_sha_and_removes_only_interrupted_staging(self):
         result = self.publish()
         self.assertFalse(result.skipped)
         self.assertEqual(f"https://github.com/{REPOSITORY}/releases/tag/latest", result.url)
         self.assertEqual(5, result.assets)
-        self.assertEqual(2, result.removed_staging)
+        self.assertEqual(3, result.removed_staging)
         self.assertEqual(SHA, self.client.tags["latest"])
         release = self.client.releases[self.client.draft_id]
         self.assertFalse(release["draft"])
         self.assertFalse(release["prerelease"])
         self.assertEqual("Latest", release["name"])
+        self.assertEqual("latest", release["tag_name"])
         self.assertEqual(SHA, release["target_commitish"])
         self.assertEqual(set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME},
                          {asset["name"] for asset in release["assets"]})
-        self.assertEqual({4, 6, 7, 9, self.client.draft_id}, set(self.client.releases))
+        self.assertEqual({4, 6, 7, self.client.draft_id}, set(self.client.releases))
         self.assertEqual({"latest", "v1.0.16", "preview", "build-notes", "build-preserve-me"},
                          set(self.client.tags))
         calls = self.client.calls
-        backup = next(call for call in calls if call[0] == "retag_release")
-        self.assertEqual((1, OLDER_SHA, False), (backup[1], backup[3], backup[4]))
-        self.assertTrue(backup[2].startswith("latest-previous-123456-"))
         uploaded = [index for index, call in enumerate(calls) if call[0] == "upload_asset"]
-        self.assertLess(max(uploaded), calls.index(backup))
-        self.assertLess(calls.index(backup), calls.index(("set_tag", "latest", SHA)))
-        public_verify = [index for index, call in enumerate(calls)
-                         if call == ("get_release", self.client.draft_id)][-1]
+        tag_move = calls.index(("set_tag", "latest", SHA))
+        stage = next(call for call in calls if call[0] == "create_draft")[1]
+        self.assertTrue(stage.startswith("build-123456-"))
+        # Every ref the swap creates points at the build commit.
+        stage_tag = calls.index(("create_tag", stage, SHA))
+        promote = calls.index(("promote_release", self.client.draft_id, stage, release["body"]))
+        staged_verify = calls.index(("get_release", self.client.draft_id), promote)
         old_release_delete = calls.index(("delete_release", 1))
-        self.assertLess(public_verify, old_release_delete)
-        self.assertLess(old_release_delete, calls.index(("delete_tag", backup[2])))
-        for leftover in sorted(self.client.staging_leftovers):
+        retag = calls.index(("retag_release", self.client.draft_id, "latest"))
+        self.assertLess(max(uploaded), stage_tag)
+        self.assertLess(stage_tag, promote)
+        self.assertLess(staged_verify, tag_move)
+        self.assertLess(tag_move, old_release_delete)
+        self.assertLess(old_release_delete, retag)
+        self.assertLess(retag, calls.index(("delete_tag", stage)))
+        self.assertNotIn(("delete_tag", "latest"), calls)
+        self.assertFalse(any(call[0] == "retag_release" and call[1] == 1 for call in calls))
+        # Drafts of failed runs go before staging; published leftovers only after verification.
+        self.assertLess(calls.index(("delete_release", 5)), calls.index(next(c for c in calls if c[0] == "create_draft")))
+        public_verify = [index for index, call in enumerate(calls) if call == ("get_release", self.client.draft_id)][-1]
+        for leftover in (8, 9):
             self.assertLess(public_verify, calls.index(("delete_release", leftover)))
         self.assertIn(("delete_tag", "latest-previous-77-0123456789ab"), calls)
 
-    def test_previous_release_left_under_backup_tag_is_replaced(self):
-        # A cancelled run moved the previous release aside and stopped before
-        # promotion, so no release currently uses the latest tag.
+    def test_previous_release_left_under_temporary_tag_is_replaced(self):
+        # A cancelled run moved the previous release aside, so no release uses the latest tag.
         del self.client.releases[1]
         result = self.publish()
         self.assertFalse(result.skipped)
         self.assertEqual("latest", self.client.releases[self.client.draft_id]["tag_name"])
-        self.assertNotIn(8, self.client.releases)
+        self.assertFalse({8, 9} & set(self.client.releases))
         self.assertNotIn("latest-previous-77-0123456789ab", self.client.tags)
-        self.assertFalse(any(call[0] == "retag_release" for call in self.client.calls))
+        self.assertEqual([("retag_release", self.client.draft_id, "latest")],
+                         [call for call in self.client.calls if call[0] == "retag_release"])
+        calls = self.client.calls
+        for leftover in (8, 9):
+            self.assertLess(calls.index(("retag_release", self.client.draft_id, "latest")),
+                            calls.index(("delete_release", leftover)))
 
     def test_success_without_existing_latest(self):
         del self.client.releases[1]
@@ -758,25 +1015,47 @@ class ClientTests(unittest.TestCase):
     def test_promotion_uses_the_latest_flag_and_public_stable_settings(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         with patch.object(client, "_request") as request:
-            client.promote_release(123, SHA, "notes")
+            client.promote_release(123, "build-123-abc", "notes")
+        # GitHub checks a sent target_commitish against main's workflow files
+        # even when the tag already exists, so the existing tag decides.
         request.assert_called_once_with("PATCH", "/releases/123", {
-            "tag_name": "latest", "target_commitish": SHA, "name": "Latest",
-            "body": "notes", "draft": False, "prerelease": False, "make_latest": "true",
+            "tag_name": "build-123-abc", "name": "Latest", "body": "notes",
+            "draft": False, "prerelease": False, "make_latest": "true",
         })
 
-    def test_release_swap_updates_use_tag_names_and_latest_flag(self):
+    def test_release_swap_updates_use_existing_tag_names_only(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         with patch.object(client, "_request") as request:
-            client.retag_release(1, "latest-previous-123-abc", OLDER_SHA)
-            client.retag_release(1, "latest", OLDER_SHA, make_latest=True)
-            client.retag_release(1, "latest", None, make_latest=True)
-            client.return_to_draft(100, "build-123-abc")
+            client.create_tag("build-123-abc", SHA)
+            client.retag_release(100, "latest")
         self.assertEqual([
-            ("PATCH", "/releases/1", {"tag_name": "latest-previous-123-abc", "target_commitish": OLDER_SHA}),
-            ("PATCH", "/releases/1", {"tag_name": "latest", "target_commitish": OLDER_SHA, "make_latest": "true"}),
-            ("PATCH", "/releases/1", {"tag_name": "latest", "make_latest": "true"}),
-            ("PATCH", "/releases/100", {"tag_name": "build-123-abc", "draft": True}),
+            ("POST", "/git/refs", {"ref": "refs/tags/build-123-abc", "sha": SHA}),
+            ("PATCH", "/releases/100", {"tag_name": "latest"}),
         ], [call.args for call in request.call_args_list])
+
+    def test_temporary_tags_list_both_publisher_prefixes(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        responses = {"/git/matching-refs/tags/build-": [{"ref": "refs/tags/build-1-0123456789ab"}],
+                     "/git/matching-refs/tags/latest-previous-": [{"ref": "refs/tags/latest-previous-1-0123456789ab"}]}
+        with patch.object(client, "_request", side_effect=lambda method, path: responses[path]):
+            self.assertEqual(["build-1-0123456789ab", "latest-previous-1-0123456789ab"], client.temporary_tags())
+        with patch.object(client, "_request", return_value={"ref": "refs/tags/build-1"}), \
+                self.assertRaisesRegex(publisher.PublishError, "invalid tag listing"):
+            client.temporary_tags()
+
+    def test_workflow_files_lists_entry_ids_and_accepts_a_missing_directory(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        listing = [{"path": ".github/workflows/release.yml", "sha": "1" * 40, "type": "file"},
+                   {"path": ".github/workflows/publish-latest.yml", "sha": "2" * 40, "type": "file"}]
+        with patch.object(client, "_request", return_value=listing) as request:
+            self.assertEqual({".github/workflows/release.yml": "1" * 40,
+                              ".github/workflows/publish-latest.yml": "2" * 40}, client.workflow_files(SHA))
+        request.assert_called_once_with("GET", f"/contents/.github/workflows?ref={SHA}")
+        with patch.object(client, "_request", side_effect=publisher.APIError(404, "Not Found")):
+            self.assertEqual({}, client.workflow_files(SHA))
+        with patch.object(client, "_request", return_value={"type": "file"}), \
+                self.assertRaisesRegex(publisher.PublishError, "invalid workflow directory"):
+            client.workflow_files(SHA)
 
     def transient_failures(self, *failures):
         responses = list(failures)
@@ -846,13 +1125,12 @@ class ClientTests(unittest.TestCase):
                 client.upload_asset({"upload_url": "https://untrusted.invalid/upload"}, asset)
 
     def test_interrupted_publication_matches_only_publisher_staging_names(self):
-        for tag, draft in (("build-123-0123456789ab", True), ("latest-previous-123-0123456789ab", False),
-                           ("latest-previous-123-0123456789ab", True)):
+        for tag, draft in (("build-123-0123456789ab", True), ("build-123-0123456789ab", False),
+                           ("latest-previous-123-0123456789ab", False), ("latest-previous-123-0123456789ab", True)):
             with self.subTest(tag=tag, draft=draft):
                 self.assertTrue(publisher.is_interrupted_publication(
                     {"tag_name": tag, "name": "Latest", "draft": draft}))
-        for release in ({"tag_name": "build-123-0123456789ab", "name": "Latest", "draft": False},
-                        {"tag_name": "build-123-0123456789ab", "name": "Notes", "draft": True},
+        for release in ({"tag_name": "build-123-0123456789ab", "name": "Notes", "draft": True},
                         {"tag_name": "build-123", "name": "Latest", "draft": True},
                         {"tag_name": "build-123-0123456789AB", "name": "Latest", "draft": True},
                         {"tag_name": "latest", "name": "Latest", "draft": False},
