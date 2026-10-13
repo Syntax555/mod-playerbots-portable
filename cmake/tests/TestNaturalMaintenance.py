@@ -1,0 +1,1059 @@
+"""Check natural-mode upkeep selection and execution against small engine stubs.
+
+NaturalMaintenanceValue chooses every autonomous gold spend and visit: vendor
+sales, repairs, trainer lessons, food, drink, ammunition, reagents and the
+auction or mailbox visit clock. The production value, action, trigger and
+auction-trip clock run here with fake core objects. Mutation checks confirm
+that the guards, budgets and priorities are required.
+"""
+
+from pathlib import Path
+import argparse
+import re
+import subprocess
+import tempfile
+
+from PreparedSources import prepared_core
+
+
+def function(source, signature):
+    start = source.index(signature)
+    opening = source.index('{', start)
+    depth = 1
+    cursor = opening + 1
+    while depth:
+        depth += (source[cursor] == '{') - (source[cursor] == '}')
+        cursor += 1
+    return source[start:cursor]
+
+
+def declaration(source, opening):
+    return re.search(re.escape(opening) + r'\n\{.*?\n\};', source, re.S).group(0)
+
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+args = parser.parse_args()
+module = args.source or prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-playerbots/src'
+values_header = (module / 'Ai/Base/Value/MaintenanceValues.h').read_text()
+values_source = (module / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
+usage_source = (module / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
+rpg = module / 'Ai/World/Rpg'
+action_header = (rpg / 'Action/NewRpgAction.h').read_text()
+action_source = (rpg / 'Action/NewRpgAction.cpp').read_text()
+trigger_header = (rpg / 'Trigger/NewRpgTriggers.h').read_text()
+trigger_source = (rpg / 'Trigger/NewRpgTrigger.cpp').read_text()
+info_header = (rpg / 'NewRpgInfo.h').read_text()
+travel_source = (module / 'Bot/EarnedAuctionTravel.cpp').read_text()
+
+rpg_fields = re.findall(r'^    (?:bool|uint32|WorldPosition|ObjectGuid) (?:earnedAuction|naturalMaintenance)\w*(?:\{[^}]*\})?;$',
+                        info_header, re.M)
+assert len(rpg_fields) >= 9, 'earned-auction visit clock fields were not found in NewRpgInfo'
+
+production = {
+    'types': '\n'.join([
+        declaration(values_header, 'enum class NaturalMaintenanceType : uint8'),
+        declaration(values_header, 'struct NaturalMaintenanceTask'),
+        'struct NewRpgInfo\n{\n' + '\n'.join(rpg_fields) + '\n};',
+    ]),
+    'classes': '\n'.join([
+        declaration(values_header, 'class NaturalMaintenanceValue : public CalculatedValue<NaturalMaintenanceTask>'),
+        declaration(action_header, 'class NewRpgNaturalMaintenanceAction : public NewRpgBaseAction'),
+        declaration(trigger_header, 'class NewRpgNaturalMaintenanceTrigger : public Trigger'),
+    ]),
+    'travel': '\n'.join(function(travel_source, signature) for signature in (
+        'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)')),
+    'value': function(values_source, 'NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()'),
+    'action': function(action_source, 'bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)'),
+    'trigger': function(trigger_source, 'bool NewRpgNaturalMaintenanceTrigger::IsActive()'),
+    'usage': function(usage_source, 'std::string const ItemUsageValue::GetConsumableType(').replace(
+        'ItemUsageValue::GetConsumableType', 'ProductionConsumableType'),
+}
+
+prelude = r'''
+#include "EarnedAuctionTravelPolicy.h"
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <type_traits>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+using uint8 = std::uint8_t;
+using uint32 = std::uint32_t;
+using int32 = std::int32_t;
+constexpr uint32 IN_MILLISECONDS = 1000;
+constexpr float INTERACTION_DISTANCE = 5.0f;
+constexpr uint8 INVENTORY_SLOT_BAG_0 = 255, EQUIPMENT_SLOT_RANGED = 17;
+constexpr int MAX_SPELL_REAGENTS = 8, MAX_ITEM_PROTO_SPELLS = 5;
+enum Powers { POWER_MANA };
+enum Classes { CLASS_WARRIOR = 1, CLASS_HUNTER = 3, CLASS_MAGE = 8 };
+enum PlayerSpellState { PLAYERSPELL_UNCHANGED, PLAYERSPELL_CHANGED, PLAYERSPELL_NEW, PLAYERSPELL_REMOVED };
+enum InventoryResult { EQUIP_ERR_OK, EQUIP_ERR_CANT_EQUIP_SKILL };
+enum ItemClass { ITEM_CLASS_CONSUMABLE = 0, ITEM_CLASS_WEAPON = 2, ITEM_CLASS_REAGENT = 5, ITEM_CLASS_PROJECTILE = 6 };
+enum ItemSubclassConsumable
+{
+    ITEM_SUBCLASS_CONSUMABLE = 0, ITEM_SUBCLASS_POTION = 1, ITEM_SUBCLASS_FLASK = 3, ITEM_SUBCLASS_FOOD = 5,
+    ITEM_SUBCLASS_BANDAGE = 7
+};
+enum ItemSubclassWeapon { ITEM_SUBCLASS_WEAPON_BOW = 2, ITEM_SUBCLASS_WEAPON_GUN = 3, ITEM_SUBCLASS_WEAPON_CROSSBOW = 18 };
+enum ItemSubclassProjectile { ITEM_SUBCLASS_ARROW = 2, ITEM_SUBCLASS_BULLET = 3 };
+enum SpellEffects { SPELL_EFFECT_HEAL = 10, SPELL_EFFECT_ENERGIZE = 30 };
+enum NPCFlags : uint32
+{
+    UNIT_NPC_FLAG_TRAINER = 0x10, UNIT_NPC_FLAG_VENDOR = 0x80, UNIT_NPC_FLAG_REPAIR = 0x1000,
+    UNIT_NPC_FLAG_AUCTIONEER = 0x200000
+};
+enum class MovementPriority { MOVEMENT_IDLE, MOVEMENT_WANDER, MOVEMENT_NORMAL, MOVEMENT_COMBAT, MOVEMENT_FORCED };
+enum class NeedMoneyFor : uint32
+{
+    none = 0, repair = 1, ammo = 2, spells = 3, travel = 4, consumables = 5, gear = 6, guild = 7, tradeskill = 8,
+    anything = 9
+};
+
+#define AI_VALUE(type, name) context->GetValue<type>(name)->Get()
+#define AI_VALUE2(type, name, param) context->GetValue<type>(name, param)->Get()
+
+uint32 now = 1000000;
+uint32 getMSTime() { return now; }
+uint32 GetMSTimeDiffToNow(uint32 then) { return now - then; }
+
+struct ObjectGuid
+{
+    uint32 value = 0;
+    uint32 GetCounter() const { return value; }
+    bool IsEmpty() const { return !value; }
+    void Clear() { value = 0; }
+    bool operator==(ObjectGuid const&) const = default;
+};
+using GuidVector = std::vector<ObjectGuid>;
+
+struct WorldPosition
+{
+    uint32 mapId = 0;
+    float x = 0.0f, y = 0.0f, z = 0.0f, o = 0.0f;
+    WorldPosition() = default;
+    WorldPosition(uint32 mapId, float x, float y, float z = 0.0f, float o = 0.0f) : mapId(mapId), x(x), y(y), z(z), o(o) {}
+    uint32 GetMapId() const { return mapId; }
+    operator bool() const { return x || y || z; }
+};
+
+struct Player;
+struct WorldObject
+{
+    virtual ~WorldObject() = default;
+    ObjectGuid guid;
+    float x = 0.0f, y = 0.0f;
+    uint32 mapId = 0;
+    bool reachable = true;
+    ObjectGuid GetGUID() const { return guid; }
+    float Distance(float px, float py) const { return std::hypot(x - px, y - py); }
+};
+struct ItemTemplate
+{
+    struct ItemSpell { int32 SpellId = 0; uint32 SpellCategory = 0; };
+    uint32 ItemId = 0, Class = ITEM_CLASS_REAGENT, SubClass = 0, BuyPrice = 0, BuyCount = 1;
+    ItemSpell Spells[MAX_ITEM_PROTO_SPELLS]{};
+};
+struct VendorItem { uint32 item = 0, maxcount = 0, incrtime = 0, ExtendedCost = 0, stock = 0; };
+struct VendorItemData { std::vector<VendorItem*> m_items; };
+struct Creature : WorldObject
+{
+    uint32 entry = 0, npcFlags = 0;
+    bool alive = true, friendly = true;
+    VendorItemData* vendor = nullptr;
+    bool IsAlive() const { return alive; }
+    bool IsFriendlyTo(Player const*) const { return friendly; }
+    bool HasNpcFlag(NPCFlags flag) const { return npcFlags & flag; }
+    uint32 GetEntry() const { return entry; }
+    VendorItemData const* GetVendorItems() const { return vendor; }
+    uint32 GetVendorItemCurrentCount(VendorItem const* item) const { return item->stock; }
+};
+struct GameObject : WorldObject {};
+struct Item
+{
+    ItemTemplate proto;
+    ItemTemplate const* GetTemplate() const { return &proto; }
+};
+struct PlayerSpell { PlayerSpellState State = PLAYERSPELL_UNCHANGED; bool Active = true; };
+struct SpellInfo
+{
+    struct EffectInfo { int Effect = 0; };
+    EffectInfo Effects[3]{};
+    int32 Reagent[MAX_SPELL_REAGENTS]{};
+    uint32 ReagentCount[MAX_SPELL_REAGENTS]{};
+    bool passive = false;
+    bool IsPassive() const { return passive; }
+};
+struct Player : WorldObject
+{
+    bool alive = true, combat = false, flight = false;
+    uint32 money = 10000, maxMana = 100;
+    uint8 cls = CLASS_MAGE;
+    float discount = 1.0f;
+    std::map<uint32, uint32> items;
+    std::unordered_map<uint32, PlayerSpell*> spells;
+    Item* ranged = nullptr;
+    std::set<uint32> unusable;
+    ObjectGuid selection;
+    mutable int usableChecks = 0;
+    bool IsAlive() const { return alive; }
+    bool IsInCombat() const { return combat; }
+    bool IsInFlight() const { return flight; }
+    uint32 GetMaxPower(Powers) const { return maxMana; }
+    uint8 getClass() const { return cls; }
+    Item* GetItemByPos(uint8 bag, uint8 slot) const
+    {
+        assert(bag == INVENTORY_SLOT_BAG_0 && slot == EQUIPMENT_SLOT_RANGED);
+        return ranged;
+    }
+    std::unordered_map<uint32, PlayerSpell*> const& GetSpellMap() const { return spells; }
+    uint32 GetItemCount(uint32 item, bool inBankAlso) const
+    {
+        assert(!inBankAlso);
+        auto const found = items.find(item);
+        return found == items.end() ? 0 : found->second;
+    }
+    InventoryResult CanUseItem(ItemTemplate const* proto) const
+    {
+        ++usableChecks;
+        return unusable.count(proto->ItemId) ? EQUIP_ERR_CANT_EQUIP_SKILL : EQUIP_ERR_OK;
+    }
+    float GetReputationPriceDiscount(Creature const*) const { return discount; }
+    bool HasEnoughMoney(uint32 price) const { return price <= money; }
+    float GetExactDist(WorldPosition const& position) const { return Distance(position.x, position.y); }
+    bool IsWithinDistInMap(WorldObject const* target, float distance) const { return target->Distance(x, y) <= distance; }
+    ObjectGuid GetTarget() const { return selection; }
+    void SetSelection(ObjectGuid guid) { selection = guid; }
+    uint32 GetMapId() const { return mapId; }
+    Creature* GetNPCIfCanInteractWith(ObjectGuid guid, NPCFlags flag);
+};
+
+namespace Trainer
+{
+struct Spell
+{
+    uint32 SpellId = 0, MoneyCost = 0;
+    bool known = false, allowed = true;
+};
+struct Trainer
+{
+    std::vector<Spell> spells;
+    bool valid = true;
+    mutable int costs = 0, teaches = 0;
+    bool IsTrainerValidForPlayer(Player const*) const { return valid; }
+    std::vector<Spell> const& GetSpells() const { return spells; }
+    uint32 GetSpellCost(Player const* player, Creature const* npc, Spell const* spell) const
+    {
+        ++costs;
+        return uint32(floor(spell->MoneyCost * player->GetReputationPriceDiscount(npc)));
+    }
+    bool CanTeachSpell(Player const*, Spell const* spell) const
+    {
+        ++teaches;
+        return !spell->known;
+    }
+};
+}  // namespace Trainer
+
+struct PlayerbotFactory
+{
+    static bool IsTrainerSpellAllowedForBot(Player*, Trainer::Trainer const*, Trainer::Spell const* spell)
+    {
+        return spell->allowed;
+    }
+};
+struct ObjectMgr
+{
+    std::map<uint32, Trainer::Trainer> trainers;
+    std::map<uint32, ItemTemplate> items;
+    Trainer::Trainer* GetTrainer(uint32 entry)
+    {
+        auto const found = trainers.find(entry);
+        return found == trainers.end() ? nullptr : &found->second;
+    }
+    ItemTemplate const* GetItemTemplate(uint32 id) const
+    {
+        auto const found = items.find(id);
+        return found == items.end() ? nullptr : &found->second;
+    }
+} objectMgr;
+auto* sObjectMgr = &objectMgr;
+struct SpellMgr
+{
+    std::map<uint32, SpellInfo> spells;
+    SpellInfo const* GetSpellInfo(uint32 id) const
+    {
+        auto const found = spells.find(id);
+        return found == spells.end() ? nullptr : &found->second;
+    }
+} spellMgr;
+auto* sSpellMgr = &spellMgr;
+struct PlayerbotAIConfig
+{
+    bool naturalProgression = true, earnedAuctions = false, allowLearnTrainerSpells = true;
+    uint32 earnedAuctionInterval = 300;
+} sPlayerbotAIConfig;
+struct ChatHelper
+{
+    static std::string FormatItem(ItemTemplate const* proto) { return "item:" + std::to_string(proto->ItemId); }
+};
+struct Event
+{
+    Event(std::string source = "", std::string param = "") : source(std::move(source)), param(std::move(param)) {}
+    std::string source, param;
+};
+
+@@TYPES@@
+
+struct Visit { ObjectGuid target; bool mailbox; };
+struct Fixture
+{
+    std::map<uint32, Creature*> creatures;
+    std::map<uint32, GameObject*> mailboxes;
+    std::vector<Visit> visits;
+    std::vector<std::pair<std::string, std::string>> actions;
+    std::vector<ObjectGuid> approaches;
+    WorldPosition* market = nullptr;
+    bool waiting = false, queueAccepts = true, travelReachable = true, actionResult = true;
+    float farStep = 40.0f;
+    int plans = 0, scans = 0, consumableChecks = 0;
+} world;
+
+struct ItemUsageValue
+{
+    static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
+};
+
+template <class T>
+class Value
+{
+public:
+    virtual ~Value() = default;
+    virtual T Get() = 0;
+    virtual void Set(T value) = 0;
+    virtual void Reset() {}
+};
+template <class T>
+class ManualValue : public Value<T>
+{
+public:
+    T value{};
+    T Get() override { return value; }
+    void Set(T next) override { value = next; }
+};
+class ScanValue : public Value<GuidVector>
+{
+public:
+    std::function<GuidVector()> scan;
+    GuidVector Get() override { return scan(); }
+    void Set(GuidVector) override {}
+};
+struct PlayerbotAI;
+struct AiObjectContext
+{
+    std::map<std::string, ManualValue<bool>> flags;
+    std::map<std::string, ManualValue<uint32>> numbers;
+    std::map<std::string, int> reads;
+    ScanValue rpgTargets, mailboxes;
+    Value<NaturalMaintenanceTask>* maintenance = nullptr;
+    template <class T>
+    Value<T>* GetValue(std::string const& name, std::string const& qualifier = "")
+    {
+        ++reads[name];
+        if constexpr (std::is_same_v<T, bool>)
+            return &flags[name];
+        else if constexpr (std::is_same_v<T, uint32>)
+            return &numbers[name + ":" + qualifier];
+        else if constexpr (std::is_same_v<T, GuidVector>)
+        {
+            assert(name == "possible new rpg targets" || name == "natural mailboxes");
+            return name == "natural mailboxes" ? &mailboxes : &rpgTargets;
+        }
+        else
+        {
+            static_assert(std::is_same_v<T, NaturalMaintenanceTask>);
+            assert(name == "natural maintenance");
+            return maintenance;
+        }
+    }
+    template <class T>
+    Value<T>* GetValue(std::string const& name, uint32 qualifier)
+    {
+        return GetValue<T>(name, std::to_string(qualifier));
+    }
+};
+struct PlayerbotAI
+{
+    Player* bot = nullptr;
+    AiObjectContext* context = nullptr;
+    NewRpgInfo rpgInfo;
+    bool gameClientMaster = false;
+    Player* GetBot() { return bot; }
+    bool HasGameClientMaster() const { return gameClientMaster; }
+    Creature* GetCreature(ObjectGuid guid)
+    {
+        auto const found = world.creatures.find(guid.value);
+        return found == world.creatures.end() ? nullptr : found->second;
+    }
+    WorldObject* GetWorldObject(ObjectGuid guid)
+    {
+        if (Creature* creature = GetCreature(guid))
+            return creature;
+        auto const found = world.mailboxes.find(guid.value);
+        return found == world.mailboxes.end() ? nullptr : found->second;
+    }
+    bool DoSpecificAction(std::string const& name, Event event, bool silent)
+    {
+        assert(silent);
+        world.actions.push_back({name, event.param});
+        return world.actionResult;
+    }
+};
+Creature* Player::GetNPCIfCanInteractWith(ObjectGuid guid, NPCFlags flag)
+{
+    auto const found = world.creatures.find(guid.value);
+    Creature* npc = found == world.creatures.end() ? nullptr : found->second;
+    return npc && npc->HasNpcFlag(flag) && IsWithinDistInMap(npc, INTERACTION_DISTANCE) ? npc : nullptr;
+}
+
+template <class T>
+class CalculatedValue : public Value<T>
+{
+public:
+    CalculatedValue(PlayerbotAI* botAI, std::string const = "value", uint32 checkInterval = 1)
+        : botAI(botAI), bot(botAI->bot), context(botAI->context),
+          checkInterval(checkInterval == 1 ? 1 : (checkInterval < 100 ? checkInterval * IN_MILLISECONDS : checkInterval))
+    {
+    }
+    T Get() override
+    {
+        if (checkInterval < 2 || !lastCheckTime || now - lastCheckTime >= checkInterval)
+        {
+            lastCheckTime = now;
+            value = Calculate();
+        }
+        return value;
+    }
+    void Set(T next) override { value = next; }
+    void Reset() override { lastCheckTime = 0; }
+
+protected:
+    virtual T Calculate() = 0;
+    PlayerbotAI* botAI;
+    Player* bot;
+    AiObjectContext* context;
+    uint32 checkInterval;
+    uint32 lastCheckTime = 0;
+    T value{};
+};
+class Trigger
+{
+public:
+    Trigger(PlayerbotAI* botAI, std::string const) : botAI(botAI), bot(botAI->bot), context(botAI->context) {}
+    virtual ~Trigger() = default;
+    virtual bool IsActive() = 0;
+
+protected:
+    PlayerbotAI* botAI;
+    Player* bot;
+    AiObjectContext* context;
+};
+class NewRpgBaseAction
+{
+public:
+    NewRpgBaseAction(PlayerbotAI* botAI, std::string const) : botAI(botAI), bot(botAI->bot), context(botAI->context) {}
+    virtual ~NewRpgBaseAction() = default;
+    virtual bool Execute(Event event) = 0;
+
+protected:
+    bool IsWaitingForLastMove(MovementPriority priority)
+    {
+        assert(priority == MovementPriority::MOVEMENT_NORMAL);
+        return world.waiting;
+    }
+    bool MoveWorldObjectTo(ObjectGuid guid, float distance = INTERACTION_DISTANCE)
+    {
+        assert(distance == INTERACTION_DISTANCE);
+        world.approaches.push_back(guid);
+        WorldObject* target = botAI->GetWorldObject(guid);
+        if (!target || !target->reachable)
+            return false;
+        bot->x = target->x;
+        bot->y = target->y;
+        return true;
+    }
+    bool MoveFarTo(WorldPosition destination)
+    {
+        if (!world.travelReachable)
+            return false;
+        float const distance = bot->GetExactDist(destination);
+        float const step = std::min(distance, world.farStep);
+        bot->x += (destination.x - bot->x) / distance * step;
+        bot->y += (destination.y - bot->y) / distance * step;
+        return true;
+    }
+    PlayerbotAI* botAI;
+    Player* bot;
+    AiObjectContext* context;
+};
+
+namespace EarnedAuction
+{
+bool IsEnabled(PlayerbotAI* ai)
+{
+    return ai && sPlayerbotAIConfig.naturalProgression && sPlayerbotAIConfig.earnedAuctions && ai->GetBot() &&
+           !ai->HasGameClientMaster();
+}
+bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox)
+{
+    assert(IsEnabled(ai) && !target.IsEmpty());
+    world.visits.push_back({target, mailbox});
+    return world.queueAccepts;
+}
+}  // namespace EarnedAuction
+namespace EarnedAuctionTravel
+{
+void FinishTrip(PlayerbotAI* ai);
+bool ContinueTrip(PlayerbotAI* ai);
+void AbortTrip(PlayerbotAI* ai);
+bool Ready(PlayerbotAI* ai) { return EarnedAuction::IsEnabled(ai) && !ai->GetBot()->IsInCombat(); }
+bool CompatibleAuctioneer(PlayerbotAI*, Creature* npc)
+{
+    return npc && npc->IsAlive() && npc->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER);
+}
+@@TRAVEL@@
+WorldPosition PlanTrip(PlayerbotAI* ai)
+{
+    ++world.plans;
+    if (ContinueTrip(ai))
+        return ai->rpgInfo.earnedAuctionTravelDestination;
+    if (!Ready(ai))
+        return {};
+    auto& info = ai->rpgInfo;
+    if (info.earnedAuctionTravelClockStarted &&
+        !TravelBackoffElapsed(GetMSTimeDiffToNow(info.earnedAuctionTravelLastAttempt)))
+        return {};
+    info.earnedAuctionTravelClockStarted = true;
+    info.earnedAuctionTravelLastAttempt = getMSTime();
+    if (!world.market)
+        return {};
+    info.earnedAuctionTravelDestination = *world.market;
+    info.earnedAuctionTravelStarted = getMSTime();
+    info.earnedAuctionTravelActive = true;
+    return info.earnedAuctionTravelDestination;
+}
+}  // namespace EarnedAuctionTravel
+
+@@USAGE@@
+std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, bool hasMana)
+{
+    ++world.consumableChecks;
+    return ProductionConsumableType(proto, hasMana);
+}
+
+@@CLASSES@@
+@@VALUE@@
+@@ACTION@@
+@@TRIGGER@@
+'''
+
+tests = r'''
+using Type = NaturalMaintenanceType;
+
+struct Scenario
+{
+    Player bot;
+    AiObjectContext context;
+    PlayerbotAI ai;
+    std::deque<Creature> npcs;
+    std::deque<GameObject> boxes;
+    std::deque<VendorItemData> stocks;
+    std::deque<VendorItem> stock;
+    std::deque<::Item> weapons;
+    std::deque<PlayerSpell> learned;
+    std::unique_ptr<NaturalMaintenanceValue> value;
+    std::unique_ptr<NewRpgNaturalMaintenanceAction> action;
+    std::unique_ptr<NewRpgNaturalMaintenanceTrigger> trigger;
+    uint32 nextGuid = 100;
+
+    Scenario()
+    {
+        world = Fixture();
+        objectMgr = ObjectMgr();
+        spellMgr = SpellMgr();
+        sPlayerbotAIConfig = PlayerbotAIConfig();
+        now = 1000000;
+        bot.guid = {7};
+        ai.bot = &bot;
+        ai.context = &context;
+        context.flags["can move around"].value = true;
+        context.rpgTargets.scan = [this]() { return Nearby(world.creatures); };
+        context.mailboxes.scan = [this]() { return Nearby(world.mailboxes); };
+        value = std::make_unique<NaturalMaintenanceValue>(&ai);
+        context.maintenance = value.get();
+        action = std::make_unique<NewRpgNaturalMaintenanceAction>(&ai);
+        trigger = std::make_unique<NewRpgNaturalMaintenanceTrigger>(&ai);
+        Count("food", 20);
+        Count("drink", 20);
+        Count("ammo", 1000);
+    }
+    template <class Map>
+    GuidVector Nearby(Map const& objects)
+    {
+        if constexpr (std::is_same_v<Map, std::map<uint32, Creature*>>)
+            ++world.scans;
+        std::vector<std::pair<float, ObjectGuid>> found;
+        for (auto const& [id, object] : objects)
+            if (object->Distance(bot.x, bot.y) <= 150.0f)
+                found.push_back({object->Distance(bot.x, bot.y), object->guid});
+        std::sort(found.begin(), found.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
+        GuidVector result;
+        for (auto const& entry : found)
+            result.push_back(entry.second);
+        return result;
+    }
+    void Flag(std::string const& name, bool enabled) { context.flags[name].value = enabled; }
+    void Budget(NeedMoneyFor type, uint32 copper)
+    {
+        context.numbers["free money for:" + std::to_string(uint32(type))].value = copper;
+    }
+    void Count(std::string const& type, uint32 count) { context.numbers["item count:" + type].value = count; }
+    Creature& Npc(uint32 flags, float x, float y = 0.0f)
+    {
+        Creature& npc = npcs.emplace_back();
+        npc.guid = {++nextGuid};
+        npc.entry = nextGuid;
+        npc.npcFlags = flags;
+        npc.x = x;
+        npc.y = y;
+        world.creatures[npc.guid.value] = &npc;
+        return npc;
+    }
+    GameObject& Mailbox(float x)
+    {
+        GameObject& box = boxes.emplace_back();
+        box.guid = {200000 + ++nextGuid};
+        box.x = x;
+        world.mailboxes[box.guid.value] = &box;
+        return box;
+    }
+    ItemTemplate& Template(uint32 itemClass, uint32 subclass, uint32 price = 0, uint32 category = 0)
+    {
+        uint32 const id = 1000 + uint32(objectMgr.items.size());
+        ItemTemplate& proto = objectMgr.items[id];
+        proto.ItemId = id;
+        proto.Class = itemClass;
+        proto.SubClass = subclass;
+        proto.BuyPrice = price;
+        proto.Spells[0].SpellCategory = category;
+        return proto;
+    }
+    VendorItem& Stock(Creature& npc, ItemTemplate const& proto)
+    {
+        if (!npc.vendor)
+            npc.vendor = &stocks.emplace_back();
+        VendorItem& item = stock.emplace_back();
+        item.item = proto.ItemId;
+        npc.vendor->m_items.push_back(&item);
+        return item;
+    }
+    Trainer::Spell& Lesson(Creature& npc, uint32 spellId, uint32 cost, bool known = false)
+    {
+        Trainer::Trainer& trainer = objectMgr.trainers[npc.entry];
+        trainer.spells.push_back({spellId, cost, known, true});
+        return trainer.spells.back();
+    }
+    void Ranged(uint32 subclass)
+    {
+        ::Item& weapon = weapons.emplace_back();
+        weapon.proto.Class = ITEM_CLASS_WEAPON;
+        weapon.proto.SubClass = subclass;
+        bot.ranged = &weapon;
+    }
+    void Learn(uint32 spellId, uint32 reagent, uint32 count, bool passive = false, bool active = true,
+               PlayerSpellState state = PLAYERSPELL_UNCHANGED)
+    {
+        bot.spells[spellId] = &learned.emplace_back(PlayerSpell{state, active});
+        SpellInfo& info = spellMgr.spells[spellId];
+        info.passive = passive;
+        info.Reagent[0] = int32(reagent);
+        info.ReagentCount[0] = count;
+    }
+    NaturalMaintenanceTask Evaluate()
+    {
+        value->Reset();
+        return value->Get();
+    }
+    bool Is(NaturalMaintenanceTask const& task, Type type, WorldObject const& target)
+    {
+        return task.type == type && task.target == target.guid;
+    }
+    bool Tick(uint32 elapsed = 1000)
+    {
+        now += elapsed;
+        if (!trigger->IsActive())
+            return false;
+        return action->Execute(Event());
+    }
+    void DueAuctionVisit()
+    {
+        sPlayerbotAIConfig.earnedAuctions = true;
+        ai.rpgInfo.earnedAuctionClockStarted = true;
+        ai.rpgInfo.earnedAuctionLastVisit = now - 1;
+        ai.rpgInfo.earnedAuctionVisitDelay = 0;
+    }
+};
+
+void GuardTests()
+{
+    Scenario s;
+    Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_REPAIR, 10.0f);
+    s.Flag("can sell", true);
+    assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+    std::vector<std::function<void(bool)>> guards = {
+        [&](bool on) { sPlayerbotAIConfig.naturalProgression = !on; },
+        [&](bool on) { s.bot.alive = !on; },
+        [&](bool on) { s.bot.combat = on; },
+        [&](bool on) { s.bot.flight = on; },
+        [&](bool on) { s.ai.gameClientMaster = on; },
+        [&](bool on) { s.Flag("can move around", !on); },
+    };
+    for (auto const& guard : guards)
+    {
+        guard(true);
+        assert(s.Evaluate().type == Type::NONE);
+        assert(!s.trigger->IsActive());
+        s.value->Set({vendor.guid, Type::SELL});
+        assert(!s.action->Execute(Event()) && s.value->Get().type == Type::NONE);
+        guard(false);
+    }
+    assert(world.actions.empty() && world.approaches.empty());
+    assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+
+    // Any guard ends an auction trip and backs off before the next one.
+    WorldPosition market(0, 1000.0f, 0.0f);
+    world.market = &market;
+    s.DueAuctionVisit();
+    assert(s.Evaluate().type == Type::AUCTION_TRAVEL && s.ai.rpgInfo.earnedAuctionTravelActive);
+    s.bot.combat = true;
+    assert(s.Evaluate().type == Type::NONE && !s.ai.rpgInfo.earnedAuctionTravelActive);
+    assert(s.ai.rpgInfo.earnedAuctionLastVisit == now &&
+           s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
+}
+
+void SellAndRepairTests()
+{
+    Scenario s;
+    Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 5.0f);
+    Creature& smith = s.Npc(UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_REPAIR, 20.0f);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Flag("should repair", true);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Flag("can repair", true);
+    // The nearer plain vendor cannot repair.
+    assert(s.Is(s.Evaluate(), Type::REPAIR, smith));
+    s.Flag("can sell", true);
+    assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+    vendor.friendly = false;
+    assert(s.Is(s.Evaluate(), Type::SELL, smith));
+    smith.alive = false;
+    assert(s.Evaluate().type == Type::NONE);
+    smith.alive = true;
+    s.Flag("can sell", false);
+
+    // The action walks to the NPC, repairs and restores the previous selection.
+    s.bot.selection = {42};
+    assert(s.Is(s.Evaluate(), Type::REPAIR, smith));
+    assert(s.Tick() && world.approaches.size() == 1 && world.actions.empty());
+    assert(s.Is(s.value->Get(), Type::REPAIR, smith));
+    assert(s.Tick() && world.actions.size() == 1 && world.actions[0].first == "repair");
+    assert(s.value->Get().type == Type::NONE && s.bot.selection.value == 42);
+    // Repair cost is checked again at the NPC.
+    s.value->Set({smith.guid, Type::REPAIR});
+    s.Flag("can repair", false);
+    assert(!s.action->Execute(Event()) && world.actions.size() == 1);
+    s.value->Set({vendor.guid, Type::SELL});
+    s.bot.x = vendor.x;
+    vendor.friendly = true;
+    assert(s.action->Execute(Event()));
+    assert(world.actions.back() == std::make_pair(std::string("sell"), std::string("vendor")));
+}
+
+void TrainerTests()
+{
+    Scenario s;
+    Creature& trainer = s.Npc(UNIT_NPC_FLAG_TRAINER, 10.0f);
+    s.Lesson(trainer, 10, 5, true);
+    Trainer::Spell& lesson = s.Lesson(trainer, 11, 100);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Budget(NeedMoneyFor::spells, 99);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Budget(NeedMoneyFor::spells, 100);
+    assert(s.Is(s.Evaluate(), Type::TRAIN, trainer));
+    s.bot.money = 99;
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.money = 10000;
+    s.bot.discount = 0.9f;
+    s.Budget(NeedMoneyFor::spells, 90);
+    assert(s.Is(s.Evaluate(), Type::TRAIN, trainer));
+    s.bot.discount = 1.0f;
+    s.Budget(NeedMoneyFor::spells, 100);
+    lesson.allowed = false;
+    assert(s.Evaluate().type == Type::NONE);
+    lesson.allowed = true;
+    lesson.known = true;
+    assert(s.Evaluate().type == Type::NONE);
+    lesson.known = false;
+    objectMgr.trainers[trainer.entry].valid = false;
+    assert(s.Evaluate().type == Type::NONE);
+    objectMgr.trainers[trainer.entry].valid = true;
+    sPlayerbotAIConfig.allowLearnTrainerSpells = false;
+    assert(s.Evaluate().type == Type::NONE);
+    sPlayerbotAIConfig.allowLearnTrainerSpells = true;
+    s.bot.x = trainer.x;
+    assert(s.Is(s.Evaluate(), Type::TRAIN, trainer) && s.Tick(0));
+    assert(world.actions.back() == std::make_pair(std::string("trainer"), std::string("learn")));
+}
+
+void SupplyTests()
+{
+    Scenario s;
+    Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 10.0f);
+    ItemTemplate& food = s.Template(ITEM_CLASS_CONSUMABLE, ITEM_SUBCLASS_FOOD, 50, 11);
+    ItemTemplate& drink = s.Template(ITEM_CLASS_CONSUMABLE, ITEM_SUBCLASS_CONSUMABLE, 60, 59);
+    ItemTemplate& arrows = s.Template(ITEM_CLASS_PROJECTILE, ITEM_SUBCLASS_ARROW, 10);
+    ItemTemplate& bullets = s.Template(ITEM_CLASS_PROJECTILE, ITEM_SUBCLASS_BULLET, 12);
+    ItemTemplate& reagent = s.Template(ITEM_CLASS_REAGENT, 0, 30);
+    ItemTemplate& token = s.Template(ITEM_CLASS_REAGENT, 0, 1);
+    for (ItemTemplate const* proto : {&food, &drink, &arrows, &bullets, &reagent})
+        s.Stock(vendor, *proto);
+    s.Stock(vendor, token).ExtendedCost = 7;
+    auto const buys = [&](ItemTemplate const& proto, NeedMoneyFor budget)
+    {
+        NaturalMaintenanceTask const task = s.Evaluate();
+        return s.Is(task, Type::BUY, vendor) && task.itemId == proto.ItemId && task.budgetType == uint32(budget);
+    };
+
+    s.Budget(NeedMoneyFor::consumables, 100);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Count("food", 4);
+    assert(buys(food, NeedMoneyFor::consumables));
+    s.Budget(NeedMoneyFor::consumables, 49);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Budget(NeedMoneyFor::consumables, 100);
+    s.bot.unusable.insert(food.ItemId);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.unusable.clear();
+    s.Count("food", 20);
+    s.Count("drink", 4);
+    assert(buys(drink, NeedMoneyFor::consumables));
+    s.bot.maxMana = 0;
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.maxMana = 100;
+    s.Count("drink", 20);
+    s.Budget(NeedMoneyFor::consumables, 0);
+    s.Count("drink", 0);
+    assert(s.Evaluate().type == Type::NONE);
+
+    // Hunters buy the ammunition their equipped ranged weapon fires.
+    s.Budget(NeedMoneyFor::ammo, 100);
+    s.Count("ammo", 199);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.cls = CLASS_HUNTER;
+    assert(s.Evaluate().type == Type::NONE);
+    s.Ranged(ITEM_SUBCLASS_WEAPON_GUN);
+    assert(buys(bullets, NeedMoneyFor::ammo));
+    s.Ranged(ITEM_SUBCLASS_WEAPON_CROSSBOW);
+    assert(buys(arrows, NeedMoneyFor::ammo));
+    s.Count("ammo", 200);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Budget(NeedMoneyFor::ammo, 0);
+
+    // Only active, learned, non-passive spells make reagents a paid goal.
+    s.Budget(NeedMoneyFor::spells, 100);
+    s.Learn(500, reagent.ItemId, 2, true);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Learn(501, reagent.ItemId, 2, false, false);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Learn(502, reagent.ItemId, 2, false, true, PLAYERSPELL_REMOVED);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Learn(503, reagent.ItemId, 2);
+    s.bot.items[reagent.ItemId] = 3;
+    assert(buys(reagent, NeedMoneyFor::spells));
+    s.bot.items[reagent.ItemId] = 4;
+    assert(s.Evaluate().type == Type::NONE);
+    s.Learn(504, token.ItemId, 1);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.items[reagent.ItemId] = 0;
+    VendorItem& limited = *vendor.vendor->m_items[4];
+    limited.maxcount = 5;
+    assert(s.Evaluate().type == Type::NONE);
+    limited.stock = 1;
+    assert(buys(reagent, NeedMoneyFor::spells));
+    s.Budget(NeedMoneyFor::spells, 29);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.discount = 0.8f;
+    s.Budget(NeedMoneyFor::spells, 24);
+    assert(buys(reagent, NeedMoneyFor::spells));
+
+    // The budget and price are checked again at the vendor.
+    s.bot.x = vendor.x;
+    s.Budget(NeedMoneyFor::spells, 23);
+    assert(!s.Tick(0) && world.actions.empty());
+    s.Budget(NeedMoneyFor::spells, 24);
+    assert(buys(reagent, NeedMoneyFor::spells) && s.Tick(0));
+    assert(world.actions.back() == std::make_pair(std::string("buy"), "item:" + std::to_string(reagent.ItemId)));
+}
+
+void AuctionVisitTests()
+{
+    Scenario s;
+    sPlayerbotAIConfig.earnedAuctions = true;
+    Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 5.0f);
+    Creature& auctioneer = s.Npc(UNIT_NPC_FLAG_AUCTIONEER, 40.0f);
+    GameObject& mailbox = s.Mailbox(30.0f);
+    s.Flag("can sell", true);
+    // The first evaluation staggers the first visit by the bot's guid.
+    assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+    assert(s.ai.rpgInfo.earnedAuctionClockStarted && s.ai.rpgInfo.earnedAuctionVisitDelay == 7 * IN_MILLISECONDS);
+    now += 7 * IN_MILLISECONDS;
+    assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+    s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+    assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer));
+    auctioneer.alive = false;
+    assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+    world.mailboxes.clear();
+    assert(s.Is(s.Evaluate(), Type::SELL, vendor) && world.plans == 1);
+    world.mailboxes[mailbox.guid.value] = &mailbox;
+    auctioneer.alive = true;
+    s.ai.rpgInfo.earnedAuctionVisitMailbox = true;
+
+    // A completed mailbox visit schedules the next one and alternates to the auctioneer.
+    assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+    assert(s.Tick(0) && world.visits.empty());
+    assert(s.Tick(0) && world.visits.size() == 1 && world.visits[0].target == mailbox.guid && world.visits[0].mailbox);
+    assert(s.ai.rpgInfo.earnedAuctionLastVisit == now && !s.ai.rpgInfo.earnedAuctionVisitMailbox);
+    assert(s.ai.rpgInfo.earnedAuctionVisitDelay == (300 + 7) * IN_MILLISECONDS);
+    assert(s.value->Get().type == Type::NONE);
+    now += 306 * IN_MILLISECONDS;
+    assert(s.Evaluate().type == Type::SELL);
+    now += IN_MILLISECONDS;
+    assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer));
+    assert(s.Tick(0) && s.Tick(0) && world.visits.size() == 2 && !world.visits[1].mailbox);
+    assert(s.ai.rpgInfo.earnedAuctionVisitMailbox);
+}
+
+void AuctionTravelTests()
+{
+    {
+        // Distant bots walk to the market and switch to the auctioneer once it is in range.
+        Scenario s;
+        WorldPosition market(0, 1000.0f, 0.0f);
+        world.market = &market;
+        Creature& auctioneer = s.Npc(UNIT_NPC_FLAG_AUCTIONEER, 1000.0f, 2.0f);
+        s.DueAuctionVisit();
+        NaturalMaintenanceTask const task = s.Evaluate();
+        assert(task.type == Type::AUCTION_TRAVEL && task.destination.x == 1000.0f && s.trigger->IsActive());
+        int ticks = 0;
+        while (s.value->Get().type == Type::AUCTION_TRAVEL)
+            assert(s.Tick(100) && ++ticks < 40);
+        assert(s.Is(s.value->Get(), Type::AUCTION, auctioneer) && s.bot.GetExactDist(market) <= 150.0f);
+        assert(s.Tick(100) && s.Tick(100) && world.visits.size() == 1);
+        assert(!s.ai.rpgInfo.earnedAuctionTravelActive && s.ai.rpgInfo.earnedAuctionTravelLastAttempt == now);
+    }
+    {
+        // Arriving without a compatible auctioneer ends the trip and backs off.
+        Scenario s;
+        WorldPosition market(0, 400.0f, 0.0f);
+        world.market = &market;
+        s.DueAuctionVisit();
+        assert(s.Evaluate().type == Type::AUCTION_TRAVEL);
+        int ticks = 0;
+        while (s.Tick(100))
+            assert(++ticks < 40);
+        assert(s.bot.GetExactDist(market) <= INTERACTION_DISTANCE && !s.ai.rpgInfo.earnedAuctionTravelActive);
+        assert(s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
+        assert(s.value->Get().type == Type::NONE && world.visits.empty());
+    }
+    {
+        // A failed path or an expired trip also backs off.
+        Scenario s;
+        WorldPosition market(0, 1000.0f, 0.0f);
+        world.market = &market;
+        s.DueAuctionVisit();
+        assert(s.Evaluate().type == Type::AUCTION_TRAVEL);
+        world.travelReachable = false;
+        assert(!s.Tick(100) && !s.ai.rpgInfo.earnedAuctionTravelActive);
+        assert(s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
+        world.travelReachable = true;
+        now += EarnedAuctionTravel::TravelBackoffMs;
+        s.DueAuctionVisit();
+        assert(s.Evaluate().type == Type::AUCTION_TRAVEL && s.Tick(100));
+        assert(!s.Tick(EarnedAuctionTravel::MaximumTravelTimeMs) && !s.ai.rpgInfo.earnedAuctionTravelActive);
+    }
+}
+
+int main()
+{
+    GuardTests();
+    SellAndRepairTests();
+    TrainerTests();
+    SupplyTests();
+    AuctionVisitTests();
+    AuctionTravelTests();
+    std::cout << "Natural maintenance: guards, priorities, budgets and auction visits passed\n";
+}
+'''
+
+
+def build(directory, parts, name):
+    text = prelude
+    for key in ('types', 'classes', 'travel', 'value', 'action', 'trigger', 'usage'):
+        text = text.replace('@@' + key.upper() + '@@', parts[key])
+    (directory / (name + '.cpp')).write_text(text + tests)
+    executable = directory / name
+    subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-fsanitize=address,undefined',
+                    '-fno-omit-frame-pointer', '-I', str(module / 'Bot'), str(directory / (name + '.cpp')),
+                    '-o', str(executable)], check=True)
+    return subprocess.run([str(executable)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+
+mutations = [
+    ('maintenance during combat', 'value', 'bot->IsInCombat() || ', ''),
+    ('maintenance with a game-client master', 'value', 'botAI->HasGameClientMaster() || ', ''),
+    ('trainer lesson above the spell budget', 'value', 'price <= spellBudget && ', ''),
+    ('supply above its budget', 'value', 'if (price <= budget && bot->HasEnoughMoney(price))',
+     'if (budget && bot->HasEnoughMoney(price))'),
+    ('reagents of passive spells', 'value', '!info || info->IsPassive()', '!info'),
+    ('repair before vendor sales', 'value', 'if (canSell && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))',
+     'if (canSell && !needsRepair && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))'),
+    ('purchase without a budget check at the vendor', 'action',
+     'if (price > AI_VALUE2(uint32, "free money for", task.budgetType) || !bot->HasEnoughMoney(price))',
+     'if (!bot->HasEnoughMoney(price))'),
+    ('visit clock not advanced', 'action', 'info.earnedAuctionLastVisit = getMSTime();', ''),
+    ('trip guard does not back off', 'travel', 'ai->rpgInfo.earnedAuctionVisitDelay = TravelBackoffMs;', ''),
+]
+
+with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temporary:
+    temporary = Path(temporary)
+    result = build(temporary, production, 'maintenance')
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Natural maintenance fixture failed (exit {result.returncode})')
+    for label, key, old, new in mutations:
+        mutated = dict(production)
+        mutated[key] = production[key].replace(old, new)
+        if mutated[key] == production[key]:
+            raise SystemExit(f'{label} mutation was not applied')
+        if not build(temporary, mutated, 'mutant').returncode:
+            raise SystemExit(f'Natural maintenance fixture did not reject: {label}')
+        print(f'Natural maintenance mutation rejected: {label}')
