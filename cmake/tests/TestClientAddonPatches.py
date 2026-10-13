@@ -335,6 +335,29 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.rejected(fixture.export(preserved))
         self.assertEqual((preserved / "user-file").read_bytes(), b"retain me")
 
+    def test_preparation_removes_generated_copies_dropped_from_lock(self):
+        fixture = self.fixture()
+        extra = {"name": "mod-extra", "url": "https://github.com/example/mod-extra.git",
+                 "revision": commit(fixture.root / ".module-cache/mod-extra",
+                                    {"src/extra.cpp": b"int extra = 1;\n", "conf/extra.conf.dist": b"Extra = 1\n"}),
+                 "patches": []}
+        fixture.lock["modules"].append(extra)
+        fixture.write_lock()
+        self.successful(fixture.prepare())
+        modules = fixture.root / ".module-cache/prepared-core/modules"
+        self.assertTrue((modules / "mod-extra/.portable-source").is_file())
+        # Unmarked directories are local work and are never removed.
+        (modules / "mod-local").mkdir()
+        (modules / "mod-local/keep.cpp").write_bytes(b"local edit\n")
+        fixture.lock["modules"].remove(extra)
+        fixture.lock["clientAddons"] = []
+        fixture.write_lock()
+        self.successful(fixture.prepare())
+        self.assertFalse((modules / "mod-extra").exists())
+        self.assertTrue((modules / "mod-fixture/.portable-source").is_file())
+        self.assertEqual((modules / "mod-local/keep.cpp").read_bytes(), b"local edit\n")
+        self.assertFalse(fixture.prepared.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
