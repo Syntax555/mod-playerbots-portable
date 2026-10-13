@@ -147,17 +147,6 @@
         "patches/multibot-options-initialization.patch",
         "patches/multibot-era-talent-inspect.patch"
       ]
-    },
-    {
-      "name": "EraTalents",
-      "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
-      "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8",
-      "archiveName": "EraTalents",
-      "interface": 30300,
-      "toc": "EraTalents.toc",
-      "license": "LICENSE",
-      "sourceModule": "mod-era-talents",
-      "sourcePath": "client-addon/EraTalents"
     }
   ],
   "clientPatch": {
