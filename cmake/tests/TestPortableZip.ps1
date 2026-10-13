@@ -10,6 +10,8 @@ $cmakeRoot = Split-Path $PSScriptRoot -Parent
 $verifier = Join-Path $cmakeRoot 'VerifyPortableZip.ps1'
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('portable-zip-tests-' + [guid]::NewGuid().ToString('N'))
 $source = Join-Path $temporaryRoot 'source with spaces'
+# Packaging always reads the generated core checkout, never the submodule.
+$core = Join-Path $source '.module-cache/prepared-core'
 $dist = Join-Path $temporaryRoot 'distribution with spaces'
 $script:passed = 0
 
@@ -91,7 +93,7 @@ try {
     $revision = 'a' * 40
     $lock = [ordered]@{
         schemaVersion = 1
-        core = @{ name = 'azerothcore-wotlk'; revision = $revision; source = 'azerothcore-wotlk' }
+        core = @{ name = 'azerothcore-wotlk'; revision = $revision; source = 'azerothcore-wotlk'; patches = @('patches/core-fixture.patch') }
         modules = @(
             @{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') },
             @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') }
@@ -102,7 +104,7 @@ try {
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
     foreach ($name in @('README.md', 'LICENSE', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
-        'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'docs/world-buffs.md',
+        'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'patches/core-fixture.patch', 'docs/world-buffs.md',
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',
         'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt',
         'docs/class-quests.md',
@@ -115,21 +117,23 @@ try {
     foreach ($profile in $profiles) {
         Write-FixtureText (Join-Path $source "cmd/startup/profiles/$profile.conf") "$profile = fixture`n"
     }
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/LICENSE')
+    Write-FixtureText (Join-Path $core 'LICENSE')
     foreach ($app in @('authserver', 'worldserver')) {
-        Write-FixtureText (Join-Path $source "azerothcore-wotlk/src/server/apps/$app/$app.conf.dist")
+        Write-FixtureText (Join-Path $core "src/server/apps/$app/$app.conf.dist")
     }
     foreach ($name in @('base/db_auth/base.sql', 'base/db_world/base.sql', 'updates/db_world/current.sql')) {
-        Write-FixtureText (Join-Path $source "azerothcore-wotlk/data/sql/$name") "SELECT 1;`n"
+        Write-FixtureText (Join-Path $core "data/sql/$name") "SELECT 1;`n"
     }
-    $moduleSql = Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/data/sql/db_world/current.sql'
+    # SQL from the pristine submodule must never reach the package.
+    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/data/sql/updates/db_world/unprepared.sql')
+    $moduleSql = Join-Path $core 'modules/mod-fixture/data/sql/db_world/current.sql'
     Write-FixtureText $moduleSql "SELECT 1;`n"
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/src/fixture.cpp')
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/conf/mod_fixture.conf.dist')
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/LICENSE')
+    Write-FixtureText (Join-Path $core 'modules/mod-fixture/src/fixture.cpp')
+    Write-FixtureText (Join-Path $core 'modules/mod-fixture/conf/mod_fixture.conf.dist')
+    Write-FixtureText (Join-Path $core 'modules/mod-fixture/LICENSE')
     # A module without SQL or a root LICENSE uses its preserved README notice.
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-world-buff-bots/src/WorldBuffBots.cpp')
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/modules/mod-world-buff-bots/conf/mod_world_buff_bots.conf.dist')
+    Write-FixtureText (Join-Path $core 'modules/mod-world-buff-bots/src/WorldBuffBots.cpp')
+    Write-FixtureText (Join-Path $core 'modules/mod-world-buff-bots/conf/mod_world_buff_bots.conf.dist')
     $addon = Join-Path $source '.module-cache/prepared-addons/MultiBot'
     Write-FixtureText (Join-Path $addon 'MultiBot.toc') "## Interface: 30300`nCore\MultiBot.lua`n"
     Write-FixtureText (Join-Path $addon 'Core/MultiBot.lua') "print('good')`n"
@@ -158,7 +162,7 @@ try {
     Write-FixtureText $oldModuleSql "SELECT 2;`n"
     $sameTimestamp = [datetime]::UtcNow.AddDays(-2)
     foreach ($path in @($oldCoreSql, $oldModuleSql,
-        (Join-Path $source 'azerothcore-wotlk/data/sql/updates/db_world/current.sql'), $moduleSql)) {
+        (Join-Path $core 'data/sql/updates/db_world/current.sql'), $moduleSql)) {
         [System.IO.File]::SetLastWriteTimeUtc($path, $sameTimestamp)
     }
     Invoke-Assembly
@@ -176,7 +180,7 @@ try {
     }
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'addons'))) 'Assembly duplicated standalone client addons'
     Remove-Item -LiteralPath (Join-Path $source '.module-cache/prepared-addons') -Recurse -Force
-    Remove-Item -LiteralPath (Join-Path $source 'azerothcore-wotlk/modules/mod-fixture/data/sql') -Recurse -Force
+    Remove-Item -LiteralPath (Join-Path $core 'modules/mod-fixture/data/sql') -Recurse -Force
     Invoke-Assembly
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'src/modules/mod-fixture/data/sql'))) 'Assembly retained SQL after the module stopped supplying it'
     Write-FixtureText $moduleSql "SELECT 1;`n"
@@ -282,27 +286,8 @@ try {
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql')) {
         Test-NegativeZip "obsolete SQL $obsolete" 'Unexpected SQL file' -ExtraEntries @(@{ Name = $obsolete; Bytes = [byte[]]@(1) })
     }
-    # Core adaptations must package from the generated checkout, while older
-    # manifests above continue to use the pristine submodule.
-    $preparedCore = Join-Path $source '.module-cache/prepared-core'
-    [void][System.IO.Directory]::CreateDirectory((Split-Path $preparedCore -Parent))
-    Copy-Item -LiteralPath (Join-Path $source 'azerothcore-wotlk') -Destination $preparedCore -Recurse
-    Write-FixtureText (Join-Path $source 'azerothcore-wotlk/data/sql/updates/db_world/unprepared.sql')
-    Write-FixtureText (Join-Path $source 'patches/core-fixture.patch')
-    $lock.core.patches = @('patches/core-fixture.patch')
-    Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
-    Invoke-Assembly
-    $script:baseline.Clear()
-    foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File -Force) {
-        $relative = [System.IO.Path]::GetRelativePath($dist, $file.FullName).Replace('\', '/')
-        $script:baseline.Add($relative, [System.IO.File]::ReadAllBytes($file.FullName))
-    }
-    $patchedZip = Join-Path $temporaryRoot 'patched-core.zip'
-    New-FixtureZip $patchedZip
-    Test-Zip 'patched core selects generated SQL and retains original source' $patchedZip
     Assert-Condition (-not $script:baseline.ContainsKey('src/data/sql/updates/db_world/unprepared.sql')) 'Original core SQL leaked into generated export'
     Test-NegativeZip 'missing core adaptation patch' 'missing core source patch' -Omit @('patches/core-fixture.patch')
-    Test-NegativeZip 'missing generated core SQL' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')
     Write-Host "Passed $script:passed portable assembly/ZIP regression checks."
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force }

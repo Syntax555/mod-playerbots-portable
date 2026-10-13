@@ -160,11 +160,8 @@ jobs:
         if: steps.features.outputs.enabled == 'true'
         run: |
           python3 - <<'PYTHON'
-          import json, pathlib, subprocess, sys
-          root = pathlib.Path.cwd()
-          lock = json.loads((root / 'versions.lock.json').read_text())
-          core = root / '.module-cache/prepared-core' if lock['core'].get('patches') else root / lock['core']['source']
-          module = core / 'modules/mod-era-talents'
+          import pathlib, subprocess, sys
+          module = pathlib.Path.cwd() / '.module-cache/prepared-core/modules/mod-era-talents'
           subprocess.run([sys.executable, str(module / 'tools/test_era_locales.py')], cwd=module, check=True)
           for fixture in sorted((module / 'client-addon/EraTalents').glob('test_*.lua')):
               subprocess.run(['lua5.1', str(fixture)], cwd=module, check=True)

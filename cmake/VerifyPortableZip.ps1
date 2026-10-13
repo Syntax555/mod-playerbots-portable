@@ -143,11 +143,7 @@ try {
     }
 
     $expectedSql = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $preparedCore = if (@($lock.core.patches | Where-Object { $_ }).Count -gt 0) {
-        Join-Path $RepositoryRoot '.module-cache/prepared-core'
-    } else {
-        Join-Path $RepositoryRoot $lock.core.source
-    }
+    $preparedCore = Join-Path $RepositoryRoot '.module-cache/prepared-core'
     foreach ($patch in @($lock.core.patches)) {
         if ($patch -and -not $files.Contains($patch)) { throw "Portable ZIP is missing core source patch $patch" }
     }
