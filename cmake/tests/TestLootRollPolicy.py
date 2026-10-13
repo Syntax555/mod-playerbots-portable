@@ -54,6 +54,10 @@ assert 'creators["master loot roll"]' in (module / 'Ai/Base/WorldPacketActionCon
 strategy = (module / 'Ai/Base/Strategy/WorldPacketHandlerStrategy.cpp').read_text()
 assert 'new TriggerNode("master loot roll", { NextAction("master loot roll", relevance) })' in strategy
 assert 'new TriggerNode("very often", { NextAction("loot roll", relevance) })' in strategy
+# Master-loot roll notifications run the same roll policy as the periodic action.
+action_header = (module / 'Ai/Base/Actions/LootRollAction.h').read_text()
+master_class = function(action_header, 'class MasterLootRollAction')
+assert 'Execute' not in master_class and 'MasterLootRollAction::Execute' not in action
 
 enums = '\n'.join(function(source, signature) + ';' for source, signature in (
     (group_header, 'enum RollVote : uint8'),
@@ -328,7 +332,6 @@ class MasterLootRollAction : public LootRollAction
 public:
     using LootRollAction::LootRollAction;
     bool isUseful();
-    bool Execute(Event event);
 };
 '''.replace('NATIVE_ENUMS', enums)
 
@@ -343,7 +346,6 @@ production = '\n'.join([
     function(action, 'bool LootRollAction::Execute'),
     function(action, 'RollVote LootRollAction::CalculateRollVote'),
     function(action, 'bool MasterLootRollAction::isUseful'),
-    function(action, 'bool MasterLootRollAction::Execute'),
     function(action, 'bool CanBotUseToken'),
     function(action, 'bool RollUniqueCheck'),
     function(group, 'Group::Rolls::iterator Group::GetRoll'),
