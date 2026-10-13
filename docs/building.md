@@ -35,7 +35,7 @@ cmake --build build --config Release --target package_zip
 cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
 ```
 
-Run each command only after the previous command succeeds. `CopyWindowsRuntime.ps1` bundles the Visual C++ runtime needed by the server and portable MySQL. `CopyDependencyLicenses.ps1` preserves dependency notices; pass the same dependency paths used to configure the build.
+Run each command only after the previous command succeeds. `CopyWindowsRuntime.ps1` bundles the Visual C++ runtime needed by the server and portable MySQL. `CopyDependencyLicenses.ps1` preserves dependency notices; pass the same dependency paths used to configure the build. If the OpenSSL package lacks its license file, also pass `-OpenSSLVersion <version>` to add the upstream license of that release.
 
 Outputs:
 
