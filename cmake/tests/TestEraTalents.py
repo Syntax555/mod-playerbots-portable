@@ -778,13 +778,23 @@ int main() {
     # The SelfBot double below mirrors the command: the human's own AI is its master.
     assert ('PlayerbotsMgr::instance().AddPlayerbotData(master, true);\n'
             '            GET_PLAYERBOT_AI(master)->SetMaster(master);') in selfbot_command
+    # The seed reads the configured spec mix: spec numbers 0-2 are each class's PvE trees in tab
+    # order and the druid's spec 3 is the cat build, matching the authored era orders.
+    assert 'uint32 randomClassSpecProb[MAX_CLASSES][MAX_SPECNO];' in (playerbots / 'PlayerbotAIConfig.h').read_text()
+    spec_labels = {number: label for label, number in re.findall(
+        r'# ([^\n]+)\nAiPlayerbot\.RandomClassSpecProb\.(\d+\.\d+) =',
+        (playerbots.parent / 'conf/playerbots.conf.dist').read_text())}
+    for cls in (1, 2, 3, 4, 5, 7, 8, 9, 11):
+        assert all(spec_labels[f'{cls}.{spec}'].endswith(' pve') for spec in range(3))
+    assert spec_labels['11.3'] == 'cat pve'
     bot_policy_code = '\n'.join((
         function((playerbots / 'Bot/PlayerbotAI.cpp').read_text(), 'bool IsSelfBot(Player* player)'),
         function((playerbots / 'PlayerbotAIConfig.cpp').read_text(), 'bool PlayerbotAIConfig::IsInRandomAccountList('),
         'namespace EraTalentBots {', function(bot_source, 'bool IsBot(Player* p)'), '}',
         'using EraTalentBots::IsBot;',
         function(bot_source, '    bool Gated(Player* p)'),
-        function(bot_source, '    bool SpendsOwnPoints(Player* bot)')))
+        function(bot_source, '    bool SpendsOwnPoints(Player* bot)'),
+        function(bot_source, '    int SeedSpecTab(Player* bot)')))
     factory_code = function(bot_source, '    bool FactoryReconcile(')
     bot_login_code = function(bot_source, '    void OnBotLogin(')
     bot_level_code = function(bot_source, '    void OnBotLevelChanged(')
@@ -793,13 +803,14 @@ int main() {
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 using uint8=uint8_t; using uint32=uint32_t;
 constexpr uint8 CLASS_DRUID=11;
 #define LOG_DEBUG(...) ((void)0)
 enum EraId : uint8 { ERA_VANILLA=0, ERA_TBC=1, ERA_WOTLK=2 };
-struct Guid { uint32 GetCounter() const { return 2; } };
+struct Guid { uint32 counter; uint32 GetCounter() const { return counter; } };
 constexpr uint32 RANDOM_ACCOUNT=7, HUMAN_ACCOUNT=1;
 struct Session {
     bool headless=true; uint32 account=RANDOM_ACCOUNT;
@@ -811,13 +822,13 @@ struct PlayerbotAI { Player* master=nullptr; Player* GetMaster() const { return 
 struct Player {
     uint8 cls=1, level=1; EraId era=ERA_VANILLA, stored=ERA_VANILLA;
     bool combat=false, cat=false, bear=false;
-    Session session; PlayerbotAI* ai=nullptr;
+    Session session; PlayerbotAI* ai=nullptr; uint32 guid=2;
     int spent=0, builds=0, lastSpec=-1, freePoints=0, infos=0, invalidates=0, reconciles=0, reapplies=0;
     int nativeSpent=0, nativeBuilds=0, money=123456, xp=987, gear=17;
     std::array<uint32,3> tabs{};
     uint8 getClass() const { return cls; }
     uint8 GetLevel() const { return level; }
-    Guid GetGUID() const { return {}; }
+    Guid GetGUID() const { return {guid}; }
     Session* GetSession() { return &session; }
     bool IsInCombat() const { return combat; }
     char const* GetName() const { return "earned-bot"; }
@@ -827,6 +838,7 @@ struct Player {
 #define GET_PLAYERBOT_AI(player) ((player)->ai)
 struct PlayerbotAIConfig {
     std::vector<uint32> randomBotAccounts{RANDOM_ACCOUNT};
+    uint32 randomClassSpecProb[12][20]{};
     bool IsInRandomAccountList(uint32 id);
     static PlayerbotAIConfig& instance() { static PlayerbotAIConfig config; return config; }
 };
@@ -938,14 +950,48 @@ int main() {
         EraTalentBots::OnBotLevelChanged(&alt); EraTalentBots::OnBotLogin(&alt);
         assert(alt.spent==0 && alt.builds==0 && alt.nativeBuilds==0 && alt.nativeSpent==10 && alt.reconciles>0);
     }
-    std::cout << "Era bots: maintenance/login retain builds, levels extend earned points, pending/combat transitions stop mutation, native factory never resets and SelfBot/altbot points stay with their owner passed\n";
+
+    // Fresh builds follow the configured PvE spec mix, and a GUID always seeds the same spec.
+    auto& probability=sPlayerbotAIConfig.randomClassSpecProb;
+    probability[1][0]=20; probability[1][1]=40; probability[1][2]=40;
+    probability[CLASS_DRUID][0]=20; probability[CLASS_DRUID][1]=25; probability[CLASS_DRUID][2]=35;
+    probability[CLASS_DRUID][3]=20; probability[CLASS_DRUID][4]=50; // a PvP variant has no era order
+    for (uint8 cls : {uint8(1),CLASS_DRUID}) {
+        std::array<int,4> seeded{}; Player seed; seed.cls=cls;
+        for (seed.guid=1; seed.guid<=20000; ++seed.guid) {
+            int tab=SeedSpecTab(&seed);
+            assert(tab==SeedSpecTab(&seed)); ++seeded.at(tab);
+        }
+        for (int tab=0; tab<4; ++tab) assert(std::abs(seeded[tab]*100-int(probability[cls][tab])*20000)<=2*20000);
+        assert(cls==CLASS_DRUID || seeded[3]==0);
+    }
+    Player unconfigured; unconfigured.cls=2;
+    for (unconfigured.guid=1; unconfigured.guid<=30; ++unconfigured.guid) assert(SeedSpecTab(&unconfigured)<3);
+    // A seeded cat keeps cat past the shared Ferocity opening and after an earned era refund.
+    Player feral; feral.cls=CLASS_DRUID;
+    while (SeedSpecTab(&feral)!=3) ++feral.guid;
+    for (feral.level=10; feral.level<=14; ++feral.level) {
+        EraTalentBots::OnBotLevelChanged(&feral); assert(feral.lastSpec==3);
+    }
+    feral.cat=true; feral.level=20; EraTalentBots::OnBotLevelChanged(&feral);
+    assert(feral.lastSpec==3 && feral.spent==11);
+    Player bear=feral; bear.cat=false; bear.bear=true; bear.lastSpec=-1;
+    assert(EraTalentBots::FactoryReconcile(&bear,3) && bear.lastSpec==-1); // no new points: no rebuild
+    bear.level=25; assert(EraTalentBots::FactoryReconcile(&bear,3) && bear.lastSpec==1); // an existing bear stays bear
+    feral.era=feral.stored=ERA_TBC; feral.spent=0; feral.tabs={}; feral.cat=false; feral.level=70;
+    EraTalentBots::OnBotLevelChanged(&feral);
+    assert(feral.lastSpec==3 && feral.spent==61);
+    std::cout << "Era bots: maintenance/login retain builds, levels extend earned points, pending/combat transitions stop mutation, native factory never resets, SelfBot/altbot points stay with their owner and fresh builds follow the configured spec mix passed\n";
 }
 '''
     compile_run(directory, 'era-bots', bot_fixture)
     for label, old, new in (
             ('SelfBot on the bot path', '(GET_PLAYERBOT_AI(p) && !IsSelfBot(p))', 'GET_PLAYERBOT_AI(p) != nullptr'),
             ('altbot historical points spent', ' && SpendsOwnPoints(bot))', ')'),
-            ('altbot native points spent', 'if (SpendsOwnPoints(bot))', 'if (bot)')):
+            ('altbot native points spent', 'if (SpendsOwnPoints(bot))', 'if (bot)'),
+            ('fresh builds ignore the spec mix', 'FactoryReconcile(bot, SeedSpecTab(bot));',
+             'FactoryReconcile(bot, int(bot->GetGUID().GetCounter() % 3));'),
+            ('seeded cat druids rebuilt as bears', ' || SeedSpecTab(bot) == 3', '')):
         mutated = bot_fixture.replace(old, new)
         if mutated == bot_fixture:
             raise SystemExit(f'{label} mutation was not applied')

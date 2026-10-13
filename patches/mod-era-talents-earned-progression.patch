@@ -1552,7 +1552,7 @@ index 0000000..50f36bf
 +
 +#endif
 diff --git a/src/EraTalentBots.cpp b/src/EraTalentBots.cpp
-index b14b581..2be2e35 100644
+index b14b581..8ead9cd 100644
 --- a/src/EraTalentBots.cpp
 +++ b/src/EraTalentBots.cpp
 @@ -1,10 +1,12 @@
@@ -1654,7 +1654,41 @@ index b14b581..2be2e35 100644
      // TBC faction DPS seals — the shared arm behind OnBotLevelChanged and the patch-0020
      // post-trainer-walk bridge. The factory's trainer walk (InitAvailableSpells) is class-only
      // gated, so a TBC-band paladin bot learns BOTH Seal of Blood (946080, Horde/BE) and Seal of
-@@ -430,7 +418,9 @@ namespace EraTalentBots
+@@ -361,6 +349,33 @@ namespace
+         { { ERA_TBC, CLASS_DRUID, 3 }, { 20121, 20122, 20128, 20127, 20126, 20129, 20130, 20131, 20132, 20133, 20135, 20136, 20138, 20139, 20140, 20141, 20123, 20124, 20125, 20143, 20144 } },
+     };
+ 
++    // A fresh build follows the configured PvE spec mix (AiPlayerbot.RandomClassSpecProb spec
++    // numbers 0-2 and the druid's cat 3, the authored orders). A GUID hash keeps the choice
++    // stable, so the next era's refunded tree is rebuilt as the same spec.
++    int SeedSpecTab(Player* bot)
++    {
++        uint8 const cls = bot->getClass();
++        int const specs = cls == CLASS_DRUID ? 4 : 3;
++        uint32 total = 0;
++        for (int spec = 0; spec < specs; ++spec)
++            total += sPlayerbotAIConfig.randomClassSpecProb[cls][spec];
++        uint32 hash = bot->GetGUID().GetCounter();
++        hash = (hash ^ (hash >> 16)) * 0x7feb352du;
++        hash = (hash ^ (hash >> 15)) * 0x846ca68bu;
++        hash ^= hash >> 16;
++        if (!total)
++            return int(hash % 3);
++        uint32 point = hash % total;
++        for (int spec = 0; spec < specs; ++spec)
++        {
++            uint32 const weight = sPlayerbotAIConfig.randomClassSpecProb[cls][spec];
++            if (point < weight)
++                return spec;
++            point -= weight;
++        }
++        return 0;
++    }
++
+     // Learn one node to maxRank (TryLearn increments a single rank per call and enforces
+     // era/class/prereq/budget — a bad order wastes points but cannot corrupt state).
+     void LearnToMax(Player* bot, uint32 talentId)
+@@ -430,7 +445,9 @@ namespace EraTalentBots
              return false;
  
          EraId era = BotEra(bot);
@@ -1665,7 +1699,7 @@ index b14b581..2be2e35 100644
  
          // Randomize/bracket moves land here for every managed bot: enforce the glyph era
          // rule alongside the talent teardown (no-op for WotLK-band bots and DKs).
-@@ -441,15 +431,28 @@ namespace EraTalentBots
+@@ -441,15 +458,30 @@ namespace EraTalentBots
          if (sEraTalentContent->NodesFor(uint8(era), bot->getClass()).empty())
              return false;                                            // DK-in-Vanilla guard
  
@@ -1689,9 +1723,11 @@ index b14b581..2be2e35 100644
 +                    specTab = tab;
 +            if (bot->getClass() == CLASS_DRUID && specTab == 1)
 +            {
++                // Both feral orders open with Ferocity, so a seeded cat stays cat until it diverges.
 +                uint32 catNode = era == ERA_VANILLA ? 18717 : 20122;
 +                uint32 bearNode = era == ERA_VANILLA ? 18720 : 20125;
-+                if (EraTalents::CurrentRank(bot, era, catNode) > 0 && EraTalents::CurrentRank(bot, era, bearNode) == 0)
++                if (EraTalents::CurrentRank(bot, era, bearNode) == 0 &&
++                    (EraTalents::CurrentRank(bot, era, catNode) > 0 || SeedSpecTab(bot) == 3))
 +                    specTab = 3;
 +            }
 +        }
@@ -1703,7 +1739,7 @@ index b14b581..2be2e35 100644
          bot->SetFreeTalentPoints(0);
          bot->SendTalentsInfoData(false);
          LOG_DEBUG("module", "[mod-era-talents] bot build: {} class {} tab{} {}pts",
-@@ -461,119 +464,43 @@ namespace EraTalentBots
+@@ -461,119 +493,43 @@ namespace EraTalentBots
      {
          if (Gated(bot))
              return;
@@ -1769,7 +1805,7 @@ index b14b581..2be2e35 100644
 -        // this hook fires). No-op for non-paladins / when the wrong seal isn't held.
 -        if (era == ERA_TBC)
 -            EraTalents::StripWrongFactionTbcPalSeal(bot);
-+            FactoryReconcile(bot, int(bot->GetGUID().GetCounter() % 3));
++            FactoryReconcile(bot, SeedSpecTab(bot));
 +        }
 +        else
 +            EraTalents::ReconcileBaselineSpells(bot, era);
@@ -1823,7 +1859,7 @@ index b14b581..2be2e35 100644
 -            && EraTalents::AvailablePoints(bot, era) > 0)
 +        InvalidateSpecTabs(bot);
 +        if (EraHasTalentTrees(bot, era))
-+            FactoryReconcile(bot, int(bot->GetGUID().GetCounter() % 3));
++            FactoryReconcile(bot, SeedSpecTab(bot));
 +        else
          {
 -            // Recover the build's tab from where the points already are (the spec-tab bridge
@@ -1850,7 +1886,7 @@ index b14b581..2be2e35 100644
      }
  
      void OnLogout(Player* p)
-@@ -694,7 +621,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
+@@ -694,7 +650,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
      // patched GetPlayerSpecTabs calls this for any Player*; we decide who it serves.
      if (!p || !tabs3 || !EraTalentBots::IsEraManaged(p))
          return false;
@@ -1859,7 +1895,7 @@ index b14b581..2be2e35 100644
  
      std::array<uint32, 3> t{ 0, 0, 0 };
      bool cached = false;
-@@ -723,8 +650,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
+@@ -723,8 +679,7 @@ bool EraTalentBots_SpecTabs(Player* p, uint32* tabs3)
          g_specTabsCache[p->GetGUID()] = t;
      }
  
@@ -1869,7 +1905,7 @@ index b14b581..2be2e35 100644
      tabs3[0] = t[0];
      tabs3[1] = t[1];
      tabs3[2] = t[2];
-@@ -738,10 +664,10 @@ uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId)
+@@ -738,10 +693,10 @@ uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId)
      if (bot->HasSpell(stockSpellId))
          return stockSpellId;    // knows the stock id: native bots, WotLK band, knob off,
                                  // and era-gated stock grants (Shield Slam) all end here
