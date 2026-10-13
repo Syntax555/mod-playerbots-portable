@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build and verify the era client MPQ using only manifest-pinned inputs.
 
 The IP client archive is the base. Both DBC generators come from the locked,
@@ -21,6 +20,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+
 
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 GITHUB_URL = re.compile(r"https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git\Z")
@@ -54,7 +54,7 @@ def relative_path(value: str) -> str:
 
 
 def run(command, *, cwd=None, quiet=False):
-    result = subprocess.run(command, cwd=cwd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(command, cwd=cwd, check=True, capture_output=True)
     if not quiet and result.stdout:
         print(result.stdout.decode(errors="replace").strip())
     return result.stdout
@@ -335,7 +335,7 @@ def verify_zip(path: Path, lock):
                 raise ValueError(f"Duplicate, directory or symbolic link in client ZIP: {name}")
             if name.startswith(".") or any(part.startswith(".") for part in PurePosixPath(name).parts):
                 raise ValueError(f"Hidden asset in client ZIP: {name}")
-            if not (name.startswith("Interface/AddOns/EraTalents/") or name.startswith("licenses/")
+            if not (name.startswith(("Interface/AddOns/EraTalents/", "licenses/"))
                     or name in ("Data/patch-V.mpq", "README.txt", "SOURCE_MANIFEST.json")):
                 raise ValueError(f"Unexpected client ZIP asset: {name}")
             folded.add(name.casefold())
@@ -428,7 +428,7 @@ def build(args):
     if not (storm_source / ".git").exists():
         run([args.git, "init", "--quiet", str(storm_source)], quiet=True)
     available = subprocess.run([args.git, "-C", str(storm_source), "cat-file", "-e", f"{storm['revision']}^{{commit}}"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0
     if not available:
         run([args.git, "-C", str(storm_source), "fetch", "--depth=1", storm["url"], storm["revision"]], quiet=True)
     with tempfile.TemporaryDirectory(prefix="era-client-", dir=cache) as temp:

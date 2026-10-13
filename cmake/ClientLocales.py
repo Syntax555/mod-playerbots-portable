@@ -10,6 +10,7 @@ import struct
 import tempfile
 from urllib.request import Request, urlopen
 
+
 DBC_LAYOUTS = {
     "Achievement.dbc": {"fields": 62, "localized": {"name": 4, "description": 21, "reward": 43}},
     "SkillLine.dbc": {"fields": 56, "localized": {"name": 3, "description": 20, "alternate verb": 38}},

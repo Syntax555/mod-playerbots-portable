@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Reconstruct a client addon from its locked commit and ordered source patches."""
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ def run_git(repository: Path, *arguments: str, ceiling: Path | None = None) -> b
     if ceiling is not None:
         environment["GIT_CEILING_DIRECTORIES"] = str(ceiling)
     result = subprocess.run(["git", "-C", str(repository), *arguments], env=environment,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            capture_output=True, check=False)
     if result.returncode:
         raise ValueError(f"Cannot reconstruct locked addon source: {result.stderr.decode(errors='replace').strip()}")
     return result.stdout
