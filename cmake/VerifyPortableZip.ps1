@@ -151,6 +151,8 @@ try {
     if (-not (Test-Path -LiteralPath $coreSqlSource -PathType Container)) { throw 'AzerothCore SQL source is missing.' }
     foreach ($sql in Get-ChildItem -LiteralPath $coreSqlSource -Recurse -File -Force -Filter '*.sql') {
         $relative = [System.IO.Path]::GetRelativePath($coreSqlSource, $sql.FullName).Replace('\', '/')
+        # The database updater never reads the historical old/ migrations.
+        if ($relative -like 'old/*') { continue }
         $name = "src/data/sql/$relative"
         [void]$expectedSql.Add($name)
         if (-not $entries.ContainsKey($name)) { throw "Portable ZIP is missing core SQL $name" }
