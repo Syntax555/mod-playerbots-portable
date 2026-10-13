@@ -87,6 +87,13 @@ try {
             throw "Portable ZIP is missing the dependency notices in $directory"
         }
     }
+    $reader = [System.IO.StreamReader]::new($entries['LICENSE'].Open())
+    try { $packagedLicense = $reader.ReadToEnd().Replace("`r`n", "`n").TrimEnd("`n") } finally { $reader.Dispose() }
+    $sourceLicense = (Get-Content (Join-Path $RepositoryRoot 'LICENSE') -Raw).Replace("`r`n", "`n").TrimEnd("`n")
+    if (-not $packagedLicense.StartsWith('This MIT License covers only the portable launcher', [System.StringComparison]::Ordinal) -or
+        -not $packagedLicense.EndsWith("`n`n$sourceLicense", [System.StringComparison]::Ordinal)) {
+        throw 'Packaged LICENSE must state that the MIT License covers only the launcher and build tooling.'
+    }
     $reader = [System.IO.StreamReader]::new($entries['portable-release.json'].Open())
     try { $identity = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
     if ($identity.schema -ne 1 -or $identity.revision -cnotmatch '^[0-9a-f]{40}$' -or

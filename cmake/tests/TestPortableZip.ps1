@@ -182,6 +182,9 @@ try {
     foreach ($name in $preserved) {
         Assert-Condition ([System.IO.File]::ReadAllText((Join-Path $dist $name)) -ceq "preserve $name") "Assembly modified $name"
     }
+    $packagedLicense = [System.IO.File]::ReadAllText((Join-Path $dist 'LICENSE'))
+    Assert-Condition ($packagedLicense.StartsWith('This MIT License covers only the portable launcher') -and
+        $packagedLicense.EndsWith("`n`nfixture`n") -and -not $packagedLicense.Contains("`r")) 'Packaged LICENSE does not state its scope'
     Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist 'addons'))) 'Assembly duplicated standalone client addons'
     Remove-Item -LiteralPath (Join-Path $source '.module-cache/prepared-addons') -Recurse -Force
     Remove-Item -LiteralPath (Join-Path $core 'modules/mod-fixture/data/sql') -Recurse -Force
@@ -284,6 +287,7 @@ try {
         Test-NegativeZip "protected user file $live" 'Live user data/configuration' -ExtraEntries @(@{ Name = $live; Bytes = [byte[]]@(1) })
     }
     Test-NegativeZip 'missing release identity' 'missing portable-release.json' -Omit @('portable-release.json')
+    Test-NegativeZip 'unscoped launcher license' 'covers only the launcher' -Replacements @{ 'LICENSE' = [System.Text.Encoding]::UTF8.GetBytes("fixture`n") }
     foreach ($name in @('legacy.dll', 'msvcp140_atomic_wait.dll') + $dependencyNotices) {
         Test-NegativeZip "missing server runtime or notice $name" 'Portable ZIP is missing' -Omit @($name)
     }
