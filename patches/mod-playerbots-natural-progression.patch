@@ -1079,10 +1079,10 @@ index e7c36e43..31116fb9 100644
  
      Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index eace9db9..243de52b 100644
+index eace9db9..29b2aa0d 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
-@@ -5,9 +5,141 @@
+@@ -5,9 +5,151 @@
   */
  
  #include "MaintenanceValues.h"
@@ -1142,7 +1142,8 @@ index eace9db9..243de52b 100644
 +        }
 +    }
 +
-+    if (!canSell && !needsRepair && !spellBudget && !needsFood && !needsDrink && !ammoSubclass)
++    bool const needsSupplies = needsFood || needsDrink || ammoSubclass || !neededReagents.empty();
++    if (!canSell && !needsRepair && !spellBudget && !needsSupplies)
 +        return {};
 +
 +    // An unreachable or failed NPC must not block the others while it stays nearest.
@@ -1169,16 +1170,19 @@ index eace9db9..243de52b 100644
 +            {
 +                for (Trainer::Spell const& spell : trainer->GetSpells())
 +                {
++                    // Most listed spells are known or unavailable; skip them before quoting a price.
++                    if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) ||
++                        !trainer->CanTeachSpell(bot, &spell))
++                        continue;
++
 +                    uint32 const price = uint32(floor(spell.MoneyCost * bot->GetReputationPriceDiscount(npc)));
-+                    if (price <= spellBudget && bot->HasEnoughMoney(price) &&
-+                        PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) &&
-+                        trainer->CanTeachSpell(bot, &spell))
++                    if (price <= spellBudget && bot->HasEnoughMoney(price))
 +                        return {guid, NaturalMaintenanceType::TRAIN};
 +                }
 +            }
 +        }
 +
-+        if (!npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
++        if (!needsSupplies || !npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
 +            continue;
 +
 +        VendorItemData const* stock = npc->GetVendorItems();
@@ -1188,11 +1192,13 @@ index eace9db9..243de52b 100644
 +        for (VendorItem const* item : stock->m_items)
 +        {
 +            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item->item);
-+            if (!proto || item->ExtendedCost || bot->CanUseItem(proto) != EQUIP_ERR_OK ||
-+                (item->maxcount && npc->GetVendorItemCurrentCount(item) < proto->BuyCount))
++            if (!proto || item->ExtendedCost)
 +                continue;
 +
-+            std::string const type = ItemUsageValue::GetConsumableType(proto, bot->GetMaxPower(POWER_MANA) > 0);
++            // Match the wanted supply from template fields before the costlier usability check.
++            std::string const type = (needsFood || needsDrink) && proto->Class == ITEM_CLASS_CONSUMABLE
++                                         ? ItemUsageValue::GetConsumableType(proto, bot->GetMaxPower(POWER_MANA) > 0)
++                                         : "";
 +            uint32 budget = 0;
 +            NeedMoneyFor budgetType = NeedMoneyFor::none;
 +            if ((needsFood && type == "food") || (needsDrink && type == "drink"))
@@ -1211,6 +1217,10 @@ index eace9db9..243de52b 100644
 +                budgetType = NeedMoneyFor::spells;
 +            }
 +            else
++                continue;
++
++            if (bot->CanUseItem(proto) != EQUIP_ERR_OK ||
++                (item->maxcount && npc->GetVendorItemCurrentCount(item) < proto->BuyCount))
 +                continue;
 +
 +            uint32 const price = uint32(floor(proto->BuyPrice * bot->GetReputationPriceDiscount(npc)));
