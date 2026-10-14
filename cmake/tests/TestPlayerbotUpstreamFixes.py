@@ -13,7 +13,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 def declaration(source, opening):
@@ -406,7 +406,7 @@ def build(directory, parts, name):
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(directory / (name + '.cpp')),
                     '-o', str(executable)], check=True)
-    return subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
 
 
 previous_destroy_loop = '''for (Item* item : items)

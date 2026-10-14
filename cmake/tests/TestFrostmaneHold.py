@@ -12,7 +12,7 @@ import sqlite3
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 def numeric_row(path, quest_id):
@@ -232,5 +232,5 @@ with tempfile.TemporaryDirectory(prefix='frostmane-hold-') as temporary:
     cpp.write_text(fixture)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
         '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(cpp), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
 print('Native quest eligibility: before/after, level, Alliance/Horde, follow-up, Senir and custom gates passed')

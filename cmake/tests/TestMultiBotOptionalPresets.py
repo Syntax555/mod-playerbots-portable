@@ -11,7 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -168,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix='multibot-presets-') as directory:
         source.write_text(fixture.replace('@PRODUCTION@', body))
         subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror',
                         str(source), '-o', str(executable)], check=True)
-        result = subprocess.run([str(executable)], text=True, capture_output=True, check=False)
+        result = subprocess.run([str(executable)], text=True, capture_output=True, check=False, timeout=TIMEOUT)
         if expect_success:
             if result.returncode:
                 raise AssertionError(result.stderr or result.stdout)

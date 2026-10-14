@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser()
@@ -457,7 +457,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie',
                '-I', str(tmp), str(tmp / 'fixture.cpp'), str(tmp / 'BattlegroundQueuePolicy.cpp'), '-o', str(executable)]
     subprocess.run(command, check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
     mutations = [
         ('SelfBot humans use the bot queue policy', '!GET_PLAYERBOT_AI(member) || IsSelfBot(member) ||',
          '!GET_PLAYERBOT_AI(member) ||'),
@@ -475,11 +475,11 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
             raise SystemExit(f'{label} mutation was not applied')
         (tmp / 'fixture.cpp').write_text(mutated)
         subprocess.run(command, check=True)
-        if subprocess.run([str(executable)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
+        if subprocess.run([str(executable)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=TIMEOUT).returncode == 0:
             raise SystemExit(f'Bot queue fixture did not reject: {label}')
         print(f'Bot queue mutation rejected: {label}')
     (tmp / 'IndividualProgressionBattlegrounds.h').unlink()
     (tmp / 'fixture.cpp').write_text(missing)
     subprocess.run(command, check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
 print('Missing progression module fails closed; legacy queue policy remains unchanged.')

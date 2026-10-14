@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -298,4 +298,4 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-arena-') as temporary:
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                     str(source), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)

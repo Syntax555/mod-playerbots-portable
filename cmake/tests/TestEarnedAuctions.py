@@ -11,7 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, prepared_core
+from FixtureSupport import TIMEOUT, cxx, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -917,4 +917,4 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporar
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                     '-g', '-I', str(module), '-I', str(travel_module),
                     str(target), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
