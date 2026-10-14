@@ -36,7 +36,7 @@ first-run setup and server updates.
    [Downloads](#downloads).
 2. Extract the server ZIP to a writable folder outside `Program Files`, such as
    `C:\Games\Playerbots`, and run `startup.exe`. The first start downloads about
-   1.2 GB of server data and creates the databases.
+   1.2 GB of server data and creates the databases and bots; allow it time.
 3. When the console shows `All servers running`, create your account in it:
 
    ```text
@@ -60,8 +60,6 @@ first-run setup and server updates.
   [bots and population](docs/configuration.md#bots-and-population).
 - **Client:** WoW 3.3.5a, build 12340, in any locale, including for Vanilla and
   TBC progression. German clients receive German talent and spell text.
-
-The executables are unsigned and may be blocked by Windows Smart App Control.
 
 ## Downloads
 
@@ -159,10 +157,15 @@ server start, including an automatic restart, overwrites `Server.log`,
 
 Every published build passes the launcher tests, source fixtures for the earned
 play rules and package verification. Complete dungeon and raid runs, every class
-quest and the 2,500-bot target have not been verified in game. The server uses
-the Wrath core and client: historical trees use Vanilla 1.12.1 and TBC Classic
-2.5.4 data, while other prices, combat formulas and systems keep core behavior.
-Existing inventories and gold are preserved without verifying their origin. See
+quest and the 2,500-bot target have not been verified in game.
+
+The server uses the Wrath core and client. Historical trees use Vanilla 1.12.1
+and TBC Classic 2.5.4 data; TBC is not an exact original 2.4.3 simulation.
+Selected class spells, riding prices and battleground rules follow the earned
+era, while other prices, combat formulas and systems keep core behavior. Bot
+questing, navigation and encounter support vary by content, and some upstream
+encounter actions use movement or combat shortcuts. Existing inventories and
+gold are preserved without verifying their origin. See
 [supported scope](docs/configuration.md#supported-scope) and the
 [roadmap](docs/todo.md).
 
