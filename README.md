@@ -86,10 +86,8 @@ See the [update guide](docs/updating.md) for manual installation, backups, offli
 | [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Timed Vanilla world buffs for eligible Vanilla-progress characters. |
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Earned-era access guards for the optional Dungeon Finder. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
-| [Token Turn-in](https://github.com/Zerathane/mod-token-turnin) | Token inventory checks; rewards still require the ordinary NPC exchange. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
 | [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | Boss and trash mechanics for bot raids in Molten Core, Blackwing Lair and Zul'Gurub. |
-| [AH Bot Plus](https://github.com/NathanHandley/mod-ah-bot-plus) | Optional generated market; seller and buyer disabled in the earned economy. |
 
 ## Supported scope
 

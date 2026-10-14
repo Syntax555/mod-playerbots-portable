@@ -148,6 +148,27 @@ func TestAutomaticProfilesUseSavedDefaultsAndPreserveRealmPhase(t *testing.T) {
 	}
 }
 
+func TestAutomaticProfilesLeaveRetiredModuleConfigs(t *testing.T) {
+	root := t.TempDir()
+	retired := "AuctionHouseBot.EnableSeller = false\nAuctionHouseBot.GUIDs = 0\n"
+	config := writeFixture(t, filepath.Join(root, "configs/modules/mod_retired.conf"), retired)
+	state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"mod_retired.conf": retired}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState), string(state))
+	backups, err := migrateConfigProfiles(root)
+	if err != nil || len(backups) != 0 {
+		t.Fatalf("migration of a retired module config: backups %v, %v", backups, err)
+	}
+	if current := readFixture(t, config); current != retired {
+		t.Fatalf("retired module config was rewritten: %q", current)
+	}
+	if !protectedUpdatePath("configs/modules/mod_retired.conf") {
+		t.Fatal("an update could remove a retired module config")
+	}
+}
+
 func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 	for _, test := range []struct {
 		name          string

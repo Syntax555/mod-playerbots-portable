@@ -2,7 +2,8 @@
 
 Autonomous random bots sell surplus from their own bags and buy useful equipment
 or supplies with their own gold. Purchases and sales use normal auction fees,
-ownership checks and mail delivery. AH Bot Plus seller and buyer remain disabled.
+ownership checks and mail delivery. The server adds no generated auction stock
+or artificial buyers.
 
 Trading requires natural progression, earned auctions and a random bot without
 a player master. Bots walk to an auctioneer or mailbox and reach ordinary
@@ -78,17 +79,6 @@ AiPlayerbot.BotSendMailEnabled = 0
 visits alternate with a stable per-bot stagger of up to 119 additional seconds.
 Busy bots or distant markets can take longer. Set `EarnedAuctions = 0` to stop
 autonomous trading; existing auctions and mail keep their normal lifecycle.
-
-Keep synthetic trading disabled in `configs/modules/mod_ahbot.conf`:
-
-```ini
-AuctionHouseBot.EnableSeller = false
-AuctionHouseBot.Buyer.Enabled = false
-AuctionHouseBot.GUIDs = 0
-```
-
-AH Bot Plus adds generated supply or artificial demand when enabled. It does
-not configure earned Playerbots trading.
 
 ## Updates and market limits
 
