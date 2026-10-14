@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -294,7 +294,7 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-arena-') as temporary:
     source = Path(temporary) / 'arena.cpp'
     executable = Path(temporary) / 'arena'
     source.write_text(fixture)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                     str(source), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True)

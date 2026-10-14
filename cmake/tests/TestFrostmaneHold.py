@@ -7,13 +7,12 @@ This fixture does not launch a realm or certify all historical quest variants.
 
 from pathlib import Path
 import argparse
-import os
 import re
 import sqlite3
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 def numeric_row(path, quest_id):
@@ -231,7 +230,7 @@ with tempfile.TemporaryDirectory(prefix='frostmane-hold-') as temporary:
     cpp = temporary / 'fixture.cpp'
     executable = temporary / 'fixture'
     cpp.write_text(fixture)
-    subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++20', '-Wall', '-Wextra', '-Werror',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
         '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(cpp), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
 print('Native quest eligibility: before/after, level, Alliance/Horde, follow-up, Senir and custom gates passed')

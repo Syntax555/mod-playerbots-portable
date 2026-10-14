@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 STUBS = r'''
 #pragma once
@@ -502,9 +502,7 @@ def main():
     native_contracts(core,source)
     if not (source/'EarnedDungeonParties.cpp').exists():
         raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear patch first')
-    compiler=shutil.which('c++') or shutil.which('g++') or shutil.which('clang++')
-    if not compiler:
-        raise SystemExit('A C++20 compiler is required')
+    compiler=cxx()
     with tempfile.TemporaryDirectory(prefix='earned-dungeons-') as temp:
         work=Path(temp)
         ip_header=(core/'modules/mod-individual-progression/src/IndividualProgression.h').read_text()

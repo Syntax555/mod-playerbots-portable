@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--source', type=Path, help='prepared Playerbots module directory')
@@ -451,7 +451,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
         'uint8 IndividualProgression_BattlegroundEra(Player*);\n')
     (tmp / 'fixture.cpp').write_text(fixture)
     executable = tmp / 'fixture'
-    command = ['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pedantic', '-pthread',
+    command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pedantic', '-pthread',
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie',
                '-I', str(tmp), str(tmp / 'fixture.cpp'), str(tmp / 'BattlegroundQueuePolicy.cpp'), '-o', str(executable)]
     subprocess.run(command, check=True)

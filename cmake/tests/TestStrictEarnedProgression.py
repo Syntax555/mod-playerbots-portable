@@ -11,7 +11,7 @@ import re
 import sqlite3
 import subprocess
 import tempfile
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -418,7 +418,7 @@ with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
     for label, old, new in (('production', '', ''),) + mutations:
         assert not old or strict_kill.count(old) == 1, label
         target.write_text(source.replace(strict_kill, strict_kill.replace(old, new)) if old else source)
-        subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
+        subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                         '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                         '-I', str(module / 'src'), str(target), '-o', str(executable)], check=True)
         result = subprocess.run([str(executable)], capture_output=True, text=True, check=False)

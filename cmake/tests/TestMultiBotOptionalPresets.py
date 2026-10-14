@@ -11,7 +11,7 @@ import os
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -153,7 +153,7 @@ production = '\n\n'.join([
     function(bridge, 'std::string GetPremadeSpecLink('),
     function(bridge, 'std::vector<TalentSpecEntryData> BuildTalentSpecEntries('),
 ])
-compiler = os.environ.get('CXX', 'c++')
+compiler = cxx()
 with tempfile.TemporaryDirectory(prefix='multibot-presets-') as directory:
     directory = Path(directory)
     for name, body, expect_success in [

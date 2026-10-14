@@ -13,7 +13,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -718,7 +718,7 @@ with tempfile.TemporaryDirectory(prefix='portable-master-flight-') as temporary:
         core / 'src/server/game/Entities/Object',
     ]
     executable = temporary / 'flight-learning'
-    command = ['c++', '-std=c++20', '-pthread', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
+    command = [cxx(), '-std=c++20', '-pthread', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
     command += [argument for path in includes for argument in ('-I', str(path))]
     command += [str(temporary / 'production.cpp'), str(temporary / 'tests.cpp'),

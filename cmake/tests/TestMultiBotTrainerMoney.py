@@ -12,7 +12,7 @@ import os
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -793,7 +793,7 @@ with tempfile.TemporaryDirectory(prefix='multibot-trainer-money-') as directory:
     source.write_text(fixture + '\n' + production + '\n' + tests)
     executable = temporary / 'trainer-money'
     subprocess.run(
-        ['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
+        [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
          '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
          str(source), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=30,

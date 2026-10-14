@@ -3,12 +3,11 @@
 import argparse
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import prepared_core
+from FixtureSupport import cxx, prepared_core
 
 STUBS = r'''
 #pragma once
@@ -140,9 +139,7 @@ def main():
     source=args.source or prepared_core(repo)/'modules/mod-lfg-progression/src'
     if not source.is_dir():
         raise SystemExit('PrepareModules.cmake must prepare mod-lfg-progression first')
-    compiler=shutil.which('c++') or shutil.which('g++') or shutil.which('clang++')
-    if not compiler:
-        raise SystemExit('A C++20 compiler is required')
+    compiler=cxx()
     with tempfile.TemporaryDirectory(prefix='lfg-earned-') as temp:
         work=Path(temp)
         (work/'NativeStubs.h').write_text(STUBS)

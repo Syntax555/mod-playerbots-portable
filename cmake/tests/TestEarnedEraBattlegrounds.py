@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-from FixtureSupport import prepared_core
+from FixtureSupport import cxx, prepared_core
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -451,7 +451,7 @@ with tempfile.TemporaryDirectory(prefix='earned-era-bg-') as scratch:
     source = folder / 'fixture.cpp'
     source.write_text(prelude + bridge + production + native_skirmish + checks)
     binary = folder / 'fixture'
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
                     str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
