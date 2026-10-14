@@ -25,6 +25,28 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records |
 | CMaNGOS Classic core | [cmangos/mangos-classic](https://github.com/cmangos/mangos-classic) | `8ec338a1704e` | Historical spell mechanics and coefficients |
 | CMaNGOS TBC core | [cmangos/mangos-tbc](https://github.com/cmangos/mangos-tbc) | `a8ad244bcbce` | Historical TBC spell mechanics and coefficients |
+| German client text | [Haeniken/TrinityCore-3.3.5-data-multilang](https://github.com/Haeniken/TrinityCore-3.3.5-data-multilang) | `b21c94991a28` | German DBC text merged into the client MPQ |
+
+## Bundled runtime
+
+The server ZIP bundles these Windows x64 runtime dependencies. The
+[release workflow](https://github.com/Syntax555/mod-playerbots-portable/blob/main/.github/workflows/release.yml)
+pins each download with its SHA-256 hash.
+
+| Runtime | Version | Location in the server ZIP |
+| --- | --- | --- |
+| MySQL Community Server | 8.0.40 | `mysql/` |
+| OpenSSL | 3.5.7, FireDaemon build | `libcrypto-3-x64.dll`, `libssl-3-x64.dll` and the `legacy.dll` provider at the root |
+| Boost | 1.84.0 | Linked statically into the servers |
+| Microsoft Visual C++ runtime | From the build's Visual Studio 2022 | DLLs at the root and in `mysql/bin/` |
+
+## Server data download
+
+The packages do not contain the server's DBC, map, vmap and mmap files. On first
+start the launcher downloads `Data.zip` (about 1.2 GB) from the
+[wowgaming/client-data v20.0 release](https://github.com/wowgaming/client-data/releases/tag/v20.0)
+and extracts it into `data/`. `--data-url` selects another copy of that archive;
+see [launcher options](updating.md#launcher-options).
 
 ## Source preparation
 
@@ -41,42 +63,19 @@ search skips despawned quest givers). The patch is dropped once the locked
 Playerbots revision contains these commits.
 
 The client packager uses IP's locked base archive, merges generated spell and
-skill rows, and preserves other entries byte for byte. `SOURCE_MANIFEST.json`
-records sources, patches, artifact hashes and the server/client generation.
-Install `EraTalents-client-latest.zip` with the matching server. Both the addon
-and MPQ are required and are installed manually with WoW closed; the server
-updater does not modify client files. See [client setup](era-talents.md).
+skill rows and German text, and preserves other entries byte for byte.
+`SOURCE_MANIFEST.json` records sources, patches, artifact hashes and the
+server/client generation. See [client setup](era-talents.md#install-the-matching-client-files).
 
-MultiBot Chatless installs as `Interface/AddOns/MultiBot/`, with `MultiBot.toc`.
-The separate addon ZIP contains the prepared addon; the server package contains
-no client addons. Local addon patches display gold, silver and copper and guard
-options-panel initialization with its existing fallback interface. Its
-`SOURCE_MANIFEST.json` records the upstream revision and those patch hashes.
-With matching EraTalents loaded, the talent button uses native inspection and
-the selected bot's server-authorized historical tree. Both addons must match
-the release; the historical view permits inspection rather than talent writes.
+The MultiBot Chatless addon ZIP contains the prepared addon at
+`MultiBot/MultiBot.toc`; the server package contains no client addons. Its
+`SOURCE_MANIFEST.json` records the upstream revision and local patch hashes.
+See [client integration](adaptations.md#client-integration) and
+[client addons](addons.md) for its behavior.
 
-In natural mode, Bridge trainer requests use the bot's current money for explicit
-purchases and the core's trainer pricing and paid purchase path.
-
-## Licenses
-
-Dependencies retain their own license terms and per-file notices. The locked
-AzerothCore and Playerbots repositories carry GPL-2.0 root license texts, with
-GPL-2.0-or-later notices in common source headers. Individual Progression carries
-an MIT root license and AGPL-3.0-or-later notices in many source files. Era
-Talents carries an MIT license; portable integration files can carry their own
-GPL notices. These components should not be described under one blanket license.
-
-The historical class data uses pinned CMaNGOS sources. Database projects carry
-GPL-3.0 texts; core projects carry GPL-2.0 texts with GPL-2.0-or-later source
-notices. The server and combined client pack retain their provenance notice and
-both license texts. Original game data retains its own terms.
-
-The locked MultiBot Bridge revision has no explicit upstream license declaration.
-Its packaged notice records provenance and this absence without granting a
-license. See [third-party notices](../THIRD_PARTY_NOTICES.md) and each package's
-`licenses/` directory for the applicable declarations.
+Dependencies keep their own license terms and per-file notices; see
+[third-party notices](../THIRD_PARTY_NOTICES.md) and each package's `licenses/`
+directory.
 
 ## Updating dependencies
 
