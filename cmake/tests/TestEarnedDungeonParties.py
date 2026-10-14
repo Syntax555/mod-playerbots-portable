@@ -446,14 +446,15 @@ def native_contracts(core, source):
     assert all(name in continent for name in ('MAP_EASTERN_KINGDOMS', 'MAP_KALIMDOR', 'MAP_OUTLAND', 'MAP_NORTHREND'))
     # Production shortcut gates remain enforced even if an existing config
     # enables a provisioning/recovery option in the portable earned profile.
+    # Each gate includes its refusal, so a condition that no longer returns fails.
     gated={
-      'Util/DcDungeonAccess.cpp': ('std::string GrantEntry(', '!bot || DcEarnedPlay::Active()'),
+      'Util/DcDungeonAccess.cpp': ('std::string GrantEntry(', 'if (!bot || DcEarnedPlay::Active())\n            return {};'),
       'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp': ('StepResult DungeonEventExecutor::RunStep(', 'if (DcEarnedPlay::Active() && !DcEarnedEvents::StepAllowed(step))\n        return StepResult::Failed;'),
       'Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp': ('ObjectiveArriveResult ObjectiveHookRegistry::Run(', 'if (DcEarnedPlay::Active())\n        return ObjectiveArriveResult::Blocked;'),
-      'Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp': ('bool RegroupAtEntrance(', 'if (DcEarnedPlay::Active())'),
-      'Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp': ('bool TryFarFromPolyRecovery(', 'if (DcEarnedPlay::Active())'),
-      'Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp': ('void Update(', 'if (DcEarnedPlay::Active())'),
-      'Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp': ('bool DungeonClearBetterLootRollAction::Execute(', 'DcEarnedPlay::Active() ||'),
+      'Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp': ('bool RegroupAtEntrance(', 'if (DcEarnedPlay::Active())\n            return false;'),
+      'Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp': ('bool TryFarFromPolyRecovery(', 'if (DcEarnedPlay::Active())\n            return false;'),
+      'Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp': ('void Update(', 'if (DcEarnedPlay::Active())\n            return;'),
+      'Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp': ('bool DungeonClearBetterLootRollAction::Execute(', 'if (DcEarnedPlay::Active() || !DcSettings::GetBool(bot, "BetterLootRolling"))\n        return LootRollAction::Execute(event);'),
       'Ai/Dungeon/DungeonClear/Action/DcPullActions.cpp': ('bool DungeonClearPullManeuverAction::Execute(', 'if (!DcEarnedPlay::Active())\n        bot->RemoveAurasDueToSpell(1604);'),
     }
     for path,(signature,gate) in gated.items():
