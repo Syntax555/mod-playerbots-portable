@@ -23,7 +23,7 @@ See [updates, moving the server and recovery](updating.md) for operating steps.
 ## Playerbots and group play
 
 Bots follow Playerbots' natural progression, `AiPlayerbot.NaturalProgression = 1`
-in the default profile; the guides also call it natural mode.
+in the default profile.
 
 | Area | Behavior and limits |
 | --- | --- |

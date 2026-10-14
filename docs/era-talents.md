@@ -29,7 +29,8 @@ modify WoW client folders.
 2. Replace `Interface/AddOns/EraTalents/` with the combined package's folder.
    The final path must be `Interface/AddOns/EraTalents/EraTalents.toc`.
 3. Copy `Data/patch-V.mpq` into the client's `Data/` folder, replacing that file
-   if present.
+   if present. The package's `README.txt`, `SOURCE_MANIFEST.json` and `licenses/`
+   describe the package and are not needed in the client.
 4. Restart WoW, enable EraTalents in the AddOns menu and open the normal talent
    window. Native Wrath talents return when that character earns tier 13.
 
@@ -46,11 +47,9 @@ world/DBC support. Client and server share a generation marker recorded in
 /run print(GetSpellInfo(932999))
 ```
 
-The result should contain `EraTalents Gen` and the package generation. If the
-addon reports a stale generation, install the matching addon/MPQ pair and fully
-restart the client.
-
-The marker supports every client locale.
+The result should contain `EraTalents Gen` and the package generation in every
+client locale. If the addon reports a stale generation, install the matching
+addon/MPQ pair and fully restart the client.
 
 ### Client language
 
@@ -118,24 +117,14 @@ supported conversion.
 
 ## Updating an existing realm
 
-See the [update guide](updating.md) for automatic server updates, manual
-installation and backups. Custom settings and the selected realm ceiling are
-preserved, with backups before managed configuration changes.
-
-Install the matching client package for each player with WoW fully closed. To
-remove a shared Vanilla/TBC ceiling, run
-`startup.exe --set-expansion individual` with initialized configs and stopped
-servers, then start normally.
+See [realm updates](changing-expansions.md#updating-an-existing-realm) for
+server updates, realm ceilings and preserved progress, and install the matching
+client package for each player.
 
 Historical activation converts incompatible native talent/spell state for the
 character's earned era and makes its earned points available in that tree.
 Valid custom allocations persist on relog. Owned glyphs remain stored. Broad
 upstream spellbook cleanup SQL is not applied.
-
-Levels, highest stored tiers, inventory and gold are preserved. These values
-alone do not prove an earned progression history. Missing durable boss credit
-may require an eligible kill. A fresh realm starts ordinary characters at level
-1, tier 0.
 
 GM/console diagnostics `.eratalents status` and `.eratalents doctor` inspect an
 online character. Administrative learn/reset commands require GM privileges.

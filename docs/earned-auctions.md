@@ -16,7 +16,7 @@ Sellers keep quest items, needed equipment, profession materials, learned-spell
 reagents, supplies and the hunter's last pet food. Equipped, bound, conjured,
 temporary and otherwise ineligible items are not listed. Each listing transfers
 an existing whole stack and pays its normal deposit from the bot's balance.
-Automatic vendor selling also protects these essentials in natural mode.
+Automatic vendor selling also protects these essentials under natural progression.
 
 Buyers select useful equipment, profession materials or supplies while reserving
 money for ordinary upkeep. Each purchase costs at most a quarter of the current
@@ -60,7 +60,7 @@ If bags are full, attachments remain in mail until space is available. Money can
 be collected with full bags. A receipt is deleted only after its money and all
 attachments have been retrieved successfully.
 
-Natural mode blocks bot mail-send and mail-management shortcuts even if
+Natural progression blocks bot mail-send and mail-management shortcuts even if
 `AiPlayerbot.BotSendMailEnabled` is re-enabled. Earned auction collection has
 its own ordinary mailbox path. Human mail remains available.
 
@@ -86,10 +86,10 @@ Server updates preserve custom auction settings, databases and characters. See
 the [update guide](updating.md) for automatic updates, manual installation and
 configuration backups.
 
-Items and money are preserved. Their stored data does not distinguish generated
-possessions from earned ones.
-A fresh natural-progression realm starts with normal character-creation items
-and no auction-stock grants.
+Existing items and money are preserved without verifying their origin; see
+[realm updates](changing-expansions.md#updating-an-existing-realm). A fresh
+natural-progression realm starts with normal character-creation items and no
+auction-stock grants.
 
 A fresh market can remain sparse while bots level, earn loot and gold, and
 reach a town. Sellers need deposits and buyers need useful affordable listings.
