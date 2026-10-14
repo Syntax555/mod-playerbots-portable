@@ -11,7 +11,7 @@ packages from the server's [Latest release](https://github.com/Syntax555/mod-pla
 
 | Package | Installation |
 | --- | --- |
-| [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | Required for the default historical talents. Install both `Interface/AddOns/EraTalents/` and `Data/patch-V.mpq`. |
+| [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | Required for every player: historical talents, spell data and German text. Install both `Interface/AddOns/EraTalents/` and `Data/patch-V.mpq`. |
 | [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional bot controls. Install `Interface/AddOns/MultiBot/`; open with `/mb`, and settings with `/mbopt`. |
 
 Each addon folder must directly contain its matching `.toc` file. Avoid nested
