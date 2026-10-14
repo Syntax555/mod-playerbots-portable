@@ -59,6 +59,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Level, quest and leader-progress synchronization | Disabled |
 | Routine free talent resets / spell grants | Disabled |
 | Ordinary paid training and earned talent allocation | Enabled |
+| Autonomous vendor, repair, training and supply visits | Enabled; paid with the bot's own gold |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
 | Automatic use of earned loot upgrades | Enabled |
 | Equipment upgrades / other useful group loot | Need / Greed, subject to native loot eligibility |
@@ -81,11 +82,11 @@ To require player presence in an existing customized installation, set
 update automatically; an explicit custom value of `0` remains an administrator's
 choice.
 
-Smart activity scaling reduces distant solo
-activity as tick time rises, while nearby/grouped bots and combat stay active.
-A target of 2,500 requires substantial server resources and does not imply every
-bot is available in every level, faction or era. Lower
-`AiPlayerbot.MinRandomBots` and `AiPlayerbot.MaxRandomBots` to fit the host.
+Smart activity scaling reduces distant solo activity as tick time rises, while
+nearby/grouped bots and combat stay active. A target of 2,500 requires
+substantial server resources and does not imply every bot is available in every
+level, faction or era. Lower `AiPlayerbot.MinRandomBots` and
+`AiPlayerbot.MaxRandomBots` to fit the host.
 
 `AiPlayerbot.LearnFlightPathsWithMaster = 1` lets controlled altbots and recruited
 random bots learn the flight point you visit when you speak to its flight master.
@@ -125,7 +126,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | World Buff Bots | Timed Vanilla events for eligible Vanilla-progress characters; native TBC events unchanged |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
-| Raid Clear | Molten Core, Blackwing Lair and Zul'Gurub mechanics; cloak and device shortcuts disabled |
+| Raid Clear | Molten Core, Blackwing Lair and Zul'Gurub mechanics; natural progression refuses its cloak and device shortcuts |
 
 AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
 smaller parties receive the upstream scaling curve with reduced XP and money.
@@ -154,13 +155,12 @@ Players and bots must still loot the corpse; drop rolls, ordinary equipment loot
 quest prerequisites and earned progression remain in place.
 
 MultiBot trainer actions require ordinary NPC range and paid core transactions.
-In natural mode, explicit purchases use the bot's current money and the core's
-trainer price, including reputation discounts. Autonomous bot spending retains
-its AI budget.
-Personal bank actions require banker range and validated storage operations.
-Free preset talent writes, SelfBot autogear and maintenance grants are blocked
-in natural mode. Token checks do not waive NPC exchange reputation, materials or
-quest requirements.
+Under natural progression, explicit purchases use the bot's current money and
+the core's trainer price, including reputation discounts. Autonomous bot
+spending retains its AI budget. Personal bank actions require banker range and
+validated storage operations. Free preset talent writes, SelfBot autogear and
+maintenance grants are blocked under natural progression. Token checks do not
+waive NPC exchange reputation, materials or quest requirements.
 
 ## Historical rules and shared settings
 
