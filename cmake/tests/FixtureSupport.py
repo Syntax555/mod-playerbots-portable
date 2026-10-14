@@ -1,11 +1,14 @@
 """Shared helpers for the cmake/tests fixtures."""
 
 from concurrent.futures import ThreadPoolExecutor
+import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
+import urllib.request
 
 
 # The fixtures check with assert statements, which -O and PYTHONOPTIMIZE remove.
@@ -89,3 +92,47 @@ def reject_mutants(work, mutations, build, name):
         if not result:
             raise SystemExit(f'{name} did not reject {label}')
         print(f'{name} mutation rejected: {label}')
+
+
+def git_apply(directory, patch, *options):
+    subprocess.run(['git', 'apply', *options, str(patch)], cwd=directory, check=True, capture_output=True)
+
+
+def unpatched(directory, patch):
+    """Revert patch where directory already has it, so callers may pass pristine or prepared sources."""
+    if subprocess.run(['git', 'apply', '--check', str(patch)], cwd=directory, capture_output=True,
+                      check=False).returncode:
+        git_apply(directory, patch, '--reverse')
+
+
+def multibot_sources(directory, files, source=None):
+    """Copy the pinned MultiBot client files into directory.
+
+    They come from source when given, else from the PrepareModules cache, else
+    from the locked revision online.
+    """
+    lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
+    addon = next(item for item in lock['clientAddons'] if item['name'] == 'MultiBot')
+    revision = addon['revision']
+    if not re.fullmatch(r'[0-9a-f]{40}', revision):
+        raise ValueError('MultiBot source revision must be pinned')
+    cache = REPOSITORY / '.module-cache/client-addon-MultiBot'
+    cached = source is None and (cache / '.git').exists() and subprocess.run(
+        ['git', '-C', str(cache), 'cat-file', '-e', revision + '^{commit}'], capture_output=True,
+        check=False).returncode == 0
+    repository = addon['url'].removeprefix('https://github.com/').removesuffix('.git')
+    for relative in files:
+        destination = directory / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source is not None:
+            shutil.copyfile(source / relative, destination)
+        elif cached:
+            destination.write_bytes(subprocess.run(['git', '-C', str(cache), 'show', f'{revision}:{relative}'],
+                                                   check=True, capture_output=True).stdout)
+        else:
+            url = f'https://raw.githubusercontent.com/{repository}/{revision}/{relative}'
+            with urllib.request.urlopen(url, timeout=30) as response:
+                content = response.read(2 * 1024 * 1024 + 1)
+            if len(content) > 2 * 1024 * 1024:
+                raise ValueError('MultiBot fixture source exceeds the supported size')
+            destination.write_bytes(content)
