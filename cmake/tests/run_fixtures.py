@@ -24,7 +24,7 @@ GAMEPLAY = (
     "TestEarnedProgression", "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestLfgProgression",
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestRaidClearEarnedPlay",
-    "TestHistoricalClassQuests", "TestMultiBotTrainerMoney",
+    "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestFormationMovement",
     "TestFrostmaneHold", "TestNaturalTaxiRoutes", "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
