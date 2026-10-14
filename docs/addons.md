@@ -57,8 +57,7 @@ conflicts; the checkbox alone does not provide a clean comparison.
 Optional addons remain upstream downloads. Their code, guides, images and
 libraries have separate licensing terms; a public repository or viewer license
 does not automatically authorize repackaging every included file. Addon-only
-updates do not require compiling server modules. The server updater does not
-install or update a player's client addons.
+updates do not require compiling server modules.
 
 ## Blocked interactions and Lua errors
 

@@ -207,9 +207,8 @@ Quest addons can retain different prerequisites in their static databases;
 see [client addon compatibility](addons.md) and the
 [adaptation reference](adaptations.md#world-data).
 
-Updates preserve levels, tiers, items and gold. These values alone do not prove
-an earned progression history. Use a fresh database when a level-1 earned
-history for every character is required. See
+Updates preserve levels, tiers, items and gold without proving an earned
+history; a fresh database gives every character a level-1 earned history. See
 [realm updates](changing-expansions.md#updating-an-existing-realm),
 [dependencies](module-versions.md) and
 [building](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md).

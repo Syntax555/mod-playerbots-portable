@@ -125,14 +125,18 @@ settings. To remove a shared Vanilla/TBC ceiling, run
 `startup.exe --set-expansion individual` with initialized configs and stopped
 servers, then start normally.
 
-Install the matching `EraTalents-client-latest.zip` in each player's client with
-WoW fully closed. The server updater does not install client files. See
+Each player installs the matching client packages; see
+[client installation](era-talents.md#install-the-matching-client-files) and
 [talent handling](era-talents.md#updating-an-existing-realm).
 
 Updates preserve levels, stored tiers, inventory and gold. These values alone
 do not prove an earned progression history. Missing durable milestone credit
 may require an eligible kill. A fresh database establishes the level-1, tier-0
 policy from character creation.
+
+To start a fresh realm, stop it with Ctrl+C and move `mysql/data/` out of the
+data folder as a backup. The next start creates new databases as on a first
+start, while `configs/` keeps the realm mode and custom settings.
 
 ## Optional realm ceilings
 
