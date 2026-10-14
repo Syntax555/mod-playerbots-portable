@@ -18,9 +18,10 @@ All members must have the dungeon's earned era and a level within its band.
 Vanilla, TBC and Wrath parties use level caps of 60, 70 and 80. Each bot's own
 rewarded progression determines its era; the tank's level or another character
 on the account does not unlock it. The tank must be near the outdoor entrance,
-and navigation data must provide a real route. The coordinator does not summon distant bots or generate
-equipment, money, keys, attunements or missing group members. A large bot
-population does not guarantee that a suitable party forms near an entrance.
+and navigation data must provide a real route. The coordinator does not summon
+distant bots or generate equipment, money, keys, attunements or missing group
+members. A large bot population does not guarantee that a suitable party forms
+near an entrance.
 
 ### Dungeons
 
@@ -78,8 +79,8 @@ Trial of the Champion needs its arena controller, and Drak'Tharon Keep needs
 an unaudited Novos controller. They remain available to player-led groups.
 
 Entry rules still apply to candidate routes. Individual Progression admits
-Magisters' Terrace from progression stage 12 and The Forge of Souls from
-stage 16; the core checks attunements, lockouts and instance limits. Before
+Magisters' Terrace from tier 12 and The Forge of Souls from tier 16; the core
+checks attunements, lockouts and instance limits. Before
 recruiting, the coordinator asks the portal's own checks for every member, so
 bots that cannot enter are not invited.
 
@@ -132,8 +133,8 @@ bot's swim speed. Missing navigation and unsafe sections stop the attempt.
 Each bot must reach the entrance and pass the ordinary instance-entry handler;
 the run starts after all five arrive in the same instance. If the portal
 refuses a member, the attempt stops and that bot is not recruited for the
-dungeon again for two hours or until its level or progression changes. Entering and leaving
-uses the physical dungeon portal. The ordinary Dungeon Finder is not used to
+dungeon again for two hours or until its level or progression changes. Entering
+and leaving uses the physical dungeon portal. The ordinary Dungeon Finder is not used to
 teleport the party.
 
 Natural progression rejects movement shortcuts, artificial combat recovery and
@@ -163,7 +164,24 @@ recruitment. The strict travel and gameplay guards require
 Automatic parties also require Individual Progression's strict default earned
 chain. A realm with a disabled or custom progression chain does not use level
 or account progress as a substitute.
-Raid Clear's switches are in `configs/modules/mod_raid_clear.conf`.
+
+Raid Clear's tactics are set in `configs/modules/mod_raid_clear.conf`:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `RaidClear.Enable` | `1` | Master switch, read at startup |
+| `RaidClear.KillOrder` | `1` | The main tank marks the add to kill first; damage dealers attack it |
+| `RaidClear.Tanks.AssignMainTank` | `1` | Give the Main Tank flag to the first tank when nobody has it |
+| `RaidClear.Tanks.Split` | `1` | Other tanks act as off-tanks |
+| `RaidClear.Tanks.Separation` | `12` | Minimum yards between tanked trash mobs; `0` disables it |
+| `RaidClear.Tanks.SeparateOnBosses` | `0` | Also separate tanked mobs during boss fights |
+| `RaidClear.DeathLog` | `1` | Log each raid death and its causes to `logs/Server.log` |
+| `RaidClear.MoltenCore.Enable`, `RaidClear.BlackwingLair.Enable`, `RaidClear.ZulGurub.Enable` | `1` | Tactics for each raid |
+
+The file's comments say Suppression Devices need the "raid" bot cheat or a
+rogue. Under natural progression bot cheats have no effect: only a bot that
+knows Disarm Trap turns a device off, and only an equipped Onyxia Scale Cloak
+protects against Shadow Flame.
 
 Updates extend an unchanged managed dungeon list and preserve custom lists,
 autonomy switches and party limits. For an existing custom list, add the desired
