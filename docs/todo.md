@@ -55,3 +55,79 @@ and ordinary player actions.
   and paid training. Apply targeted fixes for confirmed discrepancies.
 - [ ] Record verified content and remaining limits in the public guides,
   including matching EraTalents and MultiBot inspection behavior.
+- [ ] Verify in-game the behavior covered so far only by fixtures: discovered
+  flight routes, Drain Soul shards for every warlock spec, SelfBot talent
+  points, weighted bot specs, Spirit of Zandalar at the Zul'Gurub stage, Halion
+  credit in the Twilight Realm and dungeon recruitment at refused portals.
+
+## Dependency updates
+
+- [ ] Core fork `2a2211cd`: its `2026_09_27_06.sql` world update sets creature
+  modifiers that differ from Individual Progression's era values for about 530
+  creatures, and existing realms would apply them on update. Re-assert the era
+  values after that update, then bump; the core patches already apply.
+- [ ] mod-playerbots `cf1a2a20`, the last commit before the configuration
+  rename: refresh the natural-progression, earned-auctions and era-talents
+  patches, reduce the upstream-fixes patch to what the pin lacks and adapt
+  MultiBot's role toggles to the renamed strategies. A pin past `ed54b459`
+  also needs a launcher migration of every `AiPlayerbot.*` key;
+  `TestProfileKeys` fails until the profiles match.
+- [ ] Dungeon Clear `da0bdfbc`: run the new Lab tick inside the natural gate
+  and refuse `.dc lab run|batch` under natural progression.
+- [ ] Raid Clear `a3c29f6a`: ship `RaidClear.Bots.TeachTranquilizingShot = 0`
+  and keep the Zul'Gurub mind-control release from removing the bot's own
+  crowd control.
+- [ ] Try `CL_MPCount=2` on the Windows runner and drop the core
+  `settings.cmake` compile-parallelism patch if MSBuild caps `cl.exe` the same
+  way.
+- [ ] Offer generic fixes upstream (formation velocity guard, the
+  `resetTalentsCost` underflow, the empty random-battleground guard and the
+  Individual Progression filter fixes) to shrink the patch set.
+
+## Core and module patches
+
+- [ ] Replace the historical class-quest core hook with
+  `CONDITION_SOURCE_TYPE_QUEST_AVAILABLE` rows.
+- [ ] Reduce the rated-arena core patch to the map filter once the team-era
+  filter is shown never to reject in the shipped setups.
+- [ ] Credit the Naxxramas marker together with the Ahn'Qiraj marker in strict
+  mode instead of rewriting upstream condition rows, with a characters backfill.
+- [ ] One earned-era helper in Individual Progression, clamped to the realm
+  ceiling, instead of the local stage-to-era mappings in the other patches.
+- [ ] Move the Into the Breach fix into the milestones patch and the riding
+  script into its own patch (a coordinated two-patch refresh).
+- [ ] Decide whether World Buff Bots keeps its announcer name pools, which only
+  serve `{player}` in customized announcements.
+
+## Launcher and updates
+
+- [ ] Treat cleanup failures after a finished update as warnings unless the
+  journal is still applying, so a lingering lock on a backup file does not stop
+  the realm from starting.
+- [ ] A MySQL Windows service under a system account cannot be opened by a
+  normal user, so the update guard refuses every update. Read the image path
+  without opening the process.
+- [ ] When `OpenProcess` is denied, check the image name from the process
+  snapshot instead of treating the process as gone.
+- [ ] The update journal is rewritten, manifest included, once per installed
+  file. Change the format only with a recovery path for older launchers.
+- [ ] Close the short window in which `startup.exe` is missing between moving
+  the old launcher to the backup and installing the new one.
+- [ ] Sign `UPDATE_MANIFEST.json` so a token that can upload release assets
+  cannot push code to installations.
+- [ ] Evaluate starting `mysqld` with `--no-monitor` and tracking the server
+  process directly, and applying updates in-process instead of through the
+  detached helper.
+
+## Release and tests
+
+- [ ] Re-running an older successful main build can replace a pending
+  publication of a newer build until the next push.
+- [ ] Measure a compiler cache for the Windows compile step.
+- [ ] Build `mpqread` once in the client job and pass it to the fixtures that
+  read the client patch.
+- [ ] Share the sanitizer build flags, the `--source`/`--core`/`--module`
+  arguments and the WDBC helpers through `FixtureSupport`, and move the child
+  fixtures of `TestEarnedProgression` into `run_fixtures.py` groups.
+- [ ] Optional: replace the two submodules with the lock-driven fetch used for
+  the other modules.
