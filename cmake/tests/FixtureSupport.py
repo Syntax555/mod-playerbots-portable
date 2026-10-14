@@ -3,6 +3,10 @@
 from pathlib import Path
 
 
+# The fixtures check with assert statements, which -O and PYTHONOPTIMIZE remove.
+if not __debug__:
+    raise SystemExit('Run the cmake/tests fixtures without -O or PYTHONOPTIMIZE; their checks are assert statements')
+
 REPOSITORY = Path(__file__).resolve().parents[2]
 
 
