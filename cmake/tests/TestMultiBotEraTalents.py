@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core, run_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 ERA_PATCH = ROOT / 'patches/mod-era-talents-multibot-inspect.patch'
@@ -161,7 +161,7 @@ auto* sWorld=&world;
     subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                     str(source), '-o', str(binary)], check=True)
-    result = subprocess.run([str(binary)], check=True, capture_output=True, text=True)
+    result = subprocess.run([str(binary)], check=True, capture_output=True, text=True, timeout=TIMEOUT)
     return [line.split('~', 2) for line in result.stdout.splitlines()]
 
 
@@ -372,7 +372,7 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
         script.write_text('local function fixture(...)\n' + fixture + '\nend\nfixture(' + ','.join((
             json.dumps(locale), json.dumps(str(era / 'client-addon/EraTalents') + '/'),
             json.dumps(str(bot) + '/'), records)) + ')\n')
-        result = subprocess.run([lua, str(script)], capture_output=True, text=True)
+        result = run_fixture([lua, str(script)])
         if expect_failure:
             if result.returncode == 0:
                 raise AssertionError('Reverted production behavior unexpectedly passed')

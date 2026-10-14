@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import cxx, prepared_core
+from FixtureSupport import TIMEOUT, cxx, prepared_core, run_fixture
 
 STUBS = r'''
 #pragma once
@@ -148,7 +148,7 @@ def main():
         (work/'fixture.cpp').write_text(HARNESS)
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')
         subprocess.run([compiler,'-std=c++20','-O1','-Wall','-Wextra','-Wno-unused-variable','-I',str(work),'-I',str(source),str(work/'fixture.cpp'),'-o',str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
+        subprocess.run([str(exe)],check=True,timeout=TIMEOUT)
         # The original high-level shortcut must fail this same production fixture.
         original=(source/'LfgProgression.cpp').read_text()
         mutation=original.replace('return LfgProgression::PlayerExpansion(g_settings, level, IpTier(player));','return LfgProgression::ExpansionForLevel(g_settings, level);')
@@ -156,8 +156,7 @@ def main():
             raise SystemExit('High-level shortcut mutation was not applied')
         (work/'LfgProgression.cpp').write_text(mutation)
         subprocess.run([compiler,'-std=c++20','-O1','-I',str(work),'-I',str(source),str(work/'fixture.cpp'),'-o',str(exe)],check=True)
-        result=subprocess.run([str(exe)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        if result.returncode==0:
+        if run_fixture([str(exe)],'Legacy level shortcut mutant').returncode==0:
             raise SystemExit('Production fixture did not reject the legacy level shortcut')
         print('LFG production mutation: level-based era bypass rejected')
 

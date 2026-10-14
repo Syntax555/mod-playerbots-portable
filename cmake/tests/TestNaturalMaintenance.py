@@ -13,7 +13,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
 
 
 def declaration(source, opening):
@@ -1150,7 +1150,7 @@ def build(directory, parts, name):
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-fsanitize=address,undefined',
                     '-fno-omit-frame-pointer', '-I', str(module / 'Bot'), str(directory / (name + '.cpp')),
                     '-o', str(executable)], check=True)
-    return subprocess.run([str(executable)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return run_fixture([str(executable)])
 
 
 mutations = [
@@ -1202,11 +1202,15 @@ with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temp
     print(result.stdout + result.stderr, end='')
     if result.returncode:
         raise SystemExit(f'Natural maintenance fixture failed (exit {result.returncode})')
-    for label, key, old, new in mutations:
-        mutated = dict(production)
-        mutated[key] = production[key].replace(old, new)
+
+    def rejected(numbered):
+        index, (label, key, old, new) = numbered
+        mutated = {**production, key: production[key].replace(old, new)}
         if mutated[key] == production[key]:
             raise SystemExit(f'{label} mutation was not applied')
-        if not build(temporary, mutated, 'mutant').returncode:
+        return build(temporary, mutated, f'mutant-{index}').returncode != 0
+
+    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
+        if not result:
             raise SystemExit(f'Natural maintenance fixture did not reject: {label}')
         print(f'Natural maintenance mutation rejected: {label}')

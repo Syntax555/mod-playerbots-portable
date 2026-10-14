@@ -11,7 +11,7 @@ import os
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
 
 
 repository = Path(__file__).resolve().parents[2]
@@ -670,14 +670,13 @@ COMPILE = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1', '-D_
 
 
 def build(directory, sources, name):
-    (directory / 'production.cpp').write_text(
+    (directory / (name + '.cpp')).write_text(
         '#include "Fixture.h"\n' + native + '\n' + '\n'.join(sources.values()) + '\n')
     executable = directory / name
-    subprocess.run(COMPILE + ['-I', str(directory), str(directory / 'production.cpp'), str(directory / 'tests.o'),
+    subprocess.run(COMPILE + ['-I', str(directory), str(directory / (name + '.cpp')), str(directory / 'tests.o'),
                               '-o', str(executable)], check=True)
-    return subprocess.run([str(executable)], timeout=60, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                          env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
-                               'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
+    return run_fixture([str(executable)], env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
+                                               'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
 
 
 mutations = [
@@ -713,11 +712,15 @@ with tempfile.TemporaryDirectory(prefix='portable-natural-taxi-') as temporary:
     print(result.stdout + result.stderr, end='')
     if result.returncode:
         raise SystemExit(f'Natural taxi fixture failed (exit {result.returncode})')
-    for label, key, old, new in mutations:
-        mutated = dict(production)
-        mutated[key] = production[key].replace(old, new)
+
+    def rejected(numbered):
+        index, (label, key, old, new) = numbered
+        mutated = {**production, key: production[key].replace(old, new)}
         if mutated[key] == production[key]:
             raise SystemExit(f'{label} mutation was not applied')
-        if not build(temporary, mutated, 'mutant').returncode:
+        return build(temporary, mutated, f'mutant-{index}').returncode != 0
+
+    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
+        if not result:
             raise SystemExit(f'Natural taxi fixture did not reject: {label}')
         print(f'Natural taxi mutation rejected: {label}')
