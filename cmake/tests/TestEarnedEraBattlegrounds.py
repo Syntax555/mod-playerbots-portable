@@ -6,7 +6,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, prepared_core
+from FixtureSupport import TIMEOUT, cxx, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -456,4 +456,4 @@ with tempfile.TemporaryDirectory(prefix='earned-era-bg-') as scratch:
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
                     str(source), '-o', str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
+    subprocess.run([str(binary)], check=True, timeout=TIMEOUT)

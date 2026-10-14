@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import cxx, function, pinned_source, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, pinned_source, prepared_core
 import yaml
 
 
@@ -88,7 +88,7 @@ def compile_run(temporary, name, source, expected=True):
     if os.name != 'nt':
         command += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie']
     subprocess.run(command + [str(cpp), '-o', str(executable)], check=True)
-    result = subprocess.run([str(executable)], text=True, capture_output=True, check=False)
+    result = subprocess.run([str(executable)], text=True, capture_output=True, check=False, timeout=TIMEOUT)
     if expected:
         assert result.returncode == 0, result.stdout + result.stderr
         print(result.stdout.strip())

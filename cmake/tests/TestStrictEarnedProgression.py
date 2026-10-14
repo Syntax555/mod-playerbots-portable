@@ -12,7 +12,7 @@ import sqlite3
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -422,7 +422,7 @@ with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                         '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                         '-I', str(module / 'src'), str(target), '-o', str(executable)], check=True)
-        result = subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+        result = subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
         if not old:
             print(result.stdout, end='')
             assert result.returncode == 0, result.stderr

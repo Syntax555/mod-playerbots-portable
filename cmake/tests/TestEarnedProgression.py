@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
@@ -229,7 +229,7 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
     target.write_text(source)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                     '-fsanitize=address,undefined', str(target), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
 
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedBotBrackets.py'))], check=True)
 subprocess.run([sys.executable, str(Path(__file__).with_name('TestEarnedAuctions.py'))], check=True)

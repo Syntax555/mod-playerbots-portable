@@ -10,7 +10,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -338,4 +338,4 @@ with tempfile.TemporaryDirectory(prefix='earned-era-pvp-rules-') as directory:
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
                     str(source), '-o', str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
+    subprocess.run([str(binary)], check=True, timeout=TIMEOUT)

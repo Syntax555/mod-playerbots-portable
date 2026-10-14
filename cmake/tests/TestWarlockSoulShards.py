@@ -12,7 +12,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -175,7 +175,7 @@ def build(directory, parts, name):
     executable = directory / name
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
                     '-fno-omit-frame-pointer', str(directory / (name + '.cpp')), '-o', str(executable)], check=True)
-    return subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
 
 
 mutations = [
