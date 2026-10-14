@@ -22,6 +22,10 @@ ab = (zones / 'BattlegroundAB.cpp').read_text()
 av = (zones / 'BattlegroundAV.cpp').read_text()
 ab_header = (zones / 'BattlegroundAB.h').read_text()
 av_header = (zones / 'BattlegroundAV.h').read_text()
+# Only the per-match reset reads the realm's reinforcements. The native macro
+# that read them anywhere is gone, so new uses cannot skip the match's era.
+assert 'BG_AV_SCORE_INITIAL_POINTS' not in av_header + av
+assert av.count('CONFIG_BATTLEGROUND_ALTERAC_REINFORCEMENTS') == 1
 
 
 def function(source, signature):
