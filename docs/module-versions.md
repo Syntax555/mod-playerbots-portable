@@ -88,3 +88,9 @@ The build workflow checks progression fixtures, launcher behavior and package
 integrity before producing the Windows server and matched client packages.
 These checks do not certify every encounter tactic or live realm performance;
 see the [configuration reference](vanilla-config-audit.md#supported-scope).
+
+Playerbots revisions from `ed54b459` rename every `AiPlayerbot.*` key to
+`Playerbots.*` without reading the old names, so such a pin also needs renamed
+profile and launcher keys and a launcher migration that carries users'
+existing `AiPlayerbot.*` values. `cmake/tests/TestProfileKeys.py` fails while a
+shipped profile key is no longer read by the prepared sources.
