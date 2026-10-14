@@ -12,11 +12,13 @@ No client addon is required.
 | --- | --- | --- | --- |
 | Warchief's Blessing, spell 16609 | Orgrimmar; the Crossroads 10 seconds later | 60 minutes | Horde, Friendly or higher with Orgrimmar |
 | Rallying Cry of the Dragonslayer, spell 22888 | Stormwind | 120 minutes | Native aura conditions and lower-level stat scaling |
-| Spirit of Zandalar, spell 24425 | Stranglethorn Vale | 120 minutes | Native aura conditions |
+| Spirit of Zandalar, spell 24425 | Stranglethorn Vale | 120 minutes | Individual Progression's Zul'Gurub entry tier, 3 by default; native aura conditions |
 
 All timer recipients must be alive, in the world, outside GM mode, at most
-level 63 and in Vanilla progression (tiers 0–7). The recipient's own tier is
-used even in a mixed-era party. TBC and Wrath characters receive no aura from
+level 63 and in Vanilla progression (tiers 0–7). Spirit of Zandalar also
+requires the tier at which Zul'Gurub opens to the recipient
+(`IndividualProgression.RequiredZulGurubProgression`). The recipient's own tier
+is used even in a mixed-era party. TBC and Wrath characters receive no aura from
 these simulated events. Native quest turn-ins retain their core behavior.
 
 Each buff has an independent timer: initially 30–150 minutes, then 90 minutes

@@ -1,5 +1,5 @@
 diff --git a/conf/mod_world_buff_bots.conf.dist b/conf/mod_world_buff_bots.conf.dist
-index 8c5f8d0..1209196 100644
+index 8c5f8d0..edb8f03 100644
 --- a/conf/mod_world_buff_bots.conf.dist
 +++ b/conf/mod_world_buff_bots.conf.dist
 @@ -2,7 +2,11 @@
@@ -23,7 +23,7 @@ index 8c5f8d0..1209196 100644
  #
  WorldBuffBots.BaseMinutes = 90
  WorldBuffBots.VarianceMinutes = 60
-@@ -33,27 +38,30 @@ WorldBuffBots.InitialMaxMinutes = 150
+@@ -33,27 +38,31 @@ WorldBuffBots.InitialMaxMinutes = 150
  
  #
  # Warchief's Blessing
@@ -55,15 +55,17 @@ index 8c5f8d0..1209196 100644
  #
  # Spirit of Zandalar
 -#   Chooses a random name from either faction's name pool.
+-#   Applies spell 24425 to eligible players in Stranglethorn Vale.
 +#   Announces the scheduled world-buff event.
- #   Applies spell 24425 to eligible players in Stranglethorn Vale.
++#   Applies spell 24425 to eligible players in Stranglethorn Vale who have
++#   reached IndividualProgression.RequiredZulGurubProgression (default 3).
 +#   Native buff duration: 120 minutes.
  #
  WorldBuffBots.Zandalar.Enable = 1
 -WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.
 +WorldBuffBots.Zandalar.Announcement = World buff: Spirit of Zandalar is available in Stranglethorn Vale.
 diff --git a/src/WorldBuffBots.cpp b/src/WorldBuffBots.cpp
-index 0d3bbf8..04657bb 100644
+index 0d3bbf8..4b879e6 100644
 --- a/src/WorldBuffBots.cpp
 +++ b/src/WorldBuffBots.cpp
 @@ -1,10 +1,11 @@
@@ -98,7 +100,7 @@ index 0d3bbf8..04657bb 100644
  
  enum class AnnouncerNamePool
  {
-@@ -70,14 +75,26 @@ bool IsInAreaOrZone(Player const* player, uint32 areaId)
+@@ -70,14 +75,32 @@ bool IsInAreaOrZone(Player const* player, uint32 areaId)
      return player && (player->GetAreaId() == areaId || player->GetZoneId() == areaId);
  }
  
@@ -112,7 +114,13 @@ index 0d3bbf8..04657bb 100644
 +
 +    // The recipient's rewarded milestones define the era, independently of
 +    // level, account unlocks, group leaders and the server's client expansion.
-+    if (sIndividualProgression->GetPlayerProgressionFromQuests(player) >= PROGRESSION_PRE_TBC)
++    uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
++    if (stage >= PROGRESSION_PRE_TBC)
++        return false;
++
++    // Hakkar's buff waits for the stage at which Individual Progression opens
++    // Zul'Gurub to this character.
++    if (spellId == SPELL_SPIRIT_OF_ZANDALAR && stage < sIndividualProgression->RequiredZulGurubProgression)
 +        return false;
 +
 +    // AddAura does not run the spell's implicit-target conditions. Preserve
@@ -128,7 +136,7 @@ index 0d3bbf8..04657bb 100644
  }
  
  void ReplaceAll(std::string& text, std::string const& token, std::string const& value)
-@@ -107,7 +124,7 @@ public:
+@@ -107,7 +130,7 @@ public:
                  AnnouncerNamePool::Horde,
                  true,
                  0,
@@ -137,7 +145,7 @@ index 0d3bbf8..04657bb 100644
                  {},
                  { AREA_ORGRIMMAR }
              },
-@@ -118,7 +135,7 @@ public:
+@@ -118,7 +141,7 @@ public:
                  AnnouncerNamePool::Alliance,
                  true,
                  0,
@@ -146,7 +154,7 @@ index 0d3bbf8..04657bb 100644
                  {},
                  { AREA_STORMWIND_CITY }
              },
-@@ -129,7 +146,7 @@ public:
+@@ -129,7 +152,7 @@ public:
                  AnnouncerNamePool::Either,
                  true,
                  0,
@@ -155,7 +163,7 @@ index 0d3bbf8..04657bb 100644
                  {},
                  { AREA_STRANGLETHORN_VALE }
              }
-@@ -155,9 +172,15 @@ public:
+@@ -155,9 +178,15 @@ public:
  
      void OnUpdate(uint32 diff) override
      {
@@ -172,7 +180,7 @@ index 0d3bbf8..04657bb 100644
          UpdateDelayedCasts(diff);
  
          for (WorldBuffEvent& event : _events)
-@@ -209,8 +232,8 @@ private:
+@@ -209,8 +238,8 @@ private:
  
      uint32 RollInitialDelayMs() const
      {
@@ -183,7 +191,7 @@ index 0d3bbf8..04657bb 100644
  
          if (maxMinutes < minMinutes)
              std::swap(maxMinutes, minMinutes);
-@@ -220,8 +243,10 @@ private:
+@@ -220,8 +249,10 @@ private:
  
      uint32 RollMainDelayMs() const
      {
@@ -196,7 +204,7 @@ index 0d3bbf8..04657bb 100644
          return MinutesToMs(urand(minMinutes, maxMinutes));
      }
  
-@@ -270,11 +295,14 @@ private:
+@@ -270,11 +301,14 @@ private:
  
          sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
          {
