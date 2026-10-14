@@ -19,7 +19,8 @@ import sys
 TESTS = Path(__file__).resolve().parent
 WORKFLOW = TESTS.parents[1] / ".github/workflows/release.yml"
 GAMEPLAY_COMMAND = "cmake/tests/run_fixtures.py gameplay"
-# Native no-cheat and gameplay fixtures, checked against the prepared sources.
+# Native no-cheat and gameplay fixtures, checked against the prepared sources,
+# and the documentation check.
 GAMEPLAY = (
     "TestEarnedProgression", "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestLfgProgression",
@@ -28,7 +29,7 @@ GAMEPLAY = (
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestFormationMovement",
     "TestFrostmaneHold", "TestNaturalTaxiRoutes", "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
-    "TestPlayerbotUpstreamFixes", "TestProfileKeys",
+    "TestPlayerbotUpstreamFixes", "TestProfileKeys", "TestDocumentation",
 )
 
 
