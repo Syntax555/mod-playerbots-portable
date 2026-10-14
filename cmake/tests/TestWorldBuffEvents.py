@@ -18,17 +18,7 @@ import struct
 import subprocess
 import tempfile
 
-from PreparedSources import prepared_core
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, cursor = 1, opening + 1
-    while depth:
-        depth += (source[cursor] == '{') - (source[cursor] == '}')
-        cursor += 1
-    return source[start:cursor]
+from FixtureSupport import function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)

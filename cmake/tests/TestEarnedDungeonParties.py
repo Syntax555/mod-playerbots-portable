@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 STUBS = r'''
 #pragma once
@@ -417,16 +417,6 @@ int main(){
  reset();std::cout<<"Earned dungeon production coordinator: shared, rejoined and budgeted curved/partial long routes, swim speed, portal refusal memory, native entry pre-checks, bounded raw splines, geometry revalidation, native portal finish, recruitment, native era boundaries, three expansion caps, real-path gates, routes on 0/1/530/571, capital factions, wings, level bands, portal pending ACK, complete parties, native exits, ownership, wipes, era transitions, stalls, timeouts and concurrency passed\n";
 }
 '''
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, cursor = 1, opening + 1
-    while depth:
-        depth += (source[cursor] == '{') - (source[cursor] == '}')
-        cursor += 1
-    return source[start:cursor]
 
 
 def native_contracts(core, source):

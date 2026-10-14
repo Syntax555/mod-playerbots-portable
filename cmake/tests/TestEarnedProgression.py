@@ -9,21 +9,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
 ip = root / 'mod-individual-progression/src'
 pb = root / 'mod-playerbots/src'
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth = 1
-    end = opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 account = function((ip/'IndividualProgressionPlayer.cpp').read_text(), '    bool CanAccountCreateCharacter(')
 progress = function((ip/'IndividualProgression.cpp').read_text(), 'uint8 IndividualProgression::GetAccountProgression(')

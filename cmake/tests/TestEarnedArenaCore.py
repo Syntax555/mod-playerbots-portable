@@ -5,22 +5,12 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, default=prepared_core(repo), help='Prepared core source tree')
 core = parser.parse_args().source
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 queue = (core / 'src/server/game/Battlegrounds/BattlegroundQueue.cpp').read_text()

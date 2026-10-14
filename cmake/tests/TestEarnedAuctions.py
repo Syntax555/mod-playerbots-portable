@@ -10,7 +10,7 @@ from pathlib import Path
 import argparse
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]

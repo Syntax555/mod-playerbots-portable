@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import prepared_core
 
 STUBS = r'''
 #pragma once

@@ -10,7 +10,7 @@ import re
 import subprocess
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -21,16 +21,6 @@ ey = (zones / 'BattlegroundEY.cpp').read_text()
 ws = (zones / 'BattlegroundWS.cpp').read_text()
 ey_header = (zones / 'BattlegroundEY.h').read_text()
 ws_header = (zones / 'BattlegroundWS.h').read_text()
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 ey_methods = '\n'.join(function(ey, 'void BattlegroundEY::' + name + '(')

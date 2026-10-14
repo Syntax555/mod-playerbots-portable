@@ -11,7 +11,7 @@ import re
 import subprocess
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
@@ -22,16 +22,6 @@ args = parser.parse_args()
 module = args.module_source
 src = module / 'src'
 core = args.core_source
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 def compile_run(directory, name, source, includes=()):

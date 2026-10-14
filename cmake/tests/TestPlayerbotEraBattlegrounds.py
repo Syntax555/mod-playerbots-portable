@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--source', type=Path, help='prepared Playerbots module directory')
@@ -13,15 +13,6 @@ args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
 module = args.source if args.source else prepared_core(repo) / 'modules/mod-playerbots'
 pb = module / 'src/Bot'
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 script = (module / 'src/Script/Playerbots.cpp').read_text()
 native_hooks = '\n'.join(function(script, signature).replace(' override', '') for signature in (

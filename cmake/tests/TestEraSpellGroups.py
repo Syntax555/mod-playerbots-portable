@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -88,16 +88,6 @@ sentinels = [(99999, s) for _, s in deleted] + [(g, 999999) for g, _ in deleted]
 db.executemany('INSERT OR IGNORE INTO spell_group VALUES (?, ?)', sentinels)
 db.executescript(update.read_text())
 assert set(sentinels) <= set(db.execute('SELECT id, spell_id FROM spell_group'))
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 mgr_source = (args.core / 'src/server/game/Spells/SpellMgr.cpp').read_text()

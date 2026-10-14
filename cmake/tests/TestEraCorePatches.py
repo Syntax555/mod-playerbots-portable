@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import re
 
-from PreparedSources import prepared_core
+from FixtureSupport import prepared_core
 
 
 # Module patch -> release copy. A new module core patch fails until it is mapped.

@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 import re
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 # Calls that change the world for a bot instead of letting it play: free auras,
 # forced object states, relocation, items, health, immunity and cheat masks.
@@ -16,16 +16,6 @@ REVIEWED = {
     ('Raids/BlackwingLair/BwlRaidClear.cpp', 'SetGoState'): 'bool RcBwlDisarmSuppressionAction::Execute(',
     ('Raids/BlackwingLair/BwlRaidClear.cpp', 'AddAura'): 'void OnPlayerResurrect(',
 }
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, cursor = 1, opening + 1
-    while depth:
-        depth += (source[cursor] == '{') - (source[cursor] == '}')
-        cursor += 1
-    return source[start:cursor]
 
 
 def main():
