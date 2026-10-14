@@ -12,7 +12,9 @@ patches; packaged source manifests also record their hashes.
 | --- | --- |
 | Server updates | Normal startup checks Latest, downloads changed managed files, verifies their hashes and installs them with rollback and recovery. The console reports progress and activity. |
 | User data | Databases, characters, downloaded server data and custom settings are preserved. Managed configuration defaults follow the saved baseline. |
-| Portable paths | Generated SQL source paths are relative. Missing legacy paths produced by the launcher can be repaired from the complete bundled SQL tree, with configuration backups. |
+| Data location | Configurations, databases, logs and server data live in the server folder. `PLAYERBOTS_WORKDIR`, or `%LOCALAPPDATA%\Playerbots` for a read-only server folder, moves them elsewhere; automatic updates then do not run. |
+| Portable paths | Generated SQL source paths are relative. A missing absolute `SourceDirectory` is pointed at the complete bundled SQL tree, with configuration backups. |
+| Supervision | MySQL, authserver and worldserver restart two seconds after they exit or crash, including after the console `server shutdown` command. |
 | Shutdown | Ctrl+C requests shutdown of the launcher's own game servers before its database; timeout handling targets only owned processes. |
 | Client packages | EraTalents and MultiBot are separate downloads. Each player installs matching client files manually with WoW closed. |
 
