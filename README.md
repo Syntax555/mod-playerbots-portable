@@ -229,7 +229,6 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [Configuration](docs/configuration.md) | Default settings, module behavior and supported scope. |
 | [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |
 | **Reference** | |
-| [Project identity and maintenance](docs/project.md) | Origins, distribution-specific integration, GitHub presentation and fork-network considerations. |
 | [Source versions](docs/module-versions.md) | Pinned dependencies, bundled runtime and provenance. |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Licenses and packaged notice paths. |
 | **Development** | |
