@@ -74,7 +74,9 @@ level-69/79 residents must first earn TBC/Wrath. See
 Classic battlegrounds use ordinary level requirements. Tier 8 opens Eye of the
 Storm and human TBC arena skirmishes; tier 13 opens Isle of Conquest, Strand of
 the Ancients, random battlegrounds and Wrath arenas. Rated arenas require the
-native level 80, so TBC characters can use skirmishes only.
+realm's maximum level: 80 with earned Wrath in `individual` and `wotlk` mode,
+or 70 with earned TBC in `tbc` mode (see [realm ceilings](#optional-realm-ceilings)).
+Below that level, characters use skirmishes.
 
 Matchmaking separates earned eras within each level bracket. Every member of a
 queued group must qualify and share one era. Match rules remain fixed for that
