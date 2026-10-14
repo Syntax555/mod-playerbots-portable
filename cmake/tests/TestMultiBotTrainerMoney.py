@@ -7,12 +7,11 @@ recording hooks and packet containers; this does not start a realm.
 
 from pathlib import Path
 import argparse
-import json
 import os
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import cxx, function, pinned_source, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -27,13 +26,7 @@ handler = (core / 'src/server/game/Handlers/NPCHandler.cpp').read_text()
 player = (core / 'src/server/game/Entities/Player/Player.cpp').read_text()
 budget = (module / 'Ai/Base/Value/BudgetValues.cpp').read_text()
 ai = (module / 'Bot/PlayerbotAI.cpp').read_text()
-lock = json.loads((repository / 'versions.lock.json').read_text())
-bridge_revision = next(entry['revision'] for entry in lock['modules']
-                       if entry['name'] == 'mod-multibot-bridge')
-baseline = subprocess.run(
-    ['git', '-C', str(repository / '.module-cache/mod-multibot-bridge'),
-     'show', f'{bridge_revision}:src/MultiBotBridge.cpp'],
-    check=True, text=True, capture_output=True).stdout
+baseline = pinned_source('mod-multibot-bridge', 'src/MultiBotBridge.cpp')
 
 fixture = r'''
 #include <algorithm>
