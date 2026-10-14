@@ -10,7 +10,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -335,7 +335,7 @@ with tempfile.TemporaryDirectory(prefix='earned-era-pvp-rules-') as directory:
                       ws_fixture.rstrip()[:-2] + ws_fields + ws_timer_getter + '};\n' +
                       methods + checks)
     binary = folder / 'fixture'
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
                     str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

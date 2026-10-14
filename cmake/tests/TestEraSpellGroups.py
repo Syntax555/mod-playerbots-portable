@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -375,7 +375,7 @@ with tempfile.TemporaryDirectory(prefix='portable-era-spell-groups-') as tempora
     source = path / 'spell-groups.cpp'
     binary = path / 'spell-groups'
     source.write_text(stub + methods + checks)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fmax-errors=5', '-fsanitize=address,undefined',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fmax-errors=5', '-fsanitize=address,undefined',
                     '-fno-omit-frame-pointer', '-no-pie', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 print('Era spell groups: 13-row migration is targeted and idempotent; spell/rank data and stock rules unchanged')

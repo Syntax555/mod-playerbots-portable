@@ -18,7 +18,7 @@ import struct
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -808,7 +808,7 @@ with tempfile.TemporaryDirectory(prefix='portable-world-buff-events-') as direct
         source = temporary / (name + '.cpp')
         source.write_text(fixture + '\n' + source_text + '\n' + loader_text + '\n' + tests)
         executable = temporary / name
-        subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
+        subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
                         '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                         '-I', str(temporary), str(source), '-o', str(executable)], check=True)
         if expected_failure is None:

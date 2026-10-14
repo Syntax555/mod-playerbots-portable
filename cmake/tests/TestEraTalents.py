@@ -11,7 +11,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
@@ -28,7 +28,7 @@ def compile_run(directory, name, source, includes=()):
     cpp = directory / (name + '.cpp')
     binary = directory / name
     cpp.write_text(source)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie', '-pthread',
                     *[flag for include in includes for flag in ('-I', str(include))],
                     str(cpp), '-o', str(binary)], check=True)
@@ -39,7 +39,7 @@ def rejects(directory, name, source, label):
     cpp = directory / (name + '.cpp')
     binary = directory / name
     cpp.write_text(source)
-    subprocess.run(['g++', '-std=c++20', '-pthread', str(cpp), '-o', str(binary)], check=True)
+    subprocess.run([cxx(), '-std=c++20', '-pthread', str(cpp), '-o', str(binary)], check=True)
     if subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
         raise SystemExit(f'Era talent fixture did not reject the mutation: {label}')
     print(f'Era talent mutation rejected: {label}')
@@ -1234,7 +1234,7 @@ int main() {
     cpp = directory / 'era-content-mutated.cpp'
     cpp.write_text(mutated)
     binary = directory / 'era-content-mutated'
-    subprocess.run(['g++', '-std=c++20', '-I', str(content_fake), '-I', str(src), str(cpp), '-o', str(binary)],
+    subprocess.run([cxx(), '-std=c++20', '-I', str(content_fake), '-I', str(src), str(cpp), '-o', str(binary)],
                    check=True)
     if subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
         raise SystemExit('Era content fixture did not reject a stale index after reloading')

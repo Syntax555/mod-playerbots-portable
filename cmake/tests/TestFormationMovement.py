@@ -11,7 +11,7 @@ import os
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -306,7 +306,7 @@ with tempfile.TemporaryDirectory(prefix='portable-formation-') as temporary:
         cpp = temporary / (name + '.cpp')
         cpp.write_text(fixture + production + tests)
         executable = temporary / name
-        command = ['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-g', '-O1',
+        command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-g', '-O1',
                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
         if name == 'original':
             command.append('-DORIGINAL_CORE')

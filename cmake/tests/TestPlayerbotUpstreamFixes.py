@@ -13,7 +13,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 def declaration(source, opening):
@@ -403,7 +403,7 @@ def build(directory, parts, name):
     (directory / (name + '.cpp')).write_text(text)
     executable = directory / name
     # The pre-fix chat hooks ignore their language parameter, so mutants must still compile.
-    subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(directory / (name + '.cpp')),
                     '-o', str(executable)], check=True)
     return subprocess.run([str(executable)], capture_output=True, text=True, check=False)

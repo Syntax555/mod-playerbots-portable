@@ -21,7 +21,7 @@ import tempfile
 
 import yaml
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 def values(source):
@@ -85,7 +85,7 @@ def snapshot(db, tables):
 def compile_run(temporary, name, source, expected=True):
     cpp, executable = temporary / (name + '.cpp'), temporary / name
     cpp.write_text(source)
-    command = [os.environ.get('CXX', 'g++'), '-std=c++20', '-Wall', '-Wextra', '-Werror']
+    command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror']
     if os.name != 'nt':
         command += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie']
     subprocess.run(command + [str(cpp), '-o', str(executable)], check=True)

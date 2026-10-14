@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 ROOT = Path(__file__).resolve().parents[2]
 ERA_PATCH = ROOT / 'patches/mod-era-talents-multibot-inspect.patch'
@@ -157,9 +157,7 @@ auto* sWorld=&world;
     source = directory / 'native-inspect.cpp'
     binary = directory / 'native-inspect'
     source.write_text(code)
-    compiler = shutil.which('g++') or shutil.which('clang++')
-    if not compiler:
-        raise RuntimeError('A C++20 compiler is required')
+    compiler = cxx()
     subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                     str(source), '-o', str(binary)], check=True)

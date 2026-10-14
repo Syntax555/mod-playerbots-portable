@@ -10,7 +10,7 @@ from pathlib import Path
 import argparse
 import subprocess
 import tempfile
-from FixtureSupport import prepared_core
+from FixtureSupport import cxx, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -912,7 +912,7 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporar
     target = Path(temporary) / 'auctions.cpp'
     executable = Path(temporary) / 'auctions'
     target.write_text(source)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                     '-g', '-I', str(module), '-I', str(travel_module),
                     str(target), '-o', str(executable)], check=True)

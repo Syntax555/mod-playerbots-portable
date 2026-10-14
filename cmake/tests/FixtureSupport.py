@@ -1,6 +1,8 @@
 """Shared helpers for the cmake/tests fixtures."""
 
+import os
 from pathlib import Path
+import shutil
 
 
 # The fixtures check with assert statements, which -O and PYTHONOPTIMIZE remove.
@@ -24,3 +26,11 @@ def function(source, signature):
         depth += (source[end] == '{') - (source[end] == '}')
         end += 1
     return source[start:end]
+
+
+def cxx():
+    """$CXX, else g++, c++ or clang++ from PATH; the fixtures' warning and sanitizer flags target GCC."""
+    found = os.environ.get('CXX') or shutil.which('g++') or shutil.which('c++') or shutil.which('clang++')
+    if not found:
+        raise SystemExit('A C++20 compiler is required')
+    return found

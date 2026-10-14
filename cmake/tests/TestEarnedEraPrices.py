@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -196,7 +196,7 @@ with tempfile.TemporaryDirectory(prefix='portable-era-prices-') as temporary:
         (path / name).write_text((module / 'src' / name).read_text())
     source = '#include "EarnedEraRidingPrices.cpp"\nnamespace Trainer {\n' + trainer_methods + '\n}\n' + tests
     (path / 'prices.cpp').write_text(source)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                     str(path / 'prices.cpp'), '-o', str(path / 'prices')], check=True)
     subprocess.run([str(path / 'prices')], check=True)

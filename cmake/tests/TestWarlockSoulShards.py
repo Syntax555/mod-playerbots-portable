@@ -12,7 +12,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -173,7 +173,7 @@ def build(directory, parts, name):
     text = text.replace('REGISTERED', registration.group(1))
     (directory / (name + '.cpp')).write_text(text)
     executable = directory / name
-    subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
                     '-fno-omit-frame-pointer', str(directory / (name + '.cpp')), '-o', str(executable)], check=True)
     return subprocess.run([str(executable)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 

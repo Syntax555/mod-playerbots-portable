@@ -13,7 +13,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 def declaration(source, opening):
@@ -1147,7 +1147,7 @@ def build(directory, parts, name):
         text = text.replace('@@' + key.upper() + '@@', parts[key])
     (directory / (name + '.cpp')).write_text(text + tests)
     executable = directory / name
-    subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-fsanitize=address,undefined',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-fsanitize=address,undefined',
                     '-fno-omit-frame-pointer', '-I', str(module / 'Bot'), str(directory / (name + '.cpp')),
                     '-o', str(executable)], check=True)
     return subprocess.run([str(executable)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

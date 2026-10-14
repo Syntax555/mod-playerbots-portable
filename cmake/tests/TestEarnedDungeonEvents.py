@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 def block(source, signature, closing='};'):
@@ -179,9 +179,7 @@ def main():
     if not (source/'DcEarnedEvents.cpp').exists():
         raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear patch first')
     native_contracts(core, source)
-    compiler = shutil.which('c++') or shutil.which('g++') or shutil.which('clang++')
-    if not compiler:
-        raise SystemExit('A C++20 compiler is required')
+    compiler = cxx()
     registry = (source/'Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h').read_text()
     kinds = re.findall(r'^\s{4}([A-Z][A-Za-z]+),', block(registry, 'enum class EventStepKind : uint8'), re.M)
     if len(kinds) < 17:

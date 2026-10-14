@@ -13,7 +13,7 @@ import resource
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -651,7 +651,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-area-trigger-') as tempora
                        .replace('FROSTMANE_TRIGGER', frostmane_trigger)
                        .replace('QUEST_TRIGGERS', ',\n'.join(quest_triggers)))
         executable = temporary / label
-        command = ['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
+        command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
         command += [argument for path in includes for argument in ('-I', str(path))]
         subprocess.run(command + [str(cpp), '-o', str(executable)], check=True)

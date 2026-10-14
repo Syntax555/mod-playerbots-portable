@@ -13,7 +13,7 @@ import os
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -772,7 +772,7 @@ with tempfile.TemporaryDirectory(prefix='portable-loot-roll-policy-') as directo
         core / 'src/server/shared/Packets', core / 'src/server/game/Server',
         core / 'src/server/game/Server/Protocol', core / 'src/server/game/Entities/Object',
     ]
-    command = ['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
+    command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
                '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie']
     command += [argument for path in includes for argument in ('-I', str(path))]
     command += [str(source), '-o', str(executable)]

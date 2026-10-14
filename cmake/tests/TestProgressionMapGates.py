@@ -12,7 +12,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 def enum(source, name):
@@ -273,7 +273,7 @@ with tempfile.TemporaryDirectory(prefix='portable-map-gates-') as directory:
         source = temporary / 'gates.cpp'
         executable = temporary / 'gates'
         source.write_text(source_text)
-        subprocess.run(['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-g', '-O1',
+        subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-g', '-O1',
                         '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(source), '-o', str(executable)],
                        check=True)
         result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=120, check=False)

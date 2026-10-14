@@ -11,7 +11,7 @@ import os
 import subprocess
 import tempfile
 
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 
 repository = Path(__file__).resolve().parents[2]
@@ -665,7 +665,7 @@ int main()
 '''
 
 
-COMPILE = ['c++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1', '-D_GLIBCXX_ASSERTIONS',
+COMPILE = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1', '-D_GLIBCXX_ASSERTIONS',
            '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
 
 

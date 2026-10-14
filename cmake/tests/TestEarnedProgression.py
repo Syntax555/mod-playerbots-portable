@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from FixtureSupport import function, prepared_core
+from FixtureSupport import cxx, function, prepared_core
 
 root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
 ip = root / 'mod-individual-progression/src'
@@ -225,7 +225,7 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
     target = Path(temporary) / 'regression.cpp'
     executable = Path(temporary) / 'regression'
     target.write_text(source)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                     '-fsanitize=address,undefined', str(target), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
 
