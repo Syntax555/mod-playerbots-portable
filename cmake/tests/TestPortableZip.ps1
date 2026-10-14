@@ -114,8 +114,8 @@ try {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
-    $profiles = @('playerbots', 'worldserver', 'individualProgression', 'AutoBalance', 'mod_ahbot',
-        'mod_dungeon_clear', 'mod-quest-loot-party', 'MultiBotBridge', 'mod_token_turnin')
+    $profiles = @('playerbots', 'worldserver', 'individualProgression', 'AutoBalance',
+        'mod_dungeon_clear', 'mod-quest-loot-party', 'MultiBotBridge')
     foreach ($profile in $profiles) {
         Write-FixtureText (Join-Path $source "cmd/startup/profiles/$profile.conf") "$profile = fixture`n"
     }

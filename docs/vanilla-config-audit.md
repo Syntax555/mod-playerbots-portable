@@ -124,10 +124,8 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Quest Loot Party | Share naturally rolled normal-quality quest loot with eligible corpse looters |
 | World Buff Bots | Timed Vanilla events for eligible Vanilla-progress characters; native TBC events unchanged |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
-| AH Bot Plus | Seller, buyer and generated stock disabled |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
 | Raid Clear | Molten Core, Blackwing Lair and Zul'Gurub mechanics; cloak and device shortcuts disabled |
-| Token Turn-in | Read-only checks available; shortcut redemption blocked in natural mode |
 
 AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
 smaller parties receive the upstream scaling curve with reduced XP and money.

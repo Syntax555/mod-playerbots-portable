@@ -71,10 +71,10 @@ try {
         'licenses/boost/LICENSE_1_0.txt',
         'configs/authserver.conf.dist', 'configs/worldserver.conf.dist',
         'configs/modules/playerbots.conf.dist', 'configs/modules/AutoBalance.conf.dist',
-        'configs/modules/individualProgression.conf.dist', 'configs/modules/mod_ahbot.conf.dist',
+        'configs/modules/individualProgression.conf.dist',
         'configs/modules/mod_dungeon_clear.conf.dist',
         'configs/modules/mod-quest-loot-party.conf.dist',
-        'configs/modules/MultiBotBridge.conf.dist', 'configs/modules/mod_token_turnin.conf.dist',
+        'configs/modules/MultiBotBridge.conf.dist',
         'portable-release.json', 'versions.lock.json', 'README.md', 'THIRD_PARTY_NOTICES.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
         'LICENSE', 'licenses/azerothcore-wotlk.txt'
