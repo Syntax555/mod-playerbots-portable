@@ -35,7 +35,8 @@
         "patches/mod-playerbots-earned-era-battlegrounds.patch",
         "patches/mod-playerbots-master-flight-learning.patch",
         "patches/mod-playerbots-quest-area-triggers.patch",
-        "patches/mod-playerbots-loot-roll-policy.patch"
+        "patches/mod-playerbots-loot-roll-policy.patch",
+        "patches/mod-playerbots-upstream-fixes.patch"
       ]
     },
     {
