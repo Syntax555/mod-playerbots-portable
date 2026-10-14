@@ -1,34 +1,50 @@
 # AzerothCore Playerbots Portable
 
-[![Build](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml/badge.svg)](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml)
+[![Build on main](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml?query=branch%3Amain)
 [![Download](https://img.shields.io/badge/download-Latest-blue)](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
 [![Client](https://img.shields.io/badge/client-3.3.5a%20%2812340%29-orange)](#requirements)
 [![Launcher license](https://img.shields.io/badge/launcher%20license-MIT-green)](LICENSE)
 
-An earned-progression World of Warcraft 3.3.5a server for Windows x64, built on
-[AzerothCore](https://github.com/azerothcore/azerothcore-wotlk) and
-[Playerbots](https://github.com/mod-playerbots/mod-playerbots). You and up to
-2,500 bots start at level 1 and earn every level, item, gold piece and expansion
-unlock through Vanilla, The Burning Crusade and Wrath of the Lich King. Extract
-the ZIP and run `startup.exe`; the launcher manages the database, configuration,
-first-run setup and server updates.
+An independently maintained **Windows x64 distribution** for World of Warcraft
+3.3.5a, integrating character-specific progression through Vanilla, The Burning
+Crusade and Wrath of the Lich King with
+[AzerothCore](https://github.com/azerothcore/azerothcore-wotlk),
+[Playerbots](https://github.com/mod-playerbots/mod-playerbots) and community modules.
+
+This project continues [Onur Aslan's portable server project](https://github.com/onur/mod-playerbots-portable)
+with earned-play integrations, historical client packages and automatic server
+updates. Extract the ZIP and run `startup.exe`; the launcher manages the
+database, configuration and first-run setup.
+
+[Downloads](#downloads) · [Quick start](#quick-start) · [Documentation](#documentation) · [Contributing](#contributing)
 
 ## Highlights
 
-- **Earned progression:** every player and bot unlocks Vanilla, TBC and Wrath
-  content through its own milestones. Historical talent trees and selected class
-  quests follow that earned era, with German and English text.
-- **A living world:** bots level from 1, quest, train, repair and buy supplies
-  with their own gold, and trade owned items on the auction house. About 35%
-  stay at resident level caps. Timed Vanilla world-buff events follow each
-  recipient's era.
-- **Group content:** bot companions and SelfBot, autonomous five-bot parties for
-  audited dungeons, player-led Dungeon Clear in instances you entered, Molten
-  Core, Blackwing Lair and Zul'Gurub tactics, and AutoBalance scaling.
-- **PvP:** bots fill real players' battleground queues within their own earned
-  era and level bracket.
-- **Operations:** one launcher with verified incremental updates that preserve
-  characters, databases and custom settings.
+- **Earned progression:** players and bots unlock content through their own
+  milestones. Bots start at level 1 with ordinary starter equipment and earn
+  levels, gold and upgrades. See [progression](docs/changing-expansions.md).
+- **Historical talents:** Era Talents integration selects Vanilla, TBC or Wrath
+  talent systems from each character's earned era. Matching client files include
+  German and English text and selected restored class spells. See
+  [historical talents](docs/era-talents.md).
+- **Autonomous dungeon parties:** nearby random bots form five-member groups for
+  audited normal dungeons in their own era and walk to the entrance. See
+  [routes and requirements](docs/bot-dungeons.md#autonomous-parties).
+- **Player-led raids:** Dungeon Clear, Playerbots and Raid Clear provide group
+  control and encounter tactics, including Molten Core, Blackwing Lair and
+  Zul'Gurub. Autonomous raid recruitment remains outside the supported scope.
+  See [raid support](docs/bot-dungeons.md#raids).
+- **Earned bot economy:** bots train, repair and buy supplies with their own
+  gold, and trade owned items through normal auctions and mailbox delivery.
+  See [auction trading](docs/earned-auctions.md).
+- **Automatic server updates:** the launcher downloads changed files, verifies
+  hashes and preserves characters, databases and custom settings. Matching
+  client packages are installed separately. See [updates](docs/updating.md).
+- **Portable Windows setup:** the ZIP includes the server, launcher, MySQL and
+  configuration templates. Required server data is downloaded on first start.
+- **Companions and world activity:** SelfBot and controlled bot companions,
+  earned-era battleground queues, timed Vanilla world buffs and AutoBalance
+  instance scaling complement individual progression.
 
 ## Quick start
 
@@ -155,9 +171,10 @@ server start, including an automatic restart, overwrites `Server.log`,
 
 ## Status and limitations
 
-Every published build passes the launcher tests, source fixtures for the earned
-play rules and package verification. Complete dungeon and raid runs, every class
-quest and the 2,500-bot target have not been verified in game.
+The release workflow runs launcher tests, source fixtures for the earned-play
+rules and package verification before publishing. These checks do not establish
+complete in-game coverage: full dungeon and raid runs, every class quest and the
+2,500-bot target have not been verified in game.
 
 The server uses the Wrath core and client. Historical trees use Vanilla 1.12.1
 and TBC Classic 2.5.4 data; TBC is not an exact original 2.4.3 simulation.
@@ -170,6 +187,11 @@ gold are preserved without verifying their origin. See
 [roadmap](docs/todo.md).
 
 ## Included modules
+
+These upstream projects provide the underlying systems. Their roles below
+include this distribution's local integration and defaults; see
+[server adaptations](docs/adaptations.md) and the pinned
+[source versions](docs/module-versions.md).
 
 | Module | Default role |
 | --- | --- |
@@ -207,6 +229,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [Configuration](docs/configuration.md) | Default settings, module behavior and supported scope. |
 | [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |
 | **Reference** | |
+| [Project identity and maintenance](docs/project.md) | Origins, distribution-specific integration, GitHub presentation and fork-network considerations. |
 | [Source versions](docs/module-versions.md) | Pinned dependencies, bundled runtime and provenance. |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Licenses and packaged notice paths. |
 | **Development** | |
@@ -221,6 +244,11 @@ or propose a change; the
 lists what a report needs and how to change pinned sources.
 
 ## License and credits
+
+The portable project was originally created by **Onur Aslan** as
+[onur/mod-playerbots-portable](https://github.com/onur/mod-playerbots-portable).
+This continuation is maintained in `Syntax555/mod-playerbots-portable`;
+original authorship and dependency credits remain part of the project.
 
 The portable launcher and build tooling use the [MIT License](LICENSE).
 AzerothCore, modules and addons retain their upstream licenses and notices; see
