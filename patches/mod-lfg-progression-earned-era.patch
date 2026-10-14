@@ -1,5 +1,5 @@
 diff --git a/conf/mod_lfg_progression.conf.dist b/conf/mod_lfg_progression.conf.dist
-index 23ac717..c816fe9 100644
+index 23ac717..3dcc305 100644
 --- a/conf/mod_lfg_progression.conf.dist
 +++ b/conf/mod_lfg_progression.conf.dist
 @@ -4,9 +4,12 @@
@@ -32,42 +32,46 @@ index 23ac717..c816fe9 100644
  #                     vanilla, at most TbcMaxLevel when it is TBC, no cap when
  #                     it is WotLK. With players in different expansions,
  #                     BotTier picks which one counts. A player's expansion is
-@@ -28,7 +32,8 @@ LfgProgression.Enable = 1
+@@ -28,8 +32,8 @@ LfgProgression.Enable = 1
  #                     builds a group; a bot that does not fit stays in the
  #                     queue. A random bot is an account in playerbots'
  #                     randomBotAccounts; your own altbots and random bots you
 -#                     invited yourself are left alone. The seasonal bosses are
+-#                     exempt.
 +#                     invited yourself retain their own earned-era lock too.
-+#                     The seasonal bosses are
- #                     exempt.
++#                     The seasonal bosses are exempt.
  #        Default:     1 (enabled)
  #
-@@ -51,8 +56,9 @@ LfgProgression.BotTier = 0
+ 
+@@ -51,9 +55,9 @@ LfgProgression.BotTier = 0
  
  #
  #    LfgProgression.ClassicMaxLevel
 -#        Description: Highest level in vanilla. A character without an IP tier
 -#                     is vanilla up to and including this level, and random
+-#                     bots are capped here when the players are vanilla.
 +#        Description: Level fallback when Individual Progression is inactive;
-+#                     a character is vanilla up to and including this level;
-+#                     random
- #                     bots are capped here when the players are vanilla.
++#                     a character is vanilla up to and including this level.
++#                     Random bots are capped here when the players are vanilla.
  #        Default:     60
  #
-@@ -61,8 +67,9 @@ LfgProgression.ClassicMaxLevel = 60
+ 
+@@ -61,9 +65,10 @@ LfgProgression.ClassicMaxLevel = 60
  
  #
  #    LfgProgression.TbcMaxLevel
 -#        Description: Highest level in TBC. A character without an IP tier is
 -#                     TBC up to and including this level, WotLK above it, and
+-#                     random bots are capped here when the players are TBC.
 +#        Description: Level fallback when Individual Progression is inactive;
-+#                     a character is TBC up to and including this level,
-+#                     WotLK above it;
- #                     random bots are capped here when the players are TBC.
++#                     a character is TBC up to and including this level and
++#                     WotLK above it. Random bots are capped here when the
++#                     players are TBC.
  #        Default:     70
  #
+ 
 diff --git a/src/LfgProgression.cpp b/src/LfgProgression.cpp
-index 0533553..39b9758 100644
+index 0533553..6808c66 100644
 --- a/src/LfgProgression.cpp
 +++ b/src/LfgProgression.cpp
 @@ -43,9 +43,9 @@
@@ -119,7 +123,7 @@ index 0533553..39b9758 100644
      // InitializeLockedDungeons() calls the lock hook once per dungeon with the
 -    // same player, and IpTier() costs two synchronous auth database lookups
 -    // and two regexes per call. So the expansion is worked out once per pass
-+    // same player. Work out the era once per native lock-map refresh. So the expansion is worked out once per pass
++    // same player, so the expansion is worked out once per lock-map refresh
      // and forgotten in OnAfterInitializeLockedDungeons -- the IP tier can
      // change without the level changing. thread_local, because the locks are
      // worked out both in the world thread (login) and in the map threads
