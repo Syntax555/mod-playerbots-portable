@@ -159,4 +159,4 @@ MPQ, dependency licenses and source/hash manifest. Packaging checks generated
 rows, generation agreement, preserved base entries and final bytes. See
 [building](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md)
 for the complete source-build workflow and the
-[configuration reference](vanilla-config-audit.md#supported-scope) for gameplay limits.
+[configuration reference](configuration.md#supported-scope) for gameplay limits.

@@ -187,5 +187,5 @@ remains disabled through `AiPlayerbot.RandomBotJoinLfg = 0`, keeping automatic
 groups on the physical travel path.
 
 Source revisions and integration patches are recorded in
-[build provenance](module-versions.md). See [configuration](vanilla-config-audit.md)
+[build provenance](module-versions.md). See [configuration](configuration.md)
 for population, scaling and other module defaults.

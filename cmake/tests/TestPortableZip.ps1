@@ -104,7 +104,7 @@ try {
         historicalClassData = @{ sources = @(@{ name = 'Historical fixture'; url = 'https://github.com/example/data.git'; revision = $revision }); notice = 'licenses/historical-class-data/NOTICE.txt'; license = 'licenses/GPL-3.0.txt'; licenses = @('licenses/GPL-2.0.txt') }
     }
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
-    foreach ($name in @('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/vanilla-config-audit.md', 'docs/module-versions.md',
+    foreach ($name in @('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/configuration.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
         'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'patches/core-fixture.patch', 'docs/world-buffs.md',
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',

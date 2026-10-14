@@ -15,6 +15,6 @@ See the [update guide]({source_url}/docs/updating.md) for manual installation, b
 
 First startup requires Internet access and can take time while preparing data and the bot population. The executables are unsigned; Windows Smart App Control can block them.
 
-[Setup and features]({source_url}/README.md) · [Updates]({source_url}/docs/updating.md) · [Configuration]({source_url}/docs/vanilla-config-audit.md) · [Server adaptations]({source_url}/docs/adaptations.md) · [Client installation]({source_url}/docs/era-talents.md) · [Licenses]({source_url}/THIRD_PARTY_NOTICES.md)
+[Setup and features]({source_url}/README.md) · [Updates]({source_url}/docs/updating.md) · [Configuration]({source_url}/docs/configuration.md) · [Server adaptations]({source_url}/docs/adaptations.md) · [Client installation]({source_url}/docs/era-talents.md) · [Licenses]({source_url}/THIRD_PARTY_NOTICES.md)
 
 Source: [{revision}]({commit_url}). The server ZIP contains its dependency manifest, applied patches and license notices.

@@ -158,4 +158,4 @@ alone. Core `Expansion = 2` is needed for restored Vanilla Naxxramas.
 Historical progression remains on a Wrath core and client. AutoBalance scales
 smaller instance parties; it does not add encounter tactics. General prices,
 world data, professions, pets and every combat formula are not independently
-historical for each character. See the [configuration reference](vanilla-config-audit.md).
+historical for each character. See the [configuration reference](configuration.md).

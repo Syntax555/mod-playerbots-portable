@@ -68,6 +68,6 @@ chain, the simulator supplies no Vanilla buffs because the tier numbers no
 longer establish the required era.
 
 The launcher adds missing module configuration and preserves existing custom
-values. See [configuration updates](vanilla-config-audit.md) and
+values. See [configuration updates](configuration.md) and
 [server adaptations](adaptations.md) for the integration rules. Exact source
 revisions and patches are recorded in [the manifest](../versions.lock.json).

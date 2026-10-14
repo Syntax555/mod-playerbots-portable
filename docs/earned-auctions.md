@@ -95,4 +95,4 @@ A fresh market can remain sparse while bots level, earn loot and gold, and
 reach a town. Sellers need deposits and buyers need useful affordable listings.
 There is no guaranteed stock, demand, subsidy or complete autonomous crafting
 economy. AI and pathfinding limits can interrupt trading; see the
-[configuration reference](vanilla-config-audit.md#supported-scope).
+[configuration reference](configuration.md#supported-scope).
