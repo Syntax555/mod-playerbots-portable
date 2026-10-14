@@ -1,22 +1,11 @@
-# Development TODO
+# Roadmap and validation
 
-Open integration work and gameplay validation. The scope below describes the
-source implementation; planned work is not a claim of release support.
-Prefer existing AzerothCore and module functions, with small integration
-changes where required by earned progression and ordinary player actions.
-
-## Current scope
-
-| Area | Implementation and limits |
-| --- | --- |
-| Autonomous dungeons | Five nearby random bots of one faction and earned era form a party and walk to an audited normal Vanilla, TBC or Wrath dungeon within its level band. Required events and encounter controllers that need unsupported actions prevent automatic recruitment for that map. |
-| Player-led clears | A real player's group can run Dungeon Clear in any dungeon or raid it entered. Events run only through ordinary actions; an event that needs a shortcut stalls for the player. |
-| Raids | Raid Clear adds Molten Core, Blackwing Lair and Zul'Gurub mechanics to player-led raids. Autonomous raid recruitment and travel are not implemented. AutoBalance scales raids to the group size. |
-| Historical class quests | Selected priest families are restored. Other classes retain the core and Individual Progression implementations. |
-| Validation | The party coordinator, the event audit and selected native handlers have automated checks. Complete live dungeon and raid runs and all historical class quests have not been verified. |
-
-See [bot dungeons and raids](bot-dungeons.md), [class quests](class-quests.md)
-and [server adaptations](adaptations.md) for current behavior.
+Open integration work and gameplay validation. Planned work is not a claim of
+release support; [bot dungeons and raids](bot-dungeons.md),
+[class quests](class-quests.md) and [server adaptations](adaptations.md)
+describe the current behavior. Prefer existing AzerothCore and module
+functions, with small integration changes where required by earned progression
+and ordinary player actions.
 
 ## Dungeon integration
 
