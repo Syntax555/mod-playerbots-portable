@@ -16,7 +16,6 @@
       "patches/azerothcore-earned-riding-prices.patch",
       "patches/azerothcore-earned-era-battleground-rules.patch",
       "patches/azerothcore-earned-era-arena-matching.patch",
-      "patches/azerothcore-earned-era-pvp-rules.patch",
       "patches/azerothcore-windows-resource-includes.patch",
       "patches/azerothcore-windows-compile-parallelism.patch",
       "patches/azerothcore-formation-minimum-velocity.patch",
