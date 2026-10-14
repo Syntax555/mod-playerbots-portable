@@ -87,6 +87,12 @@ integrity before producing the Windows server and matched client packages.
 These checks do not certify every encounter tactic or live realm performance;
 see the [configuration reference](vanilla-config-audit.md#supported-scope).
 
+Pins follow the core fork's `Playerbot` branch, Playerbots `master` and the
+`main` branch of MultiBot Chatless and MultiBot Bridge, not their GitHub
+default feature branch; other components follow their default branch. MultiBot
+Chatless and MultiBot Bridge move only together, and a newer pair needs a
+review of new bridge endpoints, such as pet taming, against natural progression.
+
 Playerbots revisions from `ed54b459` rename every `AiPlayerbot.*` key to
 `Playerbots.*` without reading the old names, so such a pin also needs renamed
 profile and launcher keys and a launcher migration that carries users'
