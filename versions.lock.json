@@ -143,7 +143,7 @@
     "nativeSpellRestorations": "era-data/vanilla/priest.yaml",
     "stormLib": {
       "url": "https://github.com/ladislav-zezula/StormLib.git",
-      "revision": "86f9b99ffe4d3417dad16d00541cf6f2e3d7bf79"
+      "revision": "6bb1882bd00ddbc3729cac5dac0fda81a61e5514"
     },
     "localizations": {
       "deDE": {
