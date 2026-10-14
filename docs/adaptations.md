@@ -36,7 +36,7 @@ See [updates, moving the server and recovery](updating.md) for operating steps.
 | Player-led clears | A real player's group can run Dungeon Clear in any dungeon or raid it entered. Events run only through ordinary actions; movement, item, key and scripted-event shortcuts are refused. |
 | Raid tactics | Raid Clear adds Molten Core, Blackwing Lair and Zul'Gurub mechanics. Only an equipped Onyxia Scale Cloak protects, and Suppression Devices are disarmed through the rogue's own spell. |
 
-Settings and scope are documented in [configuration](vanilla-config-audit.md),
+Settings and scope are documented in [configuration](configuration.md),
 [bot brackets and PvP](earned-bot-brackets.md) and
 [auction trading](earned-auctions.md). The exploration and loot integrations are
 implemented in [area-trigger handling](../patches/mod-playerbots-quest-area-triggers.patch)
@@ -89,5 +89,5 @@ The release workflow checks patched native gameplay handlers, launcher
 subprocesses and update recovery, client generation and package contents before
 publishing the Windows build. These checks cover the integrations above; they
 do not certify every quest route, encounter tactic, third-party addon combination
-or historical combat formula. See [supported scope](vanilla-config-audit.md#supported-scope)
+or historical combat formula. See [supported scope](configuration.md#supported-scope)
 for the practical limits.

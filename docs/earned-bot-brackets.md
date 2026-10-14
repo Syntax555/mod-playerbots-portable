@@ -123,4 +123,4 @@ Bots do not fill Strand, random battlegrounds or arenas. The pinned AI lacks
 Strand tactics, and its arena gathering uses teleport shortcuts, so those bot
 paths are disabled. These human queues need ordinary participants. Other
 battleground tactics and pathfinding also depend on upstream AI; see the
-[configuration reference](vanilla-config-audit.md#supported-scope).
+[configuration reference](configuration.md#supported-scope).

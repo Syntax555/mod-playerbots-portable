@@ -58,7 +58,7 @@ The executables are unsigned and may be blocked by Windows Smart App Control.
    Use both the addon and the client pack's `patch-V.mpq`. Install with WoW fully closed.
 4. Set the client's realmlist to `set realmlist 127.0.0.1`, restart WoW and log in.
 
-Services bind locally by default. Use an ordinary player account for progression. See [EraTalents installation](docs/era-talents.md#install-the-matching-client-files) for client checks and [configuration](docs/vanilla-config-audit.md) to customize the realm.
+Services bind locally by default. Use an ordinary player account for progression. See [EraTalents installation](docs/era-talents.md#install-the-matching-client-files) for client checks and [configuration](docs/configuration.md) to customize the realm.
 
 ### Optional MultiBot interface
 
@@ -93,7 +93,7 @@ See the [update guide](docs/updating.md) for manual installation, backups, offli
 
 The server uses the Wrath core and client. Historical trees use **Vanilla 1.12.1** and **TBC Classic 2.5.4** data; TBC is not an exact original 2.4.3 simulation. Selected class spells, riding prices and battleground rules follow the earned era, while other world prices, combat formulas and systems retain core behavior.
 
-Battleground and arena access follows earned progression; see [PvP rules](docs/earned-bot-brackets.md). Bot questing, navigation and encounter support varies by content, and some upstream encounters use movement or combat shortcuts. Existing inventories and gold are preserved without verifying their origin. See [supported scope](docs/vanilla-config-audit.md#supported-scope) for gameplay limits.
+Battleground and arena access follows earned progression; see [PvP rules](docs/earned-bot-brackets.md). Bot questing, navigation and encounter support varies by content, and some upstream encounters use movement or combat shortcuts. Existing inventories and gold are preserved without verifying their origin. See [supported scope](docs/configuration.md#supported-scope) for gameplay limits.
 
 ## Documentation
 
@@ -107,7 +107,7 @@ Battleground and arena access follows earned progression; see [PvP rules](docs/e
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
 | [World buffs](docs/world-buffs.md) | Vanilla event timers, recipient conditions and native TBC events. |
 | [Bot dungeons and raids](docs/bot-dungeons.md) | Autonomous parties, player-led clears, raid tactics and travel requirements. |
-| [Configuration](docs/vanilla-config-audit.md) | Default settings, module behavior and supported scope. |
+| [Configuration](docs/configuration.md) | Default settings, module behavior and supported scope. |
 | [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |
 | [Development TODO](docs/todo.md) | Current implementation limits, planned integration and gameplay validation. |
 | [Updates](docs/updating.md) | Automatic updates, manual installation, backups and recovery. |

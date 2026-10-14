@@ -84,7 +84,7 @@ migration behavior, server/client generation agreement and earned-play guards.
 The build workflow checks progression fixtures, launcher behavior and package
 integrity before producing the Windows server and matched client packages.
 These checks do not certify every encounter tactic or live realm performance;
-see the [configuration reference](vanilla-config-audit.md#supported-scope).
+see the [configuration reference](configuration.md#supported-scope).
 
 Pins follow the core fork's `Playerbot` branch, Playerbots `master` and the
 `main` branch of MultiBot Chatless and MultiBot Bridge, not their GitHub

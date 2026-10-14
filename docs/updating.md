@@ -57,7 +57,7 @@ the release. Keep regular database and configuration backups, including before
 an established realm receives new SQL migrations. Managed configuration defaults
 change only where the active value still matches the previous default, with a
 `.backup.*` copy of each changed file; see
-[configuration updates](vanilla-config-audit.md).
+[configuration updates](configuration.md).
 
 ## Moving the server folder
 
