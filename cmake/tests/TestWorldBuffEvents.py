@@ -160,7 +160,7 @@ ip_header = (core / 'modules/mod-individual-progression/src/IndividualProgressio
 # Spirit of Zandalar follows IP's own Zul'Gurub entry stage. The double uses
 # the shipped value; the realm profile leaves the module default in place.
 ip_player = (core / 'modules/mod-individual-progression/src/IndividualProgressionPlayer.cpp').read_text()
-zg_gate = function(ip_player, 'bool OnPlayerBeforeTeleport(')
+zg_gate = function(ip_player, '    static bool CanEnterMap(')
 zg_gate = zg_gate[zg_gate.index('if (mapid == MAP_ZUL_GURUB)'):]
 zg_gate = zg_gate[:zg_gate.index('return false;')]
 assert 'sIndividualProgression->GetPlayerProgressionFromQuests(player)' in zg_gate

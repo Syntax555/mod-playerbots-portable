@@ -817,10 +817,10 @@ index 0000000..2be18ef
 +#endif
 diff --git a/src/DcEarnedProgression.cpp b/src/DcEarnedProgression.cpp
 new file mode 100644
-index 0000000..8ea586f
+index 0000000..935ff34
 --- /dev/null
 +++ b/src/DcEarnedProgression.cpp
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,32 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "DcEarnedProgression.h"
 +#include "IndividualProgression.h"
@@ -847,13 +847,18 @@ index 0000000..8ea586f
 +            return 2;
 +        return stage >= PROGRESSION_PRE_TBC ? 1 : 0;
 +    }
++
++    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z)
++    {
++        return sIndividualProgression->CanEnterMap(player, mapId, x, y, z);
++    }
 +}
 diff --git a/src/DcEarnedProgression.h b/src/DcEarnedProgression.h
 new file mode 100644
-index 0000000..8db12f8
+index 0000000..16a93a3
 --- /dev/null
 +++ b/src/DcEarnedProgression.h
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,18 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#ifndef DC_EARNED_PROGRESSION_H
 +#define DC_EARNED_PROGRESSION_H
@@ -868,6 +873,8 @@ index 0000000..8db12f8
 +    uint8 Stage(Player* player);
 +    // Returns 0 (Vanilla), 1 (TBC), 2 (Wrath), or 3 for an invalid marker stage.
 +    uint8 Expansion(Player* player);
++    // Individual Progression's map entry gates, checked without side effects.
++    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z);
 +}
 +#endif
 diff --git a/src/DungeonClearModule.cpp b/src/DungeonClearModule.cpp
@@ -969,7 +976,7 @@ index 12ebee8..b8138ce 100644
  
 diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
 new file mode 100644
-index 0000000..e5a638e
+index 0000000..b10c99c
 --- /dev/null
 +++ b/src/EarnedDungeonParties.cpp
 @@ -0,0 +1,851 @@
@@ -997,7 +1004,6 @@ index 0000000..e5a638e
 +#include "ObjectMgr.h"
 +#include "Playerbots.h"
 +#include "PlayerbotAI.h"
-+#include "ScriptMgr.h"
 +#include "Timer.h"
 +#include "WorldPacket.h"
 +#include "WorldSession.h"
@@ -1148,13 +1154,14 @@ index 0000000..e5a638e
 +               it->second.stage == DcEarnedProgression::Stage(player);
 +    }
 +
-+    // Ask the portal's native checks before recruiting: module teleport gates
-+    // such as Individual Progression's dungeon stages, then the core's entry,
-+    // lockout and access requirements. Nothing is granted or relaxed here.
++    // Ask the portal's checks before recruiting: Individual Progression's map
++    // gates, then the core's entry, lockout and access requirements. Teleport
++    // hooks are not fired because they act on their player, for example by
++    // ending a spectate or sending refusal text. Nothing is granted or relaxed.
 +    bool CanEnter(Player* player, AreaTriggerTeleport const& target)
 +    {
-+        return sScriptMgr->OnPlayerBeforeTeleport(player, target.target_mapId, target.target_X, target.target_Y,
-+                                                  target.target_Z, target.target_Orientation, 0, nullptr) &&
++        return DcEarnedProgression::CanEnterMap(player, target.target_mapId, target.target_X, target.target_Y,
++                                                target.target_Z) &&
 +               sMapMgr->PlayerCannotEnter(target.target_mapId, player, false) == Map::CAN_ENTER;
 +    }
 +
