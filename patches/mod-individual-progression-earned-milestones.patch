@@ -343,7 +343,7 @@ index 0000000..dacedff
 +
 +#endif
 diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
-index 3f9123a..cf697c8 100644
+index 3f9123a..4e5843f 100644
 --- a/src/IndividualProgression.cpp
 +++ b/src/IndividualProgression.cpp
 @@ -3,8 +3,11 @@
@@ -359,7 +359,7 @@ index 3f9123a..cf697c8 100644
  
  IndividualProgression* IndividualProgression::instance()
  {
-@@ -27,6 +30,55 @@ uint8 IndividualProgression::GetPlayerProgressionFromQuests(Player* player) cons
+@@ -27,6 +30,57 @@ uint8 IndividualProgression::GetPlayerProgressionFromQuests(Player* player) cons
      return progressionLevel;
  }
  
@@ -407,15 +407,17 @@ index 3f9123a..cf697c8 100644
 +        rewardPosition = player->GetCorpse();
 +
 +    // Use a strict three-dimensional center distance, without combat-reach
-+    // radii, and the core's same-map/instance and same-phase checks.
-+    return killed->IsWithinDistInMap(rewardPosition, sWorld->getFloatConfig(CONFIG_GROUP_XP_DISTANCE), true, false,
-+                                     false);
++    // radii, in the same map instance. Like the core's loot distance it has
++    // no phase test: Halion's raid fights in both the physical and the
++    // phased Twilight Realm.
++    return killed->IsInMap(rewardPosition) &&
++           killed->GetExactDist(rewardPosition) <= sWorld->getFloatConfig(CONFIG_GROUP_XP_DISTANCE);
 +}
 +
  bool IndividualProgression::hasPassedProgression(Player* player, ProgressionState state) const
  {
      if (!enabled || !state || !player || !player->IsInWorld())
-@@ -55,6 +107,25 @@ void IndividualProgression::UpdateProgressionState(Player* player, ProgressionSt
+@@ -55,6 +109,25 @@ void IndividualProgression::UpdateProgressionState(Player* player, ProgressionSt
          return;
  
      uint8 currentState = GetPlayerProgressionFromQuests(player);
@@ -441,7 +443,7 @@ index 3f9123a..cf697c8 100644
      if (newState > currentState)
      {
          for (uint8 i = currentState; i <= newState; ++i)
-@@ -152,6 +223,9 @@ uint8 IndividualProgression::GetAccountProgression(uint32 accountId)
+@@ -152,6 +225,9 @@ uint8 IndividualProgression::GetAccountProgression(uint32 accountId)
  
  void IndividualProgression::UpdateRNDbotSpells(Player* player)
  {
@@ -451,7 +453,7 @@ index 3f9123a..cf697c8 100644
      if (!player || !player->IsInWorld())
          return;
  
-@@ -184,6 +258,10 @@ void IndividualProgression::UpdateAccountReputation(uint32 factionId, uint32 acc
+@@ -184,6 +260,10 @@ void IndividualProgression::UpdateAccountReputation(uint32 factionId, uint32 acc
      if (!factionId || !accountId || !player || !player->IsInWorld())
          return;
  
@@ -462,7 +464,7 @@ index 3f9123a..cf697c8 100644
      Group* group = player->GetGroup();
      uint32 account = player->GetSession()->GetAccountId();
      std::string factionName = sFactionStore.LookupEntry(factionId)->name[0];
-@@ -229,6 +307,10 @@ void IndividualProgression::UpdateGroupAttunement(Player* player, std::string lo
+@@ -229,6 +309,10 @@ void IndividualProgression::UpdateGroupAttunement(Player* player, std::string lo
      if (!player || !player->IsInWorld() )
          return;
  
@@ -473,7 +475,7 @@ index 3f9123a..cf697c8 100644
      if (location.empty())
          return;
  
-@@ -371,6 +453,9 @@ bool IndividualProgression::isAttuned(Player* player)
+@@ -371,6 +455,9 @@ bool IndividualProgression::isAttuned(Player* player)
  
  bool IndividualProgression::isExcludedAccount(Player* player)
  {
@@ -483,7 +485,7 @@ index 3f9123a..cf697c8 100644
      // An empty account filter excludes nobody and needs no database lookup.
      if (!player || sIndividualProgression->excludedAccountsRegex.empty())
          return false;
-@@ -384,6 +469,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
+@@ -384,6 +471,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
  
  bool IndividualProgression::isBotAccount(Player* player)
  {
@@ -493,7 +495,7 @@ index 3f9123a..cf697c8 100644
      // An empty account filter excludes nobody and needs no database lookup.
      if (!player || sIndividualProgression->botAccountsRegex.empty())
          return false;
-@@ -417,6 +505,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
+@@ -417,6 +507,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
  
  void IndividualProgression::SyncBotsProgressionToLeader(Group* group)
  {
@@ -503,7 +505,7 @@ index 3f9123a..cf697c8 100644
      if (!group)
          return;
  
-@@ -756,6 +847,26 @@ void IndividualProgression::checkIPProgression(Player* killer)
+@@ -756,6 +849,26 @@ void IndividualProgression::checkIPProgression(Player* killer)
  
      uint8 currentState = GetPlayerProgressionFromQuests(killer);
  
@@ -530,7 +532,7 @@ index 3f9123a..cf697c8 100644
      // A completed transition quest remains earned when the realm opens TBC.
      // UpdateProgressionState still enforces the configured realm tier limit.
      if (currentState == PROGRESSION_NAXX40 && killer->GetQuestStatus(INTO_THE_BREACH) == QUEST_STATUS_REWARDED)
-@@ -833,6 +944,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
+@@ -833,6 +946,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
          return;
      */
  
@@ -559,7 +561,7 @@ index 3f9123a..cf697c8 100644
      static const std::unordered_map<uint32, ProgressionState> bossMap =
      {
          { RAGNAROS,     PROGRESSION_MOLTEN_CORE    },
-@@ -1053,6 +1186,8 @@ private:
+@@ -1053,6 +1188,8 @@ private:
      {
          sIndividualProgression->customProgressionMap.clear();
          sIndividualProgression->enabled = sConfigMgr->GetOption<bool>("IndividualProgression.Enable", true);
