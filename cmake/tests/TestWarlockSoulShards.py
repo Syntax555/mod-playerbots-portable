@@ -6,8 +6,8 @@ specialization relies on this ordinary source. Mutation checks confirm that the
 trigger, its cheap-first ordering and the strategy node are required.
 """
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 import re
 import subprocess
 import tempfile
@@ -38,9 +38,9 @@ for guard in ('bool CreateSoulShardAction::Execute(', 'bool CreateSoulShardActio
 
 production = {
     'classes': '\n'.join([
-        re.search(r'class TwoTriggers : public Trigger\n\{.*?\n\};', generic_header, re.S).group(0),
-        re.search(r'class OutOfSoulShardsTrigger : public Trigger\n\{.*?\n\};', triggers_header, re.S).group(0),
-        re.search(r'class DrainSoulForShardTrigger : public TwoTriggers\n\{.*?\n\};', triggers_header, re.S).group(0),
+        re.search(r'class TwoTriggers : public Trigger\n\{.*?\n\};', generic_header, re.DOTALL).group(0),
+        re.search(r'class OutOfSoulShardsTrigger : public Trigger\n\{.*?\n\};', triggers_header, re.DOTALL).group(0),
+        re.search(r'class DrainSoulForShardTrigger : public TwoTriggers\n\{.*?\n\};', triggers_header, re.DOTALL).group(0),
     ]),
     'functions': '\n'.join([
         re.search(r'static const uint32 SOUL_SHARD_ITEM_ID = \d+;', triggers_source).group(0),
@@ -175,7 +175,7 @@ def build(directory, parts, name):
     executable = directory / name
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
                     '-fno-omit-frame-pointer', str(directory / (name + '.cpp')), '-o', str(executable)], check=True)
-    return subprocess.run([str(executable)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False)
 
 
 mutations = [

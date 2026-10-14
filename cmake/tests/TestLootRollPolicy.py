@@ -7,9 +7,9 @@ they do not emulate a live realm or its complete item-scoring system. Native
 WorldPacket, ByteBuffer, ObjectGuid and Event types carry the real roll packets.
 """
 
-from pathlib import Path
 import argparse
 import os
+from pathlib import Path
 import subprocess
 import tempfile
 

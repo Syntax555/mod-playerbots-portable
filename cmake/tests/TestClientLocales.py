@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """Regression coverage for missing German texts in the IP client DBC tables."""
-import importlib.util
 import hashlib
+import importlib.util
 import io
 import json
 from pathlib import Path
@@ -193,9 +192,8 @@ class GermanClientLocaleTests(unittest.TestCase):
         bad_fields = bytearray(donor)
         struct.pack_into("<I", bad_fields, 8, 1)
         for malformed in (b"WDBC", donor[:-1], bytes(bad_fields), b"XXXX" + donor[4:]):
-            with self.subTest(header=malformed[:20]):
-                with self.assertRaises(ValueError):
-                    LOCALES.merge_german_text(base, malformed, filename, {})
+            with self.subTest(header=malformed[:20]), self.assertRaises(ValueError):
+                LOCALES.merge_german_text(base, malformed, filename, {})
 
     def test_invalid_localized_string_offsets_and_utf8_are_rejected(self):
         filename = "Spell.dbc"
@@ -214,9 +212,8 @@ class GermanClientLocaleTests(unittest.TestCase):
             donor[:-1] + b"x",
         )
         for candidate in malformed:
-            with self.subTest(offset=decoded(candidate)[0][0][start]):
-                with self.assertRaises(ValueError):
-                    LOCALES.merge_german_text(base, candidate, filename, {})
+            with self.subTest(offset=decoded(candidate)[0][0][start]), self.assertRaises(ValueError):
+                LOCALES.merge_german_text(base, candidate, filename, {})
 
     def test_duplicate_donor_ids_are_rejected(self):
         filename = "Achievement.dbc"
@@ -293,9 +290,8 @@ class SourceTextSemanticsTests(unittest.TestCase):
                                         "aura description": {0: "Spell damage increased by $s1."}})])
         stock = fixture(filename, [(42, localized_texts(filename))])
         for overrides in ({}, {"9876": {"name": "Historischer Zauber"}}):
-            with self.subTest(overrides=overrides):
-                with self.assertRaises(ValueError):
-                    LOCALES.verify_source_semantics(ip, stock, filename, overrides)
+            with self.subTest(overrides=overrides), self.assertRaises(ValueError):
+                LOCALES.verify_source_semantics(ip, stock, filename, overrides)
         self.assertIsNone(LOCALES.verify_source_semantics(ip, stock, filename, {
             "9876": {"name": "Historischer Zauber", "rank": "Rang 2",
                      "description": "Gewährt $s1 Zauberschaden.",
@@ -379,9 +375,9 @@ class PinnedGermanSourceTests(unittest.TestCase):
         self.assertEqual({path.name for path in self.cache.iterdir()}, set(FILES))
 
     def test_download_checksum_failure_is_rejected_without_installing_artifact(self):
-        with mock.patch.object(LOCALES, "urlopen", return_value=io.BytesIO(b"untrusted data")):
-            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
-                self.load()
+        with (mock.patch.object(LOCALES, "urlopen", return_value=io.BytesIO(b"untrusted data")),
+              self.assertRaisesRegex(ValueError, "checksum mismatch")):
+            self.load()
         self.assertEqual(list(self.cache.iterdir()), [])
 
     def test_changed_authored_override_file_is_rejected_even_when_json_is_valid(self):
@@ -433,15 +429,15 @@ class PinnedGermanSourceTests(unittest.TestCase):
             self.load()
         valid_spell = fixture("Spell.dbc", [(42, {"name": {0: "Earth Shock"}})])
         self.source["englishSpellSha256"] = hashlib.sha256(valid_spell).hexdigest()
-        with mock.patch.object(LOCALES, "urlopen", return_value=io.BytesIO(b"corrupt download")):
-            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
-                self.load()
+        with (mock.patch.object(LOCALES, "urlopen", return_value=io.BytesIO(b"corrupt download")),
+              self.assertRaisesRegex(ValueError, "checksum mismatch")):
+            self.load()
         self.assertFalse((self.cache / "Spell.enUS.dbc").exists())
         wrong_schema = self.donors["Achievement.dbc"]
         self.source["englishSpellSha256"] = hashlib.sha256(wrong_schema).hexdigest()
-        with mock.patch.object(LOCALES, "urlopen", return_value=io.BytesIO(wrong_schema)):
-            with self.assertRaisesRegex(ValueError, "DBC layout"):
-                self.load()
+        with (mock.patch.object(LOCALES, "urlopen", return_value=io.BytesIO(wrong_schema)),
+              self.assertRaisesRegex(ValueError, "DBC layout")):
+            self.load()
 
 
 if __name__ == "__main__":

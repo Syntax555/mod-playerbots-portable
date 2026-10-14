@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline regressions for pinned, patched client addon release artifacts."""
 from __future__ import annotations
 
@@ -34,7 +33,7 @@ def run(command, *, cwd=None):
     environment["GIT_ALLOW_PROTOCOL"] = "file"
     environment["GIT_TERMINAL_PROMPT"] = "0"
     return subprocess.run(command, cwd=cwd, env=environment, capture_output=True,
-                          text=True, timeout=90)
+                          text=True, timeout=90, check=False)
 
 
 def git(repository: Path, *arguments) -> str:

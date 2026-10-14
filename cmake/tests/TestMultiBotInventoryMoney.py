@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Exercise pinned MultiBot's actual inventory money UI and bridge dispatcher."""
 import argparse
 import json
@@ -102,7 +101,7 @@ class MultiBotInventoryMoneyTests(unittest.TestCase):
     def run_lua(self, body, pristine=False):
         script = fixture(self.pristine_ui if pristine else self.ui, self.comm, body)
         result = subprocess.run([LUA, "-"], input=script, text=True,
-                                capture_output=True, timeout=20)
+                                capture_output=True, timeout=20, check=False)
         if not pristine:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result

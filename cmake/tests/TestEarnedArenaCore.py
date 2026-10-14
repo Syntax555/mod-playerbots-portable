@@ -7,6 +7,7 @@ import tempfile
 
 from FixtureSupport import cxx, function, prepared_core
 
+
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, default=prepared_core(repo), help='Prepared core source tree')

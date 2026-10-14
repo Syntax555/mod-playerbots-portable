@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Exercise the production coordinator and real-path gates with native API doubles."""
 import argparse
 import os
@@ -7,7 +6,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+
 from FixtureSupport import TIMEOUT, cxx, function, prepared_core, reject_mutants
+
 
 STUBS = r'''
 #pragma once
@@ -507,7 +508,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='earned-dungeons-') as temp:
         work=Path(temp)
         ip_header=(core/'modules/mod-individual-progression/src/IndividualProgression.h').read_text()
-        progression_enum=re.search(r'enum ProgressionState : uint8[^{}]*\{.*?^\};', ip_header, re.M|re.S)
+        progression_enum=re.search(r'enum ProgressionState : uint8[^{}]*\{.*?^\};', ip_header, re.MULTILINE|re.DOTALL)
         if not progression_enum:
             raise SystemExit('Native Individual Progression stages were not recognised')
         (work/'NativeStubs.h').write_text(STUBS.replace('// NATIVE_PROGRESSION_ENUM', progression_enum.group(0)))

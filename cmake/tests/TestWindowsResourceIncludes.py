@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='resource includes ') as temp:
                    '-DTEST_GENERATOR=' + generator]
         if version:
             command.append('-DTEST_CMAKE_VERSION=' + version)
-        result = subprocess.run(command, text=True, capture_output=True)
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
         assert (result.returncode == 0) == succeeds, result.stdout + result.stderr
         if not succeeds:
             assert 'requires CMake 3.22 or newer' in result.stdout + result.stderr

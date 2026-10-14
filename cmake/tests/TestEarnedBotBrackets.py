@@ -3,7 +3,9 @@
 from pathlib import Path
 import subprocess
 import tempfile
+
 from FixtureSupport import cxx, function, prepared_core
+
 
 repo = Path(__file__).resolve().parents[2]
 pb = prepared_core(repo) / 'modules/mod-playerbots/src'

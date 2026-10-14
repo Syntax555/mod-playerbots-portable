@@ -78,15 +78,17 @@ The server bundle includes the source manifest, patches and applicable license f
 
 The gameplay fixtures run on Linux and require prepared sources, Python with
 PyYAML and GCC with AddressSanitizer and UndefinedBehaviorSanitizer support.
-Client Lua checks also require Lua 5.1. They execute selected native handlers
-with controlled adapters; a complete server build and live realm tests remain
-necessary for platform and encounter validation.
+Client Lua checks also require Lua 5.1, and the lint check uses Ruff 0.16.8.
+The fixtures execute selected native handlers with controlled adapters; a
+complete server build and live realm tests remain necessary for platform and
+encounter validation.
 
 ```bash
 go test ./...
 go vet ./...
 cmake -P cmake/PrepareModules.cmake
 python3 cmake/tests/run_fixtures.py gameplay
+ruff check cmake scripts
 ```
 
 `python3 cmake/tests/run_fixtures.py check` fails when a fixture in

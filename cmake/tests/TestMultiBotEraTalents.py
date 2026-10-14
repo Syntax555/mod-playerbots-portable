@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run native ISYNC selection and the actual MultiBot/EraTalents inspect UI.
 
 The client consumes packets produced by the server fixture for all nine authored
@@ -15,7 +14,16 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, git_apply, prepared_core, run_fixture, unpatched
+from FixtureSupport import (
+    TIMEOUT,
+    cxx,
+    function,
+    git_apply,
+    prepared_core,
+    run_fixture,
+    unpatched,
+)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 ERA_PATCH = ROOT / 'patches/mod-era-talents-multibot-inspect.patch'

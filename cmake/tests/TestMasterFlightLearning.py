@@ -6,9 +6,9 @@ methods supply their own guards; fixtures provide NPC/world state and recording
 sessions. This does not launch a realm or replace the full Windows build.
 """
 
-from pathlib import Path
 import argparse
 import os
+from pathlib import Path
 import re
 import subprocess
 import tempfile

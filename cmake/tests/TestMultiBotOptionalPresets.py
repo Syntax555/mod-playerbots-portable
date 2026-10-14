@@ -5,9 +5,9 @@ Fixtures supply configuration, environment overrides and log recording hooks;
 no realm or talent purchase is started.
 """
 
-from pathlib import Path
 import argparse
 import os
+from pathlib import Path
 import subprocess
 import tempfile
 
@@ -168,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix='multibot-presets-') as directory:
         source.write_text(fixture.replace('@PRODUCTION@', body))
         subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror',
                         str(source), '-o', str(executable)], check=True)
-        result = subprocess.run([str(executable)], text=True, capture_output=True)
+        result = subprocess.run([str(executable)], text=True, capture_output=True, check=False)
         if expect_success:
             if result.returncode:
                 raise AssertionError(result.stderr or result.stdout)
