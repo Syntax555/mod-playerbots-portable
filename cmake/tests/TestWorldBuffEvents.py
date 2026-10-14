@@ -157,6 +157,20 @@ assert 'RegisterSpellScript(spell_gen_disabled_above_63);' in scripts
 assert 'RegisterSpellScript(spell_gen_rallying_cry_of_the_dragonslayer);' in scripts
 ip_source = (core / 'modules/mod-individual-progression/src/IndividualProgression.cpp').read_text()
 ip_header = (core / 'modules/mod-individual-progression/src/IndividualProgression.h').read_text()
+# Spirit of Zandalar follows IP's own Zul'Gurub entry stage. The double uses
+# the shipped value; the realm profile leaves the module default in place.
+ip_player = (core / 'modules/mod-individual-progression/src/IndividualProgressionPlayer.cpp').read_text()
+zg_gate = function(ip_player, 'bool OnPlayerBeforeTeleport(')
+zg_gate = zg_gate[zg_gate.index('if (mapid == MAP_ZUL_GURUB)'):]
+zg_gate = zg_gate[:zg_gate.index('return false;')]
+assert 'sIndividualProgression->GetPlayerProgressionFromQuests(player)' in zg_gate
+assert 'sIndividualProgression->RequiredZulGurubProgression' in zg_gate
+assert 'if (PLAYER_PROGRESSION < REQUIRED_ZG_PROGRESSION)' in zg_gate
+zg_default = int(re.search(r'GetOption<uint8>\("IndividualProgression\.RequiredZulGurubProgression", (\d+)\)',
+                           ip_source).group(1))
+zg_dist = (core / 'modules/mod-individual-progression/conf/individualProgression.conf.dist').read_text()
+assert re.search(rf'^IndividualProgression\.RequiredZulGurubProgression = {zg_default}$', zg_dist, re.MULTILINE)
+assert 'RequiredZulGurubProgression' not in (repository / 'cmd/startup/profiles/individualProgression.conf').read_text()
 enum = function(ip_header, 'enum ProgressionState') + ';'
 native = '\n'.join((
     function(ip_source, 'uint8 IndividualProgression::GetPlayerProgressionFromQuests('),
@@ -201,6 +215,7 @@ fixture = r'''
 #include <type_traits>
 #include <vector>
 using uint8 = std::uint8_t; using uint32 = std::uint32_t; using int32 = std::int32_t;
+constexpr int ZG_STAGE = ZG_GATE_STAGE;
 constexpr uint32 IN_MILLISECONDS = 1000, MAX_SPELL_EFFECTS = 3, MAX_EFFECT_MASK = 7;
 constexpr int TEAM_ALLIANCE = 0, TEAM_HORDE = 1, REP_FRIENDLY = 4;
 constexpr uint32 MAP_KALIMDOR = 1, QUEST_STATUS_NONE = 0, QUEST_STATUS_REWARDED = 6;
@@ -285,6 +300,7 @@ struct Player : Unit
 struct IndividualProgression
 {
     bool enabled = true, strictEarnedProgression = true, disableDefaultProgression = false;
+    int RequiredZulGurubProgression = ZG_STAGE;
     std::map<uint32, uint8> customProgressionMap;
     uint8 GetPlayerProgressionFromQuests(Player*) const;
     bool IsStrictDefaultProgression() const;
@@ -517,7 +533,8 @@ void EarnedEraAndNativeGates()
         p.team = team; p.reputation = reputation;
         auto quests = p.quests;
         s.Start(); s.script.OnUpdate(60000);
-        bool expected = stage < 8 && level <= 63 && (spell != 16609 || (team == TEAM_HORDE && reputation >= 4));
+        bool expected = stage < 8 && level <= 63 && (spell != 16609 || (team == TEAM_HORDE && reputation >= 4)) &&
+                        (spell != 24425 || stage >= ZG_STAGE);
         ExpectAura(p, spell, expected);
         assert(p.quests == quests && p.money == 123456 && p.xp == 999 && p.inventory == 77);
         assert(p.accountProgression == 18 && p.leaderProgression == 18);
@@ -534,7 +551,7 @@ void RegionsEligibilityAndNativeAura()
         Scenario s;
         s.Only(spell == 16609 ? "Warchief" : spell == 22888 ? "Dragonslayer" : "Zandalar");
         uint32 zone = spell == 16609 ? AREA_ORGRIMMAR : spell == 22888 ? AREA_STORMWIND_CITY : AREA_STRANGLETHORN_VALE;
-        Player& p = s.Add(zone); p.team = TEAM_HORDE;
+        Player& p = s.Add(zone); p.team = TEAM_HORDE; Mark(p, ZG_STAGE);
         switch (state)
         {
             case 0: p.alive = false; break;
@@ -550,7 +567,7 @@ void RegionsEligibilityAndNativeAura()
     }
     {
         Scenario s; s.Only("Zandalar"); Player& p = s.Add(); p.area = 35; p.zone = AREA_STRANGLETHORN_VALE;
-        s.Start(); s.script.OnUpdate(60000); ExpectAura(p, 24425, true);
+        Mark(p, ZG_STAGE); s.Start(); s.script.OnUpdate(60000); ExpectAura(p, 24425, true);
     }
     {
         Scenario s; s.Only("Dragonslayer"); Player& p = s.Add(AREA_ORGRIMMAR); p.team = TEAM_HORDE;
@@ -574,7 +591,7 @@ void RegionsEligibilityAndNativeAura()
         assert(!p.AddAura(999999, &p)); assert(!p.AddAura(16609, nullptr));
     }
     {
-        Scenario s; s.Only("Zandalar"); Player& p = s.Add(AREA_STRANGLETHORN_VALE);
+        Scenario s; s.Only("Zandalar"); Player& p = s.Add(AREA_STRANGLETHORN_VALE); Mark(p, ZG_STAGE);
         s.Start(); s.script.OnUpdate(60000);
         assert(p.auras.at(24425)->amounts[2] == 50 && p.auras.at(24425)->duration == 7200000);
         assert(p.auras.at(24425)->effects == 4);
@@ -613,6 +630,27 @@ void StrictDefaultAndOwnMilestones()
         Player& master = s.Add(); Mark(master, 18); master.level = p.level;
         s.Start(); s.script.OnUpdate(60000); ExpectAura(p, 22888, true); ExpectAura(master, 22888, false);
     }
+}
+void ZulGurubStage()
+{
+    for (uint8 stage = 0; stage < 8; ++stage)
+    {
+        Scenario s; s.Only("Zandalar"); Player& p = s.Add(AREA_STRANGLETHORN_VALE); Mark(p, stage);
+        Player& city = s.Add(); Mark(city, stage);
+        config.numeric["WorldBuffBots.Dragonslayer.Enable"] = 1;
+        s.Start(); s.script.OnUpdate(60000);
+        ExpectAura(p, 24425, stage >= ZG_STAGE);
+        ExpectAura(city, 22888, true); // Rallying Cry needs no Zul'Gurub stage
+    }
+    for (int required : {0, 5})
+    for (uint8 stage : {0, 4, 5})
+    {
+        Scenario s; s.Only("Zandalar"); individualProgression.RequiredZulGurubProgression = required;
+        Player& p = s.Add(AREA_STRANGLETHORN_VALE); Mark(p, stage);
+        s.Start(); s.script.OnUpdate(60000);
+        ExpectAura(p, 24425, stage >= required);
+    }
+    std::cout << "Spirit of Zandalar follows each recipient's own Zul'Gurub stage\n";
 }
 void TimersDelayedRecipientsAndReload()
 {
@@ -738,13 +776,14 @@ int main(int argc, char**)
     InitializeSpells();
     SpillRegression();
     if (argc > 1) return 0;
-    EarnedEraAndNativeGates(); RegionsEligibilityAndNativeAura(); StrictDefaultAndOwnMilestones();
+    EarnedEraAndNativeGates(); RegionsEligibilityAndNativeAura(); StrictDefaultAndOwnMilestones(); ZulGurubStage();
     TimersDelayedRecipientsAndReload(); LoaderAndScope(); OneAuraPerEligibleOnlinePlayer();
     std::cout << "World-buff native iterator, strict progression, no area spill, aura amounts/durations, immunity, scheduling, delayed rechecks and reload passed\n";
 }
 '''
 
 fixture = fixture.replace('AREAS', areas).replace('PROGRESSION_ENUM', enum)
+fixture = fixture.replace('ZG_GATE_STAGE', str(zg_default))
 fixture = fixture.replace('AMOUNT_SCRIPT', amount_script).replace('TARGET_SCRIPT', target_script)
 fixture = fixture.replace('NATIVE_METHODS', native)
 environment = {**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
@@ -764,8 +803,9 @@ with tempfile.TemporaryDirectory(prefix='portable-world-buff-events-') as direct
         ('city-area-cast', '            if (player->AddAura(spellId, player))\n                ++appliedCount;',
          '            player->CastSpell(player, spellId, true);\n            ++appliedCount;',
          '!tbc.auras.contains(22888)'),
-        ('era-gate', 'sIndividualProgression->GetPlayerProgressionFromQuests(player) >= PROGRESSION_PRE_TBC',
-         'false', '!tbc.auras.contains(22888)'),
+        ('era-gate', 'if (stage >= PROGRESSION_PRE_TBC)', 'if (false)', '!tbc.auras.contains(22888)'),
+        ('zandalar-stage-gate', 'stage < sIndividualProgression->RequiredZulGurubProgression',
+         'false', 'player.auras.contains(spell) == expected'),
         ('level-gate', 'player->GetLevel() > MAX_VANILLA_BUFF_LEVEL',
          'false', 'player.auras.contains(spell) == expected'),
     )
