@@ -88,11 +88,15 @@ go test ./...
 go vet ./...
 cmake -P cmake/PrepareModules.cmake
 python3 cmake/tests/run_fixtures.py gameplay
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ruff check cmake scripts
 ```
 
 `python3 cmake/tests/run_fixtures.py check` fails when a fixture in
-`cmake/tests` does not run in CI.
+`cmake/tests` does not run in CI. The client packaging, locale and MultiBot
+Lua fixtures run on their own, as the release workflow names them, for example
+`python3 cmake/tests/TestClientLocales.py`. Fixtures refuse to run under
+`python -O`, which would skip their assert checks.
 
 The release workflow also verifies historical spell mechanics in the generated
 MPQ, client locales, dependency notices, package inventories and update recovery.
