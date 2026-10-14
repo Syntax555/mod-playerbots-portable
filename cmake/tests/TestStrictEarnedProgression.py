@@ -19,8 +19,10 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path,
                     default=prepared_core(repo) / 'modules/mod-individual-progression',
                     help='prepared Individual Progression module directory')
+parser.add_argument('--core', type=Path, default=prepared_core(repo), help='prepared core directory')
 args = parser.parse_args()
 module = args.source
+core = args.core
 production = (module / 'src/IndividualProgression.cpp').read_text()
 player_source = (module / 'src/IndividualProgressionPlayer.cpp').read_text()
 header = (module / 'src/IndividualProgression.h').read_text()
@@ -37,6 +39,21 @@ def function(source, signature):
         end += 1
     return source[start:end]
 
+
+# Strict boss credit uses the core's same-instance and distance contracts, but
+# like Player::IsAtGroupRewardDistance no phase test: Halion's raid is split
+# between the physical and the phased Twilight Realm.
+object_source = (core / 'src/server/game/Entities/Object/Object.cpp').read_text()
+in_map = function(object_source, 'bool WorldObject::IsInMap(WorldObject const* obj) const')
+assert 'IsInWorld() && obj->IsInWorld() && (FindMap() == obj->FindMap())' in in_map and 'Phase' not in in_map
+position = (core / 'src/server/game/Entities/Object/Position.h').read_text()
+assert 'float GetExactDist(Position const* pos) const { return GetExactDist(*pos); }' in position
+assert 'return GetExactDist2dSq(x, y) + dz*dz;' in function(position, 'float GetExactDistSq(float x, float y, float z) const')
+reward = function((core / 'src/server/game/Entities/Player/Player.cpp').read_text(),
+                  'bool Player::IsAtGroupRewardDistance(')
+assert 'IsInMap(pRewardSource)' in reward and 'Phase' not in reward
+halion = (core / 'src/server/scripts/Northrend/ChamberOfAspects/RubySanctum/boss_halion.cpp').read_text()
+assert 'SPELL_TWILIGHT_REALM                = 74807' in halion and 'me->SetPhaseMask(0x20, true);' in halion
 
 enums = '\n'.join(function(header, 'enum ' + name) + ';' for name in
                   ('ProgressionState', 'ProgressionBossIDs', 'ProgressionQuestIDs',
@@ -102,6 +119,13 @@ constexpr uint8 RACE_DRAENEI=11, RACE_BLOODELF=10, CLASS_DEATH_KNIGHT=6,
     CLASS_DRUID=11, CLASS_PALADIN=2, CLASS_WARLOCK=9;
 struct WorldObject {
     bool inWorld=true; uint32 map=1, instance=1, phase=1; float x=0, y=0, z=0;
+    bool IsInMap(WorldObject const* other) const {
+        return inWorld && other->inWorld && map==other->map && instance==other->instance;
+    }
+    bool InSamePhase(WorldObject const* other) const { return (phase & other->phase)!=0; }
+    float GetExactDist(WorldObject const* other) const {
+        return std::sqrt((x-other->x)*(x-other->x)+(y-other->y)*(y-other->y)+(z-other->z)*(z-other->z));
+    }
 };
 struct Corpse : WorldObject {};
 struct Session { uint32 account=1; int security=0;
@@ -159,11 +183,6 @@ struct Creature : WorldObject {
     bool IsDamageEnoughForLootingAndReward() const { return damageEnough; }
     bool IsLootRewardDisabled() const { return disabledLoot; }
     bool isTappedBy(Player const* player) const { return tapped==player || (tappedGroup && tappedGroup==player->group); }
-    bool IsWithinDistInMap(WorldObject const* other,float distance,bool threeD,bool ownReach,bool targetReach) const {
-        assert(threeD && !ownReach && !targetReach);
-        return map==other->map && instance==other->instance && (phase & other->phase) &&
-            std::sqrt((x-other->x)*(x-other->x)+(y-other->y)*(y-other->y)+(z-other->z)*(z-other->z)) < distance;
-    }
     uint32 GetEntry() const { return entry; } Group* GetLootRecipientGroup() { return tappedGroup; }
 };
 struct World { float getFloatConfig(int) const { return 100.f; } float getRate(int) const { return 1.f; } } world;
@@ -309,7 +328,18 @@ int main() {
     corpse.z=101; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); corpse.z=0;
     corpse.map=2; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); corpse.map=1;
     corpse.instance=2; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); corpse.instance=1;
-    corpse.phase=2; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); corpse.phase=1;
+    corpse.inWorld=false; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); corpse.inWorld=true;
+    corpse.phase=0x20; assert(progression.IsEligibleStrictKill(&eligible,&boss)); corpse.phase=1;
+    eligible.alive=true; eligible.corpse=nullptr; eligible.x=0;
+    // Halion: raiders in the phased Twilight Realm share the encounter and
+    // the kill, and still need presence near the physical boss.
+    boss.entry=HALION; eligible.phase=0x20;
+    assert(progression.IsEligibleStrictKill(&eligible,&boss));
+    eligible.x=99; assert(progression.IsEligibleStrictKill(&eligible,&boss));
+    eligible.x=101; assert(!progression.IsEligibleStrictKill(&eligible,&boss));
+    eligible.x=0; eligible.instance=2; assert(!progression.IsEligibleStrictKill(&eligible,&boss));
+    eligible.instance=1; eligible.phase=1; boss.entry=RAGNAROS;
+    eligible.alive=false; eligible.corpse=&corpse;
     eligible.allowedReward=false; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); eligible.allowedReward=true;
     boss.disabledLoot=true; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); boss.disabledLoot=false;
     boss.damageEnough=false; assert(!progression.IsEligibleStrictKill(&eligible,&boss)); boss.damageEnough=true;
@@ -387,14 +417,28 @@ int main() {
 source = prelude + enums + declarations + functions + '\n' + '\n'.join(guard_functions)
 source += '\nstruct Script {\n' + hooks + '\n};\n'
 source += '\nstruct Command {\n' + '\n'.join(command_guards) + '\n};\n' + tests
+strict_kill = function(production, 'bool IndividualProgression::IsEligibleStrictKill(')
+mutations = (
+    ('phase test', 'killed->IsInMap(rewardPosition) &&', 'killed->IsInMap(rewardPosition) && killed->InSamePhase(rewardPosition) &&'),
+    ('same instance', 'killed->IsInMap(rewardPosition) &&', ''),
+    ('presence distance', 'killed->GetExactDist(rewardPosition) <=', '0.f <='),
+)
 with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
     target = Path(temporary) / 'strict.cpp'
     executable = Path(temporary) / 'strict'
-    target.write_text(source)
-    subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
-                    '-I', str(module / 'src'), str(target), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    for label, old, new in (('production', '', ''),) + mutations:
+        assert not old or strict_kill.count(old) == 1, label
+        target.write_text(source.replace(strict_kill, strict_kill.replace(old, new)) if old else source)
+        subprocess.run(['g++', '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
+                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+                        '-I', str(module / 'src'), str(target), '-o', str(executable)], check=True)
+        result = subprocess.run([str(executable)], capture_output=True, text=True, check=False)
+        if not old:
+            print(result.stdout, end='')
+            assert result.returncode == 0, result.stderr
+        else:
+            assert result.returncode != 0 and 'IsEligibleStrictKill' in result.stderr, (label, result.stderr)
+            print(f'Strict boss credit rejects the {label} mutation')
 
 # Execute the production update twice against isolated condition rows. Check
 # that every targeted old gate moves to 12 and unrelated gates remain intact.
