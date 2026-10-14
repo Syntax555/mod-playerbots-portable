@@ -15,22 +15,11 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core, run_fixture
+from FixtureSupport import TIMEOUT, cxx, function, git_apply, prepared_core, run_fixture, unpatched
 
 ROOT = Path(__file__).resolve().parents[2]
 ERA_PATCH = ROOT / 'patches/mod-era-talents-multibot-inspect.patch'
 BOT_PATCH = ROOT / 'patches/multibot-era-talent-inspect.patch'
-
-
-def apply_once(directory: Path, patch: Path) -> None:
-    check = subprocess.run(['git', 'apply', '--check', str(patch)], cwd=directory,
-                           capture_output=True, text=True)
-    if check.returncode == 0:
-        subprocess.run(['git', 'apply', str(patch)], cwd=directory, check=True,
-                       capture_output=True)
-    else:
-        subprocess.run(['git', 'apply', '--reverse', '--check', str(patch)],
-                       cwd=directory, check=True, capture_output=True)
 
 
 def native_fixture(module: Path, directory: Path) -> list[list[str]]:
@@ -411,8 +400,9 @@ def main() -> None:
         (bot / 'Core').mkdir()
         for file in ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'):
             shutil.copyfile(args.addon_source / file, bot / file)
-        apply_once(era, ERA_PATCH)
-        apply_once(bot, BOT_PATCH)
+        for directory_, patch in ((era, ERA_PATCH), (bot, BOT_PATCH)):
+            unpatched(directory_, patch)
+            git_apply(directory_, patch)
         packets = native_fixture(args.module_source, directory)
         print('Native ISYNC: all authored classes, 19 earned tiers, mixed leader stages/levels, inspect gates and transition state passed')
         client_fixture(era, bot, packets, directory)
@@ -448,13 +438,10 @@ def main() -> None:
         frame.write_text(safe_frame.replace(native_guard, '', 1))
         client_fixture(era, bot, packets, directory, expect_failure=True)
         frame.write_text(safe_frame)
-        subprocess.run(['git', 'apply', '--reverse', str(BOT_PATCH)], cwd=bot,
-                       check=True, capture_output=True)
+        git_apply(bot, BOT_PATCH, '--reverse')
         client_fixture(era, bot, packets, directory, expect_failure=True)
-        subprocess.run(['git', 'apply', str(BOT_PATCH)], cwd=bot,
-                       check=True, capture_output=True)
-        subprocess.run(['git', 'apply', '--reverse', str(ERA_PATCH)], cwd=era,
-                       check=True, capture_output=True)
+        git_apply(bot, BOT_PATCH)
+        git_apply(era, ERA_PATCH, '--reverse')
         client_fixture(era, bot, packets, directory, expect_failure=True)
         print('Reverted MultiBot/EraTalents and unsafe generation/retry mutations all fail the regression fixture')
 

@@ -3,12 +3,12 @@
 import argparse
 import json
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
 import unittest
-import urllib.request
+
+from FixtureSupport import git_apply, multibot_sources, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -89,37 +89,13 @@ class MultiBotInventoryMoneyTests(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory(prefix="multibot-money-")
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
-        dependency = next(item for item in json.loads((ROOT / "versions.lock.json").read_text())["clientAddons"]
-                          if item["name"] == "MultiBot")
-        revision = dependency["revision"]
-        if not re.fullmatch(r"[0-9a-f]{40}", revision):
-            raise ValueError("MultiBot source revision must be pinned")
-        for relative in FILES:
-            destination = cls.directory / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if SOURCE is not None:
-                shutil.copyfile(SOURCE / relative, destination)
-            else:
-                url = ("https://raw.githubusercontent.com/Wishmaster117/MultiBot-Chatless/"
-                       + revision + "/" + relative)
-                with urllib.request.urlopen(url, timeout=30) as response:
-                    content = response.read(2 * 1024 * 1024 + 1)
-                if len(content) > 2 * 1024 * 1024:
-                    raise ValueError("MultiBot fixture source exceeds the supported size")
-                destination.write_bytes(content)
+        multibot_sources(cls.directory, FILES, SOURCE)
         # Local callers can supply either pristine or already prepared sources.
         # Normalize only the temporary fixture to pristine before applying the
         # exact release patch, leaving the supplied installation untouched.
-        check = subprocess.run(["git", "apply", "--check", str(PATCH)], cwd=cls.directory,
-                               capture_output=True, text=True)
-        if check.returncode:
-            subprocess.run(["git", "apply", "--reverse", "--check", str(PATCH)],
-                           cwd=cls.directory, check=True, capture_output=True)
-            subprocess.run(["git", "apply", "--reverse", str(PATCH)],
-                           cwd=cls.directory, check=True, capture_output=True)
+        unpatched(cls.directory, PATCH)
         cls.pristine_ui = (cls.directory / FILES[0]).read_text()
-        subprocess.run(["git", "apply", str(PATCH)], cwd=cls.directory,
-                       check=True, capture_output=True)
+        git_apply(cls.directory, PATCH)
         cls.ui = (cls.directory / FILES[0]).read_text()
         cls.comm = cls.directory / FILES[1]
 
@@ -214,7 +190,7 @@ assert(plain(inventory.moneyLabel.text) == "Geld: 0g12s34c")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--addon-source", type=Path,
-                        help="existing pinned MultiBot source; defaults to two pinned raw Lua files")
+                        help="existing pinned MultiBot source; defaults to the pinned PrepareModules cache")
     parser.add_argument("--lua", default=shutil.which("lua5.1") or shutil.which("lua"),
                         help="Lua 5.1 executable")
     arguments, remaining = parser.parse_known_args()
