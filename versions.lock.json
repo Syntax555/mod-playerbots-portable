@@ -42,7 +42,7 @@
     {
       "name": "mod-autobalance",
       "url": "https://github.com/azerothcore/mod-autobalance.git",
-      "revision": "73d4ad3c379fbfc35c63b5b9b44fba1f7d9e213d"
+      "revision": "1d707cb61a0962ab01e4123681e2d3b66cc558a2"
     },
     {
       "name": "mod-individual-progression",
@@ -80,7 +80,7 @@
     {
       "name": "mod-quest-loot-party",
       "url": "https://github.com/pangolp/mod-quest-loot-party.git",
-      "revision": "6f073c1bef1bba1aa73787d1e30db7429f2b1c7b"
+      "revision": "c3955915c76d5a22a9d25a44482345d368a8de82"
     },
     {
       "name": "mod-world-buff-bots",
