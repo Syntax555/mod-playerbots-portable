@@ -21,7 +21,7 @@ import tempfile
 
 import yaml
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import cxx, function, pinned_source, prepared_core
 
 
 def values(source):
@@ -546,16 +546,13 @@ assert restoration['fields'] == ['ManaCost', 'ManaCostPct']
 assert set(restoration['spellIds']) == {19236, 19238, 19240, 19241, 19242, 19243,
                                        2944, 19276, 19277, 19278, 19279, 19280}
 assert len(restoration['spellIds']) == 12
-era_revision = next(m['revision'] for m in lock['modules'] if m['name'] == 'mod-era-talents')
 datasets, helpers, dataset_paths, template_ids = [], {}, [], set()
 for era_name in ('vanilla', 'tbc'):
     path = era / f'era-data/{era_name}/priest.yaml'
     data = yaml.safe_load(path.read_text())
     dataset_paths.append(str(path))
     template_ids.update(h['template'] for h in data.get('helpers', []) if 'template' in h)
-    baseline = subprocess.run(['git', '-C', str(repository / '.module-cache/mod-era-talents'),
-                               'show', era_revision + ':era-data/' + era_name + '/priest.yaml'],
-                              check=True, text=True, capture_output=True).stdout
+    baseline = pinned_source('mod-era-talents', 'era-data/' + era_name + '/priest.yaml')
     old_ids = {h['id'] for h in yaml.safe_load(baseline).get('helpers', [])}
     new_helpers = [h for h in data.get('helpers', []) if h['id'] not in old_ids]
     datasets.append({**data, 'helpers': new_helpers, 'tabs': [], 'scriptBindings': []})
