@@ -18,7 +18,7 @@ import struct
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -804,17 +804,21 @@ with tempfile.TemporaryDirectory(prefix='portable-world-buff-events-') as direct
     for name, old, replacement, assertion in mutations:
         assert production.count(old) == 1, name
         variants.append((name, production.replace(old, replacement), loader, assertion))
-    for name, source_text, loader_text, expected_failure in variants:
+
+    def build_and_run(variant):
+        name, source_text, loader_text, _ = variant
         source = temporary / (name + '.cpp')
         source.write_text(fixture + '\n' + source_text + '\n' + loader_text + '\n' + tests)
         executable = temporary / name
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
                         '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
                         '-I', str(temporary), str(source), '-o', str(executable)], check=True)
+        return run_fixture([str(executable)], env=environment)
+
+    for (name, *_, expected_failure), result in zip(variants, in_parallel(build_and_run, variants)):
         if expected_failure is None:
-            subprocess.run([str(executable)], check=True, env=environment, timeout=60)
+            print(result.stdout + result.stderr, end='')
+            assert result.returncode == 0, name
         else:
-            result = subprocess.run([str(executable)], text=True, capture_output=True,
-                                    env=environment, timeout=60)
             assert result.returncode != 0 and expected_failure in result.stderr, result
             print(name + ': the unsafe variant fails its gameplay regression as expected')

@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core, reject_mutants
 
 STUBS = r'''
 #pragma once
@@ -529,8 +529,7 @@ def main():
         if os.name!='nt':
             flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer','-no-pie']
         subprocess.run([compiler,*flags,str(work/'fixture.cpp'),'-o',str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
-        originals={name:(work/name).read_text() for name in ('DcEarnedPlay.h','EarnedDungeonParties.cpp','DcEarnedProgression.cpp','NativeProductionMethods.h')}
+        subprocess.run([str(exe)],check=True,timeout=TIMEOUT)
         mutations=[
             ('unloaded tile probe accepts shortcut','NativeProductionMethods.h','if (DcEarnedPlay::Active() && !DcEarnedPlay::UsesRealPath(gen))','if (false)'),
             ('raw planner fallback spline','EarnedDungeonParties.cpp','if (DcEarnedPlay::RealSpline(player, points))','if (true)'),
@@ -577,18 +576,7 @@ def main():
             ('uncontrolled persistent follower path','NativeProductionMethods.h','if (DcEarnedPlay::Active())','if (false)'),
             ('free daze immunity','NativeProductionMethods.h','if (apply && !DcEarnedPlay::Active())','if (apply)'),
         ]
-        for label,name,old,new in mutations:
-            for original_name,text in originals.items():
-                (work/original_name).write_text(text)
-            mutated=originals[name].replace(old,new)
-            if mutated==originals[name]:
-                raise SystemExit(f'{label} mutation was not applied')
-            (work/name).write_text(mutated)
-            subprocess.run([compiler,'-std=c++20','-O1','-I',str(work),str(work/'fixture.cpp'),'-o',str(exe)],check=True)
-            result=subprocess.run([str(exe)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            if result.returncode==0:
-                raise SystemExit(f'Production fixture did not reject {label}')
-            print(f'Earned dungeon production mutation rejected: {label}')
+        reject_mutants(work,mutations,lambda directory,executable:[compiler,'-std=c++20','-O1','-I',str(directory),str(directory/'fixture.cpp'),'-o',str(executable)],'Earned dungeon production')
 
 if __name__=='__main__':
     main()

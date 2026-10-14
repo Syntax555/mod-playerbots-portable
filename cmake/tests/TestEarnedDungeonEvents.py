@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core, reject_mutants
 
 
 def block(source, signature, closing='};'):
@@ -202,8 +202,7 @@ def main():
         if os.name != 'nt':
             flags += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie']
         subprocess.run([compiler, *flags, str(work/'fixture.cpp'), '-o', str(exe)], check=True)
-        subprocess.run([str(exe)], check=True)
-        original = (work/'DcEarnedEvents.cpp').read_text()
+        subprocess.run([str(exe)], check=True, timeout=TIMEOUT)
         mutations = [
             ('off-mesh jump step', 'case EventStepKind::MoveTo:\n                return step.hookId == 0;', 'case EventStepKind::Jump:\n            case EventStepKind::MoveTo:\n                return step.hookId == 0;'),
             ('custom hook on a walk', 'return step.hookId == 0;', 'return true;'),
@@ -218,16 +217,10 @@ def main():
             ('optional pull controller skipped', 'return ev.required || ev.ownsThePull || ev.stepsOwnMovement;', 'return ev.required || ev.stepsOwnMovement;'),
             ('optional movement controller skipped', 'return ev.required || ev.ownsThePull || ev.stepsOwnMovement;', 'return ev.required || ev.ownsThePull;'),
         ]
-        for label, old, new in mutations:
-            mutated = original.replace(old, new)
-            if mutated == original:
-                raise SystemExit(f'{label} mutation was not applied')
-            (work/'DcEarnedEvents.cpp').write_text(mutated)
-            subprocess.run([compiler, '-std=c++20', '-O1', '-I', str(work), str(work/'fixture.cpp'), '-o', str(exe)], check=True)
-            result = subprocess.run([str(exe)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode == 0:
-                raise SystemExit(f'Earned event audit did not reject {label}')
-            print(f'Earned event audit mutation rejected: {label}')
+        reject_mutants(work, [(label, 'DcEarnedEvents.cpp', old, new) for label, old, new in mutations],
+                       lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory),
+                                                      str(directory/'fixture.cpp'), '-o', str(executable)],
+                       'Earned event audit')
 
 
 if __name__ == '__main__':

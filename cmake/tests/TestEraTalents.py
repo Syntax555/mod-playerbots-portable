@@ -11,7 +11,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
@@ -24,25 +24,31 @@ src = module / 'src'
 core = args.core_source
 
 
+# The fixtures are independent: each is written here and all of them build and
+# run in parallel once the last one is queued. A label marks a mutant that must fail.
+jobs = []
+
+
 def compile_run(directory, name, source, includes=()):
     cpp = directory / (name + '.cpp')
-    binary = directory / name
     cpp.write_text(source)
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie', '-pthread',
-                    *[flag for include in includes for flag in ('-I', str(include))],
-                    str(cpp), '-o', str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
+    jobs.append(([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
+                  '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie', '-pthread',
+                  *[flag for include in includes for flag in ('-I', str(include))],
+                  str(cpp), '-o', str(directory / name)], None))
 
 
-def rejects(directory, name, source, label):
+def rejects(directory, name, source, label, includes=()):
     cpp = directory / (name + '.cpp')
-    binary = directory / name
     cpp.write_text(source)
-    subprocess.run([cxx(), '-std=c++20', '-pthread', str(cpp), '-o', str(binary)], check=True)
-    if subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
-        raise SystemExit(f'Era talent fixture did not reject the mutation: {label}')
-    print(f'Era talent mutation rejected: {label}')
+    jobs.append(([cxx(), '-std=c++20', '-pthread', *[flag for include in includes for flag in ('-I', str(include))],
+                  str(cpp), '-o', str(directory / name)], label))
+
+
+def build_and_run(job):
+    command, label = job
+    subprocess.run(command, check=True)
+    return run_fixture([command[-1]], label and label + ' mutant')
 
 
 with tempfile.TemporaryDirectory(prefix='portable-era-talents-') as temporary:
@@ -979,17 +985,17 @@ int main() {
 }
 '''
     compile_run(directory, 'era-bots', bot_fixture)
-    for label, old, new in (
+    for index, (label, old, new) in enumerate((
             ('SelfBot on the bot path', '(GET_PLAYERBOT_AI(p) && !IsSelfBot(p))', 'GET_PLAYERBOT_AI(p) != nullptr'),
             ('altbot historical points spent', ' && SpendsOwnPoints(bot))', ')'),
             ('altbot native points spent', 'if (SpendsOwnPoints(bot))', 'if (bot)'),
             ('fresh builds ignore the spec mix', 'FactoryReconcile(bot, SeedSpecTab(bot));',
              'FactoryReconcile(bot, int(bot->GetGUID().GetCounter() % 3));'),
-            ('seeded cat druids rebuilt as bears', ' || SeedSpecTab(bot) == 3', '')):
+            ('seeded cat druids rebuilt as bears', ' || SeedSpecTab(bot) == 3', ''))):
         mutated = bot_fixture.replace(old, new)
         if mutated == bot_fixture:
             raise SystemExit(f'{label} mutation was not applied')
-        rejects(directory, 'era-bots-mutated', mutated, label)
+        rejects(directory, f'era-bots-mutated-{index}', mutated, label)
 
     transition_code = '\n'.join(line for line in (src / 'EraTransition.cpp').read_text().splitlines()
                                  if not line.startswith('#include'))
@@ -1231,11 +1237,14 @@ int main() {
                                       .replace('    _nodesByEraClass.clear();\n', ''))
     if 'EraTalentContent::Load' not in mutated or '_nodesByEraClass.clear' in mutated:
         raise SystemExit('stale content index mutation was not applied')
-    cpp = directory / 'era-content-mutated.cpp'
-    cpp.write_text(mutated)
-    binary = directory / 'era-content-mutated'
-    subprocess.run([cxx(), '-std=c++20', '-I', str(content_fake), '-I', str(src), str(cpp), '-o', str(binary)],
-                   check=True)
-    if subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
-        raise SystemExit('Era content fixture did not reject a stale index after reloading')
-    print('Era talent mutation rejected: stale content index after reloading')
+    rejects(directory, 'era-content-mutated', mutated, 'stale content index after reloading', (content_fake, src))
+
+    for (_, label), result in zip(jobs, in_parallel(build_and_run, jobs)):
+        if label is None:
+            print(result.stdout + result.stderr, end='')
+            if result.returncode:
+                raise SystemExit(f'Era talent fixture failed (exit {result.returncode})')
+        elif result.returncode == 0:
+            raise SystemExit(f'Era talent fixture did not reject the mutation: {label}')
+        else:
+            print(f'Era talent mutation rejected: {label}')
