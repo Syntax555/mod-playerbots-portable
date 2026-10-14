@@ -5,8 +5,8 @@ data, then compile the core's eligibility methods against both states.
 This fixture does not launch a realm or certify all historical quest variants.
 """
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 import re
 import sqlite3
 import subprocess

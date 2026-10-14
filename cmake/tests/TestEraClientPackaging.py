@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Client artifact regressions: locked patched addons, ZIP integrity and DBC preservation."""
 import copy
 import importlib.util
@@ -8,9 +7,11 @@ from pathlib import Path
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("era_client_package", ROOT / "cmake/PackageEraClient.py")
@@ -568,9 +569,8 @@ class NativeSpellRestorationTests(unittest.TestCase):
         changed["unexpected"] = "unreviewed restoration"
         variants.append(changed)
         for changed in variants:
-            with self.subTest(contract=changed):
-                with self.assertRaises(ValueError):
-                    self.restore(contract=changed)
+            with self.subTest(contract=changed), self.assertRaises(ValueError):
+                self.restore(contract=changed)
 
     def test_restoration_requires_each_target_in_both_tables(self):
         for which in ("base", "donor"):
@@ -601,9 +601,8 @@ class NativeSpellRestorationTests(unittest.TestCase):
         missing[204] = "Other"
         variants.append((missing, self.types))
         for columns, types in variants:
-            with self.subTest(columns=columns, types=types):
-                with self.assertRaises(ValueError):
-                    self.restore(columns=columns, types=types)
+            with self.subTest(columns=columns, types=types), self.assertRaises(ValueError):
+                self.restore(columns=columns, types=types)
 
     def test_malformed_base_and_donor_dbc_layouts_are_rejected(self):
         malformed = [b"WDBC", self.base[:-1], dbc([self.rows[20], self.rows[20]], self.base_strings)]
@@ -663,7 +662,7 @@ class AddonRuntimeTests(unittest.TestCase):
         before = {path.relative_to(self.source).as_posix(): path.read_bytes()
                   for path in self.source.rglob("*") if path.is_file()}
         destination = self.root / "runtime/Demo"
-        subprocess.run([os.sys.executable, str(ROOT / "cmake/AddonRuntime.py"), "--source", str(self.source),
+        subprocess.run([sys.executable, str(ROOT / "cmake/AddonRuntime.py"), "--source", str(self.source),
                         "--toc", "Demo.toc", "--destination", str(destination)], check=True, capture_output=True)
         self.assertEqual(before, {path.relative_to(self.source).as_posix(): path.read_bytes()
                                   for path in self.source.rglob("*") if path.is_file()})
@@ -706,23 +705,23 @@ class AddonRuntimeTests(unittest.TestCase):
 
         command = [POWERSHELL, "-NoLogo", "-NoProfile", "-File", str(ROOT / "cmake/VerifyClientAddonZip.ps1"),
                    "-ZipPath", str(path), "-AddonName", "Demo", "-RepositoryRoot", str(repository),
-                   "-Python", os.sys.executable]
+                   "-Python", sys.executable]
         archive()
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         archive({"test_unloaded.lua": b"development only\n"})
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Unexpected asset", result.stderr)
         archive()
         (prepared / "Textures/test_icon.tga").write_bytes(b"corrupted texture")
         # Mutating the prepared cache does not change the independently locked
         # expected bytes. A ZIP containing the same mutation still fails.
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.write("Textures/test_icon.tga", b"corrupted texture")
         archive()
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("differs from locked source", result.stderr)
 

@@ -5,9 +5,9 @@ actual MoveSplineInitArgs validator. Fixtures provide positions, straight-line
 collision geometry and recording spline launches; no realm is started.
 """
 
-from pathlib import Path
 import argparse
 import os
+from pathlib import Path
 import subprocess
 import tempfile
 

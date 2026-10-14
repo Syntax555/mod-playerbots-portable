@@ -5,9 +5,9 @@ interaction, purchase and reporting decisions. Fixtures supply world state,
 recording hooks and packet containers; this does not start a realm.
 """
 
-from pathlib import Path
 import argparse
 import os
+from pathlib import Path
 import subprocess
 import tempfile
 
@@ -454,8 +454,8 @@ uint32 PlayerbotAI::Value(std::string const& name, std::string const& qualifier)
         'std::vector<TrainerSpellEntryData> BuildTrainerSpellEntries(',
         'bool LearnTrainerSpell(',
         'void SendTrainerLearnResult(',
-        'void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string const& botName, '
-        'std::string const& requestToken, std::string const& trainerEntryValue, std::string const& spellIdValue)\n{',
+        ('void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string const& botName, '
+         'std::string const& requestToken, std::string const& trainerEntryValue, std::string const& spellIdValue)\n{'),
     ]),
     function(baseline, 'uint32 GetBotTrainerFreeMoney(').replace(
         'GetBotTrainerFreeMoney', 'BaselineGetBotTrainerFreeMoney'),

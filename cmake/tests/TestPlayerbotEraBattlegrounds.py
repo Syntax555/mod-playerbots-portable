@@ -5,7 +5,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+
 from FixtureSupport import cxx, function, prepared_core
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--source', type=Path, help='prepared Playerbots module directory')
@@ -473,7 +475,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
             raise SystemExit(f'{label} mutation was not applied')
         (tmp / 'fixture.cpp').write_text(mutated)
         subprocess.run(command, check=True)
-        if subprocess.run([str(executable)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+        if subprocess.run([str(executable)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0:
             raise SystemExit(f'Bot queue fixture did not reject: {label}')
         print(f'Bot queue mutation rejected: {label}')
     (tmp / 'IndividualProgressionBattlegrounds.h').unlink()

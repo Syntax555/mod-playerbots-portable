@@ -6,10 +6,11 @@ The actual module translation unit supplies those decisions under ASan/UBSan.
 This does not start a realm or replace the full core/module compile check.
 """
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 import subprocess
 import tempfile
+
 from FixtureSupport import cxx, prepared_core
 
 

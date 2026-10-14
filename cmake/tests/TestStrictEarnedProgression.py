@@ -11,6 +11,7 @@ import re
 import sqlite3
 import subprocess
 import tempfile
+
 from FixtureSupport import cxx, function, prepared_core
 
 

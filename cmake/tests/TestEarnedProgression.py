@@ -9,7 +9,9 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+
 from FixtureSupport import cxx, function, prepared_core
+
 
 root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
 ip = root / 'mod-individual-progression/src'

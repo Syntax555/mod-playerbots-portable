@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Exercise the earned Dungeon Clear event audit with native lock and registry doubles."""
 import argparse
 import os
@@ -7,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+
 from FixtureSupport import TIMEOUT, cxx, function, prepared_core, reject_mutants
 
 
@@ -181,7 +181,7 @@ def main():
     native_contracts(core, source)
     compiler = cxx()
     registry = (source/'Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h').read_text()
-    kinds = re.findall(r'^\s{4}([A-Z][A-Za-z]+),', block(registry, 'enum class EventStepKind : uint8'), re.M)
+    kinds = re.findall(r'^\s{4}([A-Z][A-Za-z]+),', block(registry, 'enum class EventStepKind : uint8'), re.MULTILINE)
     if len(kinds) < 17:
         raise SystemExit('Dungeon Clear event step vocabulary was not recognised')
     with tempfile.TemporaryDirectory(prefix='earned-events-') as temp:

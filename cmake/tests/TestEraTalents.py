@@ -13,6 +13,7 @@ import tempfile
 
 from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
 
+
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument('--module-source', type=Path,

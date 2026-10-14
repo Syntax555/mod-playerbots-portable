@@ -5,9 +5,9 @@ radius checks, session handling and quest completion. Fixtures supply world stat
 and record movement, scripts and persistence; no running realm is required.
 """
 
-from pathlib import Path
 import argparse
 import os
+from pathlib import Path
 import re
 import resource
 import subprocess
@@ -663,7 +663,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-area-trigger-') as tempora
             # Reverting the actual production actions must fail the fixed behavior,
             # independently of the original-path demonstration above.
             reverted = subprocess.run(
-                [str(executable)], capture_output=True, text=True, timeout=30,
+                [str(executable)], capture_output=True, text=True, timeout=30, check=False,
                 preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_CORE, (0, 0)))
             assert reverted.returncode == -6 and 's.Pending() == (fixed ? 169u : 0u)' in reverted.stderr
             print('Reverted native exploration code is rejected by the fixed regression assertions.')

@@ -7,8 +7,8 @@ auction-trip clock run here with fake core objects. Mutation checks confirm
 that the guards, budgets and priorities are required.
 """
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 import re
 import subprocess
 import tempfile
@@ -17,7 +17,7 @@ from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixtur
 
 
 def declaration(source, opening):
-    return re.search(re.escape(opening) + r'\n\{.*?\n\};', source, re.S).group(0)
+    return re.search(re.escape(opening) + r'\n\{.*?\n\};', source, re.DOTALL).group(0)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -36,7 +36,7 @@ info_header = (rpg / 'NewRpgInfo.h').read_text()
 travel_source = (module / 'Bot/EarnedAuctionTravel.cpp').read_text()
 
 rpg_fields = re.findall(r'^    (?:bool|uint32|WorldPosition|ObjectGuid) (?:earnedAuction|naturalMaintenance)\w*(?:\{[^}]*\})?;$',
-                        info_header, re.M)
+                        info_header, re.MULTILINE)
 assert len(rpg_fields) >= 9, 'earned-auction visit clock fields were not found in NewRpgInfo'
 
 production = {
@@ -1188,8 +1188,8 @@ mutations = [
      '(needsFood || needsDrink) && proto->Class == ITEM_CLASS_CONSUMABLE', 'proto'),
     ('lesson price quoted before teachability', 'value',
      'if (!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) ||',
-     'if (!trainer->GetSpellCost(bot, npc, &spell) ||\n                        '
-     '!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) ||'),
+     ('if (!trainer->GetSpellCost(bot, npc, &spell) ||\n                        '
+      '!PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, trainer, &spell) ||')),
     ('vendor surplus evaluated before an auction visit', 'value', '    if (EarnedAuction::IsEnabled(botAI))\n',
      '    if ((AI_VALUE(bool, "can sell") && false) || EarnedAuction::IsEnabled(botAI))\n'),
     ('auctioneer search on every approach tick', 'action',

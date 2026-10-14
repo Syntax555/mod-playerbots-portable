@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='windows compiler jobs ') as temp:
                    '-DTEST_SETTINGS=' + str(root / settings)]
         if jobs is not None:
             command.append('-DACORE_MSVC_COMPILE_JOBS:STRING=' + jobs)
-        result = subprocess.run(command, text=True, capture_output=True)
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
         return result, build
 
     result, build = configure('native', 'native.cmake')

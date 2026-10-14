@@ -68,6 +68,9 @@ jobs:
       - name: Check that every fixture runs in CI
         run: python3 cmake/tests/run_fixtures.py check
 
+      - name: Lint packaging, release and fixture scripts
+        run: pipx run --spec ruff==0.16.8 ruff check cmake scripts
+
       - name: Test distribution assembly and ZIP validation
         shell: pwsh
         run: ./cmake/tests/TestPortableZip.ps1

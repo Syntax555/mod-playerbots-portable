@@ -6,12 +6,12 @@ session and storage adapters are isolated; this does not start a realm or certif
 every historical quest. --base-dbc additionally verifies a supplied native DBC.
 """
 
-from pathlib import Path
 import argparse
 import hashlib
 import importlib.util
 import json
 import os
+from pathlib import Path
 import re
 import sqlite3
 import struct
@@ -19,9 +19,8 @@ import subprocess
 import sys
 import tempfile
 
-import yaml
-
 from FixtureSupport import cxx, function, pinned_source, prepared_core
+import yaml
 
 
 def values(source):
@@ -62,14 +61,14 @@ def values(source):
 
 def dump(db, directory, table):
     source = (directory / (table + '.sql')).read_text(encoding='utf-8')
-    columns = re.findall(r'^  `([^`]+)`', source, re.M)
+    columns = re.findall(r'^  `([^`]+)`', source, re.MULTILINE)
     assert columns, table
     primary = re.search(r'PRIMARY KEY \(([^\n]+)\)', source)
     constraint = ',PRIMARY KEY (' + primary.group(1) + ')' if primary else ''
     constraint += ''.join(',UNIQUE (' + key + ')' for key in re.findall(r'UNIQUE KEY `[^`]+` \(([^\n]+)\)', source))
     db.execute('CREATE TABLE "' + table + '" (' + ','.join('"' + c + '"' for c in columns) + constraint + ')')
     rows = []
-    for match in re.finditer(r'^\((.+)\)[,;]$', source, re.M):
+    for match in re.finditer(r'^\((.+)\)[,;]$', source, re.MULTILINE):
         row = values(match.group(1))
         assert len(row) == len(columns), (table, len(row), len(columns))
         rows.append(row)
@@ -89,7 +88,7 @@ def compile_run(temporary, name, source, expected=True):
     if os.name != 'nt':
         command += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie']
     subprocess.run(command + [str(cpp), '-o', str(executable)], check=True)
-    result = subprocess.run([str(executable)], text=True, capture_output=True)
+    result = subprocess.run([str(executable)], text=True, capture_output=True, check=False)
     if expected:
         assert result.returncode == 0, result.stdout + result.stderr
         print(result.stdout.strip())
@@ -505,7 +504,7 @@ for row in db.execute('SELECT spell_id,rank FROM spell_ranks WHERE first_spell_i
     if row[1] > 1:
         spell_initializers.append(f'spellMgr.previous.emplace({row[0]},{row[0]-1});')
 fixture = FIXTURE.replace('PROGRESSION_ENUM', progress_enum).replace('PRODUCTION_PROGRESS', '\n'.join(function(progress_source, signature) for signature in ('bool IndividualProgression::IsStrictDefaultProgression()', 'uint8 IndividualProgression::GetPlayerProgressionFromQuests(')))
-fixture = fixture.replace('PRODUCTION_HISTORICAL', re.sub(r'^#include[^\n]*\n', '', historical, flags=re.M))
+fixture = fixture.replace('PRODUCTION_HISTORICAL', re.sub(r'^#include[^\n]*\n', '', historical, flags=re.MULTILINE))
 fixture = fixture.replace('PRODUCTION_DISPATCHER', function(dispatcher, 'bool ScriptMgr::OnPlayerCanUseQuest('))
 fixture = fixture.replace('PRODUCTION_HOOK_ENUM', function(core_file('src/server/game/Scripting/ScriptDefines/PlayerScript.h').read_text(), 'enum PlayerHook') + ';')
 fixture = fixture.replace('PRODUCTION_QUESTS', quest_functions).replace('PRODUCTION_TRAINER', 'namespace Trainer {\n' + trainer_functions + '\n}')

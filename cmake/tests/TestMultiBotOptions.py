@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Exercise pinned MultiBot options initialization and fallback with Lua 5.1."""
 import argparse
 import json
@@ -9,6 +8,7 @@ import tempfile
 import unittest
 
 from FixtureSupport import git_apply, multibot_sources, unpatched
+
 
 ROOT = Path(__file__).resolve().parents[2]
 PATCH = ROOT / "patches/multibot-options-initialization.patch"
@@ -213,7 +213,7 @@ class MultiBotOptionsTests(unittest.TestCase):
         script += "\nlocal ACEGUI_SOURCE = " + json.dumps(str(self.acegui))
         script += "\nlocal TABGROUP_SOURCE = " + json.dumps(str(self.tabgroup))
         script += "\n" + FIXTURE + "\n" + body
-        result = subprocess.run([LUA, "-"], input=script, text=True, capture_output=True, timeout=20)
+        result = subprocess.run([LUA, "-"], input=script, text=True, capture_output=True, timeout=20, check=False)
         if not pristine:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result

@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
 """Compile the actual LFG hooks and exercise earned-era/native-lock behavior."""
 import argparse
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 
 from FixtureSupport import TIMEOUT, cxx, prepared_core, run_fixture
+
 
 STUBS = r'''
 #pragma once
