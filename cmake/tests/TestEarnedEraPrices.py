@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -19,17 +19,6 @@ parser.add_argument('--module', type=Path)
 args = parser.parse_args()
 module = args.module or args.core / 'modules/mod-individual-progression'
 trainer_source = (args.core / 'src/server/game/Entities/Creature/Trainer.cpp').read_text()
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth = 1
-    end = opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 trainer_methods = '\n'.join(function(trainer_source, signature) for signature in (

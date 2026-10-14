@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import prepared_core
 
 
 META_SQL = 'data/sql/world/base/2026_08_14_11_era_talent_meta.sql'

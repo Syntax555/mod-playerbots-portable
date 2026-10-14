@@ -3,20 +3,10 @@
 from pathlib import Path
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 repo = Path(__file__).resolve().parents[2]
 pb = prepared_core(repo) / 'modules/mod-playerbots/src'
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 level_source = (pb / 'Bot/RandomBotLevelMgr.cpp').read_text()

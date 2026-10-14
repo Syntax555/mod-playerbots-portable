@@ -15,21 +15,11 @@ import shutil
 import subprocess
 import tempfile
 
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 ROOT = Path(__file__).resolve().parents[2]
 ERA_PATCH = ROOT / 'patches/mod-era-talents-multibot-inspect.patch'
 BOT_PATCH = ROOT / 'patches/multibot-era-talent-inspect.patch'
-
-
-def function(source: str, signature: str) -> str:
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 def apply_once(directory: Path, patch: Path) -> None:

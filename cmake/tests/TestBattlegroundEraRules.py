@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -26,16 +26,6 @@ av_header = (zones / 'BattlegroundAV.h').read_text()
 # that read them anywhere is gone, so new uses cannot skip the match's era.
 assert 'BG_AV_SCORE_INITIAL_POINTS' not in av_header + av
 assert av.count('CONFIG_BATTLEGROUND_ALTERAC_REINFORCEMENTS') == 1
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 ab_methods = '\n'.join(function(ab, 'void BattlegroundAB::' + name + '(')

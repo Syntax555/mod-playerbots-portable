@@ -12,7 +12,7 @@ import argparse
 from pathlib import Path
 import re
 
-from PreparedSources import prepared_core
+from FixtureSupport import prepared_core
 
 
 # Families whose full key names are assembled at runtime from source literals.

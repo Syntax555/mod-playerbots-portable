@@ -11,7 +11,7 @@ import re
 import sqlite3
 import subprocess
 import tempfile
-from PreparedSources import prepared_core
+from FixtureSupport import function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -27,17 +27,6 @@ production = (module / 'src/IndividualProgression.cpp').read_text()
 player_source = (module / 'src/IndividualProgressionPlayer.cpp').read_text()
 header = (module / 'src/IndividualProgression.h').read_text()
 commands = (module / 'src/cs_individualProgression.cpp').read_text()
-
-
-def function(source, signature):
-    start = source.index(signature)
-    opening = source.index('{', start)
-    depth = 1
-    end = opening + 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[start:end]
 
 
 # Strict boss credit uses the core's same-instance and distance contracts, but
