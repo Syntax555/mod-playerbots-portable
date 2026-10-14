@@ -206,10 +206,9 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | **Reference** | |
 | [Source versions](docs/module-versions.md) | Pinned dependencies, bundled runtime and provenance. |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Licenses and packaged notice paths. |
-| [Roadmap](docs/todo.md) | Open integration work and gameplay validation. |
 | **Development** | |
 | [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build, client package and local checks. |
-| [Contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md) | Problem reports, patch workflow and review rules. |
+| [Contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md) | Problem reports, patch workflow, documentation and releases. |
 
 ## Contributing
 
