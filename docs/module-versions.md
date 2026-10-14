@@ -35,6 +35,13 @@ separate core copy and module/addon exports, then applies patches in manifest
 order. Preparation and packaging checks include patch hashes and verify addon
 files against the prepared source.
 
+`mod-playerbots-upstream-fixes.patch` carries upstream Playerbots commits
+`5dc162f3` (no item reads after a destroy or stack merge can free the item),
+`45112ef7` (queued chat commands resolve their sender when they run),
+`c583bc22` (addon messages do not command bots) and `c9398d16` (RPG quest-giver
+search skips despawned quest givers). The patch is dropped once the locked
+Playerbots revision contains these commits.
+
 The client packager uses IP's locked base archive, merges generated spell and
 skill rows, and preserves other entries byte for byte. `SOURCE_MANIFEST.json`
 records sources, patches, artifact hashes and the server/client generation.

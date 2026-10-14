@@ -28,6 +28,7 @@ GAMEPLAY = (
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestFormationMovement",
     "TestFrostmaneHold", "TestNaturalTaxiRoutes", "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
+    "TestPlayerbotUpstreamFixes",
 )
 
 
