@@ -111,11 +111,15 @@ def target_problem(root, document, target):
 
 
 def links(root):
-    """(document, line number, target) of every link outside code."""
+    """(document, line number, target) of every link outside code, including link text that wraps."""
     for document in documents(root):
-        for number, line in prose((root / document).read_text(encoding='utf-8')):
-            for target in LINK.findall(re.sub(r'`[^`]*`', '', line)):
-                yield document, number, target
+        text = (root / document).read_text(encoding='utf-8')
+        kept = dict(prose(text))
+        # Code becomes blank lines so that line numbers stay.
+        body = '\n'.join(re.sub(r'`[^`]*`', '', kept.get(number, ''))
+                         for number in range(1, len(text.splitlines()) + 1))
+        for match in LINK.finditer(body):
+            yield document, body.count('\n', 0, match.start()) + 1, match.group(1)
 
 
 def link_problems(root):
@@ -162,6 +166,7 @@ def self_check():
         assert link_problems(root) == [], link_problems(root)
         broken = {
             '[missing](docs/missing.md)': 'docs/missing.md does not exist',
+            '[wrapped\nlink](docs/wrapped.md)': 'docs/wrapped.md does not exist',
             '[anchor](docs/guide.md#start)': 'docs/guide.md has no heading #start',
             '[unzipped](docs/building.md)': 'docs/building.md is not in the server ZIP',
             '[contributing](CONTRIBUTING.md)': 'CONTRIBUTING.md is not in the server ZIP',
