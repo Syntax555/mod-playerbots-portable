@@ -130,6 +130,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | MultiBot Chatless and Bridge | Bot-control UI with natural-progression restrictions |
 | Quest Loot Party | Share naturally rolled normal-quality quest loot with eligible corpse looters |
 | World Buff Bots | Timed Vanilla events for eligible Vanilla-progress characters; native TBC events unchanged |
+| Era Events | Timed outdoor encounters at exact earned tiers 4, 6, 7 and 12; one real player required, no automatic victory payouts |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
 | Raid Clear | Molten Core, Blackwing Lair and Zul'Gurub mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
@@ -155,6 +156,12 @@ World Buff Bots uses independent 30–150 minute timers for its three Vanilla
 events. Eligibility follows each character's own earned tier and native buff
 conditions. TBC buffs use ordinary quests and areas, including personal K'iru
 requirements. See [world buffs](world-buffs.md) for locations and settings.
+
+Era Events adds Ahn'Qiraj, Scourge, Legion and zombie encounters in each
+character's exact earned tier. Bots participate without counting towards the
+one-real-player minimum. Strict progression blocks realm-wide phasing and
+automatic victory rewards; ordinary creature kill loot remains available.
+See [era world events](world-events.md) for schedules and settings.
 
 Quest Loot Party changes only eligible normal-quality quest-item distribution.
 Players and bots must still loot the corpse; drop rolls, ordinary equipment loot,

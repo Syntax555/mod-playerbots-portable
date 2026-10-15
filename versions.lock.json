@@ -94,6 +94,14 @@
       ]
     },
     {
+      "name": "mod-era-events",
+      "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
+      "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1",
+      "patches": [
+        "patches/mod-era-events-earned-progression.patch"
+      ]
+    },
+    {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
       "revision": "1da05982e478cb00e0b6c87314afe7e0e9653ffb",

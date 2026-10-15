@@ -98,7 +98,8 @@ try {
         core = @{ name = 'azerothcore-wotlk'; revision = $revision; source = 'azerothcore-wotlk'; patches = @('patches/core-fixture.patch') }
         modules = @(
             @{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') },
-            @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') }
+            @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') },
+            @{ name = 'mod-era-events'; revision = $revision; patches = @() }
         )
         clientAddons = @(@{ name = 'MultiBot'; revision = $revision; toc = 'MultiBot.toc'; license = 'LICENSE'; interface = 30300 })
         historicalClassData = @{ sources = @(@{ name = 'Historical fixture'; url = 'https://github.com/example/data.git'; revision = $revision }); notice = 'licenses/historical-class-data/NOTICE.txt'; license = 'licenses/GPL-3.0.txt'; licenses = @('licenses/GPL-2.0.txt') }
@@ -106,7 +107,7 @@ try {
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
     foreach ($name in @('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/configuration.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
-        'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'patches/core-fixture.patch', 'docs/world-buffs.md',
+        'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'patches/core-fixture.patch', 'docs/world-buffs.md', 'docs/world-events.md',
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',
         'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt',
         'docs/class-quests.md',
@@ -137,6 +138,9 @@ try {
     # A module without SQL or a root LICENSE uses its preserved README notice.
     Write-FixtureText (Join-Path $core 'modules/mod-world-buff-bots/src/WorldBuffBots.cpp')
     Write-FixtureText (Join-Path $core 'modules/mod-world-buff-bots/conf/mod_world_buff_bots.conf.dist')
+    Write-FixtureText (Join-Path $core 'modules/mod-era-events/src/EraEvents.cpp')
+    Write-FixtureText (Join-Path $core 'modules/mod-era-events/conf/mod_era_events.conf.dist')
+    Write-FixtureText (Join-Path $core 'modules/mod-era-events/LICENSE')
     $addon = Join-Path $source '.module-cache/prepared-addons/MultiBot'
     Write-FixtureText (Join-Path $addon 'MultiBot.toc') "## Interface: 30300`nCore\MultiBot.lua`n"
     Write-FixtureText (Join-Path $addon 'Core/MultiBot.lua') "print('good')`n"
@@ -309,6 +313,12 @@ try {
     }
     Test-NegativeZip 'changed world-buff attribution' 'differs from build sources' -Replacements @{
         'licenses/mod-world-buff-bots/NOTICE.txt' = [System.Text.Encoding]::UTF8.GetBytes('wrong attribution')
+    }
+    foreach ($name in @('docs/world-events.md', 'configs/modules/mod_era_events.conf.dist', 'licenses/mod-era-events/LICENSE')) {
+        Test-NegativeZip "missing era-event dependency $name" 'Portable ZIP is missing' -Omit @($name)
+    }
+    Test-NegativeZip 'changed era-event guide' 'differs from build sources' -Replacements @{
+        'docs/world-events.md' = [System.Text.Encoding]::UTF8.GetBytes('outdated event rules')
     }
     foreach ($name in @('docs/class-quests.md', 'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt')) {
         Test-NegativeZip "missing historical class notice $name" 'missing historical class data notice' -Omit @($name)
