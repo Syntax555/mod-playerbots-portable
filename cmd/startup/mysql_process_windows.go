@@ -127,7 +127,10 @@ func openMySQLProcess(pid uint32, terminate bool) (*mysqlNativeProcess, error) {
 func mysqlProcessParents() (map[uint32]uint32, error) {
 	parents := make(map[uint32]uint32)
 	err := forEachProcess(func(entry *syscall.ProcessEntry32) error {
-		parents[entry.ProcessID] = entry.ParentProcessID
+		// Toolhelp can retain exited processes while their handles are open.
+		if entry.Threads != 0 {
+			parents[entry.ProcessID] = entry.ParentProcessID
+		}
 		return nil
 	})
 	if err != nil {
@@ -182,7 +185,13 @@ func openOwnedMySQLChain(root *mysqlNativeProcess, pid uint32, parents map[uint3
 		}
 		p, err := openMySQLProcess(candidate, terminate)
 		if err != nil {
-			return nil, err
+			// A process can exit after the snapshot, making OpenProcess fail
+			// with access denied. Keep errors for candidates still running.
+			currentParents, snapshotErr := mysqlProcessParents()
+			if _, present := currentParents[candidate]; snapshotErr == nil && !present {
+				return nil, nil
+			}
+			return nil, errors.Join(err, snapshotErr)
 		}
 		held = append(held, p)
 		p.parent = parents[candidate]
