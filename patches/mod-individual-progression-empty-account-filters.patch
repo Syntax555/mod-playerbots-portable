@@ -1,7 +1,8 @@
 diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
+index 0d9516b..8cd094c 100644
 --- a/src/IndividualProgression.cpp
 +++ b/src/IndividualProgression.cpp
-@@ -371,7 +371,8 @@
+@@ -371,7 +371,8 @@ bool IndividualProgression::isAttuned(Player* player)
  
  bool IndividualProgression::isExcludedAccount(Player* player)
  {
@@ -11,7 +12,7 @@ diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
          return false;
  
      std::string accountName;
-@@ -383,7 +384,8 @@
+@@ -383,7 +384,8 @@ bool IndividualProgression::isExcludedAccount(Player* player)
  
  bool IndividualProgression::isBotAccount(Player* player)
  {
@@ -21,36 +22,11 @@ diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
          return false;
  
      std::string accountName;
-@@ -753,6 +755,14 @@
-         return;
- 
-     uint8 currentState = GetPlayerProgressionFromQuests(killer);
-+
-+    // A completed transition quest remains earned when the realm opens TBC.
-+    // UpdateProgressionState still enforces the configured realm tier limit.
-+    if (currentState == PROGRESSION_NAXX40 && killer->GetQuestStatus(INTO_THE_BREACH) == QUEST_STATUS_REWARDED)
-+    {
-+        UpdateProgressionState(killer, PROGRESSION_PRE_TBC);
-+        currentState = GetPlayerProgressionFromQuests(killer);
-+    }
- 
-     static const std::vector<std::pair<uint16, ProgressionState>> achievementMap =
-     {
 diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
-index d35f8d74..28103d31 100644
+index d35f8d7..83ebcc7 100644
 --- a/src/IndividualProgressionPlayer.cpp
 +++ b/src/IndividualProgressionPlayer.cpp
-@@ -864,7 +864,8 @@ public:
-                  sIndividualProgression->UpdateProgressionState(player, PROGRESSION_AQ_WAR);
-             break;
-         case INTO_THE_BREACH:
--            if (!sIndividualProgression->disableDefaultProgression)
-+            if (!sIndividualProgression->disableDefaultProgression &&
-+                sIndividualProgression->hasPassedProgression(player, PROGRESSION_NAXX40))
-                  sIndividualProgression->UpdateProgressionState(player, PROGRESSION_PRE_TBC);
-             break;
-         case QUEST_MORROWGRAIN:
-@@ -1336,13 +1337,16 @@ public:
+@@ -1336,13 +1336,16 @@ public:
          }
  
          // Check if the account is a bot or excluded from progression

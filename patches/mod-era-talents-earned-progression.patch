@@ -2265,22 +2265,49 @@ index c599718..7562e13 100644
  };
  #define sEraTalentContent EraTalentContent::instance()
 diff --git a/src/EraTalentIP.cpp b/src/EraTalentIP.cpp
-index 5765773..8c62388 100644
+index 5765773..49d003b 100644
 --- a/src/EraTalentIP.cpp
 +++ b/src/EraTalentIP.cpp
-@@ -1,5 +1,7 @@
+@@ -1,17 +1,15 @@
  #include "EraTalentIP.h"
 -#include "IndividualProgression.h"   // sIndividualProgression, ProgressionState
 +
 +#include "EraTalentContent.h"
-+#include "IndividualProgression.h"  // sIndividualProgression, ProgressionState
++#include "IndividualProgression.h"
  #include "Player.h"
  
  EraId EraFromIP(Player* p)
-@@ -35,12 +37,7 @@ uint8 EraIP::State(Player* p)
-     return sIndividualProgression->GetPlayerProgressionFromQuests(p);
+ {
+     if (!p)
+         return ERA_WOTLK;
+-    uint8 state = sIndividualProgression->GetPlayerProgressionFromQuests(p);
+-    if (state <= PROGRESSION_NAXX40)        // 0..7
+-        return ERA_VANILLA;
+-    if (state <= PROGRESSION_TBC_TIER_4)    // 8..12
+-        return ERA_TBC;
+-    return ERA_WOTLK;                        // 13+
++    uint8 const era = IndividualProgression_GetEarnedEra(p);
++    return era <= ERA_WOTLK ? EraId(era) : ERA_VANILLA;
  }
  
+ bool EraHasTalentTrees(EraId era)
+@@ -22,25 +20,7 @@ bool EraHasTalentTrees(EraId era)
+     return era == ERA_VANILLA || era == ERA_TBC;
+ }
+ 
+-static_assert(EraIP::kStateNaxx40   == PROGRESSION_NAXX40,     "EraIP state constant drifted from IP");
+-static_assert(EraIP::kStatePreTBC   == PROGRESSION_PRE_TBC,    "EraIP state constant drifted from IP");
+-static_assert(EraIP::kStateTbcTier4 == PROGRESSION_TBC_TIER_4, "EraIP state constant drifted from IP");
+-static_assert(EraIP::kStateTbcTier5 == PROGRESSION_TBC_TIER_5, "EraIP state constant drifted from IP");
+-static_assert(EraIP::kAchievementKilJaeden == KIL_JAEDEN_KILL, "EraIP achievement constant drifted from IP");
+-
+-uint8 EraIP::State(Player* p)
+-{
+-    if (!p || !p->IsInWorld())
+-        return 0;
+-    return sIndividualProgression->GetPlayerProgressionFromQuests(p);
+-}
+-
 -void EraIP::ForceState(Player* p, uint8 state)
 +bool EraHasTalentTrees(Player* player, EraId era)
  {
@@ -2293,12 +2320,15 @@ index 5765773..8c62388 100644
 +    return player && EraHasTalentTrees(era) && !sEraTalentContent->NodesFor(uint8(era), player->getClass()).empty();
  }
 diff --git a/src/EraTalentIP.h b/src/EraTalentIP.h
-index 781824f..b202b05 100644
+index 781824f..e0dbd6f 100644
 --- a/src/EraTalentIP.h
 +++ b/src/EraTalentIP.h
-@@ -5,18 +5,14 @@ class Player;
+@@ -3,28 +3,11 @@
+ #include "Define.h"
+ class Player;
  enum EraId : uint8 { ERA_VANILLA = 0, ERA_TBC = 1, ERA_WOTLK = 2 };
- EraId EraFromIP(Player* p);   // maps IP progression band -> EraId
+-EraId EraFromIP(Player* p);   // maps IP progression band -> EraId
++EraId EraFromIP(Player* p);   // character earned era, clamped by Individual Progression
  
 -// Implemented-era allowlist: does this era have authored custom talent trees?
 -// A character whose era is NOT in the allowlist is left on the native WotLK talent frame
@@ -2314,20 +2344,18 @@ index 781824f..b202b05 100644
 -// reads/writes. Lives here so EraTalentIP.cpp stays the ONLY TU that includes IP's header
 -// (its GENERAL enum clashes with mod-playerbots headers). Values are static_asserted against
 -// IP's own enum/achievement constants in EraTalentIP.cpp.
+-namespace EraIP
+-{
+-    constexpr uint8  kStateNaxx40   = 7;    // PROGRESSION_NAXX40   — Kel'Thuzad-40 down
+-    constexpr uint8  kStatePreTBC   = 8;    // PROGRESSION_PRE_TBC  — TBC unlocked
+-    constexpr uint8  kStateTbcTier4 = 12;   // PROGRESSION_TBC_TIER_4 — Sunwell open
+-    constexpr uint8  kStateTbcTier5 = 13;   // PROGRESSION_TBC_TIER_5 — WotLK unlocked
+-    constexpr uint32 kAchievementKilJaeden = 698;   // IP's KIL_JAEDEN_KILL
+-    uint8 State(Player* p);                     // GetPlayerProgressionFromQuests; 0 for null
+-    void  ForceState(Player* p, uint8 state);   // ForceUpdateProgressionState + checkIPPhasing (the .ip set pair)
+-}
 +bool EraHasTalentTrees(Player* player, EraId era);
 +
-+// Read-only milestone constants. EraTalentIP.cpp is the only translation unit that includes
-+// IP's header because its GENERAL enum collides with mod-playerbots headers. Advancement is
-+// credited by IP's real boss/quest path; the era integration never forces a progression state.
- namespace EraIP
- {
-     constexpr uint8  kStateNaxx40   = 7;    // PROGRESSION_NAXX40   — Kel'Thuzad-40 down
-@@ -25,6 +21,5 @@ namespace EraIP
-     constexpr uint8  kStateTbcTier5 = 13;   // PROGRESSION_TBC_TIER_5 — WotLK unlocked
-     constexpr uint32 kAchievementKilJaeden = 698;   // IP's KIL_JAEDEN_KILL
-     uint8 State(Player* p);                     // GetPlayerProgressionFromQuests; 0 for null
--    void  ForceState(Player* p, uint8 state);   // ForceUpdateProgressionState + checkIPPhasing (the .ip set pair)
- }
  #endif
 diff --git a/src/EraTalentPin.cpp b/src/EraTalentPin.cpp
 index 09bfcf7..8713131 100644

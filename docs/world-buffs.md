@@ -15,11 +15,14 @@ No client addon is required.
 | Spirit of Zandalar, spell 24425 | Stranglethorn Vale | 120 minutes | Individual Progression's Zul'Gurub entry tier, 3 by default; native aura conditions |
 
 All timer recipients must be alive, in the world, outside GM mode, at most
-level 63 and in Vanilla progression (tiers 0–7). Spirit of Zandalar also
+level 63 and in the Vanilla era after applying the realm's
+`IndividualProgression.ProgressionLimit` ceiling (tiers 0–7 with the shipped
+unlimited progression). Spirit of Zandalar also
 requires the tier at which Zul'Gurub opens to the recipient
 (`IndividualProgression.RequiredZulGurubProgression`). The recipient's own tier
-is used even in a mixed-era party. TBC and Wrath characters receive no aura from
-these simulated events. Native quest turn-ins retain their core behavior.
+is used even in a mixed-era party. On the shipped realm, TBC and Wrath characters
+receive no aura from these simulated events. Native quest turn-ins retain their
+core behavior.
 
 Each buff has an independent timer: initially 30–150 minutes, then 90 minutes
 plus or minus 60 minutes. Timers reset when worldserver starts or reloads its
@@ -61,11 +64,17 @@ Edit `configs/modules/mod_world_buff_bots.conf` with the servers stopped.
 | `WorldBuffBots.Zandalar.Enable` | `1` | Stranglethorn Vale event |
 | `WorldBuffBots.Debug` | `0` | Additional event logs |
 
-The three `*.Announcement` settings control broadcast text. Each event also
-requires enabled Individual Progression, strict earned mode, the default
-progression chain and an empty `CustomProgression`. With an inactive or custom
-chain, the simulator supplies no Vanilla buffs because the tier numbers no
-longer establish the required era.
+The three `*.Announcement` settings control broadcast text. Custom messages may
+use `{player}` (or the legacy `%s`) for a random announcer name and `{buff}` for
+the buff name. Warchief uses the Horde pool, Dragonslayer the Alliance pool and
+Zandalar either pool. These are display names; no character is created or
+credited with a quest turn-in. The default messages describe the buff and
+location without an announcer name.
+
+Each event also requires enabled Individual Progression, strict earned mode,
+the default progression chain and an empty `CustomProgression`. With an inactive
+or custom chain, the simulator supplies no Vanilla buffs because the tier numbers
+no longer establish the required era.
 
 The launcher adds missing module configuration and preserves existing custom
 values. See [configuration updates](configuration.md) and

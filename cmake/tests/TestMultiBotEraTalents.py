@@ -32,6 +32,10 @@ BOT_PATCH = ROOT / 'patches/multibot-era-talent-inspect.patch'
 
 def native_fixture(module: Path, directory: Path) -> list[list[str]]:
     src = module / 'src'
+    ip = prepared_core(ROOT) / 'modules/mod-individual-progression/src'
+    progression_enum = re.search(r'enum ProgressionState : uint8[^{}]*\{.*?^\};',
+                                 (ip / 'IndividualProgression.h').read_text(), re.MULTILINE | re.DOTALL).group(0)
+    earned_era = function((ip / 'IndividualProgression.cpp').read_text(), 'uint8 IndividualProgression_GetEarnedEra(')
     comms = (src / 'EraTalentsComms.cpp').read_text()
     code = r'''
 #include <algorithm>
@@ -47,7 +51,7 @@ def native_fixture(module: Path, directory: Path) -> list[list[str]]:
 #include <vector>
 using uint8=uint8_t; using uint32=uint32_t; using uint64=uint64_t;
 enum EraId : uint8 { ERA_VANILLA=0, ERA_TBC=1, ERA_WOTLK=2 };
-constexpr uint8 PROGRESSION_NAXX40=7, PROGRESSION_TBC_TIER_4=12;
+// NATIVE_PROGRESSION_ENUM
 constexpr uint32 INSPECT_DISTANCE=28, CONFIG_TALENTS_INSPECTING=0;
 constexpr size_t kMaxGuidToken=18, kMaxChunkBody=230;
 struct ObjectGuid { uint64 raw=0; ObjectGuid()=default; explicit ObjectGuid(uint64 v):raw(v) {} };
@@ -61,9 +65,13 @@ struct Player {
     bool IsValidAttackTarget(Player* p) const { return p->enemy; }
     bool CanBeGameMaster() const { return gm; }
 };
-struct Progression { uint8 accountStage=18; uint8 GetPlayerProgressionFromQuests(Player* p) const { return p->stage; } } progression;
+struct Progression {
+    bool enabled=true,strict=true; int progressionLimit=0;
+    bool IsStrictDefaultProgression() const { return enabled && strict; }
+    uint8 GetPlayerProgressionFromQuests(Player* p) const { return p->stage; }
+} progression;
 auto* sIndividualProgression=&progression;
-''' + function((src / 'EraTalentIP.cpp').read_text(), 'EraId EraFromIP(') + r'''
+''' + earned_era + '\n' + function((src / 'EraTalentIP.cpp').read_text(), 'EraId EraFromIP(') + r'''
 namespace EraTransition { EraId StoredEra(Player* p) { return p->stored.value_or(EraFromIP(p)); } }
 struct EraTalentNode { uint32 id; uint8 era,cls,maxRank; };
 struct Content {
@@ -134,7 +142,13 @@ auto* sWorld=&world;
                 std::cout << unsigned(stage<=7 ? 0 : stage<=12 ? 1 : 2) << '~' << unsigned(cls) << '~' << body << '\n';
         }
     }
-    bot.cls=5; bot.stage=8; bot.stored=ERA_VANILLA;
+    bot.cls=5; bot.stage=18;
+    progression.progressionLimit=7;
+    assert(BuildInspectSync(&master,token).front().starts_with("ISYNC "+token+" 0 1 5 "));
+    progression.progressionLimit=12;
+    assert(BuildInspectSync(&master,token).front().starts_with("ISYNC "+token+" 1 1 5 "));
+    progression.progressionLimit=0;
+    bot.stage=8; bot.stored=ERA_VANILLA;
     assert(BuildInspectSync(&master,token).front().starts_with("ISYNC "+token+" 0 1 5 "));
     bot.stored.reset();
     auto denial=std::vector<std::string>{"ISYNC "+token+" 0 0 0"};
@@ -151,6 +165,7 @@ auto* sWorld=&world;
         assert(BuildInspectSync(&master,malformed).front().ends_with(" 0 0 0"));
 }
 '''
+    code = code.replace('// NATIVE_PROGRESSION_ENUM', progression_enum)
     source = directory / 'native-inspect.cpp'
     binary = directory / 'native-inspect'
     source.write_text(code)

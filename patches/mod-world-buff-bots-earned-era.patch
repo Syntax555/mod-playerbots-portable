@@ -1,5 +1,5 @@
 diff --git a/conf/mod_world_buff_bots.conf.dist b/conf/mod_world_buff_bots.conf.dist
-index 8c5f8d0..edb8f03 100644
+index 8c5f8d0..7175421 100644
 --- a/conf/mod_world_buff_bots.conf.dist
 +++ b/conf/mod_world_buff_bots.conf.dist
 @@ -2,7 +2,11 @@
@@ -15,7 +15,15 @@ index 8c5f8d0..edb8f03 100644
  #   Default: 1
  #
  WorldBuffBots.Enable = 1
-@@ -18,6 +22,7 @@ WorldBuffBots.Debug = 0
+@@ -14,10 +18,15 @@ WorldBuffBots.Enable = 1
+ #
+ WorldBuffBots.Debug = 0
+ 
++# Custom announcements may use {buff} for the buff name and {player} (or %s)
++# for a display-only announcer name: Horde for Warchief, Alliance for
++# Dragonslayer, either faction for Zandalar. No character or reward is created.
++
+ #
  # WorldBuffBots.BaseMinutes / WorldBuffBots.VarianceMinutes
  #   Each buff rerolls its next fire time as BaseMinutes +/- VarianceMinutes.
  #   Default: 90 +/- 60 minutes, meaning 30 to 150 minutes.
@@ -23,7 +31,7 @@ index 8c5f8d0..edb8f03 100644
  #
  WorldBuffBots.BaseMinutes = 90
  WorldBuffBots.VarianceMinutes = 60
-@@ -33,27 +38,31 @@ WorldBuffBots.InitialMaxMinutes = 150
+@@ -33,27 +42,31 @@ WorldBuffBots.InitialMaxMinutes = 150
  
  #
  # Warchief's Blessing
@@ -65,7 +73,7 @@ index 8c5f8d0..edb8f03 100644
 -WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.
 +WorldBuffBots.Zandalar.Announcement = World buff: Spirit of Zandalar is available in Stranglethorn Vale.
 diff --git a/src/WorldBuffBots.cpp b/src/WorldBuffBots.cpp
-index 0d3bbf8..4b879e6 100644
+index 0d3bbf8..dc53452 100644
 --- a/src/WorldBuffBots.cpp
 +++ b/src/WorldBuffBots.cpp
 @@ -1,10 +1,11 @@
@@ -114,13 +122,13 @@ index 0d3bbf8..4b879e6 100644
 +
 +    // The recipient's rewarded milestones define the era, independently of
 +    // level, account unlocks, group leaders and the server's client expansion.
-+    uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
-+    if (stage >= PROGRESSION_PRE_TBC)
++    if (IndividualProgression_GetEarnedEra(player) != 0)
 +        return false;
 +
 +    // Hakkar's buff waits for the stage at which Individual Progression opens
 +    // Zul'Gurub to this character.
-+    if (spellId == SPELL_SPIRIT_OF_ZANDALAR && stage < sIndividualProgression->RequiredZulGurubProgression)
++    if (spellId == SPELL_SPIRIT_OF_ZANDALAR &&
++        sIndividualProgression->GetPlayerProgressionFromQuests(player) < sIndividualProgression->RequiredZulGurubProgression)
 +        return false;
 +
 +    // AddAura does not run the spell's implicit-target conditions. Preserve
@@ -191,7 +199,7 @@ index 0d3bbf8..4b879e6 100644
  
          if (maxMinutes < minMinutes)
              std::swap(maxMinutes, minMinutes);
-@@ -220,8 +249,10 @@ private:
+@@ -220,14 +249,18 @@ private:
  
      uint32 RollMainDelayMs() const
      {
@@ -204,7 +212,16 @@ index 0d3bbf8..4b879e6 100644
          return MinutesToMs(urand(minMinutes, maxMinutes));
      }
  
-@@ -270,11 +301,14 @@ private:
+     void FireEvent(WorldBuffEvent const& event)
+     {
+-        std::string announcerName = SelectAnnouncerName(event.NamePool);
++        std::string announcerName;
++        if (event.Announcement.find("{player}") != std::string::npos || event.Announcement.find("%s") != std::string::npos)
++            announcerName = SelectAnnouncerName(event.NamePool);
+         std::string announcement = FormatAnnouncement(event, announcerName);
+ 
+         sWorldSessionMgr->SendServerMessage(SERVER_MSG_STRING, announcement);
+@@ -270,11 +303,14 @@ private:
  
          sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
          {

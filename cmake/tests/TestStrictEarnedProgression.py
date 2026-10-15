@@ -51,6 +51,7 @@ enums = '\n'.join(function(header, 'enum ' + name) + ';' for name in
 functions = '\n'.join(function(production, signature) for signature in (
     'uint8 IndividualProgression::GetPlayerProgressionFromQuests(',
     'bool IndividualProgression::IsStrictDefaultProgression(',
+    'uint8 IndividualProgression_GetEarnedEra(',
     'bool IndividualProgression::HasStrictEarnedMilestone(',
     'bool IndividualProgression::IsEligibleStrictKill(',
     'void IndividualProgression::UpdateProgressionState(',
@@ -203,7 +204,8 @@ declarations = r'''
 struct IndividualProgression {
     bool enabled=true, strictEarnedProgression=true, disableDefaultProgression=false;
     bool questMoneyAtLevelCap=false, repeatableVanillaQuestsXp=false;
-    uint8 progressionLimit=0, tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13;
+    int progressionLimit=0;
+    uint8 tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13;
     std::map<uint32,uint8> customProgressionMap;
     std::string botAccountsRegex="RNDBOT.*", excludedAccountsRegex="RNDBOT.*";
     static std::map<uint32,uint8> accounts;
@@ -279,11 +281,17 @@ int main() {
     reloaded.quests[SIMPLY_BANG_A_GONG]=QUEST_STATUS_REWARDED;
     hook.OnPlayerCompleteQuest(&reloaded,&gong);
     assert(Stage(reloaded)==4);
-    Credit(reloaded,6); Credit(reloaded,7);
+    Credit(reloaded,6);
     progression.checkIPProgression(&reloaded);
     assert(Stage(reloaded)==4);
     reloaded.quests[CHAOS_AND_DESTRUCTION]=QUEST_STATUS_REWARDED;
     Quest war{CHAOS_AND_DESTRUCTION}; hook.OnPlayerCompleteQuest(&reloaded,&war);
+    assert(Stage(reloaded)==6 && reloaded.GetQuestStatus(66007)!=QUEST_STATUS_REWARDED);
+    progression.UpdateProgressionState(&reloaded,PROGRESSION_NAXX40);
+    progression.UpdateProgressionState(&reloaded,PROGRESSION_PRE_TBC);
+    assert(Stage(reloaded)==6); // C'Thun never substitutes for Kel'Thuzad 40
+    Credit(reloaded,7);
+    progression.checkIPProgression(&reloaded);
     assert(Stage(reloaded)==8);
 
     progression.progressionLimit=10;
@@ -349,14 +357,17 @@ int main() {
     hook.OnPlayerCreatureKillCredit(&petOwner,&boss); // core resolves pets/totems to actual tapped player
     assert(Stage(petOwner)==1);
 
-    for (uint8 stage=0; stage<=18; ++stage) {
+    for (uint8 stage=0; stage<=18; ++stage) for (int ceiling : {0,7,12,18}) {
         Player learner; if (stage) learner.quests[66000+stage]=QUEST_STATUS_REWARDED;
+        progression.progressionLimit=ceiling;
+        uint8 const clamped=ceiling ? std::min<int>(stage,ceiling) : stage;
         for (uint32 row=0; row<=10; ++row) {
             TalentEntry talent{row};
             assert(hook.OnPlayerCanLearnTalent(&learner,&talent,0)==
-                   (row <= (stage<8 ? 6u : stage<13 ? 8u : 10u)));
+                   (row <= (clamped<8 ? 6u : clamped<13 ? 8u : 10u)));
         }
     }
+    progression.progressionLimit=0;
     assert(!hook.OnPlayerCanLearnTalent(nullptr,nullptr,0));
     player.gm=true; TalentEntry wrathRow{10}; assert(hook.OnPlayerCanLearnTalent(&player,&wrathRow,0)); player.gm=false;
 
@@ -407,18 +418,19 @@ int main() {
 source = prelude + enums + declarations + functions + '\n' + '\n'.join(guard_functions)
 source += '\nstruct Script {\n' + hooks + '\n};\n'
 source += '\nstruct Command {\n' + '\n'.join(command_guards) + '\n};\n' + tests
-strict_kill = function(production, 'bool IndividualProgression::IsEligibleStrictKill(')
 mutations = (
+    ('unearned Naxx completion', '        case PROGRESSION_PRE_AQ:', '        case PROGRESSION_NAXX40: return true;\n        case PROGRESSION_PRE_AQ:'),
     ('phase test', 'killed->IsInMap(rewardPosition) &&', 'killed->IsInMap(rewardPosition) && killed->InSamePhase(rewardPosition) &&'),
     ('same instance', 'killed->IsInMap(rewardPosition) &&', ''),
     ('presence distance', 'killed->GetExactDist(rewardPosition) <=', '0.f <='),
+    ('talent earned era', 'uint8 const era = IndividualProgression_GetEarnedEra(player);', 'uint8 const era = 2;'),
 )
 with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
     target = Path(temporary) / 'strict.cpp'
     executable = Path(temporary) / 'strict'
     for label, old, new in (('production', '', ''),) + mutations:
-        assert not old or strict_kill.count(old) == 1, label
-        target.write_text(source.replace(strict_kill, strict_kill.replace(old, new)) if old else source)
+        assert not old or source.count(old) == 1, label
+        target.write_text(source.replace(old, new) if old else source)
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
                         '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                         '-I', str(module / 'src'), str(target), '-o', str(executable)], check=True)
@@ -427,8 +439,8 @@ with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
             print(result.stdout, end='')
             assert result.returncode == 0, result.stderr
         else:
-            assert result.returncode != 0 and 'IsEligibleStrictKill' in result.stderr, (label, result.stderr)
-            print(f'Strict boss credit rejects the {label} mutation')
+            assert result.returncode != 0 and 'Assertion' in result.stderr, (label, result.stderr)
+            print(f'Strict earned progression rejects the {label} mutation')
 
 # Execute the production update twice against isolated condition rows. Check
 # that every targeted old gate moves to 12 and unrelated gates remain intact.

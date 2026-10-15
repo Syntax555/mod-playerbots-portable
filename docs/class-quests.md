@@ -26,9 +26,16 @@ historical rank levels and cooldown rather than the Wrath talent's values.
 
 Historical quest rewards and removed spell ranks use separate spell records.
 Vanilla and TBC mechanics follow the corresponding source data; native Wrath
-records remain in place for Wrath progression. The core also checks eligibility
-when a quest is accepted or rewarded, and when its spell is learned or cast.
-Another party member's progression does not unlock these rewards.
+records remain in place for Wrath progression. Native quest conditions check
+personal progression markers when offering or accepting the quests. Reward
+spells, learning and casting also require the character's eligible earned era,
+clamped to the realm ceiling. Another party member's progression does not unlock
+these spells.
+
+Quest availability follows saved personal markers, including markers above the
+realm ceiling. Quests retired by those markers stay unavailable. A quest already
+in the log can still be turned in through native quest rules; its historical
+spell reward remains subject to the character's race, class, level and era.
 
 The client patch retains the server's native Wrath mana costs for Desperate
 Prayer and Devouring Plague. A dataset contract identifies the twelve affected

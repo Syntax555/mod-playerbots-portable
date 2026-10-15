@@ -54,6 +54,10 @@ def build_and_run(job):
 
 with tempfile.TemporaryDirectory(prefix='portable-era-talents-') as temporary:
     directory = Path(temporary)
+    ip = core / 'modules/mod-individual-progression/src'
+    progression_enum = re.search(r'enum ProgressionState : uint8[^{}]*\{.*?^\};',
+                                 (ip / 'IndividualProgression.h').read_text(), re.MULTILINE | re.DOTALL).group(0)
+    earned_era = function((ip / 'IndividualProgression.cpp').read_text(), 'uint8 IndividualProgression_GetEarnedEra(')
     era_policy = function((src / 'EraTalentIP.cpp').read_text(), 'EraId EraFromIP(')
     points = function((src / 'EraTalents.cpp').read_text(), '    int AvailablePoints(')
     policy_fixture = r'''
@@ -63,29 +67,39 @@ with tempfile.TemporaryDirectory(prefix='portable-era-talents-') as temporary:
 #include <iostream>
 using uint8=uint8_t; using uint32=uint32_t;
 enum EraId : uint8 { ERA_VANILLA=0, ERA_TBC=1, ERA_WOTLK=2 };
-constexpr uint8 PROGRESSION_NAXX40=7, PROGRESSION_TBC_TIER_4=12;
+// NATIVE_PROGRESSION_ENUM
 struct Player {
     uint8 stage=0, level=1; int spent=0; bool bot=false;
     uint8 GetLevel() const { return level; }
 };
-struct Progression { uint8 GetPlayerProgressionFromQuests(Player* p) const { return p->stage; } } progression;
+struct Progression {
+    bool enabled=true, strict=true; int progressionLimit=0;
+    bool IsStrictDefaultProgression() const { return enabled && strict; }
+    uint8 GetPlayerProgressionFromQuests(Player* p) const { return p->stage; }
+} progression;
 auto* sIndividualProgression=&progression;
-''' + era_policy + r'''
+''' + earned_era + '\n' + era_policy + r'''
 namespace EraTalents {
 int SpentPoints(Player* p, EraId) { return p->spent; }
 ''' + points + r'''
 }
 int main() {
     Player human, bot; bot.bot=true;
-    for (uint8 stage=0; stage<=18; ++stage) {
+    for (uint8 stage=0; stage<=18; ++stage) for (int ceiling : {0,7,12,18}) {
         human.stage=bot.stage=stage;
-        EraId expected=stage<=7 ? ERA_VANILLA : stage<=12 ? ERA_TBC : ERA_WOTLK;
+        progression.progressionLimit=ceiling;
+        uint8 clamped=ceiling ? std::min<int>(stage,ceiling) : stage;
+        EraId expected=clamped<=7 ? ERA_VANILLA : clamped<=12 ? ERA_TBC : ERA_WOTLK;
         for (uint8 level : {1,10,60,70,80}) {
             human.level=bot.level=level;
             assert(EraFromIP(&human)==expected && EraFromIP(&bot)==expected);
         }
     }
     assert(EraFromIP(nullptr)==ERA_WOTLK);
+    progression.progressionLimit=0;
+    human.stage=18; progression.strict=false; assert(EraFromIP(&human)==ERA_VANILLA);
+    progression.strict=true; progression.enabled=false; assert(EraFromIP(&human)==ERA_VANILLA);
+    progression.enabled=true;
     for (int level=1; level<=80; ++level) {
         human.level=level;
         for (EraId era : {ERA_VANILLA,ERA_TBC,ERA_WOTLK}) {
@@ -101,7 +115,10 @@ int main() {
     std::cout << "Era talents: earned tier selects era independently of level; point budgets passed\n";
 }
 '''
+    policy_fixture = policy_fixture.replace('// NATIVE_PROGRESSION_ENUM', progression_enum)
     compile_run(directory, 'era-policy', policy_fixture)
+    rejects(directory, 'era-policy-mutated', policy_fixture.replace(
+        'IndividualProgression_GetEarnedEra(p)', 'uint8(ERA_WOTLK)'), 'shared earned-era bypass')
 
     fake = directory / 'fake'
     fake.mkdir()

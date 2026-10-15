@@ -6,7 +6,7 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -15,6 +15,8 @@ parser.add_argument('--source', type=Path,
                     default=prepared_core(repo) / 'modules/mod-individual-progression')
 args = parser.parse_args()
 module = args.source
+individual_source = (module / 'src/IndividualProgression.cpp').read_text()
+earned_era = function(individual_source, 'uint8 IndividualProgression_GetEarnedEra(')
 production = (module / 'src/EarnedEraBattlegrounds.cpp').read_text()
 production = re.sub(r'^#include ".*"\n', '', production, flags=re.MULTILINE)
 bridge = (module / 'src/IndividualProgressionBattlegrounds.h').read_text()
@@ -30,6 +32,27 @@ while depth:
     end += 1
 native_skirmish = native_queue[start:end]
 
+# Team creation/invitation checks the current realm maximum; joining an
+# existing team to a rated queue does not. A TBC team survives opening Wrath.
+native_core = prepared_core(repo)
+native_party = function((native_core / 'src/server/game/Groups/Group.cpp').read_text(),
+                        'GroupJoinBattlegroundResult Group::CanJoinBattlegroundQueue(')
+native_arena = function((native_core / 'src/server/game/Handlers/BattleGroundHandler.cpp').read_text(),
+                        'void WorldSession::HandleBattlemasterJoinArena(')
+native_invite = function((native_core / 'src/server/game/Handlers/ArenaTeamHandler.cpp').read_text(),
+                         'void WorldSession::HandleArenaTeamInviteOpcode(')
+assert 'player->GetLevel() < sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)' in native_invite
+assert 'CONFIG_MAX_PLAYER_LEVEL' not in native_party + native_arena
+assert 'isRated && member->GetArenaTeamId(arenaSlot) != arenaTeamId' in native_party
+assert 'memberBracketEntry != bracketEntry' in native_party
+assert 'if (isRated && !asGroup)' in native_arena
+assert 'sArenaTeamMgr->GetArenaTeamById(ateamId)' in native_arena
+assert 'grp->CanJoinBattlegroundQueue(bgt, bgQueueTypeId, arenatype, arenatype, (bool)isRated, arenaslot)' in native_arena
+native_stage = function(individual_source, 'uint8 IndividualProgression::GetPlayerProgressionFromQuests(')
+assert 'if (!player || !player->IsInWorld())' in native_stage
+assert 'GetLevel()' not in native_stage
+assert 'player->GetQuestStatus(PROGRESSION_QUEST) == QUEST_STATUS_REWARDED' in native_stage
+
 
 prelude = r'''
 #include <cassert>
@@ -43,7 +66,7 @@ prelude = r'''
 using uint8=std::uint8_t; using uint16=std::uint16_t; using uint32=std::uint32_t;
 using ObjectGuid=uint32; using BattlegroundBracketId=uint8; using TeamId=uint8;
 using BattlegroundQueueTypeId=uint8;
-constexpr uint8 PROGRESSION_PRE_TBC=8, PROGRESSION_TBC_TIER_5=13;
+constexpr uint8 PROGRESSION_PRE_TBC=8, PROGRESSION_TBC_TIER_5=13, PROGRESSION_WOTLK_TIER_5=18;
 constexpr uint32 MAX_BATTLEGROUND_TYPE_ID=33;
 constexpr uint8 STATUS_WAIT_JOIN=1;
 constexpr uint8 TEAM_ALLIANCE=0, TEAM_HORDE=1, PVP_TEAMS_COUNT=2;
@@ -172,8 +195,9 @@ namespace ObjectAccessor {
 }
 struct IndividualProgression {
     bool enabled=true, strict=true, disableDefault=false; std::map<int,int> custom;
+    int progressionLimit=0;
     bool IsStrictDefaultProgression() const { return enabled&&strict&&!disableDefault&&custom.empty(); }
-    uint8 GetPlayerProgressionFromQuests(Player* player) const { return player->stage; }
+    uint8 GetPlayerProgressionFromQuests(Player* player) const { return player&&player->IsInWorld()?player->stage:0; }
 } individual;
 IndividualProgression* sIndividualProgression=&individual;
 struct World { uint32 wait=1800000, balance=1;
@@ -235,6 +259,17 @@ int main() {
             assert(IndividualProgression_CanJoinBattleground(&player,type)==(era>=required && player.level>=manager.templates.at(type).minLevel));
         }
     }
+    for (uint8 limit : {0,7,12,18}) {
+        individual.progressionLimit=limit;
+        for (uint8 stage=0;stage<=18;++stage) {
+            player.stage=stage;
+            uint8 capped=limit&&stage>limit?limit:stage;
+            uint8 era=capped>=13?2:capped>=8?1:0;
+            assert(IndividualProgression_GetEarnedEra(&player)==era);
+            assert(IndividualProgression_BattlegroundEra(&player)==era);
+        }
+    }
+    individual.progressionLimit=0;
     player.stage=18; player.level=9;
     assert(!IndividualProgression_CanJoinBattleground(&player,BATTLEGROUND_WS));
     player.level=60; assert(!IndividualProgression_CanJoinBattleground(&player,BATTLEGROUND_EY));
@@ -271,6 +306,26 @@ int main() {
     assert(playerHook.OnPlayerCanJoinInArenaQueue(&member,0,0,BATTLEGROUND_AA,0,0,error));
     assert(playerHook.OnPlayerCanBattleFieldPort(&member,0,BATTLEGROUND_SA,0));
     assert(!playerHook.OnPlayerCanBattleFieldPort(&member,0,BATTLEGROUND_SA,1));
+
+    // Both teams formed at the TBC ceiling. After opening Wrath, one earns
+    // Kil'jaeden's tier 13 marker while still level 70. Native admission keeps
+    // their team memberships and puts both teams in the same level bracket.
+    Player retainedTbcA{400,12,70}, retainedTbcB{401,12,70};
+    Player retainedWrathA{402,13,70}, retainedWrathB{403,13,70};
+    Group retainedTbc, retainedWrath;
+    retainedTbc.Set({&retainedTbcA,&retainedTbcB});
+    retainedWrath.Set({&retainedWrathA,&retainedWrathB});
+    GroupQueueInfo ratedTbc, ratedWrath;
+    ratedTbc.BgTypeId=ratedWrath.BgTypeId=BATTLEGROUND_AA;
+    for (Player* participant : {&retainedTbcA,&retainedTbcB,&retainedWrathA,&retainedWrathB}) {
+        ObjectAccessor::players[participant->id]=participant;
+        assert(playerHook.OnPlayerCanJoinInArenaQueue(participant,0,0,BATTLEGROUND_AA,1,1,error));
+        assert(groupHook.CanGroupJoinBattlegroundQueue(participant->group,participant,
+                                                      &manager.templates.at(BATTLEGROUND_AA),2,true,0));
+        (participant->stage==12?ratedTbc:ratedWrath).Players.insert(participant->id);
+    }
+    assert(QueuedGroupEra(&ratedTbc)==1 && QueuedGroupEra(&ratedWrath)==2);
+    assert(!queueHook.CanMatchArenaTeams(nullptr,&ratedTbc,&ratedWrath,0));
 
     std::vector<Player> players; players.reserve(12);
     std::vector<GroupQueueInfo> groups; groups.reserve(12);
@@ -451,9 +506,27 @@ int main() {
 with tempfile.TemporaryDirectory(prefix='earned-era-bg-') as scratch:
     folder = Path(scratch)
     source = folder / 'fixture.cpp'
-    source.write_text(prelude + bridge + production + native_skirmish + checks)
+    source.write_text(prelude + earned_era + bridge + production + native_skirmish + checks)
     binary = folder / 'fixture'
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
                     str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=TIMEOUT)
+    original = source.read_text()
+    mutations = (
+        ('removed rated-team era filter',
+         'return first != second && era >= 1 && era < 3 && QueuedGroupEra(second) == era;',
+         'return first != second && era >= 1 && era < 3;'),
+        ('removed earned-era realm ceiling', 'if (limit > 0 && stage > limit)',
+         'if (limit > 0 && stage > limit + 100)'),
+    )
+    for label, old, new in mutations:
+        assert old in original, f'{label} mutation was not applied'
+        source.write_text(original.replace(old, new))
+        subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
+                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
+                        str(source), '-o', str(binary)], check=True)
+        result = subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                check=False, timeout=TIMEOUT)
+        assert result.returncode != 0, f'Era battleground fixture did not reject: {label}'
+        print(f'Era battleground mutation rejected: {label}')

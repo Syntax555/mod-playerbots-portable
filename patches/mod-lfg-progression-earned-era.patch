@@ -71,7 +71,7 @@ index 23ac717..3dcc305 100644
  #
  
 diff --git a/src/LfgProgression.cpp b/src/LfgProgression.cpp
-index 0533553..6808c66 100644
+index 0533553..8dd225e 100644
 --- a/src/LfgProgression.cpp
 +++ b/src/LfgProgression.cpp
 @@ -43,9 +43,9 @@
@@ -87,7 +87,7 @@ index 0533553..6808c66 100644
   */
  
  #include <algorithm>
-@@ -95,15 +95,17 @@ namespace
+@@ -95,20 +95,17 @@ namespace
  #endif
      }
  
@@ -103,14 +103,19 @@ index 0533553..6808c66 100644
 -        if (!sIndividualProgression->enabled || !sIndividualProgression->isNormalAccount(player))
 +        if (!sIndividualProgression->enabled)
              return -1;
+-        if (sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_5))
+-            return LfgProgression::EXPANSION_WOTLK;
+-        if (sIndividualProgression->hasPassedProgression(player, PROGRESSION_PRE_TBC))
+-            return LfgProgression::EXPANSION_TBC;
+-        return LfgProgression::EXPANSION_CLASSIC;
 +        // Custom/disabled chains have no supported tier mapping. Fail closed
 +        // rather than treating legacy level or account membership as progress.
-+        if (!sIndividualProgression->IsStrictDefaultProgression())
-+            return LfgProgression::EXPANSION_CLASSIC;
-         if (sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_5))
-             return LfgProgression::EXPANSION_WOTLK;
-         if (sIndividualProgression->hasPassedProgression(player, PROGRESSION_PRE_TBC))
-@@ -116,15 +118,11 @@ namespace
++        uint8 const era = IndividualProgression_GetEarnedEra(player);
++        return era <= LfgProgression::EXPANSION_WOTLK ? era : LfgProgression::EXPANSION_CLASSIC;
+ #else
+         return -1;
+ #endif
+@@ -116,15 +113,11 @@ namespace
  
      uint8 PlayerExpansion(Player* player, uint8 level)
      {
@@ -127,7 +132,7 @@ index 0533553..6808c66 100644
      // and forgotten in OnAfterInitializeLockedDungeons -- the IP tier can
      // change without the level changing. thread_local, because the locks are
      // worked out both in the world thread (login) and in the map threads
-@@ -145,29 +143,8 @@ namespace
+@@ -145,29 +138,8 @@ namespace
      }
  
  #ifdef LFGP_WITH_PLAYERBOTS
@@ -159,7 +164,7 @@ index 0533553..6808c66 100644
  
      // Queue entries by LFG's queue guid (the group's, otherwise the player's).
      // Written in the world thread on join and on level change in the map
-@@ -277,35 +254,14 @@ public:
+@@ -277,35 +249,14 @@ public:
          if (!dungeon || !player || !g_settings.enabled)
              return;
  
@@ -198,7 +203,7 @@ index 0533553..6808c66 100644
              return;
  
          // "You have not completed the required quest", not the expansion reason: the client
-@@ -357,8 +313,8 @@ class LfgProgressionPlayer : public PlayerScript
+@@ -357,8 +308,8 @@ class LfgProgressionPlayer : public PlayerScript
  public:
      LfgProgressionPlayer() : PlayerScript("LfgProgressionPlayer", {
          PLAYERHOOK_ON_QUEUE_RANDOM_DUNGEON,
@@ -208,7 +213,7 @@ index 0533553..6808c66 100644
          PLAYERHOOK_ON_LEVEL_CHANGED,
          PLAYERHOOK_ON_LOGOUT,
  #endif
-@@ -372,18 +328,13 @@ public:
+@@ -372,18 +323,13 @@ public:
          if (!player || !g_settings.enabled)
              return;
  
@@ -228,7 +233,7 @@ index 0533553..6808c66 100644
                      continue;
                  groupExpansion = LfgProgression::GroupExpansion({ groupExpansion, PlayerExpansion(member, member->GetLevel()) });
              }
-@@ -398,7 +349,6 @@ public:
+@@ -398,7 +344,6 @@ public:
          rDungeonId = swapped;
      }
  
@@ -236,7 +241,7 @@ index 0533553..6808c66 100644
      // First in LFGMgr::JoinLfg, with the player who queues -- the group
      // leader, if there is a group. Random bots come here too (they send
      // CMSG_LFG_JOIN, which HandleBotPackets runs in the world thread).
-@@ -408,6 +358,21 @@ public:
+@@ -408,6 +353,21 @@ public:
              return true;
  
          Group* group = player->GetGroup();
@@ -258,7 +263,7 @@ index 0533553..6808c66 100644
          ObjectGuid const key = group ? group->GetGUID() : player->GetGUID();
  
          // An entry from before BotLock was reloaded to 0 must not be read
-@@ -423,9 +388,11 @@ public:
+@@ -423,9 +383,11 @@ public:
  
          std::lock_guard<std::mutex> lock(g_queueMutex);
          g_queueEntries[key] = entry;
