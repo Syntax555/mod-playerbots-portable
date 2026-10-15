@@ -23,7 +23,7 @@ GAMEPLAY_COMMAND = "cmake/tests/run_fixtures.py gameplay"
 # and the documentation check.
 GAMEPLAY = (
     "TestEarnedProgression", "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
-    "TestLootRollPolicy", "TestWorldBuffEvents", "TestLfgProgression",
+    "TestLootRollPolicy", "TestWorldBuffEvents", "TestEraEvents", "TestLfgProgression",
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestMultiBotRoleStrategies", "TestFormationMovement",

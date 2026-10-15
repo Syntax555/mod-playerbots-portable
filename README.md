@@ -43,8 +43,9 @@ database, configuration and first-run setup.
 - **Portable Windows setup:** the ZIP includes the server, launcher, MySQL and
   configuration templates. Required server data is downloaded on first start.
 - **Companions and world activity:** SelfBot and controlled bot companions,
-  earned-era battleground queues, timed Vanilla world buffs and AutoBalance
-  instance scaling complement individual progression.
+  earned-era battleground queues, timed [era world events](docs/world-events.md),
+  Vanilla world buffs and AutoBalance instance scaling complement individual
+  progression.
 
 ## Quick start
 
@@ -127,6 +128,7 @@ stopped. Updates keep custom values; see the
 | Auction trading | [Auction economy](docs/earned-auctions.md#configuration) |
 | Autonomous dungeons and raid tactics | [Bot dungeons and raids](docs/bot-dungeons.md#configuration) |
 | World buff timers | [World buffs](docs/world-buffs.md#configuration) |
+| Outdoor world event timers | [Era world events](docs/world-events.md#configuration) |
 
 ## Troubleshooting
 
@@ -201,6 +203,7 @@ include this distribution's local integration and defaults; see
 | [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Instance scaling for the players and bots present. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
 | [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Timed Vanilla world buffs for eligible Vanilla-progress characters. |
+| [Era Events](https://github.com/buildthehomelab/wow-mod-era-events) | Outdoor AQ, Scourge, Legion and zombie encounters at each character's exact earned tier, with ordinary kill loot. |
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Earned-era access guards for the Dungeon Finder, which is disabled by default. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
@@ -224,6 +227,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [Bot brackets and PvP](docs/earned-bot-brackets.md) | Resident levels, battleground eligibility and match rules. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
 | [World buffs](docs/world-buffs.md) | Vanilla event timers, recipient conditions and native TBC events. |
+| [Era world events](docs/world-events.md) | Outdoor encounters, earned tiers, timers and configuration. |
 | **Server administration** | |
 | [Running and updating](docs/updating.md) | Updates, data location, launcher options, backups and recovery. |
 | [Configuration](docs/configuration.md) | Default settings, module behavior and supported scope. |

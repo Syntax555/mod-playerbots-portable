@@ -142,6 +142,12 @@ try {
             if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
         }
     }
+    if (@($lock.modules | Where-Object { $_.name -eq 'mod-era-events' }).Count -gt 0) {
+        foreach ($name in @('docs/world-events.md', 'configs/modules/mod_era_events.conf.dist', 'licenses/mod-era-events/LICENSE')) {
+            if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
+        }
+        $textSources['docs/world-events.md'] = 'docs/world-events.md'
+    }
     foreach ($name in $textSources.Keys) {
         $reader = [System.IO.StreamReader]::new($entries[$name].Open())
         try { $packagedText = $reader.ReadToEnd() } finally { $reader.Dispose() }

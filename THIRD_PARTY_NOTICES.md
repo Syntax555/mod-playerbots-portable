@@ -35,6 +35,7 @@ applicable.
 | [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | MIT upstream license text. | `licenses/mod-raid-clear/LICENSE` |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | AGPL version 3 license text and source notice. | `licenses/mod-quest-loot-party/LICENSE`, `licenses/AGPL-3.0.txt` |
 | [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | AGPL version 3 declaration in the upstream README. | `licenses/mod-world-buff-bots/NOTICE.txt`, `licenses/AGPL-3.0.txt` |
+| [Era Events](https://github.com/buildthehomelab/wow-mod-era-events) | MIT upstream license text. | `licenses/mod-era-events/LICENSE` |
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | AGPL version 3 upstream license text. | `licenses/mod-lfg-progression/LICENSE`, `licenses/AGPL-3.0.txt` |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | No explicit license declaration at the locked revision; provenance notice retained. | `licenses/mod-multibot-bridge/NOTICE.txt` |
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | MIT upstream license; portable integration files also carry GPL-2.0-or-later notices. | Server: `licenses/mod-era-talents/LICENSE`, `licenses/GPL-2.0.txt`. Combined client pack: `Interface/AddOns/EraTalents/LICENSE`, `licenses/mod-era-talents.txt`. |

@@ -69,6 +69,11 @@ def composed(text, literals):
 def is_read(key, literals):
     if key in literals:
         return True
+    # Era Events formats the event name into its prefix before appending an option.
+    if key.startswith('EraEvents.') and 'EraEvents.{}.' in literals:
+        event, separator, option = key[len('EraEvents.'):].partition('.')
+        if separator and event in literals and option in literals:
+            return True
     return any(key.startswith(prefix) and prefix in literals and composed(key[len(prefix):], literals)
                for prefix in PREFIX_BUILT)
 
@@ -109,6 +114,11 @@ def main():
             raise SystemExit(f'A renamed {key} was not rejected')
     if not problems(keys, literals - {'StrandedRecovery'}):
         raise SystemExit('A renamed Dungeon Clear setting was not rejected')
+    for literal, key in (('RewardGold', 'EraEvents.AQWar.RewardGold'),
+                         ('AQWar', 'EraEvents.AQWar.RealmWideMinutes')):
+        if key not in keys or not any(error.startswith(key + ' ')
+                                      for error in problems(keys, literals - {literal})):
+            raise SystemExit(f'A renamed Era Events {literal} was not rejected')
     print(f'Profile keys: {len(keys)} shipped keys are read by the prepared sources; '
           f'renamed keys and prefix-built settings are rejected')
 
