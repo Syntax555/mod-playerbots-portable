@@ -68,11 +68,6 @@ and ordinary player actions.
   MultiBot's role toggles to the renamed strategies. A pin past `ed54b459`
   also needs a launcher migration of every `AiPlayerbot.*` key;
   `TestProfileKeys` fails until the profiles match.
-- [ ] Dungeon Clear `da0bdfbc`: run the new Lab tick inside the natural gate
-  and refuse `.dc lab run|batch` under natural progression.
-- [ ] Raid Clear `a3c29f6a`: ship `RaidClear.Bots.TeachTranquilizingShot = 0`
-  and keep the Zul'Gurub mind-control release from removing the bot's own
-  crowd control.
 - [ ] Try `CL_MPCount=2` on the Windows runner and drop the core
   `settings.cmake` compile-parallelism patch if MSBuild caps `cl.exe` the same
   way.

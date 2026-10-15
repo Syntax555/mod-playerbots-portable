@@ -1,8 +1,8 @@
 diff --git a/conf/mod_dungeon_clear.conf.dist b/conf/mod_dungeon_clear.conf.dist
-index a02ebcc..3da528a 100644
+index a6615b8..6e8148c 100644
 --- a/conf/mod_dungeon_clear.conf.dist
 +++ b/conf/mod_dungeon_clear.conf.dist
-@@ -2034,3 +2034,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
+@@ -2047,3 +2047,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
  #
  
  DungeonClear.BgQueueFill.LogoutOnRelease = 1
@@ -22,7 +22,7 @@ index a02ebcc..3da528a 100644
 +DungeonClear.AutonomousParties.Dungeons = "4,12"
 +DungeonClear.AutonomousParties.LevelSpread = 3
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
-index 980fa32..61981c2 100644
+index f02f6d7..491ee15 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp
 @@ -3,6 +3,7 @@
@@ -33,7 +33,7 @@ index 980fa32..61981c2 100644
  
  #include <utility>
  #include <vector>
-@@ -91,6 +92,8 @@ bool DcLootRoll::IsVotablePendingRoll(Roll const* roll, Player* bot)
+@@ -92,6 +93,8 @@ bool DcLootRoll::IsVotablePendingRoll(Roll const* roll, Player* bot)
  
  bool DungeonClearBetterLootRollAction::isUseful()
  {
@@ -42,7 +42,7 @@ index 980fa32..61981c2 100644
      // Only intercept self-bots (master == bot). A bot driven for a separate
      // human master keeps stock rolling — its vote is its own GUID, no conflict.
      if (DcPlayerbotCompat::IsSelfBot(bot) && DcSettings::GetBool(bot, "BetterLootRolling"))
-@@ -101,7 +104,7 @@ bool DungeonClearBetterLootRollAction::isUseful()
+@@ -102,7 +105,7 @@ bool DungeonClearBetterLootRollAction::isUseful()
  
  bool DungeonClearBetterLootRollAction::Execute(Event event)
  {
@@ -52,7 +52,7 @@ index 980fa32..61981c2 100644
  
      // The self-bot suppression isUseful() already applies, repeated here
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
-index ba95369..8759571 100644
+index adb8a96..9c18d72 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
 @@ -74,6 +74,7 @@
@@ -61,9 +61,9 @@ index ba95369..8759571 100644
  #include "DcActionShared.h"
 +#include "DcEarnedPlay.h"
  #include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
+ #include "Util/DcPlayerbotsConfig.h"
  
- namespace DcActionShared
-@@ -752,7 +753,7 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
+@@ -753,7 +754,7 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
                                  bool normal_only, bool exact_waypoint, MovementPriority priority,
                                  bool lessDelay, bool backwards, bool ignoreEnemyTargets)
  {
@@ -72,7 +72,7 @@ index ba95369..8759571 100644
          return false;
      DcMovement::ResolveEscortConflict(bot);
  
-@@ -788,6 +789,17 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
+@@ -789,6 +790,17 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
              destZ = snap.z;
      }
  
@@ -112,7 +112,7 @@ index 4ebe94b..62e7601 100644
              return false;
          // No navmesh to land on: on a map the core runs without pathfinding
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-index d42fa42..858c857 100644
+index 10b9e59..451aebe 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 @@ -3,6 +3,7 @@
@@ -123,7 +123,7 @@ index d42fa42..858c857 100644
  #include "DungeonClearActions.h"
  #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
  
-@@ -2072,7 +2073,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2085,7 +2086,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // its attackers + self-heal gossip + watchdog) the whole way to the
              // final boss. DriveEscortCreature returns false only once that boss
              // exists, so we fall through to Drive and the completion gate latches.
@@ -134,7 +134,7 @@ index d42fa42..858c857 100644
              {
                  if (DriveEscortCreature(step, prog))
                      return true;
-@@ -2083,7 +2086,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2096,7 +2099,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // tick and pin the leader on the lip (the prior attempts' failure).
              // DriveDropInHole returns false once landed, so we fall through to
              // Drive and RunStep's gate pulls the followers down + latches Done.
@@ -143,7 +143,7 @@ index d42fa42..858c857 100644
              {
                  if (DriveDropInHole(step))
                      return true;
-@@ -2093,7 +2096,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2106,7 +2109,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // approach every tick and the tank can't thread a house doorway to a
              // barrel inside (it stalls "close but not inside"). Returns false once in
              // cast range, so we fall through to Drive and RunStep fires the GO.
@@ -152,7 +152,7 @@ index d42fa42..858c857 100644
              {
                  // Recover between barrels. DriveUseItemOnGO owns the tick at
                  // DcRel::AtObjective (30) — above the NeedsRest triggers (26.5) —
-@@ -2129,7 +2132,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2142,7 +2145,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // step timeout. Recover between crates for the same reason the barrels
              // do: this rung sits above NeedsRest (26.5), the five crates are 330yd
              // apart end to end, and the party has the whole intro RP ahead of it.
@@ -161,7 +161,7 @@ index d42fa42..858c857 100644
              {
                  switch (EventRestDecision())
                  {
-@@ -2531,6 +2534,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
+@@ -2544,6 +2547,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
  
  bool DungeonClearBreakStuckCombatAction::Execute(Event /*event*/)
  {
@@ -174,7 +174,7 @@ index d42fa42..858c857 100644
      // nothing fightable for the full StuckCombatTimeout — no holder that is both
      // reachable and actually coming for us. Force-clear it exactly as a GM
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
-index 762452d..c1f3486 100644
+index 6bc8a74..da1a838 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
 @@ -4,6 +4,7 @@
@@ -185,7 +185,7 @@ index 762452d..c1f3486 100644
  
  #include <algorithm>
  #include <cmath>
-@@ -763,6 +764,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+@@ -764,6 +765,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
                      ++sameMap;
          followDist = std::max(followDist, DcFormation::RingRadius(sameMap, followDist));
      }
@@ -295,7 +295,7 @@ index 97f5205..b97418d 100644
  
      return AutoReleaseSpiritAction::isUseful();
 diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
-index 14ce525..dc0a73b 100644
+index 0348d68..6b23cc8 100644
 --- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 @@ -3,6 +3,7 @@
@@ -306,7 +306,7 @@ index 14ce525..dc0a73b 100644
  #include "ObjectiveHookRegistry.h"
  
  #include <atomic>
-@@ -887,6 +888,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
+@@ -888,6 +889,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
  {
      if (hookId == 0)
          return ObjectiveArriveResult::Done;
@@ -318,7 +318,7 @@ index 14ce525..dc0a73b 100644
      auto const& hooks = Hooks();
      auto it = hooks.find(hookId);
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
-index c254542..866fbdf 100644
+index 25e4ea4..f43b93c 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp
 @@ -4,6 +4,7 @@
@@ -329,7 +329,7 @@ index c254542..866fbdf 100644
  
  #include "DungeonClearUtil.h"   // DC_PULL_* log macros
  #include "DungeonClearMath.h"
-@@ -1432,7 +1433,7 @@ void DcLeaderSignal::SetLeaderDazeImmunity(Player* leader, bool apply)
+@@ -1500,7 +1501,7 @@ void DcLeaderSignal::SetLeaderDazeImmunity(Player* leader, bool apply)
      // creatures apply). spellId 0 = a blanket mechanic block. Pair add/remove
      // exactly: remove first so a re-apply never stacks duplicate entries.
      leader->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_DAZE, false);
@@ -339,7 +339,7 @@ index c254542..866fbdf 100644
          leader->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_DAZE, true);
          // Immunity only blocks FUTURE applications; clear any Daze already on
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
-index e0d355e..7d64e9f 100644
+index c58d3b8..39a906f 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DcMovement.cpp
 @@ -4,6 +4,7 @@
@@ -350,7 +350,7 @@ index e0d355e..7d64e9f 100644
  #include "Ai/Dungeon/DungeonClear/Util/DcPbCompat.h"
  #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
  
-@@ -177,7 +178,7 @@ namespace DcMovement
+@@ -178,7 +179,7 @@ namespace DcMovement
          // pause-walks-through-door race class at the mechanism (a mid-tick flip of
          // "dungeon clear paused" can no longer launch a fresh escort glide) for every
          // future caller, instead of by hand-pasted convention.
@@ -359,7 +359,7 @@ index e0d355e..7d64e9f 100644
              return false;
          Player* bot = botAI->GetBot();
          if (!bot || pts.size() < 2)
-@@ -185,6 +186,14 @@ namespace DcMovement
+@@ -186,6 +187,14 @@ namespace DcMovement
          MotionMaster* mm = bot->GetMotionMaster();
          if (!mm)
              return false;
@@ -447,7 +447,7 @@ index 74b95dd..3e78cf8 100644
  
      bool Evaluate(Player* bot)
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-index 8ad3b6e..b29e812 100644
+index 7355d38..898dadb 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 @@ -3,6 +3,8 @@
@@ -459,7 +459,7 @@ index 8ad3b6e..b29e812 100644
  #include "DungeonEventExecutor.h"
  
  #include <algorithm>
-@@ -174,6 +176,10 @@ namespace
+@@ -175,6 +177,10 @@ namespace
      {
          if (bot->isMoving())
              return;
@@ -470,7 +470,7 @@ index 8ad3b6e..b29e812 100644
          bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
                                            /*generatePath*/ true, false);
      }
-@@ -491,6 +497,10 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -492,6 +498,10 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  {
      if (!bot)
          return StepResult::Blocked;
@@ -481,7 +481,7 @@ index 8ad3b6e..b29e812 100644
  
      switch (step.kind)
      {
-@@ -646,6 +656,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -647,6 +657,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
                            bot->GetName(), go->GetGUID().ToString(), go->GetName());
                  return StepResult::Running;
              }
@@ -507,7 +507,7 @@ index 8ad3b6e..b29e812 100644
              // A GO script that gates on a carried key item refuses a click from an
              // empty bag without a word the headless harness can see (Karazhan's
              // Blackened Urn under mod-individual-progression). Grant it first.
-@@ -1115,6 +1144,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -1116,6 +1145,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
              if (step.itemId == 0)
                  return StepResult::Done;
              Item* item = bot->GetItemByEntry(step.itemId);
@@ -540,7 +540,7 @@ index 25266a7..8f06e51 100755
              return false;
  
 diff --git a/src/BgQueueFill/DcBgQueueFillManager.cpp b/src/BgQueueFill/DcBgQueueFillManager.cpp
-index aaef5a2..d66011b 100644
+index e8d6c35..718c6e9 100644
 --- a/src/BgQueueFill/DcBgQueueFillManager.cpp
 +++ b/src/BgQueueFill/DcBgQueueFillManager.cpp
 @@ -3,6 +3,7 @@
@@ -551,7 +551,7 @@ index aaef5a2..d66011b 100644
  #include "BgQueueFill/DcBgQueueFillManager.h"
  
  #include <algorithm>
-@@ -102,7 +103,7 @@ std::string DcBgQueueFillManager::RefuseReason(Player* player, std::uint8_t aren
+@@ -103,7 +104,7 @@ std::string DcBgQueueFillManager::RefuseReason(Player* player, std::uint8_t aren
      if (transient)
          *transient = false;
  
@@ -560,7 +560,7 @@ index aaef5a2..d66011b 100644
          return "module disabled";
      if (!DcSettings::GetBool(ObjectGuid::Empty, "BgQueueFill.Enable"))
          return "BgQueueFill.Enable is off";
-@@ -532,7 +533,7 @@ void DcBgQueueFillManager::Tick(std::uint32_t diff)
+@@ -533,7 +534,7 @@ void DcBgQueueFillManager::Tick(std::uint32_t diff)
      if (_jobs.empty() && _deferred.empty() && _pending.empty() && _configChecked)
          return;
  
@@ -877,8 +877,32 @@ index 0000000..16a93a3
 +    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z);
 +}
 +#endif
+diff --git a/src/DungeonClearCommand.cpp b/src/DungeonClearCommand.cpp
+index e3a2da4..6800f90 100644
+--- a/src/DungeonClearCommand.cpp
++++ b/src/DungeonClearCommand.cpp
+@@ -34,6 +34,7 @@
+ #include "PlayerbotAIConfig.h"
+ 
+ #include "DcModuleEnable.h"
++#include "DcEarnedPlay.h"
+ #include "DungeonClearDispatch.h"
+ #include "BgQueueFill/DcBgQueueFillManager.h"
+ #include "DungeonQueueFill/DcDungeonQueueFillManager.h"
+@@ -589,6 +590,11 @@ public:
+     {
+         if (DcDisabledNotice(handler))
+             return true;
++        if (DcEarnedPlay::Active())
++        {
++            handler->SendSysMessage("Provisioned lab runs are unavailable in natural progression.");
++            return true;
++        }
+         std::istringstream in(args);
+         std::string target, word, sweep;
+         uint32 seed = 0, repeat = 1;
 diff --git a/src/DungeonClearModule.cpp b/src/DungeonClearModule.cpp
-index 5699606..56fe6fd 100644
+index 9e0f1e9..62c30fc 100644
 --- a/src/DungeonClearModule.cpp
 +++ b/src/DungeonClearModule.cpp
 @@ -50,6 +50,8 @@
@@ -890,7 +914,7 @@ index 5699606..56fe6fd 100644
  #include "AllCreatureScript.h"
  #include "Cell.h"
  #include "CellImpl.h"
-@@ -282,6 +284,7 @@ public:
+@@ -283,6 +285,7 @@ public:
      void OnAfterConfigLoad(bool /*reload*/) override
      {
          DcSettings::InvalidateConfCache();
@@ -898,7 +922,7 @@ index 5699606..56fe6fd 100644
          // The one tunable a reload CANNOT apply: say so rather than leaving an
          // admin to wonder why the module is still running (or still absent).
          DcModule::WarnIfConfDiffersFromLatch();
-@@ -528,9 +531,9 @@ public:
+@@ -553,9 +556,9 @@ public:
          // provisioning ration ahead of the test harness.
          DcBgQueueFillManager::Instance().Tick(diff);
  
@@ -909,7 +933,7 @@ index 5699606..56fe6fd 100644
          DcFollowerLifecycle::ReapOrphanedFollows();
          // Authoritative advanced-pull passive teardown: release any follower DC
          // put passive once its leader is no longer mid-pull (released / dc off /
-@@ -556,7 +559,8 @@ public:
+@@ -581,7 +584,8 @@ public:
          // bots on the COMBAT engine, where the clear's non-combat triggers never
          // get one. Internally throttled and gated on the map having a row, so it
          // is a handful of integer compares on every other map.
@@ -919,18 +943,24 @@ index 5699606..56fe6fd 100644
  
          // `.dc test` harness state machine (spawn -> gear -> group -> teleport
          // -> dc on -> watchdogs -> record). Cheap no-op while no test run is
-@@ -564,9 +568,12 @@ public:
+@@ -589,12 +593,15 @@ public:
          // Headless-driver login poll first (a console start may be waiting on
          // it), then the plan scheduler (a launch it makes this tick enters the
          // run manager's tick loop immediately below).
 -        DcTestDriver::Tick();
 -        DcTestPlanManager::Instance().Tick(diff);
 -        DcTestRunManager::Instance().Tick(diff);
+-        // Pull Lab scheduler: launches warm lab parties through the run
+-        // manager above (they tick there); this only fills free capacity.
+-        DcLabManager::Instance().Tick(diff);
 +        if (!DcEarnedPlay::Active())
 +        {
 +            DcTestDriver::Tick();
 +            DcTestPlanManager::Instance().Tick(diff);
 +            DcTestRunManager::Instance().Tick(diff);
++            // Pull Lab scheduler: launches warm lab parties through the run
++            // manager above (they tick there); this only fills free capacity.
++            DcLabManager::Instance().Tick(diff);
 +        }
  
          // Dungeon-gate correctness net: re-assert "DC strategies installed iff in
@@ -1852,7 +1882,7 @@ index 0000000..d595cd8
 +}
 +#endif
 diff --git a/src/TestRun/DcTestRunManager.cpp b/src/TestRun/DcTestRunManager.cpp
-index eaf4b06..fb720b7 100644
+index eaac7b0..1f3573b 100644
 --- a/src/TestRun/DcTestRunManager.cpp
 +++ b/src/TestRun/DcTestRunManager.cpp
 @@ -3,6 +3,7 @@
@@ -1873,7 +1903,7 @@ index eaf4b06..fb720b7 100644
      DcTestDungeonRegistry::Row const* row = DcTestDungeonRegistry::Find(dungeonToken);
      if (!row)
          return fail(StartErr::UnknownDungeon,
-@@ -139,6 +143,9 @@ bool DcTestRunManager::StartRoster(Player* gm, std::string const& dungeonToken,
+@@ -192,6 +196,9 @@ bool DcTestRunManager::StartRoster(Player* gm, std::string const& dungeonToken,
          return false;
      };
  
