@@ -73,7 +73,7 @@ bool IsContinentMap(uint32 map);
 void Session::HandleAreaTriggerOpcode(WorldPacket& packet){auto* at=sObjectMgr->GetAreaTrigger(packet.id);assert(at&&owner->IsInAreaTriggerRadius(at));++owner->doorCalls;if(owner->doorRefused)return;uint32 origin=owner->GetMapId(),target=sObjectMgr->GetAreaTriggerTeleport(packet.id)->target_mapId;uint32 instance=IsContinentMap(target)?0:(owner->group?owner->group->guid.id:owner->guid.id);auto& destination=maps[{target,instance}];destination={target,instance,false};owner->map=&destination;AreaTrigger const* exit=nullptr;for(auto const& [id,tp]:sObjectMgr->GetAllAreaTriggerTeleports())if(tp.target_mapId==origin&&sObjectMgr->GetAreaTrigger(id)->map==target)exit=sObjectMgr->GetAreaTrigger(id);owner->position={exit->x+20,exit->y,exit->z};if(owner->pendingDoor){owner->transfer=true;owner->world=false;}owner->moving=false;}
 uint32 fakeNow=0;uint32 getMSTime(){return fakeNow;}uint32 getMSTimeDiff(uint32 a,uint32 b){return b-a;}
 struct PlayerbotAIConfig{bool naturalProgression=true;float SightDistance=45.0f;std::set<uint32> random{1};bool IsInRandomAccountList(uint32 id){return random.count(id);}};PlayerbotAIConfig sPlayerbotAIConfig;
-struct IndividualProgression{bool enabled=true,strict=true;bool IsStrictDefaultProgression(){return enabled&&strict;}uint8 GetPlayerProgressionFromQuests(Player* p){return p->tier;}bool CanEnterMap(Player* p,uint32,float,float,float){++p->gateChecks;return !p->progressionGate;}};IndividualProgression ip;IndividualProgression* sIndividualProgression=&ip;
+struct IndividualProgression{bool enabled=true,strict=true;int progressionLimit=0;bool IsStrictDefaultProgression(){return enabled&&strict;}uint8 GetPlayerProgressionFromQuests(Player* p){return p->tier;}bool CanEnterMap(Player* p,uint32,float,float,float){++p->gateChecks;return !p->progressionGate;}};IndividualProgression ip;IndividualProgression* sIndividualProgression=&ip;
 // NATIVE_PROGRESSION_ENUM
 struct Config{std::map<std::string,uint32> settings{{"DungeonClear.AutonomousParties.Enable",1},{"DungeonClear.AutonomousParties.MaxConcurrent",2}};std::map<std::string,std::string> strings;template<class T>T GetOption(char const* name,T def){if constexpr(std::is_same_v<T,std::string>){auto it=strings.find(name);return it==strings.end()?def:it->second;}else{auto it=settings.find(name);return it==settings.end()?def:static_cast<T>(it->second);}}};Config config;Config* sConfigMgr=&config;
 namespace lfg{constexpr uint8 LFG_STATE_NONE=0;constexpr uint32 LFG_TYPE_DUNGEON=1,LFG_FLAG_SEASONAL=4;struct LFGDungeonData{float x=0,y=0,z=0;};}struct LFGMgr{std::map<uint32,lfg::LFGDungeonData> starts;uint8 GetState(ObjectGuid guid){return ObjectAccessor::FindConnectedPlayer(guid)->rdf;}lfg::LFGDungeonData const* GetLFGDungeon(uint32 id){auto it=starts.find(id);return it==starts.end()?nullptr:&it->second;}};
@@ -142,7 +142,7 @@ std::vector<std::unique_ptr<Player>> actors;
 // One coordinator tick's corridor budget, then a direct walk of member 0.
 std::array<WalkState,5> walks;
 bool walkOnce(Player* p,uint32 trigger){buildBudget=buildsPerTick;return Walk(p,trigger,walks,0)==Travel::Moving;}
-void reset(){parties.clear();retryAfter.clear();refusals.clear();walks={};fakeWaterX=std::numeric_limits<float>::infinity();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;fakeDiagonalWall=false;fakeWallX=fakeMissingTileX=std::numeric_limits<float>::infinity();fakeChunkedCustom=false;fakeChunkedResult={};fakeChunkedCalls=0;sPlayerbotAIConfig.SightDistance=45.0f;ip.enabled=true;ip.strict=true;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
+void reset(){parties.clear();retryAfter.clear();refusals.clear();walks={};fakeWaterX=std::numeric_limits<float>::infinity();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;fakeDiagonalWall=false;fakeWallX=fakeMissingTileX=std::numeric_limits<float>::infinity();fakeChunkedCustom=false;fakeChunkedResult={};fakeChunkedCalls=0;sPlayerbotAIConfig.SightDistance=45.0f;ip.enabled=true;ip.strict=true;ip.progressionLimit=0;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
  // Dungeon Finder rows: Ragefire Chasm 15-21 (target 15-16), Stockade 20-30 (target 22-25).
  sLFGDungeonStore.rows={{4,{4,15,21,16,15,16,389,0,3,1,0}},{12,{12,20,30,24,22,25,34,0,3,1,0}}};lfgManager.starts={{4,{10,0,0}},{12,{10,0,0}}};
  sMapStore.rows={{0,{0,false,true}},{1,{1,false,true}},{34,{34,true,false}},{389,{389,true,false}}};
@@ -278,7 +278,10 @@ int main(){
  // Compile the production progression bridge with the pinned native stage enum.
  // Neither account ownership nor level influences these rewarded-marker boundaries.
  reset();auto* eraBot=add(1,2);
- for(auto [tier,expansion]:std::vector<std::pair<uint8,uint8>>{{0,0},{7,0},{8,1},{11,1},{12,1},{13,2},{18,2},{19,3},{255,3}}){eraBot->tier=tier;assert(DcEarnedProgression::Expansion(eraBot)==expansion);}
+ for(auto [tier,expansion]:std::vector<std::pair<uint8,uint8>>{{0,0},{7,0},{8,1},{11,1},{12,1},{13,2},{18,2}}){eraBot->tier=tier;assert(DcEarnedProgression::Expansion(eraBot)==expansion);}
+ ip.progressionLimit=7;assert(DcEarnedProgression::Expansion(eraBot)==0);
+ ip.progressionLimit=12;assert(DcEarnedProgression::Expansion(eraBot)==1);
+ ip.progressionLimit=0;ip.strict=false;assert(DcEarnedProgression::Expansion(eraBot)==255);ip.strict=true;
  // A complete native portal journey works on Outland, Northrend, and Kalimdor
  // for expansion dungeons. Exit maps 530/571 are continents, never instance copies.
  struct EraCase{uint32 dungeon,instance,outside;uint8 expansion,tier,level;};
@@ -293,10 +296,10 @@ int main(){
   for(auto& p:actors){assert(p->GetMapId()==c.outside&&p->GetInstanceId()==0&&p->doorCalls==2&&!p->group&&!p->ai.master&&p->ai.HasStrategy("new rpg",0));}unchanged();
  }
  // Every member must independently match the dungeon era. A higher-era tank,
- // earlier-era companion, legacy high level or invalid marker cannot unlock it.
+ // earlier-era companion or legacy high level cannot unlock it.
  for(EraCase const& c:eraCases){
-  for(uint8 badTier:{uint8(0),uint8(7),uint8(8),uint8(12),uint8(13),uint8(18),uint8(19),uint8(255)}){
-   uint8 const expected=badTier>18?3:badTier>=13?2:badTier>=8?1:0;if(expected==c.expansion)continue;
+  for(uint8 badTier:{uint8(0),uint8(7),uint8(8),uint8(12),uint8(13),uint8(18)}){
+   uint8 const expected=badTier>=13?2:badTier>=8?1:0;if(expected==c.expansion)continue;
    for(size_t member:{size_t(0),size_t(4)}){reset();expansionRoute(c.dungeon,c.instance,c.outside,c.expansion,c.level,c.level);expansionBots(c.outside,c.tier,c.level);actors[member]->tier=badTier;tick(30);assert(parties.empty());for(auto& p:actors)assert(!p->group&&p->doorCalls==0);unchanged();}
   }
  }
@@ -312,13 +315,15 @@ int main(){
  // Higher expansions never enable autonomous heroic, seasonal or raid routes.
  for(int bad=0;bad<4;++bad){reset();expansionRoute(136,543,530,1,62,63);switch(bad){case 0:sLFGDungeonStore.rows[136].Difficulty=1;break;case 1:sLFGDungeonStore.rows[136].Flags|=lfg::LFG_FLAG_SEASONAL;break;case 2:sLFGDungeonStore.rows[136].TypeID=2;break;case 3:sLFGDungeonStore.rows[136].ExpansionLevel=3;break;}tick();assert(routes.empty());}
  // Progress within the same expansion is allowed; earning a different era or
- // an invalid marker stops travel before any portal and stops an active clear.
+ // a lower realm ceiling stops travel before any portal and stops an active clear.
  for(EraCase const& c:eraCases){
   for(bool running:{false,true}){
    reset();expansionRoute(c.dungeon,c.instance,c.outside,c.expansion,c.level,c.level);expansionBots(c.outside,c.tier,c.level);tick(30);
    if(running){expansionPortal(7000);tick();tick();assert(actors[0]->ai.run.enabled);}
    actors[4]->tier=c.expansion==1?12:18;tick();assert(parties.size()==1);
-   actors[4]->tier=c.expansion==1?13:19;if(!running)expansionPortal(7000);tick();assert(parties.empty()&&!actors[0]->ai.run.enabled);
+   if(c.expansion==1)actors[4]->tier=13;else ip.progressionLimit=12;
+   if(!running){expansionPortal(7000);}
+   tick();assert(parties.empty()&&!actors[0]->ai.run.enabled);
    for(auto& p:actors){assert(p->doorCalls==(running?1:0));}unchanged();
   }
  }
@@ -442,7 +447,9 @@ def native_contracts(core, source):
     assert '#include "IndividualProgression.h"' not in coordinator
     bridge=(source/'DcEarnedProgression.cpp').read_text()
     assert 'GetPlayerProgressionFromQuests(player)' in bridge and 'IsStrictDefaultProgression()' in bridge
-    assert all(name in bridge for name in ('PROGRESSION_PRE_TBC', 'PROGRESSION_TBC_TIER_5', 'PROGRESSION_WOTLK_TIER_5'))
+    assert 'return IndividualProgression_GetEarnedEra(player);' in function(bridge,'uint8 Expansion(')
+    progression=(core/'modules/mod-individual-progression/src/IndividualProgression.cpp').read_text()
+    assert 'i <= PROGRESSION_WOTLK_TIER_5' in function(progression,'uint8 IndividualProgression::GetPlayerProgressionFromQuests(')
     continent = function((core/'src/server/shared/DataStores/DBCStructure.h').read_text(), '[[nodiscard]] bool IsContinent() const')
     assert all(name in continent for name in ('MAP_EASTERN_KINGDOMS', 'MAP_KALIMDOR', 'MAP_OUTLAND', 'MAP_NORTHREND'))
     # Production shortcut gates remain enforced even if an existing config
@@ -511,7 +518,8 @@ def main():
         progression_enum=re.search(r'enum ProgressionState : uint8[^{}]*\{.*?^\};', ip_header, re.MULTILINE|re.DOTALL)
         if not progression_enum:
             raise SystemExit('Native Individual Progression stages were not recognised')
-        (work/'NativeStubs.h').write_text(STUBS.replace('// NATIVE_PROGRESSION_ENUM', progression_enum.group(0)))
+        earned_era=function((core/'modules/mod-individual-progression/src/IndividualProgression.cpp').read_text(),'uint8 IndividualProgression_GetEarnedEra(')
+        (work/'NativeStubs.h').write_text(STUBS.replace('// NATIVE_PROGRESSION_ENUM', progression_enum.group(0))+'\n'+earned_era)
         headers=('Define.h','Common.h','Map.h','ScriptMgr.h','G3D/Vector3.h','Ai/Dungeon/DungeonClear/Data/WaypointHint.h','MapMgr.h','PlayerbotAIConfig.h','PathGenerator.h','Player.h','DcModuleEnable.h','DcStrategyGate.h','Ai/Dungeon/DungeonClear/Action/DcActionShared.h','Ai/Dungeon/DungeonClear/Util/DcRun.h','Ai/Dungeon/DungeonClear/DcValueKeys.h','Config.h','DBCStores.h','Event.h','Group.h','GroupMgr.h','IndividualProgression.h','Log.h','LFGMgr.h','MotionMaster.h','ObjectAccessor.h','ObjectMgr.h','Playerbots.h','PlayerbotAI.h','Timer.h','WorldPacket.h','WorldSession.h')
         for name in headers:
             path=work/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('#include "NativeStubs.h"\n')
@@ -570,9 +578,7 @@ def main():
             ('capital faction ignored','EarnedDungeonParties.cpp','if (zone && (zone->flags & AREA_FLAG_CAPITAL))','if (false)'),
             ('unaudited dungeon route','EarnedDungeonParties.cpp','if (!DcEarnedEvents::MapAudited(dungeon->MapID, reason))','if (false)'),
             ('band above the expansion cap','EarnedDungeonParties.cpp','target + levelSpread, ExpansionLevelCap(route.expansion)}','target + levelSpread, 255u}'),
-            ('invalid progression marker','DcEarnedProgression.cpp','stage > PROGRESSION_WOTLK_TIER_5','false'),
-            ('TBC boundary lifted early','DcEarnedProgression.cpp','stage >= PROGRESSION_PRE_TBC','stage >= PROGRESSION_NAXX40'),
-            ('Wrath boundary lifted early','DcEarnedProgression.cpp','stage >= PROGRESSION_TBC_TIER_5','stage >= PROGRESSION_TBC_TIER_4'),
+            ('shared earned-era bypass','DcEarnedProgression.cpp','return IndividualProgression_GetEarnedEra(player);','return 2;'),
             ('TBC cap uses Wrath level','EarnedDungeonParties.cpp','expansion == 1 ? 70','expansion == 1 ? 80'),
             ('endless stalled run','EarnedDungeonParties.cpp','else if (getMSTimeDiff(party.stalledSince, getMSTime()) > stallTimeout)','else if (false)'),
             ('uncontrolled persistent follower path','NativeProductionMethods.h','if (DcEarnedPlay::Active())','if (false)'),

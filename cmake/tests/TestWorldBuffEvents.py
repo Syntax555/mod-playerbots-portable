@@ -165,6 +165,7 @@ enum = function(ip_header, 'enum ProgressionState') + ';'
 native = '\n'.join((
     function(ip_source, 'uint8 IndividualProgression::GetPlayerProgressionFromQuests('),
     function(ip_source, 'bool IndividualProgression::IsStrictDefaultProgression() const'),
+    function(ip_source, 'uint8 IndividualProgression_GetEarnedEra('),
     function((core / 'src/server/game/Server/WorldSessionMgr.cpp').read_text(),
              'void WorldSessionMgr::DoForAllOnlinePlayers('),
     function((core / 'src/server/game/Entities/Unit/Unit.cpp').read_text(),
@@ -290,7 +291,7 @@ struct Player : Unit
 struct IndividualProgression
 {
     bool enabled = true, strictEarnedProgression = true, disableDefaultProgression = false;
-    int RequiredZulGurubProgression = ZG_STAGE;
+    int RequiredZulGurubProgression = ZG_STAGE, progressionLimit = 0;
     std::map<uint32, uint8> customProgressionMap;
     uint8 GetPlayerProgressionFromQuests(Player*) const;
     bool IsStrictDefaultProgression() const;
@@ -528,7 +529,7 @@ void EarnedEraAndNativeGates()
         ExpectAura(p, spell, expected);
         assert(p.quests == quests && p.money == 123456 && p.xp == 999 && p.inventory == 77);
         assert(p.accountProgression == 18 && p.leaderProgression == 18);
-        assert(p.questReads <= 18);
+        assert(p.questReads <= (spell == 24425 ? 36U : 18U));
         ++cases;
     }
     std::cout << "World buffs: " << cases << " earned-era, level, faction, reputation and human/alt/random/SelfBot cases passed\n";
@@ -619,6 +620,18 @@ void StrictDefaultAndOwnMilestones()
         Scenario s; s.Only("Dragonslayer"); Player& p = s.Add(); Mark(p, 7);
         Player& master = s.Add(); Mark(master, 18); master.level = p.level;
         s.Start(); s.script.OnUpdate(60000); ExpectAura(p, 22888, true); ExpectAura(master, 22888, false);
+    }
+}
+void RealmCeiling()
+{
+    for (int ceiling : {0, 1, 7, 8, 12, 13, 18})
+    for (uint8 stage = 0; stage <= 18; ++stage)
+    {
+        Scenario s; s.Only("Dragonslayer");
+        individualProgression.progressionLimit = ceiling;
+        Player& p = s.Add(); Mark(p, stage);
+        s.Start(); s.script.OnUpdate(60000);
+        ExpectAura(p, 22888, stage < 8 || (ceiling > 0 && ceiling < 8));
     }
 }
 void ZulGurubStage()
@@ -735,6 +748,46 @@ void TimersDelayedRecipientsAndReload()
         s.Start(); assert(randomRequests[0].lower == 2 && randomRequests[0].upper == 9);
     }
 }
+void CustomizedAnnouncements()
+{
+    for (char const* event : {"Warchief", "Dragonslayer", "Zandalar"})
+    for (uint32 faction = 0; faction < 2; ++faction)
+    {
+        Scenario s; s.Only(event);
+        std::string key = std::string("WorldBuffBots.") + event + ".Announcement";
+        config.strings[key] = "{player}: {buff} / %s / {player}";
+        s.Start();
+        bool either = std::string(event) == "Zandalar";
+        bool horde = std::string(event) == "Warchief" || (either && faction == 1);
+        char const* announcer = horde ? "Kazra" : "Vaelora";
+        char const* buff = std::string(event) == "Warchief" ? "Warchief's Blessing" :
+                           std::string(event) == "Dragonslayer" ? "Rallying Cry of the Dragonslayer" : "Spirit of Zandalar";
+        if (either) randomValues.push_back(faction);
+        randomValues.push_back(23);
+        s.script.OnUpdate(60000);
+        assert(randomValues.empty());
+        assert(worldSessionManager.announcements.size() == 1);
+        assert(worldSessionManager.announcements.back() ==
+               std::string(announcer) + ": " + buff + " / " + announcer + " / " + announcer);
+        assert(config.strings[key] == "{player}: {buff} / %s / {player}");
+
+        config.strings[key] = "%s";
+        s.script.OnAfterConfigLoad(true);
+        if (either) randomValues.push_back(faction);
+        randomValues.push_back(23);
+        s.script.OnUpdate(60000);
+        assert(randomValues.empty() && worldSessionManager.announcements.back() == announcer);
+    }
+    {
+        Scenario s; s.Only("Dragonslayer");
+        config.strings["WorldBuffBots.Dragonslayer.Announcement"] = "{buff} in Stormwind";
+        s.Start();
+        auto requests = randomRequests.size();
+        s.script.OnUpdate(60000);
+        assert(randomRequests.size() == requests + 1); // next timer, no unused announcer
+        assert(worldSessionManager.announcements.back() == "Rallying Cry of the Dragonslayer in Stormwind");
+    }
+}
 void LoaderAndScope()
 {
     registeredScripts.clear(); Addmod_world_buff_botsScripts();
@@ -766,8 +819,8 @@ int main(int argc, char**)
     InitializeSpells();
     SpillRegression();
     if (argc > 1) return 0;
-    EarnedEraAndNativeGates(); RegionsEligibilityAndNativeAura(); StrictDefaultAndOwnMilestones(); ZulGurubStage();
-    TimersDelayedRecipientsAndReload(); LoaderAndScope(); OneAuraPerEligibleOnlinePlayer();
+    EarnedEraAndNativeGates(); RegionsEligibilityAndNativeAura(); StrictDefaultAndOwnMilestones(); RealmCeiling(); ZulGurubStage();
+    TimersDelayedRecipientsAndReload(); CustomizedAnnouncements(); LoaderAndScope(); OneAuraPerEligibleOnlinePlayer();
     std::cout << "World-buff native iterator, strict progression, no area spill, aura amounts/durations, immunity, scheduling, delayed rechecks and reload passed\n";
 }
 '''
@@ -793,11 +846,15 @@ with tempfile.TemporaryDirectory(prefix='portable-world-buff-events-') as direct
         ('city-area-cast', '            if (player->AddAura(spellId, player))\n                ++appliedCount;',
          '            player->CastSpell(player, spellId, true);\n            ++appliedCount;',
          '!tbc.auras.contains(22888)'),
-        ('era-gate', 'if (stage >= PROGRESSION_PRE_TBC)', 'if (false)', '!tbc.auras.contains(22888)'),
-        ('zandalar-stage-gate', 'stage < sIndividualProgression->RequiredZulGurubProgression',
+        ('era-gate', 'if (IndividualProgression_GetEarnedEra(player) != 0)', 'if (false)', '!tbc.auras.contains(22888)'),
+        ('zandalar-stage-gate', 'sIndividualProgression->GetPlayerProgressionFromQuests(player) < sIndividualProgression->RequiredZulGurubProgression',
          'false', 'player.auras.contains(spell) == expected'),
         ('level-gate', 'player->GetLevel() > MAX_VANILLA_BUFF_LEVEL',
          'false', 'player.auras.contains(spell) == expected'),
+        ('custom-announcer', 'ReplaceAll(message, "{player}", announcerName);',
+         '', 'worldSessionManager.announcements.back() =='),
+        ('legacy-announcer', 'ReplaceAll(message, "%s", announcerName);',
+         '', 'worldSessionManager.announcements.back() =='),
     )
     variants = [('patched', production, loader, None),
                 ('baseline', baseline_source, baseline_loader, '!tbc.auras.contains(22888)')]

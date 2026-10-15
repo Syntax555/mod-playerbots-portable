@@ -129,12 +129,6 @@ struct DisableMgr
     bool IsDisabledFor(int, uint32, void const*) const { return false; }
 } disableMgr;
 auto* sDisableMgr = &disableMgr;
-struct Player;
-struct ScriptMgr
-{
-    bool OnPlayerCanUseQuest(Player*, Quest const*) const { return true; }
-} scriptMgr;
-auto* sScriptMgr = &scriptMgr;
 struct Player
 {
     uint32 level = 9, raceMask = 1, classMask = 1;

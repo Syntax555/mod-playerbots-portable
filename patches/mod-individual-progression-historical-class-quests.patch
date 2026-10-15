@@ -169,12 +169,45 @@ index 0000000..d5626c4
 +INSERT IGNORE INTO `spell_script_names` (`spell_id`, `ScriptName`) VALUES (949295, 'spell_historical_priest_training');
 +INSERT IGNORE INTO `spell_script_names` (`spell_id`, `ScriptName`) VALUES (949296, 'spell_historical_priest_training');
 +INSERT IGNORE INTO `spell_script_names` (`spell_id`, `ScriptName`) VALUES (949378, 'spell_historical_consume_magic');
+diff --git a/data/sql/world/updates/2026_10_15_00_historical_class_quest_conditions.sql b/data/sql/world/updates/2026_10_15_00_historical_class_quest_conditions.sql
+new file mode 100644
+index 0000000..5e504c7
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_15_00_historical_class_quest_conditions.sql
+@@ -0,0 +1,27 @@
++-- Historical quest availability uses each character's rewarded progression markers.
++-- Fear Ward ends at TBC; the remaining restored quests end at Wrath.
++-- Gate every existing alternative without replacing custom conditions or rewards.
++-- Value2=1 is ignored by rewarded-quest checks and keeps custom positive rows intact.
++INSERT IGNORE INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTypeOrReference`, `ConditionTarget`, `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorType`, `ErrorTextId`, `ScriptName`, `Comment`)
++SELECT DISTINCT 19, 0, q.`ID`, 0, COALESCE(c.`ElseGroup`, 0), 8, 0, marker.`ID`, 1, 0, 1, 0, 0, '', 'Historical priest quest: before later personal progression'
++FROM `quest_template` q
++CROSS JOIN (
++    SELECT 66008 AS `ID` UNION ALL SELECT 66009 UNION ALL SELECT 66010
++    UNION ALL SELECT 66011 UNION ALL SELECT 66012 UNION ALL SELECT 66013
++    UNION ALL SELECT 66014 UNION ALL SELECT 66015 UNION ALL SELECT 66016
++    UNION ALL SELECT 66017 UNION ALL SELECT 66018
++) marker
++LEFT JOIN `conditions` c ON c.`SourceTypeOrReferenceId` = 19 AND c.`SourceGroup` = 0 AND c.`SourceEntry` = q.`ID` AND c.`SourceId` = 0
++WHERE q.`ID` IN (5634, 5635, 5636, 5637, 5638, 5639, 5641, 5645, 5647,
++    5627, 5628, 5629, 5630, 5631, 5632, 5633, 5672, 5673, 5674, 5675,
++    5658, 5660, 5661, 5662, 5663, 5652, 5654, 5655, 5656, 5657,
++    5642, 5643, 5680, 5676, 5677, 5644, 5646, 5679)
++AND q.`RewardSpell` IN (948090, 948091, 949290, 949291, 949292, 949293, 949294, 949295, 949296)
++AND marker.`ID` >= CASE WHEN q.`RewardSpell` = 948091 THEN 66008 ELSE 66013 END;
++
++-- The native Fear Ward quest also allows draenei; its Vanilla reward is dwarf-only.
++INSERT IGNORE INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTypeOrReference`, `ConditionTarget`, `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorType`, `ErrorTextId`, `ScriptName`, `Comment`)
++SELECT DISTINCT 19, 0, q.`ID`, 0, COALESCE(c.`ElseGroup`, 0), 16, 0, 4, 0, 0, 0, 0, 0, '', 'Historical Fear Ward: dwarf-only Vanilla quest'
++FROM `quest_template` q
++LEFT JOIN `conditions` c ON c.`SourceTypeOrReferenceId` = 19 AND c.`SourceGroup` = 0 AND c.`SourceEntry` = q.`ID` AND c.`SourceId` = 0
++WHERE q.`ID` IN (5641, 5645, 5647) AND q.`RewardSpell` = 948091;
 diff --git a/src/HistoricalClassQuests.cpp b/src/HistoricalClassQuests.cpp
 new file mode 100644
-index 0000000..df558c3
+index 0000000..9b9a7bb
 --- /dev/null
 +++ b/src/HistoricalClassQuests.cpp
-@@ -0,0 +1,265 @@
+@@ -0,0 +1,239 @@
 +/*
 + * Historical priest racial quest acquisition for Individual Progression.
 + * Integration follows AzerothCore GPL terms. Historical source data retain
@@ -221,20 +254,6 @@ index 0000000..df558c3
 +    return player && player->IsInWorld() && sIndividualProgression->IsStrictDefaultProgression();
 +}
 +
-+uint8 Era(Player* player)
-+{
-+    uint8 state = sIndividualProgression->GetPlayerProgressionFromQuests(player);
-+    return state < PROGRESSION_PRE_TBC ? 0 : (state < PROGRESSION_TBC_TIER_5 ? 1 : 2);
-+}
-+
-+Family const* FamilyForQuest(uint32 quest)
-+{
-+    for (auto const& family : Families)
-+        if (quest && std::find(family.quests.begin(), family.quests.end(), quest) != family.quests.end())
-+            return &family;
-+    return nullptr;
-+}
-+
 +Family const* FamilyForSpell(uint32 spell, uint8& era, uint8& rank)
 +{
 +    if (!spell)
@@ -263,15 +282,8 @@ index 0000000..df558c3
 +{
 +    if (!Active(player) || player->getClass() != CLASS_PRIEST)
 +        return false;
-+    uint8 era = Era(player);
++    uint8 era = IndividualProgression_GetEarnedEra(player);
 +    return era < 2 && (family.raceMasks[era] & (1u << (player->getRace() - 1))) && family.ranks[era][0] && player->GetLevel() >= family.levels[era][0];
-+}
-+
-+bool CanUseQuest(Player* player, uint32 quest)
-+{
-+    Family const* family = FamilyForQuest(quest);
-+    return !family || (Eligible(player, *family) &&
-+        (family->questRequired[Era(player)] & (1u << (player->getRace() - 1))));
 +}
 +
 +bool CanUseSpell(Player* player, uint32 spell)
@@ -279,10 +291,10 @@ index 0000000..df558c3
 +    for (auto const& family : Families)
 +        if (family.learnSpell && spell == family.learnSpell)
 +            return Eligible(player, family) &&
-+                (family.questRequired[Era(player)] & (1u << (player->getRace() - 1))) && Rewarded(player, family);
++                (family.questRequired[IndividualProgression_GetEarnedEra(player)] & (1u << (player->getRace() - 1))) && Rewarded(player, family);
 +    uint8 era = 0, rank = 0;
 +    if (Family const* family = FamilyForSpell(spell, era, rank))
-+        return Eligible(player, *family) && Era(player) == era &&
++        return Eligible(player, *family) && IndividualProgression_GetEarnedEra(player) == era &&
 +            (!(family->questRequired[era] & (1u << (player->getRace() - 1))) || Rewarded(player, *family)) &&
 +            player->GetLevel() >= family->levels[era][rank];
 +
@@ -296,12 +308,12 @@ index 0000000..df558c3
 +    bool d = std::find(plague.begin(), plague.end(), spell) != plague.end() || spell == 48300;
 +    if ((!p && !d && spell != 6346) || !Active(player))
 +        return true;
-+    return spell == 6346 ? Era(player) >= 1 : Era(player) == 2;
++    return spell == 6346 ? IndividualProgression_GetEarnedEra(player) >= 1 : IndividualProgression_GetEarnedEra(player) == 2;
 +}
 +
 +uint32 RootForEra(Player* player, Family const& family)
 +{
-+    uint8 era = Era(player);
++    uint8 era = IndividualProgression_GetEarnedEra(player);
 +    return era < 2 ? family.ranks[era][0] : 0;
 +}
 +
@@ -331,14 +343,9 @@ index 0000000..df558c3
 +{
 +public:
 +    historical_class_quests() : PlayerScript("historical_class_quests", {
-+        PLAYERHOOK_CAN_USE_QUEST, PLAYERHOOK_CAN_LEARN_SPELL, PLAYERHOOK_ON_LOGIN,
++        PLAYERHOOK_CAN_LEARN_SPELL, PLAYERHOOK_ON_LOGIN,
 +        PLAYERHOOK_ON_GET_TRAINER_SPELL_STATE, PLAYERHOOK_ON_BEFORE_RECEIVE_SPELL_LIST_FROM_TRAINER,
 +        PLAYERHOOK_ON_SPELL_CAST}) { }
-+
-+    bool OnPlayerCanUseQuest(Player* player, Quest const* quest) override
-+    {
-+        return quest && HistoricalClassQuests::CanUseQuest(player, quest->GetQuestId());
-+    }
 +
 +    bool OnPlayerCanLearnSpell(Player* player, uint32 spell) override
 +    {

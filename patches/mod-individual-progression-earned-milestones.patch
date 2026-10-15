@@ -268,82 +268,8 @@ index 0000000..bee5872
 +    (23, 18525, 34163, 0, 0, 0),
 +    (23, 18525, 35321, 0, 0, 0),
 +    (23, 21655, 34200, 0, 0, 0));
-diff --git a/src/EarnedEraRidingPrices.cpp b/src/EarnedEraRidingPrices.cpp
-new file mode 100644
-index 0000000..7866728
---- /dev/null
-+++ b/src/EarnedEraRidingPrices.cpp
-@@ -0,0 +1,30 @@
-+/*
-+    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
-+*/
-+
-+#include "EarnedEraRidingPricesPolicy.h"
-+#include "IndividualProgression.h"
-+
-+class IndividualProgressionEraRidingPrices : public PlayerScript
-+{
-+public:
-+    IndividualProgressionEraRidingPrices()
-+        : PlayerScript("IndividualProgressionEraRidingPrices", {PLAYERHOOK_ON_GET_TRAINER_SPELL_COST})
-+    {
-+    }
-+
-+    void OnPlayerGetTrainerSpellCost(Player const* player, Creature const* /*trainer*/, uint32 spellId,
-+                                     uint32& moneyCost) override
-+    {
-+        if (!player || !player->IsInWorld() || !sIndividualProgression->IsStrictDefaultProgression())
-+            return;
-+
-+        uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(const_cast<Player*>(player));
-+        moneyCost = EarnedEraRidingPricesPolicy::BaseCost(stage, spellId, moneyCost);
-+    }
-+};
-+
-+void AddSC_individual_progression_era_riding_prices()
-+{
-+    new IndividualProgressionEraRidingPrices();
-+}
-diff --git a/src/EarnedEraRidingPricesPolicy.h b/src/EarnedEraRidingPricesPolicy.h
-new file mode 100644
-index 0000000..dacedff
---- /dev/null
-+++ b/src/EarnedEraRidingPricesPolicy.h
-@@ -0,0 +1,32 @@
-+/*
-+    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
-+*/
-+
-+#ifndef EARNED_ERA_RIDING_PRICES_POLICY_H
-+#define EARNED_ERA_RIDING_PRICES_POLICY_H
-+
-+#include <cstdint>
-+
-+namespace EarnedEraRidingPricesPolicy
-+{
-+// Undiscounted copper, using late Vanilla (1.12.1), original TBC (2.4.3),
-+// and the pinned Wrath trainer table. This changes costs, not availability.
-+constexpr std::uint32_t BaseCost(std::uint8_t stage, std::uint32_t spellId, std::uint32_t configuredCost)
-+{
-+    switch (spellId)
-+    {
-+        case 33388: // Apprentice Riding
-+            return stage < 8 ? 900000 : stage < 13 ? 350000 : 40000;
-+        case 33391: // Journeyman Riding
-+            return stage < 8 ? 9000000 : stage < 13 ? 6000000 : 500000;
-+        case 34090: // Expert Riding
-+            return stage < 8 ? configuredCost : stage < 13 ? 8000000 : 2500000;
-+        case 34091: // Artisan Riding
-+            return stage < 8 ? configuredCost : 50000000;
-+        default:
-+            return configuredCost;
-+    }
-+}
-+}
-+
-+#endif
 diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
-index 3f9123a..4e5843f 100644
+index 8cd094c..2b7481c 100644
 --- a/src/IndividualProgression.cpp
 +++ b/src/IndividualProgression.cpp
 @@ -3,8 +3,11 @@
@@ -359,13 +285,29 @@ index 3f9123a..4e5843f 100644
  
  IndividualProgression* IndividualProgression::instance()
  {
-@@ -27,6 +30,57 @@ uint8 IndividualProgression::GetPlayerProgressionFromQuests(Player* player) cons
+@@ -27,6 +30,73 @@ uint8 IndividualProgression::GetPlayerProgressionFromQuests(Player* player) cons
      return progressionLevel;
  }
  
 +bool IndividualProgression::IsStrictDefaultProgression() const
 +{
 +    return enabled && strictEarnedProgression && !disableDefaultProgression && customProgressionMap.empty();
++}
++
++uint8 IndividualProgression_GetEarnedEra(Player* player)
++{
++    if (!player || !sIndividualProgression->IsStrictDefaultProgression())
++        return 255;
++
++    uint8 stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
++    if (stage > PROGRESSION_WOTLK_TIER_5)
++        return 255;
++
++    int const limit = sIndividualProgression->progressionLimit;
++    if (limit > 0 && stage > limit)
++        stage = uint8(limit);
++
++    return stage >= PROGRESSION_TBC_TIER_5 ? 2 : stage >= PROGRESSION_PRE_TBC ? 1 : 0;
 +}
 +
 +bool IndividualProgression::HasStrictEarnedMilestone(Player* player, uint8 stage) const
@@ -417,7 +359,7 @@ index 3f9123a..4e5843f 100644
  bool IndividualProgression::hasPassedProgression(Player* player, ProgressionState state) const
  {
      if (!enabled || !state || !player || !player->IsInWorld())
-@@ -55,6 +109,25 @@ void IndividualProgression::UpdateProgressionState(Player* player, ProgressionSt
+@@ -55,6 +125,25 @@ void IndividualProgression::UpdateProgressionState(Player* player, ProgressionSt
          return;
  
      uint8 currentState = GetPlayerProgressionFromQuests(player);
@@ -443,7 +385,7 @@ index 3f9123a..4e5843f 100644
      if (newState > currentState)
      {
          for (uint8 i = currentState; i <= newState; ++i)
-@@ -152,6 +225,9 @@ uint8 IndividualProgression::GetAccountProgression(uint32 accountId)
+@@ -152,6 +241,9 @@ uint8 IndividualProgression::GetAccountProgression(uint32 accountId)
  
  void IndividualProgression::UpdateRNDbotSpells(Player* player)
  {
@@ -453,7 +395,7 @@ index 3f9123a..4e5843f 100644
      if (!player || !player->IsInWorld())
          return;
  
-@@ -184,6 +260,10 @@ void IndividualProgression::UpdateAccountReputation(uint32 factionId, uint32 acc
+@@ -184,6 +276,10 @@ void IndividualProgression::UpdateAccountReputation(uint32 factionId, uint32 acc
      if (!factionId || !accountId || !player || !player->IsInWorld())
          return;
  
@@ -464,7 +406,7 @@ index 3f9123a..4e5843f 100644
      Group* group = player->GetGroup();
      uint32 account = player->GetSession()->GetAccountId();
      std::string factionName = sFactionStore.LookupEntry(factionId)->name[0];
-@@ -229,6 +309,10 @@ void IndividualProgression::UpdateGroupAttunement(Player* player, std::string lo
+@@ -229,6 +325,10 @@ void IndividualProgression::UpdateGroupAttunement(Player* player, std::string lo
      if (!player || !player->IsInWorld() )
          return;
  
@@ -475,7 +417,7 @@ index 3f9123a..4e5843f 100644
      if (location.empty())
          return;
  
-@@ -371,6 +455,9 @@ bool IndividualProgression::isAttuned(Player* player)
+@@ -371,6 +471,9 @@ bool IndividualProgression::isAttuned(Player* player)
  
  bool IndividualProgression::isExcludedAccount(Player* player)
  {
@@ -485,7 +427,7 @@ index 3f9123a..4e5843f 100644
      // An empty account filter excludes nobody and needs no database lookup.
      if (!player || sIndividualProgression->excludedAccountsRegex.empty())
          return false;
-@@ -384,6 +471,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
+@@ -384,6 +487,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
  
  bool IndividualProgression::isBotAccount(Player* player)
  {
@@ -495,7 +437,7 @@ index 3f9123a..4e5843f 100644
      // An empty account filter excludes nobody and needs no database lookup.
      if (!player || sIndividualProgression->botAccountsRegex.empty())
          return false;
-@@ -417,6 +507,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
+@@ -417,6 +523,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
  
  void IndividualProgression::SyncBotsProgressionToLeader(Group* group)
  {
@@ -505,7 +447,7 @@ index 3f9123a..4e5843f 100644
      if (!group)
          return;
  
-@@ -756,6 +849,26 @@ void IndividualProgression::checkIPProgression(Player* killer)
+@@ -756,6 +865,34 @@ void IndividualProgression::checkIPProgression(Player* killer)
  
      uint8 currentState = GetPlayerProgressionFromQuests(killer);
  
@@ -529,10 +471,18 @@ index 3f9123a..4e5843f 100644
 +        return;
 +    }
 +
-     // A completed transition quest remains earned when the realm opens TBC.
-     // UpdateProgressionState still enforces the configured realm tier limit.
-     if (currentState == PROGRESSION_NAXX40 && killer->GetQuestStatus(INTO_THE_BREACH) == QUEST_STATUS_REWARDED)
-@@ -833,6 +946,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
++    // A completed transition quest remains earned when the realm opens TBC.
++    // UpdateProgressionState still enforces the configured realm tier limit.
++    if (currentState == PROGRESSION_NAXX40 && killer->GetQuestStatus(INTO_THE_BREACH) == QUEST_STATUS_REWARDED)
++    {
++        UpdateProgressionState(killer, PROGRESSION_PRE_TBC);
++        currentState = GetPlayerProgressionFromQuests(killer);
++    }
++
+     static const std::vector<std::pair<uint16, ProgressionState>> achievementMap =
+     {
+         { HALION_KILL,        PROGRESSION_WOTLK_TIER_5   },
+@@ -825,6 +962,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
          return;
      */
  
@@ -561,7 +511,7 @@ index 3f9123a..4e5843f 100644
      static const std::unordered_map<uint32, ProgressionState> bossMap =
      {
          { RAGNAROS,     PROGRESSION_MOLTEN_CORE    },
-@@ -1053,6 +1188,8 @@ private:
+@@ -1045,6 +1204,8 @@ private:
      {
          sIndividualProgression->customProgressionMap.clear();
          sIndividualProgression->enabled = sConfigMgr->GetOption<bool>("IndividualProgression.Enable", true);
@@ -571,10 +521,20 @@ index 3f9123a..4e5843f 100644
          sIndividualProgression->vanillaHealingAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.VanillaHealingAdjustment", 1);
          sIndividualProgression->tbcPowerAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.TBCPowerAdjustment", 1);
 diff --git a/src/IndividualProgression.h b/src/IndividualProgression.h
-index e3c5c9a..0fddb0c 100644
+index e3c5c9a..d332073 100644
 --- a/src/IndividualProgression.h
 +++ b/src/IndividualProgression.h
-@@ -404,6 +404,11 @@ class IndividualProgression
+@@ -21,6 +21,9 @@
+ 
+ typedef std::unordered_map<uint32, uint32> questXpMapType;
+ 
++// 0: Vanilla, 1: TBC, 2: Wrath; 255: unavailable or unrestricted policy.
++uint8 IndividualProgression_GetEarnedEra(Player* player);
++
+ enum ProgressionBossIDs
+ {
+     RAGNAROS             = 11502,
+@@ -404,6 +407,11 @@ class IndividualProgression
  public:
      static IndividualProgression* instance();
  
@@ -586,7 +546,7 @@ index e3c5c9a..0fddb0c 100644
      std::map<uint32, uint8> customProgressionMap;
      questXpMapType questXpMap;
      float vanillaPowerAdjustment, tbcPowerAdjustment, vanillaHealingAdjustment, tbcHealingAdjustment;
-@@ -416,6 +421,9 @@ public:
+@@ -416,6 +424,9 @@ public:
      uint8 GetPlayerProgressionFromQuests(Player* player) const;
  
      bool hasPassedProgression(Player* player, ProgressionState state) const;
@@ -597,7 +557,7 @@ index e3c5c9a..0fddb0c 100644
      void UpdateProgressionState(Player* player, ProgressionState newState) const;
      static void ForceUpdateProgressionState(Player* player, ProgressionState newState);
 diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
-index 28103d3..ab1b657 100644
+index 83ebcc7..be57806 100644
 --- a/src/IndividualProgressionPlayer.cpp
 +++ b/src/IndividualProgressionPlayer.cpp
 @@ -86,6 +86,29 @@ public:
@@ -617,14 +577,14 @@ index 28103d3..ab1b657 100644
 +
 +        // These are Wrath talent rows, not replacement historical trees.
 +        // The earned expansion controls depth for humans and bots alike.
-+        uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
-+        if (stage < PROGRESSION_PRE_TBC)
++        uint8 const era = IndividualProgression_GetEarnedEra(player);
++        if (era == 0)
 +            return talent->Row <= 6;
 +
-+        if (stage < PROGRESSION_TBC_TIER_5)
++        if (era == 1)
 +            return talent->Row <= 8;
 +
-+        return true;
++        return era == 2;
 +    }
 +
      void OnPlayerResurrect(Player* player, float /*restore_percent*/, bool& /*applySickness*/) override
@@ -821,7 +781,17 @@ index 28103d3..ab1b657 100644
                  return false;
              }
          }
-@@ -879,6 +912,11 @@ public:
+@@ -864,7 +897,8 @@ public:
+                  sIndividualProgression->UpdateProgressionState(player, PROGRESSION_AQ_WAR);
+             break;
+         case INTO_THE_BREACH:
+-            if (!sIndividualProgression->disableDefaultProgression)
++            if (!sIndividualProgression->disableDefaultProgression &&
++                sIndividualProgression->hasPassedProgression(player, PROGRESSION_NAXX40))
+                  sIndividualProgression->UpdateProgressionState(player, PROGRESSION_PRE_TBC);
+             break;
+         case QUEST_MORROWGRAIN:
+@@ -878,6 +912,11 @@ public:
              }
              break;
          }
@@ -833,7 +803,7 @@ index 28103d3..ab1b657 100644
      }
  
      bool OnPlayerCanGroupInvite(Player* player, std::string& membername) override
-@@ -1130,6 +1168,11 @@ public:
+@@ -1129,6 +1168,11 @@ public:
              }
          }
  
@@ -845,7 +815,7 @@ index 28103d3..ab1b657 100644
          Group* group = killer->GetGroup();
          
          if (killed->GetCreatureTemplate()->rank > CREATURE_ELITE_NORMAL)
-@@ -1185,6 +1228,24 @@ public:
+@@ -1184,6 +1228,24 @@ public:
          }
      }
  
@@ -870,7 +840,7 @@ index 28103d3..ab1b657 100644
      bool OnPlayerUpdateFishingSkill(Player* player, int32 /*skill*/, int32 /*zone_skill*/, int32 chance, int32 roll) override
      {
          if (!player || !player->IsInWorld() || !chance || !roll)
-@@ -1329,6 +1390,12 @@ public:
+@@ -1328,6 +1390,12 @@ public:
          if (!accountId || !charRace || !charClass)
              return false;
  
@@ -883,7 +853,7 @@ index 28103d3..ab1b657 100644
          if ((!sIndividualProgression->enabled) ||
              (charRace != RACE_DRAENEI && charRace != RACE_BLOODELF && charClass != CLASS_DEATH_KNIGHT) ||
              (!sIndividualProgression->tbcRacesProgressionLevel && !sIndividualProgression->deathKnightProgressionLevel))
-@@ -1337,7 +1404,9 @@ public:
+@@ -1336,7 +1404,9 @@ public:
          }
  
          // Check if the account is a bot or excluded from progression
@@ -894,7 +864,7 @@ index 28103d3..ab1b657 100644
          {
              std::string accountName;
              if (AccountMgr::GetName(accountId, accountName) &&
-@@ -1510,6 +1579,11 @@ public:
+@@ -1509,6 +1579,11 @@ public:
  
  };
  
@@ -906,26 +876,6 @@ index 28103d3..ab1b657 100644
  void AddSC_mod_individual_progression_player()
  {
      new IndividualPlayerProgression();
-diff --git a/src/IndividualProgression_loader.cpp b/src/IndividualProgression_loader.cpp
-index 07ee51e..8ad4354 100644
---- a/src/IndividualProgression_loader.cpp
-+++ b/src/IndividualProgression_loader.cpp
-@@ -4,6 +4,7 @@
- 
- // From SC
- void AddSC_mod_individual_progression();
-+void AddSC_individual_progression_era_riding_prices();
- void AddSC_boss_onyxia_40();
- void AddSC_instance_onyxias_lair_40();
- void AddSC_instance_blackrock_spire_50_59_B();
-@@ -56,6 +57,7 @@ void AddSC_serpentshrine_cavern_70();
- void Addmod_individual_progressionScripts()
- {
-     AddSC_mod_individual_progression();
-+    AddSC_individual_progression_era_riding_prices();
-     AddSC_boss_onyxia_40();
-     AddSC_instance_onyxias_lair_40();
-     AddSC_instance_blackrock_spire_50_59_B();
 diff --git a/src/StrictEarnedProgressionPolicy.h b/src/StrictEarnedProgressionPolicy.h
 new file mode 100644
 index 0000000..0c95a74

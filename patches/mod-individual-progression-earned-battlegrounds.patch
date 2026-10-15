@@ -1,9 +1,9 @@
 diff --git a/src/EarnedEraBattlegrounds.cpp b/src/EarnedEraBattlegrounds.cpp
 new file mode 100644
-index 0000000..3d27732
+index 0000000..32c6335
 --- /dev/null
 +++ b/src/EarnedEraBattlegrounds.cpp
-@@ -0,0 +1,526 @@
+@@ -0,0 +1,515 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
 + * Released under the GNU AGPL v3 license:
@@ -27,17 +27,6 @@ index 0000000..3d27732
 +#include "GroupScript.h"
 +#include "IndividualProgression.h"
 +#include "IndividualProgressionBattlegrounds.h"
-+
-+// Bridge functions keep Playerbots independent of the progression module's
-+// enums. These checks read the character's already loaded rewarded quests.
-+uint8 IndividualProgression_GetEarnedEra(Player* player)
-+{
-+    if (!player || !player->IsInWorld() || !sIndividualProgression->IsStrictDefaultProgression())
-+        return 255;
-+
-+    uint8 const stage = sIndividualProgression->GetPlayerProgressionFromQuests(player);
-+    return stage >= PROGRESSION_TBC_TIER_5 ? 2 : stage >= PROGRESSION_PRE_TBC ? 1 : 0;
-+}
 +
 +uint8 IndividualProgression_BattlegroundEra(Player* player) { return IndividualProgression_GetEarnedEra(player); }
 +
@@ -532,10 +521,10 @@ index 0000000..3d27732
 +}
 diff --git a/src/IndividualProgressionBattlegrounds.h b/src/IndividualProgressionBattlegrounds.h
 new file mode 100644
-index 0000000..31ff44f
+index 0000000..fe5fc8d
 --- /dev/null
 +++ b/src/IndividualProgressionBattlegrounds.h
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,20 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
 + * Released under the GNU AGPL v3 license:
@@ -551,7 +540,6 @@ index 0000000..31ff44f
 +class Battleground;
 +
 +// 0: Vanilla, 1: TBC, 2: Wrath; 255: unavailable or unrestricted policy.
-+uint8 IndividualProgression_GetEarnedEra(Player* player);
 +uint8 IndividualProgression_BattlegroundEra(Player* player);
 +bool IndividualProgression_CanJoinBattleground(Player* player, uint32 battlegroundType);
 +uint8 IndividualProgression_BattlegroundMatchEra(Battleground* battleground);

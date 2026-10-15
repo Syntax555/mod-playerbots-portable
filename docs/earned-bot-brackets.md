@@ -70,7 +70,8 @@ access apply.
 
 The pinned IP/core data supplies these brackets. Matchmaking separates Vanilla
 (tiers 0–7), TBC (8–12) and Wrath (13+) within each bracket, including overlapping
-level-60/70 characters. Queued groups must share one earned era and every member
+level-60/70 characters. The realm tier limit also caps each active era.
+Queued groups must share one earned era and every member
 must qualify. Invitations and refills retain the instance's era; invitation
 acceptance checks the actual map and era again.
 
@@ -112,9 +113,12 @@ static scoreboard maximum is not a historical TBC display.
 ## Human queues and AI limits
 
 Humans unlock Strand of the Ancients and random battlegrounds with earned Wrath,
-and arena skirmishes with earned TBC. Native rated arenas require the realm's
-maximum level: 80 with earned Wrath, or 70 with earned TBC in the `tbc` realm
-mode; other characters use skirmishes. TBC arenas select Nagrand,
+and arena skirmishes with earned TBC. Creating an arena team or inviting a new
+member requires the realm's maximum level: 80 in `individual` and `wotlk` mode,
+or 70 in `tbc` mode. Existing teams retain rated access after the realm ceiling
+increases; level brackets and each participant's earned era still apply.
+Rated matchmaking also separates TBC and Wrath teams within the same bracket.
+TBC arenas select Nagrand,
 Blade's Edge and Ruins of Lordaeron. Wrath also adds Dalaran Sewers and Ring of
 Valor. Ordinary team and rating requirements remain in force. A character with
 SelfBot enabled keeps these human queue rights.

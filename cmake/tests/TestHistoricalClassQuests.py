@@ -122,20 +122,40 @@ historical = (ip / 'src/HistoricalClassQuests.cpp').read_text()
 progress_source = (ip / 'src/IndividualProgression.cpp').read_text()
 progress_enum = function((ip / 'src/IndividualProgression.h').read_text(), 'enum ProgressionState') + ';'
 trainer_source = core_file('src/server/game/Entities/Creature/Trainer.cpp').read_text()
-dispatcher = core_file('src/server/game/Scripting/ScriptDefines/PlayerScript.cpp').read_text()
+condition_source = core_file('src/server/game/Conditions/ConditionMgr.cpp').read_text()
+condition_header = core_file('src/server/game/Conditions/ConditionMgr.h').read_text()
 sql = (ip / 'data/sql/world/updates/2026_10_11_00_historical_class_quests.sql').read_text().replace('INSERT IGNORE', 'INSERT OR IGNORE')
+condition_sql = (ip / 'data/sql/world/updates/2026_10_15_00_historical_class_quest_conditions.sql').read_text().replace('INSERT IGNORE', 'INSERT OR IGNORE')
 training = (era / 'data/sql/world/base/2026_10_11_00_historical_priest_training.sql').read_text().replace('INSERT IGNORE', 'INSERT OR IGNORE')
 
 db = sqlite3.connect(':memory:')
 tables = ('quest_template', 'quest_template_addon', 'disables', 'creature_queststarter',
-          'creature_questender', 'trainer_spell', 'spell_ranks', 'spell_script_names', 'spell_bonus_data')
+          'creature_questender', 'trainer_spell', 'spell_ranks', 'spell_script_names', 'spell_bonus_data', 'conditions')
 rows = {table: dump(db, world if world.exists() else fallback / 'data/sql/base/db_world', table)
         for table in tables}
+# The native rewarded-quest condition requires a real nonrepeatable template.
+markers = (ip / 'data/sql/world/base/player_progression.sql').read_text()
+marker_insert = re.search(r'INSERT INTO `quest_template`.*?;', markers, re.DOTALL).group()
+db.executescript(marker_insert)
+marker_addon = re.search(r'INSERT INTO `quest_template_addon`.*?;', markers, re.DOTALL).group()
+db.executescript(marker_addon)
+for marker in range(66001, 66019):
+    row = db.execute('SELECT * FROM quest_template WHERE ID=?', (marker,)).fetchone()
+    assert row is not None
+    special = db.execute('SELECT SpecialFlags FROM quest_template_addon WHERE ID=?', (marker,)).fetchone()
+    assert special is not None and not special[0] & 1, 'marker unexpectedly repeatable'
+# Existing custom OR alternatives must both keep the progression gate.
+custom_conditions = [(19, 0, 5634, 0, group, 16, 0, race, 0, 0, 0, 0, 0, '', 'Custom historical race')
+                     for group, race in ((7, 1), (9, 4))]
+custom_conditions.append((19, 0, 5634, 0, 11, 8, 0, 66013, 0, 0, 0, 0, 0, '', 'Custom positive marker'))
+db.executemany('INSERT INTO conditions VALUES (' + ','.join('?' for _ in range(15)) + ')', custom_conditions)
 before = snapshot(db, tables)
 db.executescript(sql)
+db.executescript(condition_sql)
 db.executescript(training)
 after = snapshot(db, tables)
 db.executescript(sql)
+db.executescript(condition_sql)
 db.executescript(training)
 assert snapshot(db, tables) == after, 'migrations are not idempotent'
 assert before['quest_template_addon'] == after['quest_template_addon'], 'native class/race/chain gates changed'
@@ -154,8 +174,33 @@ families = (
     ((5644, 5646, 5679), 16, 20, 949152, 949364, 949296),
 )
 quest_ids = tuple(q for family in families for q in family[0])
+for family in families:
+    for quest in family[0]:
+        assert rows['quest_template_addon'][quest]['AllowableClasses'] == 16, quest
+        assert rows['quest_template'][quest]['MinLevel'] == family[2], quest
+        native_races = 1028 if quest in families[1][0] else family[1]
+        assert rows['quest_template'][quest]['AllowableRaces'] == native_races, quest
 assert any(row[0:2] == (1, 5634) for row in before['disables']), 'baseline no longer demonstrates the reported missing prayer quest'
 quest_columns = list(rows['quest_template'][5634])
+assert set(before['conditions']) <= set(after['conditions']), 'custom/native conditions changed'
+for quest in quest_ids:
+    gates = db.execute('SELECT ElseGroup,ConditionValue1,NegativeCondition FROM conditions WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? AND ConditionTypeOrReference=8 AND NegativeCondition=1', (quest,)).fetchall()
+    first = 66008 if quest in families[1][0] else 66013
+    groups = (7, 9, 11) if quest == 5634 else (0,)
+    assert set(gates) == {(group, marker, 1) for group in groups for marker in range(first, 66019)}, quest
+# The native primary key omits NegativeCondition. Dropping the discriminator
+# must fail the same gate check when a custom positive marker occupies it.
+with sqlite3.connect(':memory:') as collision:
+    collision.execute(db.execute("SELECT sql FROM sqlite_master WHERE name='conditions'").fetchone()[0])
+    collision.execute('CREATE TABLE quest_template (ID INTEGER PRIMARY KEY, RewardSpell INTEGER)')
+    collision.execute('INSERT INTO quest_template VALUES (5634,948090)')
+    collision.executemany('INSERT INTO conditions VALUES (' + ','.join('?' for _ in range(15)) + ')', custom_conditions)
+    mutated_sql = condition_sql.replace('marker.`ID`, 1, 0, 1', 'marker.`ID`, 0, 0, 1')
+    assert mutated_sql != condition_sql
+    collision.executescript(mutated_sql)
+    gates = collision.execute('SELECT ElseGroup,ConditionValue1,NegativeCondition FROM conditions WHERE SourceTypeOrReferenceId=19 AND SourceEntry=5634 AND ConditionTypeOrReference=8 AND NegativeCondition=1').fetchall()
+    assert set(gates) != {(group, marker, 1) for group in (7, 9, 11) for marker in range(66013, 66019)}
+print('Historical SQL mutation rejected: colliding positive marker swallowed the availability gate')
 for original, current in zip(before['quest_template'], after['quest_template']):
     assert original[0] == current[0]
     if original[0] not in quest_ids:
@@ -190,7 +235,7 @@ assert db.execute('SELECT RewardSpell,RewardDisplaySpell FROM quest_template WHE
 assert db.execute('SELECT 1 FROM disables WHERE sourceType=1 AND entry=5634').fetchone()
 db.execute('DELETE FROM disables WHERE sourceType=1 AND entry=5634')
 db.execute('UPDATE quest_template SET RewardSpell=948090,RewardDisplaySpell=948081 WHERE ID=5634')
-print('Historical SQL: native objectives/class/race/chain gates, relations, idempotence and customized rewards passed')
+print('Historical SQL: native quest/condition data, every custom OR branch, later-marker gaps, idempotence and customized rewards passed')
 
 FIXTURE = r'''
 #include <algorithm>
@@ -201,6 +246,7 @@ FIXTURE = r'''
 #include <cstdlib>
 #include <iostream>
 #include <functional>
+#include <list>
 #include <map>
 #include <set>
 #include <string>
@@ -215,6 +261,7 @@ enum { DISABLE_TYPE_QUEST, INVALIDREASON_DONT_HAVE_REQ, INVALIDREASON_QUEST_FAIL
  INVALIDREASON_QUEST_FAILED_WRONG_RACE, QUEST_STATUS_NONE, QUEST_STATUS_INCOMPLETE, QUEST_STATUS_COMPLETE, QUEST_STATUS_REWARDED,
  QUEST_SPECIAL_FLAGS_DELIVER, QUEST_ITEM_OBJECTIVES_COUNT=4, EQUIP_ERR_ITEM_NOT_FOUND=7, CONFIG_QUEST_HIGH_LEVEL_HIDE_DIFF=8 };
 PROGRESSION_ENUM
+CONDITION_ENUMS
 struct Quest {
  using PrevQuests=std::vector<int32>;
  uint32 id=0,minLevel=1,maxLevel=0,races=0,classes=0,rewardSpell=0,rewardDisplay=0;
@@ -238,7 +285,7 @@ struct ObjectMgr {
 struct DisableMgr {std::set<uint32> disabled; bool IsDisabledFor(int,uint32 id,void const*)const{return disabled.contains(id);}} disables;
 auto* sDisableMgr=&disables;
 struct World { uint32 getIntConfig(int) const {return 0;} } world; auto* sWorld=&world;
-struct Object {bool IsUnit()const{return false;} uint32 GetGUID()const{return 0;}};
+struct Object {virtual ~Object()=default;Object* ToUnit(){return this;}struct Player* GetCharmerOrOwnerPlayerOrPlayerItself();bool IsUnit()const{return false;} uint32 GetGUID()const{return 0;}virtual uint32 getRaceMask()const{return 0;}};
 struct Creature: Object { void SendPlaySpellVisual(uint32){} void SendPlaySpellImpact(uint32,uint32){}
  void CastSpell(struct Player*,uint32,bool){} };
 struct SpellEffectInfo {uint32 Effect=0,TriggerSpell=0;bool IsEffect(uint32 id)const{return Effect==id;}};
@@ -277,8 +324,8 @@ struct Player: Object {
  auto const& GetAppliedAuras()const{return applied;}void RemoveAura(AuraApplication* aura){for(auto i=applied.begin();i!=applied.end();){if(i->second==aura){i=applied.erase(i);++removedAuras;}else ++i;}}
  uint32 GetLevel()const{return level;}uint8 getRace()const{return race;}uint8 getClass()const{return playerClass;}
  uint32 getRaceMask()const{return 1u<<(race-1);}uint32 getClassMask()const{return 1u<<(playerClass-1);}
- bool IsInWorld()const{return inWorld;}bool GetQuestRewardStatus(uint32 id)const{return rewarded.contains(id);}
- bool IsQuestRewarded(uint32 id)const{return rewarded.contains(id);}int GetQuestStatus(uint32 id)const{if(id==66000u+state&&state)return QUEST_STATUS_REWARDED;auto i=active.find(id);return i==active.end()?QUEST_STATUS_NONE:i->second;}
+ bool IsInWorld()const{return inWorld;}bool GetQuestRewardStatus(uint32 id)const;
+ bool IsQuestRewarded(uint32 id)const{return rewarded.contains(id)||(state&&id==66000u+state);}int GetQuestStatus(uint32 id)const{if(id==66000u+state&&state)return QUEST_STATUS_REWARDED;auto i=active.find(id);return i==active.end()?QUEST_STATUS_NONE:i->second;}
  void SendCanTakeQuestResponse(int e)const{errors.push_back(e);}void SendEquipError(int,void*,void*,uint32){}
  uint32 GetItemCount(uint32)const{return 0;}bool HasEnoughMoney(uint32 cost)const{return money>=cost;}
  void ModifyMoney(int32 delta){assert(std::int64_t(money)+delta>=0);money=uint32(std::int64_t(money)+delta);++moneyChanges;}
@@ -296,28 +343,47 @@ struct Player: Object {
 #define GUARD(name) bool name(Quest const*,bool)const{return true;}
  GUARD(SatisfyQuestSkill) GUARD(SatisfyQuestReputation) GUARD(SatisfyQuestTimed) GUARD(SatisfyQuestNextChain)
  GUARD(SatisfyQuestPrevChain) GUARD(SatisfyQuestBreadcrumb) GUARD(SatisfyQuestDay) GUARD(SatisfyQuestWeek)
- GUARD(SatisfyQuestMonth) GUARD(SatisfyQuestSeasonal) GUARD(SatisfyQuestConditions)
+ GUARD(SatisfyQuestMonth) GUARD(SatisfyQuestSeasonal)
+ bool SatisfyQuestConditions(Quest const*,bool);
 #undef GUARD
 };
-struct IndividualProgression {bool enabled=true,strictEarnedProgression=true,disableDefaultProgression=false;std::map<uint32,uint32> customProgressionMap;
+Player* Object::GetCharmerOrOwnerPlayerOrPlayerItself(){return dynamic_cast<Player*>(this);}
+using WorldObject=Object;using Unit=Object;
+struct IndividualProgression {int progressionLimit=0;bool enabled=true,strictEarnedProgression=true,disableDefaultProgression=false;std::map<uint32,uint32> customProgressionMap;
  bool IsStrictDefaultProgression()const;uint8 GetPlayerProgressionFromQuests(Player*)const;} progression;
 auto* sIndividualProgression=&progression;
 PRODUCTION_HOOK_ENUM
 struct PlayerScript {std::set<uint16> hooks;PlayerScript(char const*,std::vector<uint16> enabled):hooks(enabled.begin(),enabled.end()){}
- virtual ~PlayerScript()=default;virtual bool OnPlayerCanUseQuest(Player*,Quest const*){return true;}
+ virtual ~PlayerScript()=default;
  virtual bool OnPlayerCanLearnSpell(Player*,uint32){return true;}virtual void OnPlayerLogin(Player*){}
  virtual void OnPlayerGetTrainerSpellState(Player const*,uint32,uint32,Trainer::SpellState&){}
  virtual void OnPlayerBeforeReceiveSpellListFromTrainer(Player*,Creature*,WorldPackets::NPC::TrainerList&){}
  virtual void OnPlayerSpellCast(Player*,Spell*,bool){}
 };
 std::vector<PlayerScript*> registered;
-struct ScriptMgr {bool OnPlayerCanUseQuest(Player*,Quest const*);
+struct ScriptMgr {
  bool OnPlayerCanLearnSpell(Player* p,uint32 id){for(auto* s:registered)if(s->hooks.contains(PLAYERHOOK_CAN_LEARN_SPELL)&&!s->OnPlayerCanLearnSpell(p,id))return false;return true;}
  void OnPlayerGetTrainerSpellState(Player const* p,uint32 trainer,uint32 spell,Trainer::SpellState& state){for(auto* s:registered)s->OnPlayerGetTrainerSpellState(p,trainer,spell,state);}
  void OnPlayerGetTrainerSpellCost(Player const*,Creature const*,uint32,uint32&){}
  void OnPlayerAfterTrainSpell(Player*,Creature*,uint32){}
 } scripts;auto* sScriptMgr=&scripts;
-#define CALL_ENABLED_BOOLEAN_HOOKS(kind,hook,condition) for(auto* script:registered)if(script->hooks.contains(hook)&&(condition))return false;return true
+struct Condition;
+struct ConditionSourceInfo {std::array<Object*,1> mConditionTargets;Condition* mLastFailedCondition=nullptr;
+ explicit ConditionSourceInfo(Object* p):mConditionTargets{{p}}{}};
+struct Condition {uint32 ConditionType=8,ConditionValue1=0,NegativeCondition=1,ElseGroup=0,ReferenceId=0;
+ bool isLoaded()const{return true;}bool Meets(ConditionSourceInfo&);};
+using ConditionList=std::list<Condition*>;
+using ConditionTypeContainer=std::map<uint32,ConditionList>;
+using ConditionContainer=std::map<ConditionSourceType,ConditionTypeContainer>;
+using ConditionReferenceContainer=std::map<uint32,ConditionList>;
+struct ConditionMgr {ConditionContainer ConditionStore;ConditionReferenceContainer ConditionReferenceStore;
+ ConditionList GetConditionsForNotGroupedEntry(ConditionSourceType,uint32);
+ bool IsObjectMeetToConditions(WorldObject*,ConditionList const&);
+ bool IsObjectMeetToConditions(ConditionSourceInfo&,ConditionList const&);
+ bool IsObjectMeetToConditionList(ConditionSourceInfo&,ConditionList const&);
+} conditions;auto* sConditionMgr=&conditions;
+#define LOG_DEBUG(...) ((void)0)
+#define ASSERT(value) assert(value)
 struct SpellScript {
  Player* caster=nullptr;SpellInfo const* info=nullptr;
  bool preventDefault=false;void PreventHitDefaultEffect(uint32){preventDefault=true;}
@@ -338,7 +404,7 @@ struct SpellScript {
 #define RegisterSpellScript(name) ((void)0)
 PRODUCTION_PROGRESS
 PRODUCTION_HISTORICAL
-PRODUCTION_DISPATCHER
+PRODUCTION_CONDITIONS
 PRODUCTION_QUESTS
 PRODUCTION_TRAINER
 PRODUCTION_LEARN_GATE
@@ -354,6 +420,7 @@ void Player::CastSpell(Player*,uint32 id,bool){
 int main(){
  historical_class_quests hook;registered.push_back(&hook);
  QUEST_ROWS
+ CONDITION_ROWS
  SPELL_ROWS
  Trainer::Trainer trainer;TRAINER_ROWS
  Object giver;Creature npc;
@@ -367,11 +434,12 @@ int main(){
    Player p;p.state=tier;p.race=race;p.playerClass=cls;p.level=contract.minLevel;
    uint32 root=tier<8?contract.vanillaRoot:(tier<13?contract.tbcRoot:0);
    bool expected=cls==5&&(contract.races&(1u<<(race-1)))&&root;
-   assert(p.CanSeeStartQuest(quest)==expected);assert(p.CanTakeQuest(quest,false)==expected);
+   bool nativeEligible=cls==5&&(quest->GetAllowableRaces()&(1u<<(race-1)));
+   assert(p.CanSeeStartQuest(quest)==nativeEligible);assert(p.CanTakeQuest(quest,false)==expected);
    assert(!p.CanRewardQuest(quest,false));p.active[id]=QUEST_STATUS_COMPLETE;
-   assert(p.CanRewardQuest(quest,false)==expected);
+   assert(p.CanRewardQuest(quest,false));
    p.RewardQuest(quest,0,&giver,false,false);
-   assert(p.sideEffects==uint32(expected));assert(p.rewarded.contains(id)==expected);
+   assert(p.sideEffects==1&&p.rewarded.contains(id));
    assert(p.HasSpell(root)==expected);++cases;
   }
  }
@@ -382,8 +450,21 @@ int main(){
  assert(!p.CanTakeQuest(prayer,false));p.rewarded.clear();
  p.level=9;assert(!p.CanTakeQuest(prayer,false));p.level=10;
  p.active[5634]=QUEST_STATUS_COMPLETE;p.state=13;
- assert(!p.CanRewardQuest(prayer,false));p.RewardQuest(prayer,0,&giver,false,false);
- assert(p.sideEffects==0&&p.active.contains(5634)&&p.rewarded.empty()&&p.known.empty());
+ assert(!p.CanTakeQuest(prayer,false));assert(p.CanRewardQuest(prayer,false));
+ p.RewardQuest(prayer,0,&giver,false,false);
+ assert(p.sideEffects==1&&!p.active.contains(5634)&&p.rewarded.contains(5634)&&p.known.empty());
+ Player capped;capped.state=13;capped.level=60;
+ progression.progressionLimit=7;
+ assert(!capped.CanTakeQuest(prayer,false));
+ capped.rewarded.insert(5634);
+ assert(HistoricalClassQuests::CanUseSpell(&capped,948081));
+ assert(!HistoricalClassQuests::CanUseSpell(&capped,949300));
+ progression.progressionLimit=12;
+ assert(!HistoricalClassQuests::CanUseSpell(&capped,948081));
+ assert(HistoricalClassQuests::CanUseSpell(&capped,949300));
+ progression.progressionLimit=0;
+ assert(!HistoricalClassQuests::CanUseSpell(&capped,949300));
+ p.rewarded.clear();p.active[5634]=QUEST_STATUS_COMPLETE;
  p.state=0;assert(!HistoricalClassQuests::CanUseSpell(&p,948081));p.learnSpell(948081);assert(p.known.empty());
  p.RewardQuest(prayer,0,&giver,false,false);assert(p.HasSpell(948081));assert(!p.HasSpell(948082));
  p.known.clear();hook.OnPlayerLogin(&p);assert(p.HasSpell(948081)&&!p.HasSpell(948082));
@@ -424,8 +505,8 @@ int main(){
  Player leader;leader.state=13;leader.rewarded.insert(5634);leader.known.insert(948081);
  Player follower;follower.level=60;hook.OnPlayerLogin(&follower);assert(follower.known.empty());
  assert(follower.CanTakeQuest(prayer,false));assert(!HistoricalClassQuests::CanUseSpell(&follower,948081));
- follower.inWorld=false;assert(!follower.CanSeeStartQuest(prayer));
- assert(!HistoricalClassQuests::CanUseQuest(nullptr,5634));assert(!HistoricalClassQuests::CanUseSpell(nullptr,948081));
+ follower.inWorld=false;assert(!HistoricalClassQuests::CanUseSpell(&follower,948081));
+ assert(!HistoricalClassQuests::CanUseSpell(nullptr,948081));
  struct Paid{uint32 root,races,level;};std::array<Paid,4> paid={{{949317,512,10},{949371,1028,20},{949377,1024,10},{949378,512,20}}};
  uint32 paidCases=0;
  for(auto const& entry:paid)for(uint8 tier=0;tier<=18;++tier)for(uint8 race:{1,2,3,4,5,6,7,8,10,11})for(uint8 cls:{1,5,8}){
@@ -459,19 +540,25 @@ int main(){
  consume.OnEffectHitTarget.handler(EFFECT_0);assert(consume.preventDefault&&consumer.removedAuras==1);
  for(int mode=0;mode<4;++mode){progression.enabled=mode!=0;progression.strictEarnedProgression=mode!=1;
  progression.disableDefaultProgression=mode==2;progression.customProgressionMap.clear();if(mode==3)progression.customProgressionMap[0]=1;
- assert(!p.CanSeeStartQuest(prayer));assert(!HistoricalClassQuests::CanUseSpell(&p,948081));assert(HistoricalClassQuests::CanUseSpell(&p,19236));}
- std::cout<<"Native historical acquisition: "<<cases<<" era/race/class/reward cases, "<<paidCases<<" TBC paid-racial cases, "<<purchases<<" real paid-rank purchases, direct reward revalidation, exclusive choices, personal markers and inactive-chain gates passed\n";
+ assert(p.CanSeeStartQuest(prayer));assert(!HistoricalClassQuests::CanUseSpell(&p,948081));assert(HistoricalClassQuests::CanUseSpell(&p,19236));}
+ std::cout<<"Native historical acquisition: "<<cases<<" era/race/class/reward cases, "<<paidCases<<" TBC paid-racial cases, "<<purchases<<" real paid-rank purchases, native condition routing, exclusive choices, personal markers and reward-spell gates passed\n";
 }
 '''
 
 quest_functions = '\n'.join(function(quest_source, signature) for signature in (
     'bool Player::CanSeeStartQuest(', 'bool Player::CanTakeQuest(', 'bool Player::CanRewardQuest(Quest const* quest, bool msg)',
     'bool Player::SatisfyQuestPreviousQuest(', 'bool Player::SatisfyQuestExclusiveGroup(',
-    'bool Player::SatisfyQuestClass(', 'bool Player::SatisfyQuestRace(', 'bool Player::SatisfyQuestLevel('))
-# Keep the production direct-reward gate and mark-credit-before-reward-cast block.
+    'bool Player::SatisfyQuestClass(', 'bool Player::SatisfyQuestRace(', 'bool Player::SatisfyQuestLevel(',
+    'bool Player::SatisfyQuestConditions(', 'bool Player::GetQuestRewardStatus('))
+assert 'if (!CanTakeQuest(quest, false))' in function(quest_source, 'void Player::PrepareQuestMenu(')
+dialog = function(quest_source, 'QuestGiverStatus Player::GetQuestDialogStatus(')
+assert dialog.count('GetConditionsForNotGroupedEntry(CONDITION_SOURCE_TYPE_QUEST_AVAILABLE,') == 2
+assert dialog.count('if (!sConditionMgr->IsObjectMeetToConditions(this, conditions))') == 2
+# Keep the native mark-credit-before-reward-cast block.
 # The unrelated inventory/XP/mail middle is an observable storage adapter.
 reward = function(quest_source, 'void Player::RewardQuest(')
 entry = reward[:reward.index('    //this THING')]
+assert 'OnPlayerCanUseQuest' not in entry, 'obsolete core quest hook remains'
 tail = reward[reward.index('    RemoveActiveQuest('):reward.index('    if (quest->GetZoneOrSort()')]
 quest_functions += '\n' + entry + '    ++sideEffects;\n    uint32 quest_id = quest->GetQuestId();\n    (void)reward; (void)announce; (void)isLFGReward;\n' + tail.replace('    if (announce)\n        SendQuestReward(quest, XP);\n', '') + '\n}\n'
 trainer_functions = '\n'.join(function(trainer_source, signature) for signature in (
@@ -479,7 +566,7 @@ trainer_functions = '\n'.join(function(trainer_source, signature) for signature 
     'Spell const* Trainer::GetSpell(', 'bool Trainer::CanTeachSpell(', 'SpellState Trainer::GetSpellState(',
     'SpellState Trainer::GetDefaultSpellState(', 'bool Trainer::IsTrainerValidForPlayer('))
 
-initializers = []
+initializers = [f'objects.quests.emplace({marker},Quest{{{marker},60,0,0,0,0,0,0,{{}}}});' for marker in range(66001, 66019)]
 for quest_id in quest_ids:
     quest = rows['quest_template'][quest_id]
     addon = rows['quest_template_addon'][quest_id]
@@ -503,9 +590,31 @@ for row in db.execute('SELECT * FROM trainer_spell WHERE TrainerId=11 AND SpellI
 for row in db.execute('SELECT spell_id,rank FROM spell_ranks WHERE first_spell_id>=948081 ORDER BY first_spell_id,rank'):
     if row[1] > 1:
         spell_initializers.append(f'spellMgr.previous.emplace({row[0]},{row[0]-1});')
-fixture = FIXTURE.replace('PROGRESSION_ENUM', progress_enum).replace('PRODUCTION_PROGRESS', '\n'.join(function(progress_source, signature) for signature in ('bool IndividualProgression::IsStrictDefaultProgression()', 'uint8 IndividualProgression::GetPlayerProgressionFromQuests(')))
+fixture = FIXTURE.replace('PROGRESSION_ENUM', progress_enum).replace('PRODUCTION_PROGRESS', '\n'.join(function(progress_source, signature) for signature in ('bool IndividualProgression::IsStrictDefaultProgression()', 'uint8 IndividualProgression::GetPlayerProgressionFromQuests(', 'uint8 IndividualProgression_GetEarnedEra(')))
 fixture = fixture.replace('PRODUCTION_HISTORICAL', re.sub(r'^#include[^\n]*\n', '', historical, flags=re.MULTILINE))
-fixture = fixture.replace('PRODUCTION_DISPATCHER', function(dispatcher, 'bool ScriptMgr::OnPlayerCanUseQuest('))
+# Compile the native marker/race decisions, negation and OR-group evaluator.
+# Other Condition::Meets cases concern unrelated object/spell/world adapters.
+meets = function(condition_source, 'bool Condition::Meets(')
+rewarded_case = meets[meets.index('    case CONDITION_QUESTREWARDED:'):meets.index('    case CONDITION_QUESTTAKEN:')]
+assert 'ConditionValue2' not in rewarded_case, 'rewarded-quest discriminator now changes evaluation'
+validation = function(condition_source, 'bool ConditionMgr::isConditionTypeValid(')
+quest_validation = validation[validation.index('    case CONDITION_QUESTREWARDED:'):validation.index('    case CONDITION_QUESTSTATE:')]
+assert 'if (cond->ConditionValue2 > 1)' in quest_validation, 'rewarded-quest discriminator no longer accepted'
+race_case = meets[meets.index('    case CONDITION_RACE:'):meets.index('    case CONDITION_GENDER:')]
+condition_functions = 'bool Condition::Meets(ConditionSourceInfo& sourceInfo) {\nWorldObject* object=sourceInfo.mConditionTargets[0];if(!object)return false;bool condMeets=false;switch(ConditionType){\n' + rewarded_case + race_case + 'default:break; }\n' + meets[meets.index('    if (NegativeCondition)'):]
+condition_functions += '\n'.join(function(condition_source, signature) for signature in (
+    'ConditionList ConditionMgr::GetConditionsForNotGroupedEntry(',
+    'bool ConditionMgr::IsObjectMeetToConditionList(',
+    'bool ConditionMgr::IsObjectMeetToConditions(WorldObject* object,',
+    'bool ConditionMgr::IsObjectMeetToConditions(ConditionSourceInfo&'))
+fixture = fixture.replace('CONDITION_ENUMS', function(condition_header, 'enum ConditionTypes') + ';\n' + function(condition_header, 'enum ConditionSourceType') + ';')
+fixture = fixture.replace('PRODUCTION_CONDITIONS', condition_functions)
+condition_initializers = []
+for index, row in enumerate(db.execute('SELECT SourceEntry,ElseGroup,ConditionTypeOrReference,ConditionValue1,NegativeCondition FROM conditions WHERE SourceTypeOrReferenceId=19 AND SourceEntry IN (' + ','.join(map(str, quest_ids)) + ')')):
+    quest, group, kind, value, negative = row
+    assert kind in (8, 16), row
+    condition_initializers.append(f'Condition condition{index}{{{kind},{value},{negative},{group},0}};conditions.ConditionStore[CONDITION_SOURCE_TYPE_QUEST_AVAILABLE][{quest}].push_back(&condition{index});')
+fixture = fixture.replace('CONDITION_ROWS', '\n'.join(condition_initializers))
 fixture = fixture.replace('PRODUCTION_HOOK_ENUM', function(core_file('src/server/game/Scripting/ScriptDefines/PlayerScript.h').read_text(), 'enum PlayerHook') + ';')
 fixture = fixture.replace('PRODUCTION_QUESTS', quest_functions).replace('PRODUCTION_TRAINER', 'namespace Trainer {\n' + trainer_functions + '\n}')
 fixture = fixture.replace('QUEST_ROWS', '\n'.join(initializers)).replace('SPELL_ROWS', '\n'.join(spell_initializers)).replace('TRAINER_ROWS', '\n'.join(trainer_initializers))
@@ -516,12 +625,16 @@ fixture = fixture.replace('PRODUCTION_LEARN_GATE', learn[:learn.index('    // Xi
 with tempfile.TemporaryDirectory(prefix='historical-class-quests-') as directory:
     temporary = Path(directory)
     compile_run(temporary, 'native', fixture)
-    # Reverting the original absence of quest gates admits cross-era quests.
-    removed = fixture.replace('    if (!sScriptMgr->OnPlayerCanUseQuest(this, quest))\n        return false;\n', '')
-    compile_run(temporary, 'missing-quest-gates', removed, expected=False)
-    removed = fixture.replace('    if (!sScriptMgr->OnPlayerCanUseQuest(this, quest))\n        return;\n', '')
-    compile_run(temporary, 'missing-direct-reward-gate', removed, expected=False)
-print('Reverted native quest and direct reward gate mutations were rejected')
+    removed = fixture.replace('           && SatisfyQuestConditions(quest, msg)', '')
+    assert removed != fixture
+    compile_run(temporary, 'missing-native-condition-route', removed, expected=False)
+    removed = fixture.replace('condMeets = player->GetQuestRewardStatus(ConditionValue1);', 'condMeets = player && false;')
+    assert removed != fixture
+    compile_run(temporary, 'missing-personal-marker-gate', removed, expected=False)
+    removed = fixture.replace('condMeets = unit->getRaceMask() & ConditionValue1;', 'condMeets = unit != nullptr;')
+    assert removed != fixture
+    compile_run(temporary, 'missing-vanilla-fear-ward-race-gate', removed, expected=False)
+print('Native availability route, personal-marker and historical-race mutations were rejected')
 
 
 def load_python(name, path):

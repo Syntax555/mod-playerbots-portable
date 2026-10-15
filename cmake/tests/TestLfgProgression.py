@@ -2,10 +2,11 @@
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, prepared_core, run_fixture
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core, run_fixture
 
 
 STUBS = r'''
@@ -57,12 +58,12 @@ void Group::Set(std::initializer_list<Player*> members){refs.clear();for(Player*
 struct ConfigMgr {std::map<std::string,uint32> opts;template<class T>T GetOption(char const* name,T fallback){auto it=opts.find(name);return it==opts.end()?fallback:static_cast<T>(it->second);}};
 ConfigMgr config;ConfigMgr* sConfigMgr=&config;
 struct IndividualProgression {
- bool enabled=true,strict=true;uint8 progressionLimit=0;
+ bool enabled=true,strict=true;int progressionLimit=0;
  bool IsStrictDefaultProgression()const{return enabled&&strict;}
- bool hasPassedProgression(Player* p,uint8 state)const{return p&&p->tier>=state&&(!progressionLimit||state<=progressionLimit);}
+ uint8 GetPlayerProgressionFromQuests(Player* p)const{return p->tier;}
 };
 IndividualProgression ip;IndividualProgression* sIndividualProgression=&ip;
-constexpr uint8 PROGRESSION_PRE_TBC=8,PROGRESSION_TBC_TIER_5=13;
+// NATIVE_PROGRESSION_ENUM
 struct PlayerbotAIConfig {std::set<uint32> accounts;bool IsInRandomAccountList(uint32 id){return accounts.count(id)!=0;}};
 PlayerbotAIConfig sPlayerbotAIConfig;
 struct LFGMgr {
@@ -120,6 +121,7 @@ int main(){
  ip.progressionLimit=12;random=261;queue.OnPlayerQueueRandomDungeon(&p,random);assert(random==259);
  ip.progressionLimit=0;ip.strict=false;random=261;queue.OnPlayerQueueRandomDungeon(&p,random);assert(random==258);
  ip.strict=true;ip.enabled=false;random=261;queue.OnPlayerQueueRandomDungeon(&p,random);assert(random==261);ip.enabled=true;
+ assert(IpTier(nullptr)==LfgProgression::EXPANSION_CLASSIC);
  // Random category entries stay usable for the remap; specific later-era entries remain locked.
  p.tier=0;p.level=60;lfg::LFGDungeonData randomEntry{259,0,0,1,lfg::LFG_TYPE_RANDOM,false};lock=0;
  locks.OnInitializeLockedDungeons(&p,level,lock,&randomEntry);assert(lock==0);locks.OnAfterInitializeLockedDungeons(&p);
@@ -135,13 +137,18 @@ def main():
     parser.add_argument('--source',type=Path)
     args=parser.parse_args()
     repo=Path(__file__).resolve().parents[2]
-    source=args.source or prepared_core(repo)/'modules/mod-lfg-progression/src'
+    core=prepared_core(repo)
+    source=args.source or core/'modules/mod-lfg-progression/src'
     if not source.is_dir():
         raise SystemExit('PrepareModules.cmake must prepare mod-lfg-progression first')
     compiler=cxx()
+    ip=core/'modules/mod-individual-progression/src'
+    progression_enum=re.search(r'enum ProgressionState : uint8[^{}]*\{.*?^\};',
+                               (ip/'IndividualProgression.h').read_text(),re.MULTILINE|re.DOTALL).group(0)
+    earned_era=function((ip/'IndividualProgression.cpp').read_text(),'uint8 IndividualProgression_GetEarnedEra(')
     with tempfile.TemporaryDirectory(prefix='lfg-earned-') as temp:
         work=Path(temp)
-        (work/'NativeStubs.h').write_text(STUBS)
+        (work/'NativeStubs.h').write_text(STUBS.replace('// NATIVE_PROGRESSION_ENUM',progression_enum)+'\n'+earned_era)
         for name in ('Config.h','Group.h','LFG.h','LFGMgr.h','Log.h','ObjectMgr.h','Player.h','ScriptMgr.h','WorldSession.h','IndividualProgression.h','PlayerbotAIConfig.h'):
             (work/name).write_text('#include "NativeStubs.h"\n')
         (work/'fixture.cpp').write_text(HARNESS)

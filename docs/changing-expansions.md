@@ -17,6 +17,10 @@ credit is saved even when earned out of order, but cannot fill missing earlier
 tiers. Transition quests must be rewarded as well as have their prerequisites
 met. Ordinary quest, item, map and attunement requirements remain in force.
 
+The realm tier limit caps the active earned era for talents, riding prices,
+battlegrounds, dungeon parties and LFG. Lowering it preserves saved progression
+markers. Historical quest availability continues to follow those saved markers.
+
 ## Required milestone chain
 
 These are the completion markers for each tier, rather than every encounter
@@ -73,10 +77,12 @@ level-69/79 residents must first earn TBC/Wrath. See
 
 Classic battlegrounds use ordinary level requirements. Tier 8 opens Eye of the
 Storm and human TBC arena skirmishes; tier 13 opens Isle of Conquest, Strand of
-the Ancients, random battlegrounds and Wrath arenas. Rated arenas require the
-realm's maximum level: 80 with earned Wrath in `individual` and `wotlk` mode,
-or 70 with earned TBC in `tbc` mode (see [realm ceilings](#optional-realm-ceilings)).
-Below that level, characters use skirmishes.
+the Ancients, random battlegrounds and Wrath arenas. Creating arena teams and
+inviting new members requires the realm's maximum level: 80 in `individual`
+and `wotlk` mode, or 70 in `tbc` mode (see [realm ceilings](#optional-realm-ceilings)).
+Existing teams retain rated access after the realm ceiling increases. Their
+members still need the same level bracket and earned era to queue together;
+rated matchmaking also separates opponents by earned era.
 
 Matchmaking separates earned eras within each level bracket. Every member of a
 queued group must qualify and share one era. Match rules remain fixed for that

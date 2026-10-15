@@ -69,18 +69,10 @@ and ordinary player actions.
 
 ## Core and module patches
 
-- [ ] Replace the historical class-quest core hook with
-  `CONDITION_SOURCE_TYPE_QUEST_AVAILABLE` rows.
-- [ ] Reduce the rated-arena core patch to the map filter once the team-era
-  filter is shown never to reject in the shipped setups.
-- [ ] Credit the Naxxramas marker together with the Ahn'Qiraj marker in strict
-  mode instead of rewriting upstream condition rows, with a characters backfill.
-- [ ] One earned-era helper in Individual Progression, clamped to the realm
-  ceiling, instead of the local stage-to-era mappings in the other patches.
-- [ ] Move the Into the Breach fix into the milestones patch and the riding
-  script into its own patch (a coordinated two-patch refresh).
-- [ ] Decide whether World Buff Bots keeps its announcer name pools, which only
-  serve `{player}` in customized announcements.
+- [ ] Keep the rated-arena team-era filter while retained level-70 teams can
+  enter the same native bracket with different earned eras after a TBC-to-Wrath
+  realm transition. Remove it only if the native admission rules make this
+  impossible without restricting existing characters or teams.
 
 ## Launcher and updates
 

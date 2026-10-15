@@ -817,10 +817,10 @@ index 0000000..2be18ef
 +#endif
 diff --git a/src/DcEarnedProgression.cpp b/src/DcEarnedProgression.cpp
 new file mode 100644
-index 0000000..935ff34
+index 0000000..99c050b
 --- /dev/null
 +++ b/src/DcEarnedProgression.cpp
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,27 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "DcEarnedProgression.h"
 +#include "IndividualProgression.h"
@@ -840,12 +840,7 @@ index 0000000..935ff34
 +    // The character's own rewarded progression markers decide its earned era.
 +    uint8 Expansion(Player* player)
 +    {
-+        uint8 const stage = Stage(player);
-+        if (stage > PROGRESSION_WOTLK_TIER_5)
-+            return 3;
-+        if (stage >= PROGRESSION_TBC_TIER_5)
-+            return 2;
-+        return stage >= PROGRESSION_PRE_TBC ? 1 : 0;
++        return IndividualProgression_GetEarnedEra(player);
 +    }
 +
 +    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z)
@@ -855,7 +850,7 @@ index 0000000..935ff34
 +}
 diff --git a/src/DcEarnedProgression.h b/src/DcEarnedProgression.h
 new file mode 100644
-index 0000000..16a93a3
+index 0000000..f7d2776
 --- /dev/null
 +++ b/src/DcEarnedProgression.h
 @@ -0,0 +1,18 @@
@@ -871,7 +866,7 @@ index 0000000..16a93a3
 +    bool StrictDefault();
 +    // The highest rewarded Individual Progression marker stage.
 +    uint8 Stage(Player* player);
-+    // Returns 0 (Vanilla), 1 (TBC), 2 (Wrath), or 3 for an invalid marker stage.
++    // Returns 0 (Vanilla), 1 (TBC), 2 (Wrath), or 255 for unsupported progression.
 +    uint8 Expansion(Player* player);
 +    // Individual Progression's map entry gates, checked without side effects.
 +    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z);
