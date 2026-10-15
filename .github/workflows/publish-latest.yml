@@ -13,6 +13,8 @@ permissions:
 concurrency:
   # Only publishable builds share the queue, so the skipped run of a failed,
   # cancelled or pull request build cannot replace a pending publication.
+  # The surviving publisher selects the newest successful main build, even
+  # when an older re-run replaces a newer pending publication.
   group: >-
     ${{ github.event.workflow_run.conclusion == 'success' &&
     github.event.workflow_run.head_repository.full_name == github.repository &&
@@ -30,34 +32,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout verified source
+      - name: Checkout trusted publisher
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Select newest verified main build
+        id: build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/publish_latest.py --select-build-output "$GITHUB_OUTPUT"
+
       - name: Download verified server and addon packages
+        if: steps.build.outputs.run_id != ''
         uses: actions/download-artifact@v7
         with:
           name: portable-zip
           path: output
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.build.outputs.run_id }}
 
       - name: Download verified client package
+        if: steps.build.outputs.run_id != ''
         uses: actions/download-artifact@v7
         with:
           name: era-client-zip
           path: output
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.build.outputs.run_id }}
 
       - name: Publish Latest
+        if: steps.build.outputs.run_id != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           python3 scripts/publish_latest.py
-          --sha '${{ github.event.workflow_run.head_sha }}'
+          --sha '${{ steps.build.outputs.sha }}'
           --artifacts output
           --notes .github/RELEASE_TEMPLATE.md
           --run-id '${{ github.run_id }}'

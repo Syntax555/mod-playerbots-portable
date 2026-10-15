@@ -17,6 +17,7 @@ changed: it is deleted once its replacement is public and verified.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
 from dataclasses import dataclass
 import hashlib
 import json
@@ -52,6 +53,7 @@ RETRY_DELAYS = (2, 5)
 # release as moved aside by earlier versions of this script.
 STAGING_TAG = re.compile(r"build-[0-9]+-[0-9a-f]{12}")
 BACKUP_TAG = re.compile(r"latest-previous-[0-9]+-[0-9a-f]{12}")
+BUILD_ARTIFACTS = {"portable-zip", "era-client-zip"}
 
 
 class PublishError(RuntimeError):
@@ -167,6 +169,25 @@ class GitHubClient:
 
     def compare_commits(self, base: str, head: str) -> dict[str, Any]:
         return self._request("GET", f"/compare/{base}...{head}")
+
+    def _action_entries(self, path: str, key: str) -> Iterator[dict[str, Any]]:
+        separator = "&" if "?" in path else "?"
+        for page in range(1, 1001):
+            response = self._request("GET", f"{path}{separator}per_page=100&page={page}")
+            entries = response.get(key) if isinstance(response, dict) else None
+            if not isinstance(entries, list):
+                raise PublishError("GitHub returned an invalid Actions listing")
+            yield from entries
+            if len(entries) < 100:
+                return
+        raise PublishError("GitHub pagination exceeded the expected repository size")
+
+    def successful_main_builds(self) -> Iterator[dict[str, Any]]:
+        return self._action_entries(
+            "/actions/workflows/release.yml/runs?branch=main&status=success", "workflow_runs")
+
+    def build_artifacts(self, run_id: int) -> Iterator[dict[str, Any]]:
+        return self._action_entries(f"/actions/runs/{run_id}/artifacts", "artifacts")
 
     def release_by_tag(self, tag: str) -> dict[str, Any] | None:
         try:
@@ -439,6 +460,41 @@ def contains(client: GitHubClient, base: str, head: str) -> bool:
             and type(behind) is int and behind == 0)
 
 
+def select_build(client: GitHubClient) -> dict[str, Any] | None:
+    """Resolve the newest original usable main run inside the publication queue.
+
+    A re-run can evict a newer pending workflow from GitHub's concurrency
+    queue. Each surviving publisher therefore chooses from successful builds
+    rather than publishing the build that triggered it.
+    """
+    main = commit_sha(client.main_sha())
+    if main is None:
+        raise PublishError("GitHub returned an invalid main revision")
+    # A re-run keeps its original run_number, regardless of completion time
+    # or the order in which the API returns workflow runs.
+    runs = (run for run in client.successful_main_builds()
+            if type(run.get("run_number")) is int and run["run_number"] > 0)
+    for run in sorted(runs, key=lambda run: run["run_number"], reverse=True):
+        sha = commit_sha(run.get("head_sha"))
+        repository = run.get("head_repository")
+        if (run.get("status") != "completed" or run.get("conclusion") != "success"
+                or run.get("event") not in {"push", "workflow_dispatch"}
+                or run.get("head_branch") != "main" or not isinstance(repository, dict)
+                or repository.get("full_name") != client.repository
+                or type(run.get("id")) is not int or run["id"] <= 0
+                or sha is None or not contains(client, sha, main)):
+            continue
+        artifacts = [artifact for artifact in client.build_artifacts(run["id"])
+                     if artifact.get("name") in BUILD_ARTIFACTS]
+        if (len(artifacts) == len(BUILD_ARTIFACTS)
+                and {artifact["name"] for artifact in artifacts} == BUILD_ARTIFACTS
+                and all(artifact.get("expired") is False
+                        and type(artifact.get("size_in_bytes")) is int and artifact["size_in_bytes"] > 0
+                        for artifact in artifacts)):
+            return {"run_id": run["id"], "sha": sha}
+    return None
+
+
 def workflows_match_main(client: GitHubClient, sha: str, main: str) -> bool:
     """Whether GitHub lets the Actions token point refs at the build commit."""
     return sha == main or client.workflow_files(sha) == client.workflow_files(main)
@@ -616,13 +672,25 @@ def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, r
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sha", required=True)
-    parser.add_argument("--artifacts", required=True, type=Path)
-    parser.add_argument("--notes", required=True, type=Path)
-    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--select-build-output", type=Path)
+    parser.add_argument("--sha")
+    parser.add_argument("--artifacts", type=Path)
+    parser.add_argument("--notes", type=Path)
+    parser.add_argument("--run-id")
     args = parser.parse_args()
+    if args.select_build_output is None and not all((args.sha, args.artifacts, args.notes, args.run_id)):
+        parser.error("publication requires --sha, --artifacts, --notes and --run-id")
     try:
         client = GitHubClient(os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", ""))
+        if args.select_build_output is not None:
+            build = select_build(client)
+            if build is None:
+                print("No successful main build has both required packages available; publication skipped.")
+            else:
+                with args.select_build_output.open("a", encoding="utf-8") as output:
+                    output.write(f"run_id={build['run_id']}\nsha={build['sha']}\n")
+                print(f"Selected main build {build['run_id']} at {build['sha']}.")
+            return 0
         result = publish(client, args.sha, args.artifacts, args.notes, args.run_id)
     except (PublishError, OSError) as error:
         print(f"Publication failed: {error}", file=sys.stderr)
