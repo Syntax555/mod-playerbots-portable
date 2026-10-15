@@ -8,7 +8,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 
 | Component | Upstream repository | Locked revision | Role |
 | --- | --- | --- | --- |
-| AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `f19a18799a35` | Core server, historical spell/accounting hooks and earned-era PvP rules |
+| AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `2a2211cd8f3d` | Core server, historical spell/accounting hooks and earned-era PvP rules |
 | Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `037c01418b5d` | Natural progression, earned auctions and era-aware bots |
 | AutoBalance | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) | `1d707cb61a09` | Instance scaling by actual party size |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `60336b349cce` | Earned content milestones and expansion access |

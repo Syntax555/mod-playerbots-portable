@@ -3,7 +3,7 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-    "revision": "f19a18799a35f7c24bdcdc9ea399c601f166259b",
+    "revision": "2a2211cd8f3d157da432ec0175ddd4b8a191931f",
     "source": "azerothcore-wotlk",
     "patches": [
       "patches/azerothcore-era-shatter.patch",
@@ -53,7 +53,8 @@
         "patches/mod-individual-progression-earned-milestones.patch",
         "patches/mod-individual-progression-earned-battlegrounds.patch",
         "patches/mod-individual-progression-frostmane-hold.patch",
-        "patches/mod-individual-progression-historical-class-quests.patch"
+        "patches/mod-individual-progression-historical-class-quests.patch",
+        "patches/mod-individual-progression-creature-era-modifiers.patch"
       ]
     },
     {
