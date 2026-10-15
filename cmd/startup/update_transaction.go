@@ -214,6 +214,14 @@ func discardStagedUpdate(root string) error {
 	return nil
 }
 
+// Only use after confirming the installation is intact. Leftover update files
+// can be removed on the next start; they must not prevent this one.
+func discardFinishedUpdate(root string) {
+	if err := discardStagedUpdate(root); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not clean up update files; will retry on the next start: %v\n", err)
+	}
+}
+
 func recoverPortableUpdate(root string) error {
 	plan, err := readPortableUpdatePlan(root)
 	if errors.Is(err, os.ErrNotExist) {
@@ -229,13 +237,19 @@ func recoverPortableUpdate(root string) error {
 		} else if !errors.Is(ownerErr, os.ErrNotExist) {
 			return ownerErr
 		}
-		return discardStagedUpdate(root)
+		discardFinishedUpdate(root)
+		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read pending update: %w", err)
 	}
 	for _, pid := range []int{plan.ParentPID, plan.HelperPID} {
 		if pid != os.Getpid() && updateProcessActive(root, pid) {
+			// Cleanup can leave the journal when the helper restarts us. Let
+			// it exit, then re-read the phase before touching recovery files.
+			if pid == plan.HelperPID && plan.Phase != "applying" && watchProcessExit(pid)(2*time.Second) {
+				return recoverPortableUpdate(root)
+			}
 			return errors.New("another launcher is updating this installation; wait for it to finish")
 		}
 	}
@@ -250,7 +264,8 @@ func recoverPortableUpdate(root string) error {
 			return fmt.Errorf("restore interrupted update before starting servers: %w", err)
 		}
 	}
-	return discardStagedUpdate(root)
+	discardFinishedUpdate(root)
+	return nil
 }
 
 // updateProcessActive reports whether pid runs a program from this
@@ -501,7 +516,8 @@ func finishPortableUpdate(root string, plan *portableUpdatePlan) error {
 	if err := writeUpdateJSON(filename, plan.Manifest); err != nil {
 		return err
 	}
-	return discardStagedUpdate(root)
+	discardFinishedUpdate(root)
+	return nil
 }
 
 func runPortableUpdateHelper(args []string) (bool, error) {
@@ -569,7 +585,8 @@ func discardIntactUpdate(root string) bool {
 	if err != nil || plan.Phase != "staged" && plan.Phase != "rolled-back" {
 		return false
 	}
-	return discardStagedUpdate(root) == nil
+	discardFinishedUpdate(root)
+	return true
 }
 
 // withoutUpdateCheck adds --no-update once, before any "--" terminator, so a
