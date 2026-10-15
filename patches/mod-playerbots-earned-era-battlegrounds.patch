@@ -1,23 +1,23 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index e5a6a12..b8d28c5 100644
+index 1e28e9f..f21660a 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
-@@ -1656,6 +1656,13 @@ AiPlayerbot.RandomBotJoinBG = 1
+@@ -1656,6 +1656,13 @@ Playerbots.RandomBotJoinBG = 1
  # Existing matches may finish. Disable when opening later-expansion PvP.
- AiPlayerbot.VanillaBattlegroundsOnly = 0
+ Playerbots.VanillaBattlegroundsOnly = 0
  
 +# Use earned Individual Progression tiers and native level brackets for bot PvP.
 +# Fills real players' queues within the same era: Vanilla WS/AB/AV, TBC Eye of
 +# the Storm and Wrath Isle of Conquest. Requires the portable earned IP patch.
 +# Bot arenas, random battlegrounds and unsupported Strand of the Ancients stay
 +# disabled. No character levels, progression, gear or gold are granted.
-+AiPlayerbot.EarnedEraBattlegrounds = 0
++Playerbots.EarnedEraBattlegrounds = 0
 +
  # Enable auto-joining of battlegrounds - have bots start battlegrounds and arenas on their own
- AiPlayerbot.RandomBotAutoJoinBG = 0
+ Playerbots.RandomBotAutoJoinBG = 0
  
 diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
-index e6bcae0..e33adb1 100644
+index 4ceb421..8d9bcf5 100644
 --- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 +++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 @@ -24,7 +24,8 @@ bool BGJoinAction::Execute(Event /*event*/)
@@ -322,7 +322,7 @@ index 0000000..fc6e281
 +
 +#endif
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 5e1ac33..8d02966 100644
+index 337518f..dbe0f9b 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
 @@ -933,6 +933,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
@@ -455,7 +455,7 @@ index 5e1ac33..8d02966 100644
  }
  
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index 78d74e0..26466d3 100644
+index d673b7f..66843be 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
 @@ -7,6 +7,7 @@
@@ -486,21 +486,21 @@ index 78d74e0..26466d3 100644
 +
      RandomPlayerbotMgr() : PlayerbotHolder()
      {
-         this->playersLevel = sPlayerbotAIConfig.randombotStartingLevel;
+         this->playersLevel = sPlayerbotAIConfig.RandomBotStartingLevel;
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 21c6627..4e4b3b6 100644
+index bc0265d..23b77fd 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -86,6 +86,7 @@ bool PlayerbotAIConfig::Initialize()
      earnedAuctionInterval =
-         std::clamp(sConfigMgr->GetOption<uint32>("AiPlayerbot.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
-     vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.VanillaBattlegroundsOnly", false);
-+    earnedEraBattlegrounds = sConfigMgr->GetOption<bool>("AiPlayerbot.EarnedEraBattlegrounds", false);
-     if (!enabled)
+         std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
+     vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("Playerbots.VanillaBattlegroundsOnly", false);
++    earnedEraBattlegrounds = sConfigMgr->GetOption<bool>("Playerbots.EarnedEraBattlegrounds", false);
+     if (!Enabled)
      {
          LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index b61fd2e..38ac14d 100644
+index 3775c5c..c7243bd 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -112,6 +112,7 @@ public:
@@ -508,11 +508,11 @@ index b61fd2e..38ac14d 100644
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
 +    bool earnedEraBattlegrounds = false;
-     bool disabledWithoutRealPlayer;
+     bool DisabledWithoutRealPlayer;
      bool EnableICCBuffs;
-     bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
+     bool AllowAccountBots, AllowGuildBots, AllowTrustedAccountBots;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index 5f490f3..08322ed 100644
+index 5e529c6..b4d6274 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -7,6 +7,8 @@

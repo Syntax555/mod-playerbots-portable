@@ -69,8 +69,8 @@ The server validates talent purchases against earned era, level-earned budget,
 row depth, rank and prerequisites. Native Wrath purchases are blocked while a
 historical tree is active. Random bots add points to their existing build and use
 the full native tree after earning Wrath. A new historical build follows the PvE
-spec weights in `AiPlayerbot.RandomClassSpecProb`, including feral cat druids.
-`AiPlayerbot.LimitTalentsExpansion = 0` disables the level-based factory limit
+spec weights in `Playerbots.RandomClassSpecProb`, including feral cat druids.
+`Playerbots.LimitTalentsExpansion = 0` disables the level-based factory limit
 for that allocation. Altbots and SelfBot characters keep unspent points for their
 owner to spend.
 

@@ -35,10 +35,10 @@ progression. Human characters and account alts receive no automatic caps.
 Edit `configs/modules/playerbots.conf` with the servers stopped:
 
 ```ini
-AiPlayerbot.NaturalProgression = 1
-AiPlayerbot.EarnedLevelBrackets = "19:5,29:5,39:5,49:5,59:5,69:5,79:5"
-AiPlayerbot.LevelBrackets.Enabled = 0
-AiPlayerbot.ResetBotLevel.Enabled = 0
+Playerbots.NaturalProgression = 1
+Playerbots.EarnedLevelBrackets = "19:5,29:5,39:5,49:5,59:5,69:5,79:5"
+Playerbots.LevelBrackets.Enabled = 0
+Playerbots.ResetBotLevel.Enabled = 0
 ```
 
 Each entry is `level:percentage`: unique levels from 1 to 80 and positive whole
@@ -80,10 +80,10 @@ TBC, must earn the needed expansion before queueing. Their levels are retained.
 The defaults in `configs/modules/playerbots.conf` are:
 
 ```ini
-AiPlayerbot.EarnedEraBattlegrounds = 1
-AiPlayerbot.VanillaBattlegroundsOnly = 0
-AiPlayerbot.RandomBotJoinBG = 1
-AiPlayerbot.RandomBotAutoJoinBG = 0
+Playerbots.EarnedEraBattlegrounds = 1
+Playerbots.VanillaBattlegroundsOnly = 0
+Playerbots.RandomBotJoinBG = 1
+Playerbots.RandomBotAutoJoinBG = 0
 ```
 
 Bots fill a real player's eligible queue; autonomous all-bot matches and

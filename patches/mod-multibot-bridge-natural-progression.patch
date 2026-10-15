@@ -1,4 +1,5 @@
 diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
+index 19f1e59..acf3361 100644
 --- a/src/MultiBotBridge.cpp
 +++ b/src/MultiBotBridge.cpp
 @@ -14,6 +14,7 @@
@@ -9,7 +10,25 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
  #include "ObjectAccessor.h"
  #include "ObjectGuid.h"
  #include "ObjectMgr.h"
-@@ -3985,7 +3986,7 @@
+@@ -1341,7 +1342,7 @@ std::string GetPremadeSpecLink(uint8 classId, uint32 specIndex, uint32 botLevel)
+         seen.insert(level);
+ 
+         std::ostringstream key;
+-        key << "AiPlayerbot.PremadeSpecLink." << static_cast<uint32>(classId) << '.' << specIndex << '.' << level;
++        key << "Playerbots.PremadeSpecLink." << static_cast<uint32>(classId) << '.' << specIndex << '.' << level;
+ 
+         std::string const link = GetPremadeSpecConfigString(key.str());
+         if (!link.empty())
+@@ -1545,7 +1546,7 @@ std::vector<TalentSpecEntryData> BuildTalentSpecEntries(Player* bot)
+     for (uint32 specIndex = 0; specIndex <= 30; ++specIndex)
+     {
+         std::ostringstream nameKey;
+-        nameKey << "AiPlayerbot.PremadeSpecName." << static_cast<uint32>(classId) << '.' << specIndex;
++        nameKey << "Playerbots.PremadeSpecName." << static_cast<uint32>(classId) << '.' << specIndex;
+ 
+         std::string const specName = GetPremadeSpecConfigString(nameKey.str());
+         if (specName.empty())
+@@ -3985,7 +3986,7 @@ PlayerbotAI* GetBotAI(Player* bot)
      return sPlayerbotsMgr.GetPlayerbotAI(bot);
  }
  
@@ -18,7 +37,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
  {
      PlayerbotAI* const botAI = GetBotAI(bot);
      if (!botAI || !botAI->GetAiObjectContext())
-@@ -3999,11 +4000,95 @@
+@@ -3999,6 +4000,9 @@ Creature* FindNearbyNpcWithFlag(Player* bot, uint32 npcFlag)
          if (!unit || unit->IsHostileTo(bot) || !unit->HasNpcFlag(static_cast<NPCFlags>(npcFlag)))
              continue;
  
@@ -28,10 +47,10 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          if (Creature* const creature = unit->ToCreature())
              return creature;
      }
- 
+@@ -4006,6 +4010,87 @@ Creature* FindNearbyNpcWithFlag(Player* bot, uint32 npcFlag)
      return nullptr;
-+}
-+
+ }
+ 
 +uint32 MoveNaturalBankItem(Player* bot, Creature* banker, Item* item, bool deposit, std::string& reason)
 +{
 +    reason = "NATURAL_PROGRESSION";
@@ -111,10 +130,12 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
 +    else
 +        reason.clear();
 +    return moved;
- }
- 
++}
++
  Creature* FindNearbyVendorSellingItem(Player* bot, uint32 itemId, uint32& vendorSlot, uint32& vendorExtendedCost, bool& sawVendor)
-@@ -4655,12 +4740,54 @@
+ {
+     vendorSlot = 0;
+@@ -4655,7 +4740,8 @@ void SendTrainerPackets(Player* requester, ChatMsg replyType, std::string const&
      SendAddonPacket(requester, replyType, "TRAINER_END", headerPayload);
  }
  
@@ -124,15 +145,15 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
  {
      if (!bot || !spellInfo)
      {
-         reason = "NO_SPELL";
+@@ -4663,6 +4749,47 @@ bool LearnTrainerSpell(Player* bot, SpellInfo const* spellInfo, uint32 cost, std
          return false;
-+    }
-+
+     }
+ 
 +    if (sPlayerbotAIConfig.naturalProgression)
 +    {
 +        reason = "NATURAL_PROGRESSION";
 +        if (!bot->GetSession() || !bot->IsInWorld() || !trainerCreature ||
-+            !sPlayerbotAIConfig.allowLearnTrainerSpells ||
++            !sPlayerbotAIConfig.AllowLearnTrainerSpells ||
 +            bot->GetNPCIfCanInteractWith(trainerCreature->GetGUID(), UNIT_NPC_FLAG_TRAINER) != trainerCreature)
 +            return false;
 +
@@ -167,10 +188,12 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
 +        if (learned)
 +            reason = "OK";
 +        return learned;
-     }
- 
++    }
++
      if (!BotHasGoldCheat(bot))
-@@ -4719,6 +4846,18 @@
+     {
+         if (GetBotTrainerFreeMoney(bot) < cost)
+@@ -4719,6 +4846,18 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
          return;
      }
  
@@ -189,7 +212,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
      if (!expectedTrainerEntry)
      {
          SendTrainerLearnResult(requester, replyType, effectiveBotName, token, expectedTrainerEntry, spellIdValue, false, "NO_TRAINER", 0, 0);
-@@ -4735,6 +4874,8 @@
+@@ -4735,6 +4874,8 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
      Creature* const trainerCreature = GetSelectedTrainer(requester, expectedTrainerEntry, trainerReason);
      if (!trainerCreature)
      {
@@ -198,7 +221,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          SendTrainerLearnResult(requester, replyType, effectiveBotName, token, expectedTrainerEntry, spellIdValue, false, trainerReason, 0, 0);
          return;
      }
-@@ -4758,14 +4899,19 @@
+@@ -4758,15 +4899,20 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
  
          SpellInfo const* const spellInfo = sSpellMgr->GetSpellInfo(entry.spellId);
          std::string learnReason;
@@ -214,27 +237,27 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          }
          else if (learnReason != "OK" && learnedCount == 0)
              reason = learnReason;
-+
+ 
 +        if (sPlayerbotAIConfig.naturalProgression && moneyBefore > bot->GetMoney())
 +            spent += moneyBefore - bot->GetMoney();
- 
++
          if (!learnAll)
              break;
-@@ -5241,9 +5387,10 @@
+     }
+@@ -5241,9 +5387,10 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
          return 0;
      }
  
 -    if (!FindNearbyNpcWithFlag(bot, UNIT_NPC_FLAG_BANKER))
--    {
--        reason = "BANKER_NOT_FOUND";
 +    Creature* const banker = FindNearbyNpcWithFlag(bot, UNIT_NPC_FLAG_BANKER, sPlayerbotAIConfig.naturalProgression);
 +    if (!banker)
-+    {
+     {
+-        reason = "BANKER_NOT_FOUND";
 +        reason = sPlayerbotAIConfig.naturalProgression ? "NATURAL_PROGRESSION" : "BANKER_NOT_FOUND";
          return 0;
      }
  
-@@ -5251,6 +5398,16 @@
+@@ -5251,6 +5398,16 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
      while (Item* const item = FindBagItemByEntry(bot, itemId))
      {
          uint32 const stackCount = item->GetCount();
@@ -251,7 +274,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          ItemPosCountVec dest;
          InventoryResult const msg = bot->CanBankItem(NULL_BAG, NULL_SLOT, dest, item, false);
          if (msg != EQUIP_ERR_OK)
-@@ -5267,7 +5424,7 @@
+@@ -5267,7 +5424,7 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
              break;
      }
  
@@ -260,21 +283,20 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          reason = "ITEM_NOT_FOUND";
  
      return moved;
-@@ -5281,9 +5438,10 @@
+@@ -5281,9 +5438,10 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
          return 0;
      }
  
 -    if (!FindNearbyNpcWithFlag(bot, UNIT_NPC_FLAG_BANKER))
--    {
--        reason = "BANKER_NOT_FOUND";
 +    Creature* const banker = FindNearbyNpcWithFlag(bot, UNIT_NPC_FLAG_BANKER, sPlayerbotAIConfig.naturalProgression);
 +    if (!banker)
-+    {
+     {
+-        reason = "BANKER_NOT_FOUND";
 +        reason = sPlayerbotAIConfig.naturalProgression ? "NATURAL_PROGRESSION" : "BANKER_NOT_FOUND";
          return 0;
      }
  
-@@ -5291,6 +5449,16 @@
+@@ -5291,6 +5449,16 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
      while (Item* const item = FindBankItemByEntry(bot, itemId))
      {
          uint32 const stackCount = item->GetCount();
@@ -291,7 +313,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          ItemPosCountVec dest;
          InventoryResult const msg = bot->CanStoreItem(NULL_BAG, NULL_SLOT, dest, item, false);
          if (msg != EQUIP_ERR_OK)
-@@ -5307,7 +5475,7 @@
+@@ -5307,7 +5475,7 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
              break;
      }
  
@@ -300,7 +322,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
          reason = "ITEM_NOT_FOUND";
  
      return moved;
-@@ -6426,6 +6594,8 @@
+@@ -6426,6 +6594,8 @@ void RunTalentApplyCommand(
  
      if (!requester || !requester->GetSession())
          reason = "BAD_REQUEST";
@@ -309,7 +331,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
      else if (!ConsumeTalentApplyRateLimit(requester))
          reason = "RATE_LIMIT";
      else if (!RegisterTalentApplyToken(requester, token))
-@@ -6609,6 +6779,8 @@
+@@ -6609,6 +6779,8 @@ void RunTalentSpecApplyCommand(
  
      if (!requester || !requester->GetSession())
          reason = "BAD_REQUEST";
@@ -318,7 +340,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
      else if (!ConsumeTalentSpecApplyRateLimit(requester))
          reason = "RATE_LIMIT";
      else if (!RegisterTalentSpecApplyToken(requester, token))
-@@ -7218,8 +7390,12 @@
+@@ -7218,8 +7390,12 @@ void RunInventoryItemDepositExactCommand(
                      reason = "SOURCE_STALE";
                  else if (action == "BANK_DEPOSIT")
                  {
@@ -333,7 +355,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
                      else
                      {
                          ItemPosCountVec dest;
-@@ -8367,7 +8543,9 @@
+@@ -8367,7 +8543,9 @@ void RunInventoryItemActionCommand(Player* requester, ChatMsg replyType, std::st
              reason = "BAD_ACTION";
      }
  
@@ -344,7 +366,7 @@ diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
      if (ok)
          reason = "OK";
      else if (reason.empty())
-@@ -10286,6 +10464,8 @@
+@@ -10286,6 +10464,8 @@ void RunSelfActionCommand(
          reason = "NO_SESSION";
      else if (!IsSelfBot(requester))
          reason = "NOT_SELF_BOT";

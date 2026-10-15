@@ -267,9 +267,9 @@ inline Store<AreaTableEntry> sAreaTableStore;
 struct PlayerbotAIConfig
 {
     bool naturalProgression = true;
-    float farDistance = 20.0f;
-    uint32 botTaxiDelayMin = 350, botTaxiGapMs = 200, botTaxiGapJitterMs = 100, botTaxiDelayMax = 5000;
-    float probTeleToBankers = 0.0f;
+    float FarDistance = 20.0f;
+    uint32 BotTaxiDelayMin = 350, BotTaxiGapMs = 200, BotTaxiGapJitterMs = 100, BotTaxiDelayMax = 5000;
+    float ProbTeleToBankers = 0.0f;
 };
 inline PlayerbotAIConfig sPlayerbotAIConfig;
 inline uint32 randomState = 1;

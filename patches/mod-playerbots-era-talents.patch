@@ -1,5 +1,5 @@
 diff --git a/src/Ai/Base/Actions/LfgActions.cpp b/src/Ai/Base/Actions/LfgActions.cpp
-index 21e3c5e..f8cdee2 100644
+index dedc79c..d30fcd9 100644
 --- a/src/Ai/Base/Actions/LfgActions.cpp
 +++ b/src/Ai/Base/Actions/LfgActions.cpp
 @@ -6,6 +6,7 @@
@@ -20,7 +20,7 @@ index 21e3c5e..f8cdee2 100644
              else
                  return PLAYER_ROLE_DAMAGE;
 diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
-index abd207c..4446faa 100644
+index 66800f0..18ababd 100644
 --- a/src/Ai/Base/Actions/WorldBuffAction.cpp
 +++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
 @@ -6,6 +6,7 @@
@@ -151,7 +151,7 @@ index f973060..7e5b611 100644
          triggers.push_back(new TriggerNode("clearcasting and medium aoe", { NextAction("swipe (cat)", 25.5f) }));
          triggers.push_back(new TriggerNode("medium aoe", { NextAction("swipe (cat)", 25.0f) }));
 diff --git a/src/Ai/Class/Paladin/Actions/PaladinActions.cpp b/src/Ai/Class/Paladin/Actions/PaladinActions.cpp
-index db1e765..2bc2e39 100644
+index 7fb2f8f..40e5344 100644
 --- a/src/Ai/Class/Paladin/Actions/PaladinActions.cpp
 +++ b/src/Ai/Class/Paladin/Actions/PaladinActions.cpp
 @@ -6,6 +6,7 @@
@@ -200,7 +200,7 @@ index db1e765..2bc2e39 100644
              botAI->HasAura("blessing of sanctuary", target) ||
              botAI->HasAura("greater blessing of sanctuary", target);
 diff --git a/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp b/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
-index 632895b..6b3309d 100644
+index 54ca6d4..1679762 100644
 --- a/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
 +++ b/src/Ai/Class/Paladin/Actions/PaladinGreaterBlessingAction.cpp
 @@ -7,6 +7,7 @@
@@ -618,7 +618,7 @@ index 8066d57..4027e35 100644
      triggers.push_back(new TriggerNode("no air totem", { NextAction("windfury totem", 55.0f) }));
  }
 diff --git a/src/Ai/Class/Warrior/WarriorTriggers.cpp b/src/Ai/Class/Warrior/WarriorTriggers.cpp
-index 7bfd542..c4bc3d5 100644
+index 052500b..3ec327d 100644
 --- a/src/Ai/Class/Warrior/WarriorTriggers.cpp
 +++ b/src/Ai/Class/Warrior/WarriorTriggers.cpp
 @@ -5,6 +5,7 @@
@@ -668,7 +668,7 @@ index 0000000..f0b6172
 +
 +#endif
 diff --git a/src/Bot/Factory/AiFactory.cpp b/src/Bot/Factory/AiFactory.cpp
-index bcb3377..004f941 100644
+index f9718ae..a921f3e 100644
 --- a/src/Bot/Factory/AiFactory.cpp
 +++ b/src/Bot/Factory/AiFactory.cpp
 @@ -9,6 +9,7 @@
@@ -743,7 +743,7 @@ index bcb3377..004f941 100644
              if (tab == DEATH_KNIGHT_TAB_BLOOD)
                  nonCombatEngine->addStrategiesNoInit("tank assist", "pull", nullptr);
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
-index 9818ee1..7620f7d 100644
+index c32f69d..6728f73 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
 +++ b/src/Bot/Factory/PlayerbotFactory.cpp
 @@ -13,6 +13,7 @@
@@ -762,7 +762,7 @@ index 9818ee1..7620f7d 100644
 +            bool isCat = !bot->HasAura(EraKnown(bot, SPELL_DRUID_THICK_HIDE));
              if (!isCat && bot->GetLevel() == 20)
              {
-                 uint32 bearP = sPlayerbotAIConfig.randomClassSpecProb[cls][1];
+                 uint32 bearP = sPlayerbotAIConfig.RandomClassSpecProb[cls][1];
 @@ -1776,6 +1777,17 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
              LOG_ERROR("playerbots", "Fail to select spec num for bot {}! Set to 0.", bot->GetName());
          }
@@ -776,13 +776,13 @@ index 9818ee1..7620f7d 100644
 +            bot->SetCanDualWield(true);
 +        }
 +        bot->SendTalentsInfoData(false);
-+        return sPlayerbotAIConfig.randomClassSpecIndex[cls][specTab];
++        return sPlayerbotAIConfig.RandomClassSpecIndex[cls][specTab];
 +    }
      if (reset && !sPlayerbotAIConfig.naturalProgression)
      {
          bot->resetTalents(true);
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index bcda103..8cc64a2 100644
+index dcd865d..97a4f68 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -16,6 +16,7 @@
@@ -804,7 +804,7 @@ index bcda103..8cc64a2 100644
                  return true;
              }
 diff --git a/src/Mgr/Item/StatsWeightCalculator.cpp b/src/Mgr/Item/StatsWeightCalculator.cpp
-index 699084d..9bedc7e 100644
+index b940a62..30cea33 100644
 --- a/src/Mgr/Item/StatsWeightCalculator.cpp
 +++ b/src/Mgr/Item/StatsWeightCalculator.cpp
 @@ -7,6 +7,7 @@

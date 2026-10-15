@@ -6,56 +6,56 @@ import (
 )
 
 func TestFreshPlayerbotsProfile(t *testing.T) {
-	source := "# AiPlayerbot.MinRandomBots = 500\r\nAiPlayerbot.MinRandomBots=500\r\nAiPlayerbot.BotCheats = \"food,taxi,raid\"\r\nAiPlayerbot.RandombotStartingLevel = 55\r\nCustom.Value = \"keep=me\"\r\n"
+	source := "# Playerbots.MinRandomBots = 500\r\nPlayerbots.MinRandomBots=500\r\nPlayerbots.BotCheats = \"food,taxi,raid\"\r\nPlayerbots.RandombotStartingLevel = 55\r\nCustom.Value = \"keep=me\"\r\n"
 	merged, err := applyConfigProfile("playerbots.conf.dist", source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	required := []string{
-		"# AiPlayerbot.MinRandomBots = 500\r\n",
-		"AiPlayerbot.MinRandomBots = 2500\r\n",
-		"AiPlayerbot.MaxRandomBots = 2500\r\n",
-		"AiPlayerbot.NaturalProgression = 1\r\n",
-		"AiPlayerbot.RandombotStartingLevel = 1\r\n",
-		"AiPlayerbot.BotCheats = \"\"\r\n",
-		"AiPlayerbot.RandomBotFixedLevel = 0\r\n",
-		"AiPlayerbot.RandomBotXPRate = 1.0\r\n",
-		"AiPlayerbot.AutoEquipUpgradeLoot = 1\r\n",
-		"AiPlayerbot.AllowLearnTrainerSpells = 1\r\n",
-		"AiPlayerbot.DisabledWithoutRealPlayer = 1\r\n",
-		"AiPlayerbot.DisabledWithoutRealPlayerLoginDelay = 30\r\n",
-		"AiPlayerbot.DisabledWithoutRealPlayerLogoutDelay = 60\r\n",
-		"AiPlayerbot.BotActiveAlone = 100\r\n",
-		"AiPlayerbot.botActiveAloneSmartScale = 1\r\n",
-		"AiPlayerbot.botActiveAloneSmartScaleDiffLimitfloor = 50\r\n",
-		"AiPlayerbot.botActiveAloneSmartScaleDiffLimitCeiling = 200\r\n",
-		"AiPlayerbot.botActiveAloneSmartScaleWhenMinLevel = 1\r\n",
-		"AiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = 80\r\n",
-		"AiPlayerbot.RandomBotMaxLevel = 80\r\n",
-		"AiPlayerbot.RandomBotMaps = 0,1,530,571\r\n",
-		"AiPlayerbot.ApplyInstanceStrategies = 1\r\n",
-		"AiPlayerbot.AutoAvoidAoe = 1\r\n",
-		"AiPlayerbot.VanillaBattlegroundsOnly = 0\r\n",
-		"AiPlayerbot.EarnedEraBattlegrounds = 1\r\n",
-		"AiPlayerbot.LimitTalentsExpansion = 0\r\n",
-		"AiPlayerbot.RandomBotJoinBG = 1\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBG = 0\r\n",
-		"AiPlayerbot.RandomBotAutoJoinWSBrackets = 0,1,2,3,4,5,6,7,8,9\r\n",
-		"AiPlayerbot.RandomBotAutoJoinABBrackets = 0,1,2,3,4,5,6,7,8\r\n",
-		"AiPlayerbot.RandomBotAutoJoinAVBrackets = 0,1,2,3\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGEYCount = 1\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGICCount = 1\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGRatedArena2v2Count = 0\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGRatedArena3v3Count = 0\r\n",
-		"AiPlayerbot.RandomBotAutoJoinBGRatedArena5v5Count = 0\r\n",
-		"AiPlayerbot.RandomBotArenaTeam2v2Count = 0\r\n",
-		"AiPlayerbot.RandomBotArenaTeam3v3Count = 0\r\n",
-		"AiPlayerbot.RandomBotArenaTeam5v5Count = 0\r\n",
-		"AiPlayerbot.EnableGreet = 1\r\n",
-		"AiPlayerbot.GreetRealPlayersOnly = 1\r\n",
-		"AiPlayerbot.RandomBotEmote = 0\r\n",
-		"AiPlayerbot.ToxicLinksRepliesChance = 0\r\n",
-		"AiPlayerbot.ThunderfuryRepliesChance = 0\r\n",
+		"# Playerbots.MinRandomBots = 500\r\n",
+		"Playerbots.MinRandomBots = 2500\r\n",
+		"Playerbots.MaxRandomBots = 2500\r\n",
+		"Playerbots.NaturalProgression = 1\r\n",
+		"Playerbots.RandombotStartingLevel = 1\r\n",
+		"Playerbots.BotCheats = \"\"\r\n",
+		"Playerbots.RandomBotFixedLevel = 0\r\n",
+		"Playerbots.RandomBotXPRate = 1.0\r\n",
+		"Playerbots.AutoEquipUpgradeLoot = 1\r\n",
+		"Playerbots.AllowLearnTrainerSpells = 1\r\n",
+		"Playerbots.DisabledWithoutRealPlayer = 1\r\n",
+		"Playerbots.DisabledWithoutRealPlayerLoginDelay = 30\r\n",
+		"Playerbots.DisabledWithoutRealPlayerLogoutDelay = 60\r\n",
+		"Playerbots.BotActiveAlone = 100\r\n",
+		"Playerbots.botActiveAloneSmartScale = 1\r\n",
+		"Playerbots.botActiveAloneSmartScaleDiffLimitfloor = 50\r\n",
+		"Playerbots.botActiveAloneSmartScaleDiffLimitCeiling = 200\r\n",
+		"Playerbots.botActiveAloneSmartScaleWhenMinLevel = 1\r\n",
+		"Playerbots.botActiveAloneSmartScaleWhenMaxLevel = 80\r\n",
+		"Playerbots.RandomBotMaxLevel = 80\r\n",
+		"Playerbots.RandomBotMaps = 0,1,530,571\r\n",
+		"Playerbots.ApplyInstanceStrategies = 1\r\n",
+		"Playerbots.AutoAvoidAoe = 1\r\n",
+		"Playerbots.VanillaBattlegroundsOnly = 0\r\n",
+		"Playerbots.EarnedEraBattlegrounds = 1\r\n",
+		"Playerbots.LimitTalentsExpansion = 0\r\n",
+		"Playerbots.RandomBotJoinBG = 1\r\n",
+		"Playerbots.RandomBotAutoJoinBG = 0\r\n",
+		"Playerbots.RandomBotAutoJoinWSBrackets = 0,1,2,3,4,5,6,7,8,9\r\n",
+		"Playerbots.RandomBotAutoJoinABBrackets = 0,1,2,3,4,5,6,7,8\r\n",
+		"Playerbots.RandomBotAutoJoinAVBrackets = 0,1,2,3\r\n",
+		"Playerbots.RandomBotAutoJoinBGEYCount = 1\r\n",
+		"Playerbots.RandomBotAutoJoinBGICCount = 1\r\n",
+		"Playerbots.RandomBotAutoJoinBGRatedArena2v2Count = 0\r\n",
+		"Playerbots.RandomBotAutoJoinBGRatedArena3v3Count = 0\r\n",
+		"Playerbots.RandomBotAutoJoinBGRatedArena5v5Count = 0\r\n",
+		"Playerbots.RandomBotArenaTeam2v2Count = 0\r\n",
+		"Playerbots.RandomBotArenaTeam3v3Count = 0\r\n",
+		"Playerbots.RandomBotArenaTeam5v5Count = 0\r\n",
+		"Playerbots.EnableGreet = 1\r\n",
+		"Playerbots.GreetRealPlayersOnly = 1\r\n",
+		"Playerbots.RandomBotEmote = 0\r\n",
+		"Playerbots.ToxicLinksRepliesChance = 0\r\n",
+		"Playerbots.ThunderfuryRepliesChance = 0\r\n",
 		"Custom.Value = \"keep=me\"\r\n",
 	}
 	for _, setting := range required {
@@ -66,7 +66,7 @@ func TestFreshPlayerbotsProfile(t *testing.T) {
 	if strings.Contains(strings.ReplaceAll(merged, "\r\n", ""), "\n") {
 		t.Error("profile changed CRLF line endings")
 	}
-	if strings.Count(merged, "AiPlayerbot.MaxRandomBots =") != 1 {
+	if strings.Count(merged, "Playerbots.MaxRandomBots =") != 1 {
 		t.Error("appended duplicate setting")
 	}
 	again, err := applyConfigProfile("playerbots.conf.dist", merged)

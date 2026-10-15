@@ -63,14 +63,14 @@ func TestAutomaticProfilesIgnoreEditedLegacyDefaultsAndKeepCustomData(t *testing
 		t.Fatal(err)
 	}
 	writeFixture(t, filepath.Join(root, "configs/realm-phase.txt"), "individual\n")
-	previous := strings.Replace(profiles["playerbots.conf"], "AiPlayerbot.RandomBotJoinBG = 1", "AiPlayerbot.RandomBotJoinBG = 0", 1)
+	previous := strings.Replace(profiles["playerbots.conf"], "Playerbots.RandomBotJoinBG = 1", "Playerbots.RandomBotJoinBG = 0", 1)
 	if previous == profiles["playerbots.conf"] {
 		t.Fatal("fixture no longer represents a changed default")
 	}
 	writeFixture(t, filepath.Join(root, "defaults/playerbots.conf"), previous)
-	previous = strings.Replace(previous, "AiPlayerbot.RandomBotEmote = 0", "AiPlayerbot.RandomBotEmote = 1", 1)
+	previous = strings.Replace(previous, "Playerbots.RandomBotEmote = 0", "Playerbots.RandomBotEmote = 1", 1)
 	previous = strings.ReplaceAll(previous, "\r\n", "\n")
-	previous = strings.Replace(previous, "AiPlayerbot.Enabled = 1\n", "", 1)
+	previous = strings.Replace(previous, "Playerbots.Enabled = 1\n", "", 1)
 	original := "# custom comment\n" + previous + "\nPlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\nCustom.Bot = 42\n"
 	original = strings.ReplaceAll(strings.ReplaceAll(original, "\r\n", "\n"), "\n", "\r\n")
 	bots := writeFixture(t, filepath.Join(root, "configs/modules/playerbots.conf"), original)
@@ -92,7 +92,7 @@ func TestAutomaticProfilesIgnoreEditedLegacyDefaultsAndKeepCustomData(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"AiPlayerbot.RandomBotJoinBG = 0\r\n", "AiPlayerbot.RandomBotEmote = 1\r\n", "AiPlayerbot.Enabled = 1\r\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\r\n", "Custom.Bot = 42\r\n"} {
+	for _, expected := range []string{"Playerbots.RandomBotJoinBG = 0\r\n", "Playerbots.RandomBotEmote = 1\r\n", "Playerbots.Enabled = 1\r\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\r\n", "Custom.Bot = 42\r\n"} {
 		if !strings.Contains(string(updated), expected) {
 			t.Fatalf("missing managed or custom setting %q", expected)
 		}
@@ -120,7 +120,7 @@ func TestAutomaticProfilesUseSavedDefaultsAndPreserveRealmPhase(t *testing.T) {
 	root := t.TempDir()
 	phase, _ := parseRealmPhase("tbc")
 	profiles, _ := currentManagedProfiles(phase)
-	old := strings.Replace(profiles["playerbots.conf"], "AiPlayerbot.RandomBotJoinBG = 1", "AiPlayerbot.RandomBotJoinBG = 0", 1)
+	old := strings.Replace(profiles["playerbots.conf"], "Playerbots.RandomBotJoinBG = 1", "Playerbots.RandomBotJoinBG = 0", 1)
 	writeFixture(t, filepath.Join(root, "configs/realm-phase.txt"), "tbc\n")
 	bots := writeFixture(t, filepath.Join(root, "configs/modules/playerbots.conf"), old)
 	state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"playerbots.conf": old}})
@@ -133,7 +133,7 @@ func TestAutomaticProfilesUseSavedDefaultsAndPreserveRealmPhase(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, _ := os.ReadFile(bots)
-	if !strings.Contains(string(current), "AiPlayerbot.RandomBotJoinBG = 1") || !strings.Contains(string(current), "AiPlayerbot.RandomBotMaxLevel = 70") {
+	if !strings.Contains(string(current), "Playerbots.RandomBotJoinBG = 1") || !strings.Contains(string(current), "Playerbots.RandomBotMaxLevel = 70") {
 		t.Fatalf("managed default or TBC phase lost: %s", current)
 	}
 	// Only user-facing configs receive backups; the baseline changed as well.
@@ -188,16 +188,16 @@ func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 			}
 			// Windows checkouts embed CRLF profiles; the fixture uses LF on every platform.
 			current := strings.ReplaceAll(profiles["playerbots.conf"], "\r\n", "\n")
-			if value, ok := configValue(current, "AiPlayerbot.DisabledWithoutRealPlayer"); !ok || value != "1" {
+			if value, ok := configValue(current, "Playerbots.DisabledWithoutRealPlayer"); !ok || value != "1" {
 				t.Fatal("player-presence default is missing from the effective profile")
 			}
-			original := strings.Replace(current, "AiPlayerbot.DisabledWithoutRealPlayer = 1", "AiPlayerbot.DisabledWithoutRealPlayer = 0", 1)
-			original = strings.Replace(original, "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 25", 1)
+			original := strings.Replace(current, "Playerbots.DisabledWithoutRealPlayer = 1", "Playerbots.DisabledWithoutRealPlayer = 0", 1)
+			original = strings.Replace(original, "Playerbots.MaxRandomBots = 2500", "Playerbots.MaxRandomBots = 25", 1)
 			original += "\nPlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\nCustom.Bot = 42\n"
 			bots := writeFixture(t, filepath.Join(root, "configs/modules/playerbots.conf"), original)
 			characters := writeFixture(t, filepath.Join(root, "mysql/data/characters.ibd"), "existing characters")
 			if test.previousValue != "" {
-				previous := strings.Replace(current, "AiPlayerbot.DisabledWithoutRealPlayer = 1", "AiPlayerbot.DisabledWithoutRealPlayer = "+test.previousValue, 1)
+				previous := strings.Replace(current, "Playerbots.DisabledWithoutRealPlayer = 1", "Playerbots.DisabledWithoutRealPlayer = "+test.previousValue, 1)
 				state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"playerbots.conf": previous}})
 				if err != nil {
 					t.Fatal(err)
@@ -212,10 +212,10 @@ func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if value, _ := configValue(string(updated), "AiPlayerbot.DisabledWithoutRealPlayer"); value != test.wantValue {
+			if value, _ := configValue(string(updated), "Playerbots.DisabledWithoutRealPlayer"); value != test.wantValue {
 				t.Fatalf("presence setting = %q, want %q", value, test.wantValue)
 			}
-			for _, retained := range []string{"AiPlayerbot.MaxRandomBots = 25\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\n", "Custom.Bot = 42\n"} {
+			for _, retained := range []string{"Playerbots.MaxRandomBots = 25\n", "PlayerbotsDatabaseInfo = \"db;3310;alice;secret;bots\"\n", "Custom.Bot = 42\n"} {
 				if !strings.Contains(string(updated), retained) {
 					t.Fatalf("lost custom setting %q", retained)
 				}
@@ -389,14 +389,14 @@ func TestAutomaticProfilesRefuseSymlinkedModuleDirectory(t *testing.T) {
 	root := t.TempDir()
 	world := writeFixture(t, filepath.Join(root, "configs", "worldserver.conf"), "Custom = 42\n")
 	external := t.TempDir()
-	bots := writeFixture(t, filepath.Join(external, "playerbots.conf"), "AiPlayerbot.MinRandomBots = 7\n")
+	bots := writeFixture(t, filepath.Join(external, "playerbots.conf"), "Playerbots.MinRandomBots = 7\n")
 	if err := os.Symlink(external, filepath.Join(root, "configs", "modules")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	if _, err := migrateConfigProfiles(root); err == nil || !strings.Contains(err.Error(), "symbolic link") {
 		t.Fatalf("migration wrote through a linked module directory: %v", err)
 	}
-	if readFixture(t, bots) != "AiPlayerbot.MinRandomBots = 7\n" || readFixture(t, world) != "Custom = 42\n" {
+	if readFixture(t, bots) != "Playerbots.MinRandomBots = 7\n" || readFixture(t, world) != "Custom = 42\n" {
 		t.Fatal("configuration changed before all targets were validated")
 	}
 	for _, pattern := range []string{filepath.Join(root, "configs", "*.backup.*"), filepath.Join(external, "*.backup.*"), filepath.Join(root, "configs", automaticProfileState)} {

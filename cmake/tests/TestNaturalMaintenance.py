@@ -292,7 +292,7 @@ struct SpellMgr
 auto* sSpellMgr = &spellMgr;
 struct PlayerbotAIConfig
 {
-    bool naturalProgression = true, earnedAuctions = false, allowLearnTrainerSpells = true;
+    bool naturalProgression = true, earnedAuctions = false, AllowLearnTrainerSpells = true;
     uint32 earnedAuctionInterval = 300;
 } sPlayerbotAIConfig;
 struct ChatHelper
@@ -812,9 +812,9 @@ void TrainerTests()
     objectMgr.trainers[trainer.entry].valid = false;
     assert(s.Evaluate().type == Type::NONE);
     objectMgr.trainers[trainer.entry].valid = true;
-    sPlayerbotAIConfig.allowLearnTrainerSpells = false;
+    sPlayerbotAIConfig.AllowLearnTrainerSpells = false;
     assert(s.Evaluate().type == Type::NONE);
-    sPlayerbotAIConfig.allowLearnTrainerSpells = true;
+    sPlayerbotAIConfig.AllowLearnTrainerSpells = true;
     s.bot.x = trainer.x;
     assert(s.Is(s.Evaluate(), Type::TRAIN, trainer) && s.Tick(0));
     assert(world.actions.back() == std::make_pair(std::string("trainer"), std::string("learn")));

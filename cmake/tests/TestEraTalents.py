@@ -781,9 +781,9 @@ int main() {
             '            GET_PLAYERBOT_AI(master)->SetMaster(master);') in selfbot_command
     # The seed reads the configured spec mix: spec numbers 0-2 are each class's PvE trees in tab
     # order and the druid's spec 3 is the cat build, matching the authored era orders.
-    assert 'uint32 randomClassSpecProb[MAX_CLASSES][MAX_SPECNO];' in (playerbots / 'PlayerbotAIConfig.h').read_text()
+    assert 'uint32 RandomClassSpecProb[MAX_CLASSES][MAX_SPECNO];' in (playerbots / 'PlayerbotAIConfig.h').read_text()
     spec_labels = {number: label for label, number in re.findall(
-        r'# ([^\n]+)\nAiPlayerbot\.RandomClassSpecProb\.(\d+\.\d+) =',
+        r'# ([^\n]+)\nPlayerbots\.RandomClassSpecProb\.(\d+\.\d+) =',
         (playerbots.parent / 'conf/playerbots.conf.dist').read_text())}
     for cls in (1, 2, 3, 4, 5, 7, 8, 9, 11):
         assert all(spec_labels[f'{cls}.{spec}'].endswith(' pve') for spec in range(3))
@@ -838,12 +838,12 @@ struct Player {
 };
 #define GET_PLAYERBOT_AI(player) ((player)->ai)
 struct PlayerbotAIConfig {
-    std::vector<uint32> randomBotAccounts{RANDOM_ACCOUNT};
-    uint32 randomClassSpecProb[12][20]{};
+    std::vector<uint32> RandomBotAccounts{RANDOM_ACCOUNT};
+    uint32 RandomClassSpecProb[12][20]{};
     bool IsInRandomAccountList(uint32 id);
-    static PlayerbotAIConfig& instance() { static PlayerbotAIConfig config; return config; }
+    static PlayerbotAIConfig& Instance() { static PlayerbotAIConfig config; return config; }
 };
-#define sPlayerbotAIConfig PlayerbotAIConfig::instance()
+#define sPlayerbotAIConfig PlayerbotAIConfig::Instance()
 using std::find;
 bool EraHasTalentTrees(EraId era) { return era!=ERA_WOTLK; }
 bool EraHasTalentTrees(Player* p,EraId era) { return p->cls!=6 && EraHasTalentTrees(era); }
@@ -953,7 +953,7 @@ int main() {
     }
 
     // Fresh builds follow the configured PvE spec mix, and a GUID always seeds the same spec.
-    auto& probability=sPlayerbotAIConfig.randomClassSpecProb;
+    auto& probability=sPlayerbotAIConfig.RandomClassSpecProb;
     probability[1][0]=20; probability[1][1]=40; probability[1][2]=40;
     probability[CLASS_DRUID][0]=20; probability[CLASS_DRUID][1]=25; probability[CLASS_DRUID][2]=35;
     probability[CLASS_DRUID][3]=20; probability[CLASS_DRUID][4]=50; // a PvP variant has no era order

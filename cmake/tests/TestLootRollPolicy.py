@@ -143,10 +143,10 @@ ObjectManager objectManager;
 #define sObjectMgr (&objectManager)
 struct PlayerbotAIConfig
 {
-    int32 lootNeedRollLevel = 1;
-    bool lootGreedRollLevel = false;
-    bool lootRollRecipe = false;
-    bool lootRollDisenchant = false;
+    int32 LootNeedRollLevel = 1;
+    bool LootGreedRollLevel = false;
+    bool LootRollRecipe = false;
+    bool LootRollDisenchant = false;
 };
 PlayerbotAIConfig playerbotAIConfig;
 #define sPlayerbotAIConfig playerbotAIConfig
@@ -489,7 +489,7 @@ void ItemGuardsAndVariants()
         for (uint32 uniqueState = 0; uniqueState < 4; ++uniqueState)
         {
             Scenario s;
-            playerbotAIConfig.lootNeedRollLevel = 2;
+            playerbotAIConfig.LootNeedRollLevel = 2;
             s.Item().flags = ITEM_FLAG_UNIQUE_EQUIPPABLE;
             s.bot.bagCount = uniqueState;
             s.bot.totalCount = uniqueState == 0 ? 1 : uniqueState;
@@ -499,8 +499,8 @@ void ItemGuardsAndVariants()
         for (bool sameClass : {false, true})
         {
             Scenario s;
-            playerbotAIConfig.lootNeedRollLevel = 2;
-            playerbotAIConfig.lootGreedRollLevel = true;
+            playerbotAIConfig.LootNeedRollLevel = 2;
+            playerbotAIConfig.LootGreedRollLevel = true;
             s.Item().Class = ITEM_CLASS_MISC;
             s.Item().SubClass = ITEM_SUBCLASS_JUNK;
             s.Item().Quality = ITEM_QUALITY_EPIC;
@@ -511,7 +511,7 @@ void ItemGuardsAndVariants()
         for (int32 property : {-83, 0, 57})
         {
             Scenario s;
-            playerbotAIConfig.lootNeedRollLevel = 2;
+            playerbotAIConfig.LootNeedRollLevel = 2;
             s.ai.usages["100"] = ITEM_USAGE_AH;
             std::string qualifier = property ? "100," + std::to_string(property) : "100";
             s.ai.usages[qualifier] = ITEM_USAGE_REPLACE;
@@ -527,7 +527,7 @@ void ItemGuardsAndVariants()
         ignored.Item().Class = ITEM_CLASS_CONSUMABLE;
         ignored.ai.usages["100"] = ITEM_USAGE_USE;
         ignored.ai.lootAllowed = false;
-        playerbotAIConfig.lootGreedRollLevel = true;
+        playerbotAIConfig.LootGreedRollLevel = true;
         assert(notification ? ignored.Receive() : ignored.periodic.Execute(Event("loot roll")));
         ignored.Expect(PASS);
     }
@@ -541,7 +541,7 @@ void PendingRollGuards()
         {
             Scenario s;
             s.group.method = method;
-            playerbotAIConfig.lootNeedRollLevel = 2;
+            playerbotAIConfig.LootNeedRollLevel = 2;
             assert(notification ? s.Receive() : s.periodic.Execute(Event("loot roll")));
             s.Expect(PASS);
         }
@@ -591,8 +591,8 @@ void NativeMasksAndSession()
         Scenario s;
         s.group.method = NEED_BEFORE_GREED;
         s.group.lfg = true;
-        playerbotAIConfig.lootNeedRollLevel = 2;
-        playerbotAIConfig.lootGreedRollLevel = true;
+        playerbotAIConfig.LootNeedRollLevel = 2;
+        playerbotAIConfig.LootGreedRollLevel = true;
         s.Item().AllowableClass = allowed ? s.bot.getClassMask() : 2;
         bool canNeed = s.bot.CanRollForItemInLFG(&s.Item(), &s.source) == EQUIP_ERR_OK;
         assert(canNeed == allowed);
@@ -606,7 +606,7 @@ void NativeMasksAndSession()
         s.Expect(allowed ? NEED : GREED);
     }
     Scenario unavailable;
-    playerbotAIConfig.lootRollDisenchant = true;
+    playerbotAIConfig.LootRollDisenchant = true;
     unavailable.ai.usages["100"] = ITEM_USAGE_DISENCHANT;
     unavailable.roll.rollVoteMask = ROLL_ALL_TYPE_NO_DISENCHANT;
     assert(unavailable.Receive());

@@ -36,7 +36,7 @@ for method in ['uint32 PlayerbotFactory::InitTalentsTree(', 'void PlayerbotFacto
     body = function(talents_source, method)
     resets.append(function(body, '    if (reset'))
 fallback = function(talents_source, 'void PlayerbotFactory::InitTalents(uint32 specNo)')
-fallback = fallback[fallback.index('        if (sPlayerbotAIConfig.limitTalentsExpansion'):fallback.index('        spells[talentInfo->Row]')]
+fallback = fallback[fallback.index('        if (sPlayerbotAIConfig.LimitTalentsExpansion'):fallback.index('        spells[talentInfo->Row]')]
 
 prelude = r'''
 #include <algorithm>
@@ -104,7 +104,7 @@ auto* sScriptMgr = &scripts;
 struct World { uint32 expansion=2, raceMask=0, classMask=0;
     uint32 getIntConfig(int key) { return key==0 ? expansion : (key==1 ? raceMask : classMask); } } world;
 auto* sWorld = &world;
-struct Config { bool naturalProgression=true, limitTalentsExpansion=true; } config;
+struct Config { bool naturalProgression=true, LimitTalentsExpansion=true; } config;
 auto& sPlayerbotAIConfig = config;
 struct RaceMgr { uint8 GetMaxRaces() { return 12; } } races;
 auto* sRaceMgr = &races;

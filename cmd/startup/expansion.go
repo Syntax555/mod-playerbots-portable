@@ -100,7 +100,7 @@ func detectRealmPhase(workDir string, allowConflictingCaps bool) (realmPhase, er
 	var inferred realmPhase
 	for _, setting := range []struct{ file, key string }{
 		{"worldserver.conf", "MaxPlayerLevel"},
-		{"modules/playerbots.conf", "AiPlayerbot.RandomBotMaxLevel"},
+		{"modules/playerbots.conf", "Playerbots.RandomBotMaxLevel"},
 		{"modules/individualProgression.conf", "IndividualProgression.ProgressionLimit"},
 	} {
 		path := filepath.Join(workDir, "configs", filepath.FromSlash(setting.file))
@@ -111,7 +111,7 @@ func detectRealmPhase(workDir string, allowConflictingCaps bool) (realmPhase, er
 		if err != nil {
 			return realmPhase{}, err
 		}
-		number, exists, err := configInt(string(content), setting.key)
+		number, exists, err := configInt(migratePlayerbotsKeys(string(content)), setting.key)
 		if !exists {
 			continue
 		}
@@ -175,7 +175,7 @@ func (phase realmPhase) profile(filename string) string {
 	case "individualProgression.conf":
 		return fmt.Sprintf("IndividualProgression.Enable = 1\nIndividualProgression.ProgressionLimit = %d\nIndividualProgression.BotAccountsMaxLevel = %d\nIndividualProgression.StartingProgression = 0\nIndividualProgression.DisableDefaultProgression = 0\nIndividualProgression.CustomProgression = \"\"\nIndividualProgression.BotAccountsRegex = \"\"\nIndividualProgression.ExcludedAccountsRegex = \"\"\nIndividualProgression.TbcRacesUnlockProgression = 8\nIndividualProgression.tbcRacesStartingProgression = 0\nIndividualProgression.DeathKnightUnlockProgression = 13\nIndividualProgression.DeathKnightStartingProgression = 13\n", phase.limit, phase.level)
 	case "playerbots.conf":
-		return fmt.Sprintf("AiPlayerbot.RandomBotMaxLevel = %d\nAiPlayerbot.botActiveAloneSmartScaleWhenMaxLevel = %d\nAiPlayerbot.RandomBotMaps = %s\nAiPlayerbot.NaturalProgression = 1\nAiPlayerbot.RandombotStartingLevel = 1\nAiPlayerbot.RandomBotMinLevel = 1\nAiPlayerbot.DisableRandomLevels = 1\nAiPlayerbot.RandomBotFixedLevel = 0\nAiPlayerbot.SyncLevelWithPlayers = 0\nAiPlayerbot.DisableDeathKnightLogin = 1\n", phase.level, phase.level, phase.maps)
+		return fmt.Sprintf("Playerbots.RandomBotMaxLevel = %d\nPlayerbots.botActiveAloneSmartScaleWhenMaxLevel = %d\nPlayerbots.RandomBotMaps = %s\nPlayerbots.NaturalProgression = 1\nPlayerbots.RandombotStartingLevel = 1\nPlayerbots.RandomBotMinLevel = 1\nPlayerbots.DisableRandomLevels = 1\nPlayerbots.RandomBotFixedLevel = 0\nPlayerbots.SyncLevelWithPlayers = 0\nPlayerbots.DisableDeathKnightLogin = 1\n", phase.level, phase.level, phase.maps)
 	}
 	return ""
 }

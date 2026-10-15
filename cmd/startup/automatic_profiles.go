@@ -22,6 +22,8 @@ type managedProfileState struct {
 // A saved default is a baseline, never a copy of the user's live configuration.
 // Only values still matching that baseline follow a new recommended default.
 func mergeManagedProfile(content, previous, current string) (string, error) {
+	content = migratePlayerbotsKeys(content)
+	previous = migratePlayerbotsKeys(previous)
 	oldSettings, err := parseConfigAssignments(previous)
 	if err != nil {
 		return "", fmt.Errorf("invalid previous profile: %w", err)

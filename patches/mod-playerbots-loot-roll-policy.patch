@@ -1,5 +1,5 @@
 diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRollAction.cpp
-index c5b07c7..8f11114 100644
+index fdfc913..3692a5e 100644
 --- a/src/Ai/Base/Actions/LootRollAction.cpp
 +++ b/src/Ai/Base/Actions/LootRollAction.cpp
 @@ -6,9 +6,11 @@
@@ -15,7 +15,7 @@ index c5b07c7..8f11114 100644
  #include "PlayerbotAIConfig.h"
  #include "Playerbots.h"
 @@ -93,6 +95,22 @@ bool LootRollAction::Execute(Event /*event*/)
-         else if (vote == GREED && !sPlayerbotAIConfig.lootGreedRollLevel)
+         else if (vote == GREED && !sPlayerbotAIConfig.LootGreedRollLevel)
              vote = PASS;
  
 +        uint8 voteMask = roll->rollVoteMask;
@@ -30,7 +30,7 @@ index c5b07c7..8f11114 100644
 +        }
 +        if ((vote == NEED && !(voteMask & ROLL_FLAG_TYPE_NEED)) ||
 +            (vote == DISENCHANT && !(voteMask & ROLL_FLAG_TYPE_DISENCHANT)))
-+            vote = sPlayerbotAIConfig.lootGreedRollLevel ? GREED : PASS;
++            vote = sPlayerbotAIConfig.LootGreedRollLevel ? GREED : PASS;
 +        if (vote == GREED && !(voteMask & ROLL_FLAG_TYPE_GREED))
 +            vote = PASS;
 +

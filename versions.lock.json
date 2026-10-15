@@ -25,7 +25,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
-      "revision": "cf1a2a20c1731e94cea5556844f5f98a482d926c",
+      "revision": "ed54b45939632ff386fbc038705c18b8584ce6d5",
       "source": "mod-playerbots",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",

@@ -71,8 +71,8 @@ database, configuration and first-run setup.
 - **Server:** Windows 10/11 x64, a writable server folder and Internet access
   for the first-run server data download and automatic updates. CPU, memory and
   storage needs grow with the bot population: the default target is 2,500 bots
-  while a real player is connected. Lower `AiPlayerbot.MinRandomBots` and
-  `AiPlayerbot.MaxRandomBots` to fit the host; see
+  while a real player is connected. Lower `Playerbots.MinRandomBots` and
+  `Playerbots.MaxRandomBots` to fit the host; see
   [bots and population](docs/configuration.md#bots-and-population).
 - **Client:** WoW 3.3.5a, build 12340, in any locale, including for Vanilla and
   TBC progression. German clients receive German talent and spell text.

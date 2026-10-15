@@ -331,7 +331,7 @@ Rate.XP.Kill = 1
 	playerbotsDistContent := `
 Playerbots.Updates.EnableDatabases = 1
 Playerbots.Debug.Enable = 0
-AiPlayerbot.DisabledWithoutRealPlayer = 0
+Playerbots.DisabledWithoutRealPlayer = 0
 `
 	if err := os.WriteFile(filepath.Join(modulesDir, "playerbots.conf.dist"), []byte(playerbotsDistContent), 0644); err != nil {
 		t.Fatalf("failed to write playerbots.conf.dist: %v", err)
@@ -385,15 +385,15 @@ MyCustomOption = 42
 	if !strings.Contains(playerbotsConf, "Playerbots.Updates.EnableDatabases = 1") {
 		t.Errorf("playerbots.conf missing content: %s", playerbotsConf)
 	}
-	if !strings.Contains(playerbotsConf, "AiPlayerbot.DisabledWithoutRealPlayer = 1") {
-		t.Errorf("playerbots.conf missing AiPlayerbot.DisabledWithoutRealPlayer = 1: %s", playerbotsConf)
+	if !strings.Contains(playerbotsConf, "Playerbots.DisabledWithoutRealPlayer = 1") {
+		t.Errorf("playerbots.conf missing Playerbots.DisabledWithoutRealPlayer = 1: %s", playerbotsConf)
 	}
-	for _, setting := range []string{"AiPlayerbot.MinRandomBots = 2500", "AiPlayerbot.MaxRandomBots = 2500", "AiPlayerbot.NaturalProgression = 1", "AiPlayerbot.RandombotStartingLevel = 1"} {
+	for _, setting := range []string{"Playerbots.MinRandomBots = 2500", "Playerbots.MaxRandomBots = 2500", "Playerbots.NaturalProgression = 1", "Playerbots.RandombotStartingLevel = 1"} {
 		if !strings.Contains(playerbotsConf, setting) {
 			t.Errorf("playerbots.conf missing setting %s", setting)
 		}
 	}
-	customBots := "# Existing administrator choices\nAiPlayerbot.MinRandomBots = 25\nAiPlayerbot.NaturalProgression = 0\n"
+	customBots := "# Existing administrator choices\nPlayerbots.MinRandomBots = 25\nPlayerbots.NaturalProgression = 0\n"
 	if err := os.WriteFile(filepath.Join(modulesDir, "playerbots.conf"), []byte(customBots), 0644); err != nil {
 		t.Fatal(err)
 	}

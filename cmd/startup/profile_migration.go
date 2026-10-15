@@ -11,6 +11,41 @@ import (
 	"time"
 )
 
+// Explicit new keys take precedence over their legacy aliases. Keep colliding
+// values as comments, and leave duplicate order intact for the server's first-
+// assignment-wins parser.
+func migratePlayerbotsKeys(content string) string {
+	const legacy = "AiPlayerbot."
+	const current = "Playerbots."
+	if !strings.Contains(content, legacy) {
+		return content
+	}
+	explicit := make(map[string]bool)
+	for key := range configAssignments(content) {
+		if strings.HasPrefix(key, current) {
+			explicit[key] = true
+		}
+	}
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || trimmed[0] == '#' || trimmed[0] == '[' {
+			continue
+		}
+		key, _, assignment := strings.Cut(trimmed, "=")
+		key = strings.TrimSpace(key)
+		if !assignment || !strings.HasPrefix(key, legacy) {
+			continue
+		}
+		renamed := current + strings.TrimPrefix(key, legacy)
+		lines[i] = strings.Replace(line, key, renamed, 1)
+		if explicit[renamed] {
+			lines[i] = "# " + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Port overrides are applied only while creating a missing configuration.
 // Existing credentials, hosts and databases in its template are preserved.
 func applyRuntimePorts(filename, content string, opts startupOptions) (string, error) {
