@@ -62,9 +62,10 @@ and ordinary player actions.
 
 ## Dependency updates
 
-- [ ] Offer generic fixes upstream (formation velocity guard, the
-  `resetTalentsCost` underflow, the empty random-battleground guard and the
-  Individual Progression filter fixes) to shrink the patch set.
+- [ ] Submit the [prepared Individual Progression filter fix](upstream/README.md)
+  upstream when repository permissions allow.
+- [ ] Track the [generic core proposals](upstream/README.md), then pin accepted
+  fixes and remove their corresponding local hunks.
 
 ## Core and module patches
 
