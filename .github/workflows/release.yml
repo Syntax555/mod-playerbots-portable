@@ -188,6 +188,8 @@ jobs:
       PACKAGE_VERSION: ${{ needs.launcher.outputs.package_version }}
       # ExternalProject starts another cmake --build, which needs its own limit.
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      # MSBuild supplies /MP2 without changing the core's native /MP option.
+      CL_MPCount: '2'
       # Bundled runtime dependencies. Change a version together with the
       # SHA-256 of its exact download.
       MYSQL_VERSION: '8.0.40'
@@ -296,15 +298,6 @@ jobs:
           cmake --build build --target azerothcore-configure --config Release
           if ($LASTEXITCODE -ne 0) { throw 'Native server configuration failed.' }
           $nativeBuild = Join-Path (Get-Location) 'build/azerothcore-build'
-          if (Select-String -Path (Join-Path $nativeBuild 'CMakeCache.txt') -Pattern '^ACORE_MSVC_COMPILE_JOBS:STRING=' -Quiet) {
-              foreach ($relativeProject in @('modules/modules.vcxproj', 'src/server/game/game.vcxproj')) {
-                  [xml]$projectXml = Get-Content (Join-Path $nativeBuild $relativeProject) -Raw
-                  $limits = @($projectXml.SelectNodes('//*[local-name()="ClCompile"]/*[local-name()="ProcessorNumber"]'))
-                  if ($limits.Count -eq 0 -or @($limits | Where-Object { $_.InnerText -ne '2' }).Count -ne 0) {
-                      throw "Native compiler process limit was not applied: $relativeProject"
-                  }
-              }
-          }
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
           $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
           if (-not $msbuild -or -not (Test-Path $msbuild -PathType Leaf)) { throw 'MSBuild was not found.' }

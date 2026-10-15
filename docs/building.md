@@ -30,6 +30,7 @@ cmake -B build -S . `
   -DOPENSSL_ROOT_DIR="C:/tools/openssl/current/x64" `
   -DBOOST_ROOT_DIR="C:/local/boost_1_84_0"
 $env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
+$env:CL_MPCount = '2'
 cmake --build build --config Release --parallel 2
 pwsh -File scripts/CopyWindowsRuntime.ps1 -DistDir dist
 pwsh -File scripts/CopyDependencyLicenses.ps1 -DistDir dist `
@@ -69,13 +70,14 @@ preservation.
 
 ## Build resources
 
-The default MSVC configuration uses two compiler processes per project.
-`CMAKE_BUILD_PARALLEL_LEVEL` also limits the nested server build to two parallel
-projects, reducing peak memory use.
+The commands above and the release workflow set `CL_MPCount=2`, so MSBuild
+limits each project's compiler workers to two. `CMAKE_BUILD_PARALLEL_LEVEL`
+also limits the nested server build to two parallel projects, reducing peak
+memory use.
 
-On a machine with more memory, adjust that environment variable and set
-`-DPORTABLE_MSVC_COMPILE_JOBS=<count>` when configuring. Increasing both limits
-can multiply the number of active compiler processes.
+On a machine with more memory, adjust `CL_MPCount` and
+`CMAKE_BUILD_PARALLEL_LEVEL` before building. Increasing both limits can
+multiply the number of active compiler processes.
 
 To generate the native server projects before starting the full C++ build:
 

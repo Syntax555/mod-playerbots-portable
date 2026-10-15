@@ -68,9 +68,6 @@ and ordinary player actions.
   MultiBot's role toggles to the renamed strategies. A pin past `ed54b459`
   also needs a launcher migration of every `AiPlayerbot.*` key;
   `TestProfileKeys` fails until the profiles match.
-- [ ] Try `CL_MPCount=2` on the Windows runner and drop the core
-  `settings.cmake` compile-parallelism patch if MSBuild caps `cl.exe` the same
-  way.
 - [ ] Offer generic fixes upstream (formation velocity guard, the
   `resetTalentsCost` underflow, the empty random-battleground guard and the
   Individual Progression filter fixes) to shrink the patch set.
