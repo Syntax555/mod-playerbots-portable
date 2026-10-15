@@ -166,7 +166,7 @@ The simultaneous-party limit accepts 1–8. `Dungeons` lists Dungeon Finder ids;
 remove an id to keep autonomous parties out of that dungeon. `LevelSpread`
 accepts 0–10. Set the autonomous-party switch to `0` to stop automatic
 recruitment. The strict travel and gameplay guards require
-`AiPlayerbot.NaturalProgression = 1` in `configs/modules/playerbots.conf`.
+`Playerbots.NaturalProgression = 1` in `configs/modules/playerbots.conf`.
 Automatic parties also require Individual Progression's strict default earned
 chain. A realm with a disabled or custom progression chain does not use level
 or account progress as a substitute.
@@ -195,11 +195,11 @@ autonomy switches and party limits. For an existing custom list, add the desired
 normal Dungeon Finder ids explicitly; an entry must still pass the event audit.
 
 Random bots run while at least one real player session is connected through
-`AiPlayerbot.DisabledWithoutRealPlayer = 1`. Login begins after a 30-second delay;
+`Playerbots.DisabledWithoutRealPlayer = 1`. Login begins after a 30-second delay;
 bots log out after the last session has ended for 60 seconds. SelfBot enabled on
 a human player's character still counts as a real session. Independent parties
 can run while that player is elsewhere in the world. Adjust
-`AiPlayerbot.MinRandomBots` and `AiPlayerbot.MaxRandomBots` for the host's
+`Playerbots.MinRandomBots` and `Playerbots.MaxRandomBots` for the host's
 capacity. A population limit of `0` prevents random-bot parties; updates preserve
 custom population settings.
 
@@ -208,7 +208,7 @@ custom population settings.
 LFG Progression checks each participant's own earned expansion and retains
 native quest, item, achievement and class access requirements. It does not form
 autonomous parties, navigate or run encounters. Automatic Dungeon Finder joining
-remains disabled through `AiPlayerbot.RandomBotJoinLfg = 0`, keeping automatic
+remains disabled through `Playerbots.RandomBotJoinLfg = 0`, keeping automatic
 groups on the physical travel path.
 
 Source revisions and integration patches are recorded in

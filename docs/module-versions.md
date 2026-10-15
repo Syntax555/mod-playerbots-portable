@@ -9,7 +9,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Component | Upstream repository | Locked revision | Role |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `2a2211cd8f3d` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `cf1a2a20c173` | Natural progression, earned auctions and era-aware bots |
+| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `ed54b4593963` | Natural progression, earned auctions and era-aware bots |
 | AutoBalance | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) | `1d707cb61a09` | Instance scaling by actual party size |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `60336b349cce` | Earned content milestones and expansion access |
 | Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `da0bdfbc7240` | Autonomous earned-era parties and player-led clears without event shortcuts |
@@ -99,10 +99,10 @@ default feature branch; other components follow their default branch. MultiBot
 Chatless and MultiBot Bridge move only together, and a newer pair needs a
 review of new bridge endpoints, such as pet taming, against natural progression.
 
-The Playerbots pin `cf1a2a20` is the direct parent of `ed54b459` and retains
-`AiPlayerbot.*` configuration names. Revisions from `ed54b459` rename every
-`AiPlayerbot.*` key to `Playerbots.*` without reading the old names, so such a
-pin also needs renamed profile and launcher keys and a launcher migration
-that carries users' existing `AiPlayerbot.*` values.
-`cmake/tests/TestProfileKeys.py` fails while a shipped profile key is no longer
-read by the prepared sources.
+The Playerbots pin `ed54b459` reads `Playerbots.*` configuration names.
+Profiles and launcher settings use that prefix. Normal startup migrates legacy
+`AiPlayerbot.*` values and their managed baselines before merging profile
+updates; existing `Playerbots.*` values take precedence. See
+[configuration updates](configuration.md) for migration and backup behavior.
+`cmake/tests/TestProfileKeys.py` checks that the prepared sources read every
+shipped key and rejects renamed readers and removed keys.

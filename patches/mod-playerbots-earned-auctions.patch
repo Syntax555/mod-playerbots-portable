@@ -1,23 +1,23 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 5be9190..e5a6a12 100644
+index 9c41849..1e28e9f 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
-@@ -91,6 +91,13 @@ AiPlayerbot.RandomBotAutologin = 1
+@@ -91,6 +91,13 @@ Playerbots.RandomBotAutologin = 1
  # Does not provide missing quest, crafting, profession or raid AI.
- AiPlayerbot.NaturalProgression = 0
+ Playerbots.NaturalProgression = 0
  
 +# Optional natural-mode trading by autonomous random bots using owned surplus,
 +# earned gold, normal auction fees and physical auctioneer/mailbox visits.
 +# The portable earned-play profile enables this; upstream-style defaults opt out.
-+AiPlayerbot.EarnedAuctions = 0
++Playerbots.EarnedAuctions = 0
 +# Base seconds between visits, plus per-bot staggering; clamped to 60..3600.
-+AiPlayerbot.EarnedAuctionInterval = 300
++Playerbots.EarnedAuctionInterval = 300
 +
  # Optional earned caps in natural mode: level:percentage pairs, unique levels 1-80,
  # positive percentages totaling at most 100. Example: 19:5,29:5,39:5,49:5,59:5.
  # Unassigned bots progress normally. Bots earn every level; no level/gear grants,
 diff --git a/src/Ai/Base/Actions/CheckMailAction.cpp b/src/Ai/Base/Actions/CheckMailAction.cpp
-index 800e0d6..5609cf1 100644
+index 672cf53..7ce2795 100644
 --- a/src/Ai/Base/Actions/CheckMailAction.cpp
 +++ b/src/Ai/Base/Actions/CheckMailAction.cpp
 @@ -12,6 +12,9 @@
@@ -102,7 +102,7 @@ index e395227..1401d3c 100644
          return true;
      }
 diff --git a/src/Ai/Base/Actions/SendMailAction.cpp b/src/Ai/Base/Actions/SendMailAction.cpp
-index 58fd57e..74b0a56 100644
+index 8657a1f..ee73559 100644
 --- a/src/Ai/Base/Actions/SendMailAction.cpp
 +++ b/src/Ai/Base/Actions/SendMailAction.cpp
 @@ -14,6 +14,9 @@
@@ -116,7 +116,7 @@ index 58fd57e..74b0a56 100644
      bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
  
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index a44dcb5..050d67c 100644
+index 2c08e3b..69563cc 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -9,6 +9,8 @@
@@ -214,7 +214,7 @@ index 63b7f78..f87521a 100644
  
  // Natural upkeep runs only for a living, idle bot that may move and has no game-client master.
 diff --git a/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp b/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
-index 52a9b8c..4bd88a9 100644
+index 4e75090..dee66e3 100644
 --- a/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
 +++ b/src/Ai/Base/Value/PossibleRpgTargetsValue.cpp
 @@ -215,3 +215,20 @@ GuidVector PossibleNewRpgGameObjectsValue::Calculate()
@@ -258,7 +258,7 @@ index ce688b7..d983362 100644
 +
  #endif
 diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
-index 9adf689..45dd61d 100644
+index 0636393..7221642 100644
 --- a/src/Ai/Base/ValueContext.h
 +++ b/src/Ai/Base/ValueContext.h
 @@ -281,6 +281,7 @@ public:
@@ -1494,26 +1494,26 @@ index 0000000..8b6bec2
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 0736dbb..21c6627 100644
+index 50b081f..bc0265d 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -82,6 +82,9 @@ bool PlayerbotAIConfig::Initialize()
  
-     enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", true);
-     naturalProgression = sConfigMgr->GetOption<bool>("AiPlayerbot.NaturalProgression", false);
-+    earnedAuctions = sConfigMgr->GetOption<bool>("AiPlayerbot.EarnedAuctions", false);
+     Enabled = sConfigMgr->GetOption<bool>("Playerbots.Enabled", true);
+     naturalProgression = sConfigMgr->GetOption<bool>("Playerbots.NaturalProgression", false);
++    earnedAuctions = sConfigMgr->GetOption<bool>("Playerbots.EarnedAuctions", false);
 +    earnedAuctionInterval =
-+        std::clamp(sConfigMgr->GetOption<uint32>("AiPlayerbot.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
-     vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.VanillaBattlegroundsOnly", false);
-     if (!enabled)
++        std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
+     vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("Playerbots.VanillaBattlegroundsOnly", false);
+     if (!Enabled)
      {
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index a5dff8e..b61fd2e 100644
+index e3512e8..3775c5c 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -107,6 +107,8 @@ public:
  
-     bool enabled;
+     bool Enabled;
      bool naturalProgression = false;
 +    bool earnedAuctions = false;
 +    uint32 earnedAuctionInterval = 300;
@@ -1521,7 +1521,7 @@ index a5dff8e..b61fd2e 100644
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index 9bd0bcc..5f490f3 100644
+index ad67162..5e529c6 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -16,6 +16,7 @@

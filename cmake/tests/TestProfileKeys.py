@@ -98,13 +98,13 @@ def main():
     if errors:
         raise SystemExit('\n'.join(errors))
 
-    # An upstream rename such as AiPlayerbot.* to Playerbots.* must fail.
-    renamed = {value.replace('AiPlayerbot.', 'Playerbots.') for value in literals}
+    # Renaming the current Playerbots readers must reject every shipped key.
+    renamed = {value.replace('Playerbots.', 'RenamedPlayerbots.') for value in literals}
     failures = problems(keys, renamed)
-    expected = {key for key in keys if key.startswith('AiPlayerbot.')}
+    expected = {key for key in keys if key.startswith('Playerbots.')}
     if not expected or not all(any(error.startswith(key + ' ') for error in failures) for key in expected):
         raise SystemExit('Renamed Playerbots keys were not rejected')
-    for key in ('AiPlayerbot.NaturalProgression', 'IndividualProgression.ProgressionLimit', 'MaxPlayerLevel'):
+    for key in ('Playerbots.NaturalProgression', 'IndividualProgression.ProgressionLimit', 'MaxPlayerLevel'):
         if key not in keys or not problems(keys, literals - {key}):
             raise SystemExit(f'A renamed {key} was not rejected')
     if not problems(keys, literals - {'StrandedRecovery'}):

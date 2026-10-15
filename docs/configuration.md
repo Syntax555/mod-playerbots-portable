@@ -14,6 +14,12 @@ defaults for future comparisons.
 
 `configs/.portable-profiles.json` records the managed baseline for future
 updates; keep it with the active configs when backing up or moving a realm.
+The launcher renames legacy `AiPlayerbot.*` settings to `Playerbots.*` before
+merging updates, including custom keys and saved managed baselines. If both
+names exist, the `Playerbots.*` value takes precedence and the old assignment
+stays visible as a comment. Configuration backups preserve the original files.
+Update external environment overrides from `AC_AI_PLAYERBOT_*` to
+`AC_PLAYERBOTS_*`; the server reads only the new names.
 Server binaries and SQL update through the launcher's normal startup check.
 See the [update guide](updating.md) for manual installation and offline startup.
 
@@ -52,7 +58,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Natural progression | Enabled |
 | Fresh bot level / XP rate | 1 / 1.0 |
 | Online population target | 2,500 while at least one real player session is connected |
-| Disable bots without a real player | Enabled; `AiPlayerbot.DisabledWithoutRealPlayer = 1` |
+| Disable bots without a real player | Enabled; `Playerbots.DisabledWithoutRealPlayer = 1` |
 | Login / logout delay | 30 seconds after a real session connects / 60 seconds after the last session ends |
 | Resident earned caps | About 5% each at 19, 29, 39, 49, 59, 69 and 79 |
 | Free factory equipment, money and supplies | Disabled |
@@ -77,7 +83,7 @@ not. After the last real session ends, random bots log out after the configured
 60-second delay.
 
 To require player presence in an existing customized installation, set
-`AiPlayerbot.DisabledWithoutRealPlayer = 1` in
+`Playerbots.DisabledWithoutRealPlayer = 1` in
 `configs/modules/playerbots.conf` with the server stopped. Managed defaults
 update automatically; an explicit custom value of `0` remains an administrator's
 choice.
@@ -85,10 +91,10 @@ choice.
 Smart activity scaling reduces distant solo activity as tick time rises, while
 nearby/grouped bots and combat stay active. A target of 2,500 requires
 substantial server resources and does not imply every bot is available in every
-level, faction or era. Lower `AiPlayerbot.MinRandomBots` and
-`AiPlayerbot.MaxRandomBots` to fit the host.
+level, faction or era. Lower `Playerbots.MinRandomBots` and
+`Playerbots.MaxRandomBots` to fit the host.
 
-`AiPlayerbot.LearnFlightPathsWithMaster = 1` lets controlled altbots and recruited
+`Playerbots.LearnFlightPathsWithMaster = 1` lets controlled altbots and recruited
 random bots learn the flight point you visit when you speak to its flight master.
 This also works while SelfBot is enabled on your character.
 Both characters must be alive and able to interact with the same NPC in normal
@@ -98,8 +104,8 @@ discovered, from a flight master within normal interaction range; a following bo
 without the route stays behind and says so.
 
 Bots use the same roll policy with ordinary players and SelfBot masters.
-`AiPlayerbot.LootNeedRollLevel = 2` permits Need for appropriate equipment
-upgrades; `AiPlayerbot.LootGreedRollLevel = 1` permits Greed for other items the
+`Playerbots.LootNeedRollLevel = 2` permits Need for appropriate equipment
+upgrades; `Playerbots.LootGreedRollLevel = 1` permits Greed for other items the
 AI classifies as useful or sellable. Group roll masks and native Need Before
 Greed restrictions apply. Unsupported or unwanted items can still be passed.
 Existing roll settings are preserved during updates; edit these two keys in
@@ -136,7 +142,7 @@ mechanic tactics or guarantee that every class can solo an encounter.
 
 Playerbots includes selected dungeon and raid tactics across Vanilla, TBC and
 Wrath. Bots can accompany a player through real instances without a dungeon
-simulator. `AiPlayerbot.ApplyInstanceStrategies = 1` enables these tactics;
+simulator. `Playerbots.ApplyInstanceStrategies = 1` enables these tactics;
 navigation and boss coverage vary by encounter. Automatic Dungeon Finder
 joining is disabled. Autonomous five-bot parties can walk to and attempt
 normal Vanilla, TBC and Wrath dungeons in their own earned era. A player's group

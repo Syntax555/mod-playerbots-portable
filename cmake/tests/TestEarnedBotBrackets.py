@@ -54,7 +54,7 @@ struct Player {
 };
 struct Config {
     bool naturalProgression=true, vanillaBattlegroundsOnly=true, earnedEraBattlegrounds=false;
-    float randomBotXPRate=10.0f;
+    float RandomBotXPRate=10.0f;
     std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets;
 } sPlayerbotAIConfig;
 struct RandomMgr { bool IsRandomBot(Player* p) const { return p->random; } } sRandomPlayerbotMgr;

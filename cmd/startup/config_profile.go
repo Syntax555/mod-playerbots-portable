@@ -49,6 +49,7 @@ func mergeConfigProfile(content, profile string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	content = migratePlayerbotsKeys(content)
 	values := make(map[string]string, len(assignments))
 	for _, assignment := range assignments {
 		values[assignment.key] = assignment.value

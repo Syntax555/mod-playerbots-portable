@@ -1541,7 +1541,7 @@ index 0000000..50f36bf
 +
 +#endif
 diff --git a/src/EraTalentBots.cpp b/src/EraTalentBots.cpp
-index b14b581..f9701e1 100644
+index b14b581..58558ce 100644
 --- a/src/EraTalentBots.cpp
 +++ b/src/EraTalentBots.cpp
 @@ -1,10 +1,12 @@
@@ -1762,7 +1762,7 @@ index b14b581..f9701e1 100644
          { { ERA_TBC, CLASS_DRUID, 3 }, { 20121, 20122, 20128, 20127, 20126, 20129, 20130, 20131, 20132, 20133, 20135, 20136, 20138, 20139, 20140, 20141, 20123, 20124, 20125, 20143, 20144 } },
      };
  
-+    // A fresh build follows the configured PvE spec mix (AiPlayerbot.RandomClassSpecProb spec
++    // A fresh build follows the configured PvE spec mix (Playerbots.RandomClassSpecProb spec
 +    // numbers 0-2 and the druid's cat 3, the authored orders). A GUID hash keeps the choice
 +    // stable, so the next era's refunded tree is rebuilt as the same spec.
 +    int SeedSpecTab(Player* bot)
@@ -1771,7 +1771,7 @@ index b14b581..f9701e1 100644
 +        int const specs = cls == CLASS_DRUID ? 4 : 3;
 +        uint32 total = 0;
 +        for (int spec = 0; spec < specs; ++spec)
-+            total += sPlayerbotAIConfig.randomClassSpecProb[cls][spec];
++            total += sPlayerbotAIConfig.RandomClassSpecProb[cls][spec];
 +        uint32 hash = bot->GetGUID().GetCounter();
 +        hash = (hash ^ (hash >> 16)) * 0x7feb352du;
 +        hash = (hash ^ (hash >> 15)) * 0x846ca68bu;
@@ -1781,7 +1781,7 @@ index b14b581..f9701e1 100644
 +        uint32 point = hash % total;
 +        for (int spec = 0; spec < specs; ++spec)
 +        {
-+            uint32 const weight = sPlayerbotAIConfig.randomClassSpecProb[cls][spec];
++            uint32 const weight = sPlayerbotAIConfig.RandomClassSpecProb[cls][spec];
 +            if (point < weight)
 +                return spec;
 +            point -= weight;

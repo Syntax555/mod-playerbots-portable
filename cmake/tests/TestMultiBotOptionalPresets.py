@@ -105,12 +105,12 @@ std::string FormatTalentSpecPointSummary(std::array<uint32, 3> const&) { return 
 int main()
 {
     Player player;
-    configMgr._configOptions["AiPlayerbot.PremadeSpecName.8.0"] = " arcane pve \t";
-    configMgr._configOptions["AiPlayerbot.PremadeSpecLink.8.0.80"] = " 230005-0-0 \n";
-    configMgr._configOptions["AiPlayerbot.PremadeSpecName.8.2"] = "\t frost pve ";
-    configMgr._configOptions["AiPlayerbot.PremadeSpecLink.8.2.60"] = "0-0-230005";
-    configMgr._configOptions["AiPlayerbot.PremadeSpecName.8.1"] = "";
-    configMgr._configOptions["AiPlayerbot.PremadeSpecName.8.30"] = " custom preset ";
+    configMgr._configOptions["Playerbots.PremadeSpecName.8.0"] = " arcane pve \t";
+    configMgr._configOptions["Playerbots.PremadeSpecLink.8.0.80"] = " 230005-0-0 \n";
+    configMgr._configOptions["Playerbots.PremadeSpecName.8.2"] = "\t frost pve ";
+    configMgr._configOptions["Playerbots.PremadeSpecLink.8.2.60"] = "0-0-230005";
+    configMgr._configOptions["Playerbots.PremadeSpecName.8.1"] = "";
+    configMgr._configOptions["Playerbots.PremadeSpecName.8.30"] = " custom preset ";
 
     auto const entries = BuildTalentSpecEntries(&player);
     assert(entries.size() == 3);
@@ -124,8 +124,8 @@ int main()
     assert(missingLogs == 0 && criticalLogs == 0 && environmentLogs == 0);
 
     // Native environment precedence still applies to these quiet lookups.
-    configMgr.environment["AiPlayerbot.PremadeSpecName.8.0"] = " environmental preset ";
-    configMgr.environment["AiPlayerbot.PremadeSpecName.8.1"] = " environment-only preset ";
+    configMgr.environment["Playerbots.PremadeSpecName.8.0"] = " environmental preset ";
+    configMgr.environment["Playerbots.PremadeSpecName.8.1"] = " environment-only preset ";
     auto const overridden = BuildTalentSpecEntries(&player);
     assert(overridden.size() == 4);
     assert(overridden[0].name == "environmental preset");

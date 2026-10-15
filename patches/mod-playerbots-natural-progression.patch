@@ -1,16 +1,16 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index f84c08e6..5be9190c 100644
+index 079b3406..9c418490 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
-@@ -85,6 +85,20 @@ AiPlayerbot.Enabled = 1
+@@ -85,6 +85,20 @@ Playerbots.Enabled = 1
  # Enable randombot system
- AiPlayerbot.RandomBotAutologin = 1
+ Playerbots.RandomBotAutologin = 1
  
 +# Preserve normal character creation and earned progress. Disable random factory
 +# gear/gold/spell/quest grants, free maintenance and bot cheat masks.
 +# Disables periodic revive/teleport and teleport recovery; pathfinding can stall.
 +# Does not provide missing quest, crafting, profession or raid AI.
-+AiPlayerbot.NaturalProgression = 0
++Playerbots.NaturalProgression = 0
 +
 +# Optional earned caps in natural mode: level:percentage pairs, unique levels 1-80,
 +# positive percentages totaling at most 100. Example: 19:5,29:5,39:5,49:5,59:5.
@@ -18,39 +18,39 @@ index f84c08e6..5be9190c 100644
 +# resets or XP-off matchmaking flags. GUID assignment survives relogs/restarts.
 +# Existing bots above their assigned cap are left alone. Empty disables caps.
 +# Invalid input logs an error and disables caps. Reload config or restart to apply.
-+AiPlayerbot.EarnedLevelBrackets = ""
++Playerbots.EarnedLevelBrackets = ""
 +
  # Randombot count
- AiPlayerbot.MinRandomBots = 500
- AiPlayerbot.MaxRandomBots = 500
-@@ -1630,6 +1644,11 @@ AiPlayerbot.AutoTeleportForLevel = 1
+ Playerbots.MinRandomBots = 500
+ Playerbots.MaxRandomBots = 500
+@@ -1630,6 +1644,11 @@ Playerbots.AutoTeleportForLevel = 1
  # Enable battlegrounds/arenas for randombots
- AiPlayerbot.RandomBotJoinBG = 1
+ Playerbots.RandomBotJoinBG = 1
  
 +# Restrict bot queues and new invitations to Warsong Gulch, Arathi Basin and
 +# Alterac Valley. Blocks arenas and expansion/random battleground queues.
 +# Existing matches may finish. Disable when opening later-expansion PvP.
-+AiPlayerbot.VanillaBattlegroundsOnly = 0
++Playerbots.VanillaBattlegroundsOnly = 0
 +
  # Enable auto-joining of battlegrounds - have bots start battlegrounds and arenas on their own
- AiPlayerbot.RandomBotAutoJoinBG = 0
+ Playerbots.RandomBotAutoJoinBG = 0
  
-@@ -2585,11 +2604,14 @@ AiPlayerbot.RandomBotTalk = 1
- AiPlayerbot.RandomBotEmote = 0
+@@ -2585,11 +2604,14 @@ Playerbots.RandomBotTalk = 1
+ Playerbots.RandomBotEmote = 0
  # Enable randombots suggesting dungeons in chat
- AiPlayerbot.RandomBotSuggestDungeons = 1
+ Playerbots.RandomBotSuggestDungeons = 1
 -# Bots greet players when invited
 +# Bots greet nearby players once while they remain in the bot's seen-player list.
- AiPlayerbot.EnableGreet = 0
+ Playerbots.EnableGreet = 0
 -# Chance to reply to toxic links with toxic links (0-100)
 +# Limit nearby greetings to real player sessions; excludes bot-to-bot greetings.
 +# Requires EnableGreet. Default 0 preserves the unrestricted greeting behavior.
-+AiPlayerbot.GreetRealPlayersOnly = 0
++Playerbots.GreetRealPlayersOnly = 0
 +# Chance to reply to toxic links with toxic links (0-100; 0 disables replies)
- AiPlayerbot.ToxicLinksRepliesChance = 30
+ Playerbots.ToxicLinksRepliesChance = 30
 -# Chance to reply to Thunderfury with Thunderfury (0-100)
 +# Chance to reply to Thunderfury with Thunderfury (0-100; 0 disables replies)
- AiPlayerbot.ThunderfuryRepliesChance = 40
+ Playerbots.ThunderfuryRepliesChance = 40
  # Enable bots chatting in guild about certain events
  AIPlayerbot.GuildFeedback = 1
 diff --git a/src/Ai/Base/ActionContext.h b/src/Ai/Base/ActionContext.h
@@ -74,7 +74,7 @@ index 26b56250..a8c657dd 100644
      static Action* new_rpg_go_grind(PlayerbotAI* botAI) { return new NewRpgGoGrindAction(botAI); }
      static Action* new_rpg_go_camp(PlayerbotAI* botAI) { return new NewRpgGoCampAction(botAI); }
 diff --git a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
-index 7588abd8..2cec28cb 100644
+index 03a4b9ba..477007ac 100644
 --- a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
 +++ b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
 @@ -43,7 +43,7 @@ void AutoMaintenanceOnLevelupAction::AutoPickTalents()
@@ -120,7 +120,7 @@ index 7588abd8..2cec28cb 100644
          return;
  
 diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
-index eece1396..e6bcae0d 100644
+index 6396770a..4ceb4211 100644
 --- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 +++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 @@ -8,6 +8,7 @@
@@ -252,7 +252,7 @@ index 0da759b7..49fc7737 100644
          if (!pCreature)
              continue;
 diff --git a/src/Ai/Base/Actions/ChangeTalentsAction.cpp b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
-index 02c7170d..d8908580 100644
+index 0a8a5228..3bf7c154 100644
 --- a/src/Ai/Base/Actions/ChangeTalentsAction.cpp
 +++ b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
 @@ -16,6 +16,9 @@
@@ -300,7 +300,7 @@ index 761d1af8..2c116d9b 100644
      std::vector<uint32> itemIds;
      std::istringstream iss(event.getParam());
 diff --git a/src/Ai/Base/Actions/FishingAction.cpp b/src/Ai/Base/Actions/FishingAction.cpp
-index 63fcdbb8..406e2ab2 100644
+index e86bfb1a..3b93151b 100644
 --- a/src/Ai/Base/Actions/FishingAction.cpp
 +++ b/src/Ai/Base/Actions/FishingAction.cpp
 @@ -383,7 +383,7 @@ bool EquipFishingPoleAction::isUseful()
@@ -313,7 +313,7 @@ index 63fcdbb8..406e2ab2 100644
          bot->StoreNewItemInBestSlots(FISHING_POLE, 1);  // Try to get a fishing pole
          return true;
 diff --git a/src/Ai/Base/Actions/GreetAction.cpp b/src/Ai/Base/Actions/GreetAction.cpp
-index 2941f118..41b00377 100644
+index eb5e418b..b7330b52 100644
 --- a/src/Ai/Base/Actions/GreetAction.cpp
 +++ b/src/Ai/Base/Actions/GreetAction.cpp
 @@ -5,13 +5,60 @@
@@ -391,7 +391,7 @@ index 2941f118..41b00377 100644
 +        return false;
 +    }
 +
-     if (!bot->HasInArc(CAST_ANGLE_IN_FRONT, player, sPlayerbotAIConfig.sightDistance))
+     if (!bot->HasInArc(CAST_ANGLE_IN_FRONT, player, sPlayerbotAIConfig.SightDistance))
          bot->SetFacingToObject(player);
  
 -    ObjectGuid oldSel = bot->GetTarget();
@@ -446,7 +446,7 @@ index bd00e2f2..cd962f96 100644
  
  #endif
 diff --git a/src/Ai/Base/Actions/GuildCreateActions.cpp b/src/Ai/Base/Actions/GuildCreateActions.cpp
-index d8903c99..43a2bc61 100644
+index 605fa684..f1df4e32 100644
 --- a/src/Ai/Base/Actions/GuildCreateActions.cpp
 +++ b/src/Ai/Base/Actions/GuildCreateActions.cpp
 @@ -239,7 +239,7 @@ bool PetitionTurnInAction::Execute(Event /*event*/)
@@ -473,7 +473,7 @@ index 3f9c791b..41e421dc 100644
      CharacterDatabase.Execute("UPDATE characters SET account = {} WHERE guid = {}", account,
                                bot->GetGUID().GetCounter());
 diff --git a/src/Ai/Base/Actions/QuestAction.cpp b/src/Ai/Base/Actions/QuestAction.cpp
-index 5c06c795..80854fc2 100644
+index 6028944b..0bf56dee 100644
 --- a/src/Ai/Base/Actions/QuestAction.cpp
 +++ b/src/Ai/Base/Actions/QuestAction.cpp
 @@ -74,6 +74,10 @@ bool QuestAction::Execute(Event event)
@@ -488,7 +488,7 @@ index 5c06c795..80854fc2 100644
  
      // If player doesn't have the quest
 diff --git a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
-index 1ecf4c5d..2e758bb6 100644
+index 79a806d4..43f1a59d 100644
 --- a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
 +++ b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
 @@ -9,6 +9,7 @@
@@ -697,7 +697,7 @@ index 9662f263..84835aef 100644
  
  class RepopAction : public SpiritHealerAction
 diff --git a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
-index 41d73978..5f33cb50 100644
+index 6cf8b452..0e3435f7 100644
 --- a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
 +++ b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
 @@ -95,7 +95,7 @@ bool FindCorpseAction::Execute(Event /*event*/)
@@ -722,8 +722,8 @@ index 41d73978..5f33cb50 100644
      GraveyardStruct const* ClosestGrave =
          GetGrave(dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10);
  
--    if (bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.sightDistance)
-+    if (ClosestGrave && bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.sightDistance)
+-    if (bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.SightDistance)
++    if (ClosestGrave && bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.SightDistance)
      {
          GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
          for (GuidVector::iterator i = npcs.begin(); i != npcs.end(); i++)
@@ -764,14 +764,14 @@ index 41d73978..5f33cb50 100644
      // {
      context->GetValue<uint32>("death count")->Set(dCount + 1);
 diff --git a/src/Ai/Base/Actions/SayAction.cpp b/src/Ai/Base/Actions/SayAction.cpp
-index a7d18f06..4749a933 100644
+index 7ef99113..41a83110 100644
 --- a/src/Ai/Base/Actions/SayAction.cpp
 +++ b/src/Ai/Base/Actions/SayAction.cpp
 @@ -221,6 +221,9 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32& type, uint32& guid1, std:
  
  bool ChatReplyAction::HandleThunderfuryReply(Player* bot, ChatChannelSource chatChannelSource)
  {
-+    if (!sPlayerbotAIConfig.thunderfuryRepliesChance)
++    if (!sPlayerbotAIConfig.ThunderfuryRepliesChance)
 +        return false;
 +
      std::map<std::string, std::string> placeholders;
@@ -781,7 +781,7 @@ index a7d18f06..4749a933 100644
  
  bool ChatReplyAction::HandleToxicLinksReply(Player* bot, ChatChannelSource chatChannelSource)
  {
-+    if (!sPlayerbotAIConfig.toxicLinksRepliesChance)
++    if (!sPlayerbotAIConfig.ToxicLinksRepliesChance)
 +        return false;
 +
      //quests
@@ -803,17 +803,17 @@ index a202d686..38142b82 100644
      std::string param = event.getParam();
      std::istringstream iss(param);
 diff --git a/src/Ai/Base/Actions/TaxiAction.cpp b/src/Ai/Base/Actions/TaxiAction.cpp
-index 41c12771..f37f759e 100644
+index abd2c7dd..25706b7e 100644
 --- a/src/Ai/Base/Actions/TaxiAction.cpp
 +++ b/src/Ai/Base/Actions/TaxiAction.cpp
 @@ -40,7 +40,9 @@ bool TaxiAction::Execute(Event event)
          if (!(npc->GetNpcFlags() & UNIT_NPC_FLAG_FLIGHTMASTER))
              continue;
  
--        if (bot->GetDistance(npc) > sPlayerbotAIConfig.farDistance)
+-        if (bot->GetDistance(npc) > sPlayerbotAIConfig.FarDistance)
 +        // Natural bots must be able to talk to the flight master like a player.
 +        if (sPlayerbotAIConfig.naturalProgression ? !bot->GetNPCIfCanInteractWith(guid, UNIT_NPC_FLAG_FLIGHTMASTER)
-+                                                  : bot->GetDistance(npc) > sPlayerbotAIConfig.farDistance)
++                                                  : bot->GetDistance(npc) > sPlayerbotAIConfig.FarDistance)
              continue;
  
          bot->GetSession()->SendLearnNewTaxiNode(npc);
@@ -840,8 +840,8 @@ index 41c12771..f37f759e 100644
 +            }
 +
              uint32 index = botAI->GetGroupSlotIndex(bot);
-             uint32 delay = sPlayerbotAIConfig.botTaxiDelayMin +
-                           index * sPlayerbotAIConfig.botTaxiGapMs +
+             uint32 delay = sPlayerbotAIConfig.BotTaxiDelayMin +
+                           index * sPlayerbotAIConfig.BotTaxiGapMs +
 @@ -76,9 +87,11 @@ bool TaxiAction::Execute(Event event)
              botAI->AddTimedEvent(
                  [bot = bot, &movement, npcGuid]() -> void
@@ -902,7 +902,7 @@ index c1efb7f1..cb2c4e13 100644
          SpellCastTargets targets;
          targets.SetUnitTarget(bot);
 diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
-index c32c9d99..bc29a05b 100644
+index d4465a05..e5d9ef14 100644
 --- a/src/Ai/Base/Actions/TrainerAction.cpp
 +++ b/src/Ai/Base/Actions/TrainerAction.cpp
 @@ -76,6 +76,14 @@ bool TrainerAction::isPossible()
@@ -982,8 +982,8 @@ index c32c9d99..bc29a05b 100644
  
  bool MaintenanceAction::Execute(Event /*event*/)
  {
--    if (!sPlayerbotAIConfig.maintenanceCommand)
-+    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.maintenanceCommand)
+-    if (!sPlayerbotAIConfig.MaintenanceCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.MaintenanceCommand)
      {
          botAI->TellError("maintenance command is not allowed, please check the configuration.");
          return false;
@@ -991,8 +991,8 @@ index c32c9d99..bc29a05b 100644
  
  bool BisGearAction::RunAutogearFallback(uint16 effectiveIlvl)
  {
--    if (!sPlayerbotAIConfig.autoGearCommand)
-+    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.autoGearCommand)
+-    if (!sPlayerbotAIConfig.AutoGearCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.AutoGearCommand)
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "bis_autogear_unavailable_error",
@@ -1000,8 +1000,8 @@ index c32c9d99..bc29a05b 100644
  
  bool BisGearAction::Execute(Event event)
  {
--    if (!sPlayerbotAIConfig.autoGearBisCommand)
-+    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.autoGearBisCommand)
+-    if (!sPlayerbotAIConfig.AutoGearBisCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.AutoGearBisCommand)
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "bis_command_unavailable_error",
@@ -1009,13 +1009,13 @@ index c32c9d99..bc29a05b 100644
  
  bool AutoGearAction::Execute(Event event)
  {
--    if (!sPlayerbotAIConfig.autoGearCommand)
-+    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.autoGearCommand)
+-    if (!sPlayerbotAIConfig.AutoGearCommand)
++    if (sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.AutoGearCommand)
      {
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "autogear_command_disabled_error", "autogear command is not allowed, please check the configuration.", {}));
 diff --git a/src/Ai/Base/Actions/UseMeetingStoneAction.cpp b/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
-index 4745c95c..f8821e07 100644
+index 0fdaee40..194898eb 100644
 --- a/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
 +++ b/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
 @@ -163,6 +163,10 @@ bool SummonAction::SummonUsingNpcs(Player* summoner, Player* player, bool preser
@@ -1030,7 +1030,7 @@ index 4745c95c..f8821e07 100644
      if (!summoner || summoner == player)
          return false;
 diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
-index 0c9a679f..abd207c0 100644
+index e15f70e0..66800f0b 100644
 --- a/src/Ai/Base/Actions/WorldBuffAction.cpp
 +++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
 @@ -11,6 +11,10 @@
@@ -1045,7 +1045,7 @@ index 0c9a679f..abd207c0 100644
  
      std::vector<uint32> buffs = NeedWorldBuffs(bot);  // Get matching buffs
 diff --git a/src/Ai/Base/Actions/XpGainAction.cpp b/src/Ai/Base/Actions/XpGainAction.cpp
-index 86934c5f..94a16438 100644
+index eec1a605..a69cc6cc 100644
 --- a/src/Ai/Base/Actions/XpGainAction.cpp
 +++ b/src/Ai/Base/Actions/XpGainAction.cpp
 @@ -55,6 +55,9 @@ bool XpGainAction::Execute(Event event)
@@ -1079,7 +1079,7 @@ index 32ad9aa8..67a4d99d 100644
      static Trigger* go_camp_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_GO_CAMP); }
      static Trigger* wander_random_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_WANDER_RANDOM); }
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index eace9db9..a44dcb5d 100644
+index eace9db9..2c08e3bd 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -5,9 +5,157 @@
@@ -1169,7 +1169,7 @@ index eace9db9..a44dcb5d 100644
 +        if (needsRepair && npc->HasNpcFlag(UNIT_NPC_FLAG_REPAIR))
 +            return {guid, NaturalMaintenanceType::REPAIR};
 +
-+        if (sPlayerbotAIConfig.allowLearnTrainerSpells && npc->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))
++        if (sPlayerbotAIConfig.AllowLearnTrainerSpells && npc->HasNpcFlag(UNIT_NPC_FLAG_TRAINER))
 +        {
 +            Trainer::Trainer* trainer = sObjectMgr->GetTrainer(npc->GetEntry());
 +            if (trainer && trainer->IsTrainerValidForPlayer(bot))
@@ -1361,7 +1361,7 @@ index 6a866727..a3d77826 100644
  
  class AlreadySeenPlayersValue : public ManualSetValue<GuidSet&>
 diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
-index b1d510a4..9adf689f 100644
+index 527622a3..06363930 100644
 --- a/src/Ai/Base/ValueContext.h
 +++ b/src/Ai/Base/ValueContext.h
 @@ -280,6 +280,7 @@ public:
@@ -1430,7 +1430,7 @@ index 25d3f23f..39dc0dfc 100644
          new TriggerNode(
              "too many soul shards",
 diff --git a/src/Ai/Class/Warlock/WarlockActions.cpp b/src/Ai/Class/Warlock/WarlockActions.cpp
-index e80260a4..1a90b70b 100644
+index b07730ab..ae36d5fc 100644
 --- a/src/Ai/Class/Warlock/WarlockActions.cpp
 +++ b/src/Ai/Class/Warlock/WarlockActions.cpp
 @@ -118,6 +118,9 @@ bool CastSoulshatterAction::isUseful()
@@ -1536,7 +1536,7 @@ index aa5fbd51..9ecd5c33 100644
          }
      }
 diff --git a/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp b/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
-index 32062286..6cfd2ecd 100644
+index 1a1a8974..5c314861 100644
 --- a/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
 +++ b/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
 @@ -489,7 +489,7 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
@@ -1549,7 +1549,7 @@ index 32062286..6cfd2ecd 100644
  
      Item* flare = bot->GetItemByEntry(itemId);
 diff --git a/src/Ai/Raid/SSC/SSCActions.cpp b/src/Ai/Raid/SSC/SSCActions.cpp
-index 42b8d88e..cfd45bcd 100644
+index 64ae1cbf..e3941780 100644
 --- a/src/Ai/Raid/SSC/SSCActions.cpp
 +++ b/src/Ai/Raid/SSC/SSCActions.cpp
 @@ -2555,6 +2555,10 @@ bool LadyVashjPassTheTaintedCoreAction::IsFourthCorePasserInPosition(Player* fou
@@ -1752,7 +1752,7 @@ index 12dbf300..834a0b00 100644
          WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
          packet << (uint8)i;
 diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-index e914db17..30497296 100644
+index 4afe6fe9..291b6648 100644
 --- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 +++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 @@ -13,10 +13,12 @@
@@ -2003,7 +2003,7 @@ index 00000000..2582f6e1
 +
 +#endif
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
-index dee93d47..9818ee10 100644
+index eeba8187..c32f69d9 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
 +++ b/src/Bot/Factory/PlayerbotFactory.cpp
 @@ -255,7 +255,9 @@ bool PlayerbotFactory::IsTrainerSpellAllowedForBot(Player* bot, Trainer::Trainer
@@ -2025,7 +2025,7 @@ index dee93d47..9818ee10 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     // if (sPlayerbotAIConfig.disableRandomLevels)
+     // if (sPlayerbotAIConfig.DisableRandomLevels)
      //     return;
  
 @@ -1089,6 +1095,10 @@ void PlayerbotFactory::Randomize(bool incremental)
@@ -2037,8 +2037,8 @@ index dee93d47..9818ee10 100644
 +        return;
 +
      // Prepare();
-     // if (!sPlayerbotAIConfig.equipAndSpecPersistence ||
-     //     bot->GetLevel() < sPlayerbotAIConfig.equipAndSpecPersistenceLevel)
+     // if (!sPlayerbotAIConfig.EquipAndSpecPersistence ||
+     //     bot->GetLevel() < sPlayerbotAIConfig.EquipAndSpecPersistenceLevel)
 @@ -1129,6 +1139,9 @@ void PlayerbotFactory::Refresh()
  
  void PlayerbotFactory::InitConsumables()
@@ -2153,18 +2153,18 @@ index dee93d47..9818ee10 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     for (std::vector<uint32>::iterator i = sPlayerbotAIConfig.randomBotSpellIds.begin();
-          i != sPlayerbotAIConfig.randomBotSpellIds.end(); ++i)
+     for (std::vector<uint32>::iterator i = sPlayerbotAIConfig.RandomBotSpellIds.begin();
+          i != sPlayerbotAIConfig.RandomBotSpellIds.end(); ++i)
      {
 @@ -3660,6 +3697,14 @@ void PlayerbotFactory::InitTalents(uint32 specNo)
          if ((classMask & talentTabInfo->ClassMask) == 0)
              continue;
  
-+        if (sPlayerbotAIConfig.limitTalentsExpansion && bot->GetLevel() <= 60 &&
++        if (sPlayerbotAIConfig.LimitTalentsExpansion && bot->GetLevel() <= 60 &&
 +            (talentInfo->Row > 6 || (talentInfo->Row == 6 && talentInfo->Col != 1)))
 +            continue;
 +
-+        if (sPlayerbotAIConfig.limitTalentsExpansion && bot->GetLevel() <= 70 &&
++        if (sPlayerbotAIConfig.LimitTalentsExpansion && bot->GetLevel() <= 70 &&
 +            (talentInfo->Row > 8 || (talentInfo->Row == 8 && talentInfo->Col != 1)))
 +            continue;
 +
@@ -2198,9 +2198,9 @@ index dee93d47..9818ee10 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     uint32 firstmount = sPlayerbotAIConfig.useGroundMountAtMinLevel;
-     uint32 secondmount = sPlayerbotAIConfig.useFastGroundMountAtMinLevel;
-     uint32 thirdmount = sPlayerbotAIConfig.useFlyMountAtMinLevel;
+     uint32 firstmount = sPlayerbotAIConfig.UseGroundMountAtMinLevel;
+     uint32 secondmount = sPlayerbotAIConfig.UseFastGroundMountAtMinLevel;
+     uint32 thirdmount = sPlayerbotAIConfig.UseFlyMountAtMinLevel;
 @@ -4127,6 +4181,9 @@ void PlayerbotFactory::UnbindInstance()
  
  void PlayerbotFactory::InitPotions()
@@ -2272,7 +2272,7 @@ index dee93d47..9818ee10 100644
      if (level < 55)
          return; // Only apply for level 55+ bots
 diff --git a/src/Bot/Factory/RandomPlayerbotFactory.cpp b/src/Bot/Factory/RandomPlayerbotFactory.cpp
-index cd0cc068..ac96bdd3 100644
+index 23046e1a..0e6a14d9 100644
 --- a/src/Bot/Factory/RandomPlayerbotFactory.cpp
 +++ b/src/Bot/Factory/RandomPlayerbotFactory.cpp
 @@ -5,6 +5,9 @@
@@ -2342,14 +2342,14 @@ index cd0cc068..ac96bdd3 100644
  uint32 RandomPlayerbotFactory::CalculateAvailableCharsPerAccount()
  {
      // Death Knight availability according to their login eligibility, and if WotLK is enabled at all.
--    bool noDK = sPlayerbotAIConfig.disableDeathKnightLogin || sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
-+    bool noDK = sPlayerbotAIConfig.naturalProgression || sPlayerbotAIConfig.disableDeathKnightLogin ||
+-    bool noDK = sPlayerbotAIConfig.DisableDeathKnightLogin || sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
++    bool noDK = sPlayerbotAIConfig.naturalProgression || sPlayerbotAIConfig.DisableDeathKnightLogin ||
 +                sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
  
      uint32 availableChars = noDK ? 9 : 10;
  
 @@ -693,7 +715,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
-         sPlayerbotAIConfig.randomBotAccounts.push_back(accountId);
+         sPlayerbotAIConfig.RandomBotAccounts.push_back(accountId);
  
          uint32 count = AccountMgr::GetCharactersCount(accountId);
 -        if (count >= 10)
@@ -2384,7 +2384,7 @@ index cd0cc068..ac96bdd3 100644
              if (!((1 << (cls - 1)) & CLASSMASK_ALL_PLAYABLE) || !sChrClassesStore.LookupEntry(cls))
                  continue;
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index e084c020..bcda1033 100644
+index 7f51eca5..dcd865d6 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -145,7 +145,9 @@ PlayerbotAI::PlayerbotAI(Player* bot)
@@ -2401,22 +2401,22 @@ index e084c020..bcda1033 100644
 @@ -1325,15 +1327,16 @@ void PlayerbotAI::HandleBotOutgoingPacket(WorldPacket const& packet)
  
                      auto itemIds = GetChatHelper()->ExtractAllItemIds(message);
-                     if (message.starts_with(sPlayerbotAIConfig.toxicLinksPrefix) &&
+                     if (message.starts_with(sPlayerbotAIConfig.ToxicLinksPrefix) &&
 -                        (itemIds.size() > 0 || GetChatHelper()->ExtractAllQuestIds(message).size() > 0) &&
--                        sPlayerbotAIConfig.toxicLinksRepliesChance)
+-                        sPlayerbotAIConfig.ToxicLinksRepliesChance)
 +                        (itemIds.size() > 0 || GetChatHelper()->ExtractAllQuestIds(message).size() > 0))
                      {
--                        if (urand(0, 50) > 0 || urand(1, 100) > sPlayerbotAIConfig.toxicLinksRepliesChance)
-+                        if (!sPlayerbotAIConfig.toxicLinksRepliesChance || urand(0, 50) > 0 ||
-+                            urand(1, 100) > sPlayerbotAIConfig.toxicLinksRepliesChance)
+-                        if (urand(0, 50) > 0 || urand(1, 100) > sPlayerbotAIConfig.ToxicLinksRepliesChance)
++                        if (!sPlayerbotAIConfig.ToxicLinksRepliesChance || urand(0, 50) > 0 ||
++                            urand(1, 100) > sPlayerbotAIConfig.ToxicLinksRepliesChance)
                              return;
                      }
--                    else if (itemIds.count(19019) && sPlayerbotAIConfig.thunderfuryRepliesChance)
+-                    else if (itemIds.count(19019) && sPlayerbotAIConfig.ThunderfuryRepliesChance)
 +                    else if (itemIds.count(19019))
                      {
--                        if (urand(0, 60) > 0 || urand(1, 100) > sPlayerbotAIConfig.thunderfuryRepliesChance)
-+                        if (!sPlayerbotAIConfig.thunderfuryRepliesChance || urand(0, 60) > 0 ||
-+                            urand(1, 100) > sPlayerbotAIConfig.thunderfuryRepliesChance)
+-                        if (urand(0, 60) > 0 || urand(1, 100) > sPlayerbotAIConfig.ThunderfuryRepliesChance)
++                        if (!sPlayerbotAIConfig.ThunderfuryRepliesChance || urand(0, 60) > 0 ||
++                            urand(1, 100) > sPlayerbotAIConfig.ThunderfuryRepliesChance)
                              return;
                      }
                      else
@@ -2441,7 +2441,7 @@ index e084c020..bcda1033 100644
  bool IsAlliance(uint8 race)
  {
 diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
-index 821209de..f0659f9e 100644
+index da22f6e7..2819cf8d 100644
 --- a/src/Bot/PlayerbotAI.h
 +++ b/src/Bot/PlayerbotAI.h
 @@ -83,6 +83,7 @@ enum BotState
@@ -2460,10 +2460,10 @@ index 821209de..f0659f9e 100644
 +            return false;
 +
          return ((uint32)mask & (uint32)cheatMask) != 0 ||
-                ((uint32)mask & (uint32)sPlayerbotAIConfig.botCheatMask) != 0;
+                ((uint32)mask & (uint32)sPlayerbotAIConfig.BotCheatMask) != 0;
      }
 diff --git a/src/Bot/PlayerbotMgr.cpp b/src/Bot/PlayerbotMgr.cpp
-index 848ba215..c30584a2 100644
+index 0d599cc9..71f45ac2 100644
 --- a/src/Bot/PlayerbotMgr.cpp
 +++ b/src/Bot/PlayerbotMgr.cpp
 @@ -29,6 +29,8 @@
@@ -2547,7 +2547,7 @@ index 848ba215..c30584a2 100644
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
 diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
-index 8bcebe3b..a5ba1441 100644
+index d3ecf115..7070ca76 100644
 --- a/src/Bot/RandomBotLevelMgr.cpp
 +++ b/src/Bot/RandomBotLevelMgr.cpp
 @@ -293,6 +293,9 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
@@ -2567,7 +2567,7 @@ index 8bcebe3b..a5ba1441 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     uint8 levelToResetTo = sPlayerbotAIConfig.resetBotLevelResetTo;
+     uint8 levelToResetTo = sPlayerbotAIConfig.ResetBotLevelResetTo;
  
      uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
 @@ -851,6 +857,9 @@ void RandomBotLevelMgr::ResetBot(Player* player, uint8 currentLevel)
@@ -2577,7 +2577,7 @@ index 8bcebe3b..a5ba1441 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     uint8 levelToSkipTo = sPlayerbotAIConfig.resetBotLevelSkipTo;
+     uint8 levelToSkipTo = sPlayerbotAIConfig.ResetBotLevelSkipTo;
  
      uint8 dkMinLevel = static_cast<uint8>(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL));
 @@ -928,6 +937,9 @@ void RandomBotLevelMgr::RunResetPlayedTimeCheck()
@@ -2587,7 +2587,7 @@ index 8bcebe3b..a5ba1441 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     if (sPlayerbotAIConfig.levelBracketsEnabled)
+     if (sPlayerbotAIConfig.LevelBracketsEnabled)
      {
          _bracketsTimer += diff;
 @@ -960,6 +972,9 @@ void RandomBotLevelMgr::Update(uint32 diff)
@@ -2647,7 +2647,7 @@ index 8bcebe3b..a5ba1441 100644
  
      void OnPlayerLogin(Player* player) override
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 6c638816..5e1ac332 100644
+index 4afebecf..337518fa 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
 @@ -9,6 +9,7 @@
@@ -2664,7 +2664,7 @@ index 6c638816..5e1ac332 100644
  
 +bool RandomPlayerbotMgr::CanLogInRandomBots() const
 +{
-+    return !sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.disabledWithoutRealPlayer ||
++    return !sPlayerbotAIConfig.naturalProgression || !sPlayerbotAIConfig.DisabledWithoutRealPlayer ||
 +           sWorldSessionMgr->GetActiveAndQueuedSessionCount() > 0;
 +}
 +
@@ -2676,11 +2676,11 @@ index 6c638816..5e1ac332 100644
              }
  
 -            if (RealPlayerLastTimeSeen != 0 && onlineBotCount > 0 &&
--                time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.disabledWithoutRealPlayerLogoutDelay)
+-                time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.DisabledWithoutRealPlayerLogoutDelay)
 +            if (onlineBotCount > 0 &&
 +                ((sPlayerbotAIConfig.naturalProgression && RealPlayerLastTimeSeen == 0) ||
 +                 (RealPlayerLastTimeSeen != 0 &&
-+                  time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.disabledWithoutRealPlayerLogoutDelay)))
++                  time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.DisabledWithoutRealPlayerLogoutDelay)))
              {
                  LogoutAllBots();
                  LOG_INFO("playerbots", "Logout all bots due no real player session.");
@@ -2761,7 +2761,7 @@ index 6c638816..5e1ac332 100644
 +
          randomTime = urand(1, 2);
  
-         uint32 randomBotUpdateInterval = _isBotInitializing ? 1 : sPlayerbotAIConfig.randomBotUpdateInterval;
+         uint32 randomBotUpdateInterval = _isBotInitializing ? 1 : sPlayerbotAIConfig.RandomBotUpdateInterval;
 @@ -1434,7 +1470,7 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
          return true;
      }
@@ -2818,7 +2818,7 @@ index 6c638816..5e1ac332 100644
 +    if (sPlayerbotAIConfig.naturalProgression)
 +        return;
 +
-     uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
+     uint32 maxLevel = sPlayerbotAIConfig.RandomBotMaxLevel;
      if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
          maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
 @@ -2022,6 +2073,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
@@ -2852,7 +2852,7 @@ index 6c638816..5e1ac332 100644
      if (!botAI)
          return;
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index 93780bc2..78d74e07 100644
+index fca1d7c6..d673b7f7 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
 @@ -134,6 +134,7 @@ public:
@@ -2873,7 +2873,7 @@ index 93780bc2..78d74e07 100644
      uint32 AddRandomBots();
      bool ProcessBot(uint32 bot);
 diff --git a/src/Mgr/Travel/TravelMgr.cpp b/src/Mgr/Travel/TravelMgr.cpp
-index 50e99c0f..6ff03cc7 100644
+index a36d7e2c..68ee7de3 100644
 --- a/src/Mgr/Travel/TravelMgr.cpp
 +++ b/src/Mgr/Travel/TravelMgr.cpp
 @@ -4464,17 +4464,19 @@ std::vector<std::vector<uint32>> TravelMgr::GetOptimalFlightDestinations(Player*
@@ -2906,42 +2906,42 @@ index 50e99c0f..6ff03cc7 100644
  
          candidateZones.erase(candidateZones.begin() + zoneIndex);
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index c18aceea..0736dbbd 100644
+index 3965c01d..50b081f4 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -81,6 +81,8 @@ bool PlayerbotAIConfig::Initialize()
      LOG_INFO("server.loading", "Initializing mod-playerbots, based on AI Playerbots by ike3 and the original Playerbots by blueboy");
  
-     enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", true);
-+    naturalProgression = sConfigMgr->GetOption<bool>("AiPlayerbot.NaturalProgression", false);
-+    vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.VanillaBattlegroundsOnly", false);
-     if (!enabled)
+     Enabled = sConfigMgr->GetOption<bool>("Playerbots.Enabled", true);
++    naturalProgression = sConfigMgr->GetOption<bool>("Playerbots.NaturalProgression", false);
++    vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("Playerbots.VanillaBattlegroundsOnly", false);
+     if (!Enabled)
      {
          LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
 @@ -625,6 +627,7 @@ bool PlayerbotAIConfig::Initialize()
  
      // SPP switches
-     enableGreet = sConfigMgr->GetOption<bool>("AiPlayerbot.EnableGreet", true);
-+    greetRealPlayersOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.GreetRealPlayersOnly", false);
-     summonWhenGroup = sConfigMgr->GetOption<bool>("AiPlayerbot.SummonWhenGroup", true);
-     randomBotFixedLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotFixedLevel", false);
-     disableRandomLevels = sConfigMgr->GetOption<bool>("AiPlayerbot.DisableRandomLevels", false);
+     EnableGreet = sConfigMgr->GetOption<bool>("Playerbots.EnableGreet", true);
++    greetRealPlayersOnly = sConfigMgr->GetOption<bool>("Playerbots.GreetRealPlayersOnly", false);
+     SummonWhenGroup = sConfigMgr->GetOption<bool>("Playerbots.SummonWhenGroup", true);
+     RandomBotFixedLevel = sConfigMgr->GetOption<bool>("Playerbots.RandomBotFixedLevel", false);
+     DisableRandomLevels = sConfigMgr->GetOption<bool>("Playerbots.DisableRandomLevels", false);
 @@ -802,6 +805,13 @@ bool PlayerbotAIConfig::Initialize()
  // percentages at runtime.
  void PlayerbotAIConfig::LoadRandomBotLevelConfig()
  {
 +    auto earnedPolicy = std::make_shared<EarnedLevelBracketPolicy>();
-+    if (!earnedPolicy->Load(sConfigMgr->GetOption<std::string>("AiPlayerbot.EarnedLevelBrackets", "")))
++    if (!earnedPolicy->Load(sConfigMgr->GetOption<std::string>("Playerbots.EarnedLevelBrackets", "")))
 +        LOG_ERROR("playerbots",
-+                  "Invalid AiPlayerbot.EarnedLevelBrackets; earned caps disabled. "
++                  "Invalid Playerbots.EarnedLevelBrackets; earned caps disabled. "
 +                  "Use unique level:percentage pairs, levels 1-80 and positive percentages totaling at most 100.");
 +    earnedLevelBrackets.store(std::move(earnedPolicy));
 +
      // ---- Level brackets ----
-     levelBracketsEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.LevelBrackets.Enabled", false);
-     levelBracketsIgnoreGuildWithRealPlayers =
+     LevelBracketsEnabled = sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.Enabled", false);
+     LevelBracketsIgnoreGuildWithRealPlayers =
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index c0ae3718..a5dff8e4 100644
+index d0f700d4..e3512e8e 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -8,9 +8,12 @@
@@ -2960,32 +2960,32 @@ index c0ae3718..a5dff8e4 100644
 @@ -103,6 +106,10 @@ public:
      bool IsInPvpProhibitedArea(uint32 id);
  
-     bool enabled;
+     bool Enabled;
 +    bool naturalProgression = false;
 +    std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets{
 +        std::make_shared<EarnedLevelBracketPolicy>()};
 +    bool vanillaBattlegroundsOnly = false;
-     bool disabledWithoutRealPlayer;
+     bool DisabledWithoutRealPlayer;
      bool EnableICCBuffs;
-     bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
+     bool AllowAccountBots, AllowGuildBots, AllowTrustedAccountBots;
 @@ -186,6 +193,7 @@ public:
-     bool randomBotSuggestDungeons;
-     bool enableBroadcasts;
-     bool enableGreet;
+     bool RandomBotSuggestDungeons;
+     bool EnableBroadcasts;
+     bool EnableGreet;
 +    bool greetRealPlayersOnly = false;
-     bool randomBotSayWithoutMaster;
+     bool RandomBotSayWithoutMaster;
      bool AnnounceConsumableUse;
  
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index 039c72de..9bd0bcc5 100644
+index d099421a..ad671626 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -362,7 +362,7 @@ public:
      void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
      {
          // early return
--        if (sPlayerbotAIConfig.randomBotXPRate == 1.0 || !player)
-+        if (sPlayerbotAIConfig.naturalProgression || sPlayerbotAIConfig.randomBotXPRate == 1.0 || !player)
+-        if (sPlayerbotAIConfig.RandomBotXPRate == 1.0 || !player)
++        if (sPlayerbotAIConfig.naturalProgression || sPlayerbotAIConfig.RandomBotXPRate == 1.0 || !player)
              return;
  
          // no XP multiplier, when player is no bot.

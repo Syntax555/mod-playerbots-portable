@@ -1,7 +1,8 @@
 diff --git a/src/Ai/Base/Actions/AreaTriggerAction.cpp b/src/Ai/Base/Actions/AreaTriggerAction.cpp
+index a75bb3d..c81c499 100644
 --- a/src/Ai/Base/Actions/AreaTriggerAction.cpp
 +++ b/src/Ai/Base/Actions/AreaTriggerAction.cpp
-@@ -27,6 +27,20 @@
+@@ -27,6 +27,20 @@ bool ReachAreaTriggerAction::Execute(Event event)
  
      if (!sObjectMgr->GetAreaTriggerTeleport(triggerId))
      {
@@ -22,17 +23,22 @@ diff --git a/src/Ai/Base/Actions/AreaTriggerAction.cpp b/src/Ai/Base/Actions/Are
          WorldPacket p1(CMSG_AREATRIGGER);
          p1 << triggerId;
          p1.rpos(0);
-@@ -66,19 +80,35 @@
+@@ -66,19 +80,35 @@ bool AreaTriggerAction::Execute(Event /*event*/)
      LastMovement& movement = context->GetValue<LastMovement&>("last area trigger")->Get();
  
      uint32 triggerId = movement.lastAreaTrigger;
+-    movement.lastAreaTrigger = 0;
+-
+-    if (!sObjectMgr->GetAreaTrigger(triggerId))
 +    AreaTrigger const* at = sObjectMgr->GetAreaTrigger(triggerId);
 +    if (!at)
 +    {
 +        movement.lastAreaTrigger = 0;
-+        return false;
+         return false;
 +    }
-+
+ 
+-    if (!sObjectMgr->GetAreaTriggerTeleport(triggerId))
+-        return true;
 +    bool isTeleport = sObjectMgr->GetAreaTriggerTeleport(triggerId) != nullptr;
 +    if (!isTeleport)
 +    {
@@ -47,15 +53,8 @@ diff --git a/src/Ai/Base/Actions/AreaTriggerAction.cpp b/src/Ai/Base/Actions/Are
 +        if (!bot->IsInAreaTriggerRadius(at))
 +            return false;
 +    }
-+
-     movement.lastAreaTrigger = 0;
--
--    if (!sObjectMgr->GetAreaTrigger(triggerId))
--        return false;
--
--    if (!sObjectMgr->GetAreaTriggerTeleport(triggerId))
--        return true;
--
+ 
++    movement.lastAreaTrigger = 0;
      WorldPacket p(CMSG_AREATRIGGER);
      p << triggerId;
      p.rpos(0);
@@ -67,9 +66,10 @@ diff --git a/src/Ai/Base/Actions/AreaTriggerAction.cpp b/src/Ai/Base/Actions/Are
      return true;
  }
 diff --git a/src/Ai/Base/Trigger/WithinAreaTrigger.cpp b/src/Ai/Base/Trigger/WithinAreaTrigger.cpp
+index 41d91c2..3f5a185 100644
 --- a/src/Ai/Base/Trigger/WithinAreaTrigger.cpp
 +++ b/src/Ai/Base/Trigger/WithinAreaTrigger.cpp
-@@ -19,7 +19,11 @@
+@@ -19,7 +19,11 @@ bool WithinAreaTrigger::IsActive()
          return false;
  
      if (!sObjectMgr->GetAreaTriggerTeleport(movement.lastAreaTrigger))

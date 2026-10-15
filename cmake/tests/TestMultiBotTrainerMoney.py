@@ -329,7 +329,7 @@ PlayerbotAI* GetBotAI(Player* player) { return player ? player->botAI : nullptr;
 struct Config
 {
     bool naturalProgression = true;
-    bool allowLearnTrainerSpells = true;
+    bool AllowLearnTrainerSpells = true;
 } sPlayerbotAIConfig;
 struct ScriptManager
 {
@@ -696,7 +696,7 @@ void SecurityAndInteractionGuards()
             case 8: s.npc.reaction = REP_UNFRIENDLY; break;
             case 9: s.npc.charmer = {99}; break;
             case 10: s.bot.inFlight = true; break;
-            case 11: sPlayerbotAIConfig.allowLearnTrainerSpells = false; break;
+            case 11: sPlayerbotAIConfig.AllowLearnTrainerSpells = false; break;
             case 12: s.requester.selected = nullptr; break;
             case 13: s.ai.security.expectedRequester = &s.bot; break;
         }

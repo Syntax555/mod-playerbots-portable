@@ -61,7 +61,7 @@ be collected with full bags. A receipt is deleted only after its money and all
 attachments have been retrieved successfully.
 
 Natural progression blocks bot mail-send and mail-management shortcuts even if
-`AiPlayerbot.BotSendMailEnabled` is re-enabled. Earned auction collection has
+`Playerbots.BotSendMailEnabled` is re-enabled. Earned auction collection has
 its own ordinary mailbox path. Human mail remains available.
 
 ## Configuration
@@ -69,10 +69,10 @@ its own ordinary mailbox path. Human mail remains available.
 The active Playerbots file is `configs/modules/playerbots.conf`:
 
 ```ini
-AiPlayerbot.NaturalProgression = 1
-AiPlayerbot.EarnedAuctions = 1
-AiPlayerbot.EarnedAuctionInterval = 300
-AiPlayerbot.BotSendMailEnabled = 0
+Playerbots.NaturalProgression = 1
+Playerbots.EarnedAuctions = 1
+Playerbots.EarnedAuctionInterval = 300
+Playerbots.BotSendMailEnabled = 0
 ```
 
 `EarnedAuctionInterval` is in seconds, clamped to 60–3,600. Auctioneer and mailbox

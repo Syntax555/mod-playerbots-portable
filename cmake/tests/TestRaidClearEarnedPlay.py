@@ -233,7 +233,7 @@ def main():
             raise SystemExit(f'Raid Clear audit did not reject the {label} mutation')
     native_checks(sources)
     profile = (REPOSITORY / 'cmd/startup/profiles/playerbots.conf').read_text()
-    if not re.search(r'^AiPlayerbot\.ApplyInstanceStrategies\s*=\s*1\s*$', profile, re.MULTILINE):
+    if not re.search(r'^Playerbots\.ApplyInstanceStrategies\s*=\s*1\s*$', profile, re.MULTILINE):
         raise SystemExit('Raid Clear needs playerbots instance strategies enabled in the portable profile')
     profile = (REPOSITORY / 'cmd/startup/profiles/mod_raid_clear.conf').read_text()
     assert re.search(r'^RaidClear\.Bots\.TeachTranquilizingShot\s*=\s*0\s*$', profile, re.MULTILINE)

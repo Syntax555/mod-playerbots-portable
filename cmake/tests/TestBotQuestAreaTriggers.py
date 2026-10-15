@@ -346,7 +346,7 @@ struct PlayerbotTextMgr
     static PlayerbotTextMgr& instance() { static PlayerbotTextMgr manager; return manager; }
     std::string GetBotTextOrDefault(std::string const&, std::string const& text, std::vector<std::string>) { return text; }
 };
-struct PlayerbotAIConfig { float reactDelay = 500.0f; } sPlayerbotAIConfig;
+struct PlayerbotAIConfig { float ReactDelay = 500.0f; } sPlayerbotAIConfig;
 using PlayerBotMap = std::map<uint32, Player*>;
 struct PlayerbotMgr
 {
