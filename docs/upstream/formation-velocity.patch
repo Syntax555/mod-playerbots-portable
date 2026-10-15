@@ -1,0 +1,26 @@
+From e7ab46025c35aee1e08403c6ff7429bd06b3e7ab Mon Sep 17 00:00:00 2001
+From: Tolga <tolga_kaan_eskin@proton.me>
+Date: Thu, 15 Oct 2026 11:22:44 +0000
+Subject: [PATCH] fix(Core/Movement): guard near-zero formation velocities
+
+Formation catch-up scaling can produce positive velocities rejected by the spline validator. Use the existing walking-speed fallback for the entire rejected range.
+---
+ .../Movement/MovementGenerators/FormationMovementGenerator.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/game/Movement/MovementGenerators/FormationMovementGenerator.cpp b/src/server/game/Movement/MovementGenerators/FormationMovementGenerator.cpp
+index 1a96860..698e6dc 100644
+--- a/src/server/game/Movement/MovementGenerators/FormationMovementGenerator.cpp
++++ b/src/server/game/Movement/MovementGenerators/FormationMovementGenerator.cpp
+@@ -153,7 +153,8 @@ void FormationMovementGenerator::LaunchMovement(Creature* owner, Unit* target)
+         _hasPredictedDestination = false;
+     }
+ 
+-    if (velocity == 0.0f)
++    // Spline validation also rejects near-zero catch-up velocities.
++    if (velocity <= 0.01f)
+         velocity = target->GetSpeed(MOVE_WALK);
+ 
+     Movement::MoveSplineInit init(owner);
+
+base-commit: a64665927de9d23cf81b0b623ee7117131f0919a

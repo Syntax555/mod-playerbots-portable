@@ -1,0 +1,26 @@
+From b23ff54d8696e5edb519df30fbcb666ff164204a Mon Sep 17 00:00:00 2001
+From: Tolga <tolga_kaan_eskin@proton.me>
+Date: Thu, 15 Oct 2026 11:22:46 +0000
+Subject: [PATCH] fix(Core/Battlegrounds): handle empty random map candidates
+
+Return the existing no-battleground sentinel when no configured map survives template and level checks, before weighted selection dereferences the empty container.
+---
+ src/server/game/Battlegrounds/BattlegroundMgr.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/server/game/Battlegrounds/BattlegroundMgr.cpp b/src/server/game/Battlegrounds/BattlegroundMgr.cpp
+index 00c31f5..a023950 100644
+--- a/src/server/game/Battlegrounds/BattlegroundMgr.cpp
++++ b/src/server/game/Battlegrounds/BattlegroundMgr.cpp
+@@ -935,6 +935,9 @@ BattlegroundTypeId BattlegroundMgr::GetRandomBG(BattlegroundTypeId bgTypeId, uin
+             }
+         }
+ 
++        if (ids.empty())
++            return BATTLEGROUND_TYPE_NONE;
++
+         return *Acore::Containers::SelectRandomWeightedContainerElement(ids, weights);
+     }
+ 
+
+base-commit: a64665927de9d23cf81b0b623ee7117131f0919a

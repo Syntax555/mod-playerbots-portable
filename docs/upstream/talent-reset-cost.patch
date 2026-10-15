@@ -1,0 +1,35 @@
+From a82870b1c40e555245ce2acd70559ad4aa03316a Mon Sep 17 00:00:00 2001
+From: Tolga <tolga_kaan_eskin@proton.me>
+Date: Thu, 15 Oct 2026 11:22:45 +0000
+Subject: [PATCH] fix(Core/Player): prevent talent reset cost underflow
+
+Ignore negative elapsed time and clamp monthly decay before unsigned subtraction. Preserve the existing ten-gold minimum and normal reset increments.
+---
+ src/server/game/Entities/Player/Player.cpp | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
+index 138e7ea..ef5a2ba 100644
+--- a/src/server/game/Entities/Player/Player.cpp
++++ b/src/server/game/Entities/Player/Player.cpp
+@@ -3861,13 +3861,14 @@ uint32 Player::resetTalentsCost() const
+         return 10 * GOLD;
+     else
+     {
+-        uint64 months = (GameTime::GetGameTime().count() - m_resetTalentsTime) / MONTH;
++        auto now = GameTime::GetGameTime().count();
++        uint64 months = now > m_resetTalentsTime ? (now - m_resetTalentsTime) / MONTH : 0;
+         if (months > 0)
+         {
+             // This cost will be reduced by a rate of 5 gold per month
+-            int32 new_cost = int32(m_resetTalentsCost - 5 * GOLD * months);
+-            // to a minimum of 10 gold.
+-            return (new_cost < 10 * GOLD ? 10 * GOLD : new_cost);
++            // Clamp the elapsed reduction before subtracting the persisted unsigned cost.
++            uint64 reduction = std::min<uint64>(m_resetTalentsCost, 5 * GOLD * months);
++            return std::max<uint32>(10 * GOLD, m_resetTalentsCost - uint32(reduction));
+         }
+         else
+         {
+
+base-commit: a64665927de9d23cf81b0b623ee7117131f0919a
