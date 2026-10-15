@@ -76,9 +76,6 @@ and ordinary player actions.
 
 ## Launcher and updates
 
-- [ ] Treat cleanup failures after a finished update as warnings unless the
-  journal is still applying, so a lingering lock on a backup file does not stop
-  the realm from starting.
 - [ ] A MySQL Windows service under a system account cannot be opened by a
   normal user, so the update guard refuses every update. Read the image path
   without opening the process.

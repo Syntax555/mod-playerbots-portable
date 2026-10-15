@@ -118,6 +118,9 @@ release starts, and the next launch continues with the remaining files.
 Incomplete file installation is rolled back before starting services; if
 rollback fails, startup stops to avoid running mixed files. Keep
 `.portable-update/` intact while an interrupted update is being recovered.
+After a completed update or successful rollback, a failure to remove temporary
+update files reports a warning and retries on the next start without blocking
+the realm.
 
 ## Launcher options
 

@@ -1081,6 +1081,141 @@ func TestPortableUpdateCommittedJournalWithActiveHelperRefusesCleanup(t *testing
 	}
 }
 
+func TestPortableUpdateCleanupFailureDoesNotBlockIntactInstallation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cleanup failures are covered with native file locks")
+	}
+	for _, phase := range []string{"staging", "staged", "rolled-back", "committed", "no-journal"} {
+		t.Run(phase, func(t *testing.T) {
+			root, outside := t.TempDir(), t.TempDir()
+			updateTestWrite(t, root, "startup.exe", []byte("working installed launcher"))
+			updateTestWrite(t, outside, "keep.txt", []byte("unrelated user file"))
+			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+			server, _, _ := updateTestRangeServer(t, archive)
+			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if phase == "committed" {
+				if err := applyPortableUpdate(root, plan, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if phase == "no-journal" {
+				if err := os.Remove(filepath.Join(root, portableUpdateDirectory, "journal.json")); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				plan.Phase, plan.ParentPID = phase, 2147483647
+				if err := writePortableUpdatePlan(root, plan); err != nil {
+					t.Fatal(err)
+				}
+			}
+			backup := filepath.Join(root, portableUpdateDirectory, "backup")
+			if err := os.RemoveAll(backup); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, backup); err != nil {
+				t.Fatal(err)
+			}
+			if err := discardStagedUpdate(root); err == nil {
+				t.Fatal("fixture did not prevent update cleanup")
+			}
+			if phase == "committed" {
+				if err := finishPortableUpdate(root, plan); err != nil {
+					t.Fatalf("cleanup prevented update completion: %v", err)
+				}
+				if installed, err := readInstalledUpdateManifest(root); err != nil || installed.Revision != manifest.Revision {
+					t.Fatalf("completed update inventory was not recorded: %v", err)
+				}
+			}
+			if (phase == "staged" || phase == "rolled-back") && !discardIntactUpdate(root) {
+				t.Fatal("cleanup prevented the helper from restarting the intact release")
+			}
+			recovery := exec.Command(os.Args[0], "-test.run=^TestPortableUpdateRecoveryChild$")
+			recovery.Env = append(os.Environ(), "PORTABLE_UPDATE_RECOVERY_ROOT="+root)
+			output, err := recovery.CombinedOutput()
+			if err != nil || !bytes.Contains(output, []byte("Warning: could not clean up update files; will retry on the next start:")) {
+				t.Fatalf("cleanup did not allow startup with a warning: %v\n%s", err, output)
+			}
+			if phase != "no-journal" {
+				if journal, err := readPortableUpdatePlan(root); err != nil || journal.Phase != phase {
+					t.Fatalf("cleanup failure discarded the pending journal: %v", err)
+				}
+			}
+			if content, err := os.ReadFile(filepath.Join(outside, "keep.txt")); err != nil || string(content) != "unrelated user file" {
+				t.Fatalf("cleanup changed files outside the update directory: %v", err)
+			}
+			if err := os.Remove(backup); err != nil {
+				t.Fatal(err)
+			}
+			if err := recoverPortableUpdate(root); err != nil {
+				t.Fatalf("cleanup did not recover on the next start: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, portableUpdateDirectory, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("successful retry left the update journal: %v", err)
+			}
+		})
+	}
+}
+
+func TestPortableUpdateRecoveryWaitsForExitingHelperAndRereadsJournal(t *testing.T) {
+	for _, phase := range []string{"committed", "staged"} {
+		t.Run(phase, func(t *testing.T) {
+			root := t.TempDir()
+			updateTestWrite(t, root, "startup.exe", []byte("original launcher"))
+			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+			server, _, _ := updateTestRangeServer(t, archive)
+			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if phase == "committed" {
+				if err := applyPortableUpdate(root, plan, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			helper := updateTestStartIdleProcess(t, filepath.Join(root, portableUpdateDirectory, "helper.exe"))
+			plan.Phase, plan.ParentPID, plan.HelperPID = phase, 2147483647, helper.Process.Pid
+			if err := writePortableUpdatePlan(root, plan); err != nil {
+				t.Fatal(err)
+			}
+			released := make(chan error, 1)
+			go func() {
+				time.Sleep(300 * time.Millisecond)
+				var err error
+				if phase == "staged" {
+					plan.Phase = "applying"
+					for i := range plan.Operations {
+						if plan.Operations[i].File.Path == "startup.exe" {
+							plan.Operations[i].State = "applying"
+						}
+					}
+					err = errors.Join(os.Remove(filepath.Join(root, "startup.exe")), writePortableUpdatePlan(root, plan))
+				}
+				_ = helper.Process.Kill()
+				_ = helper.Wait()
+				released <- err
+			}()
+			err = recoverPortableUpdate(root)
+			if releaseErr := <-released; releaseErr != nil {
+				t.Fatal(releaseErr)
+			}
+			if phase == "committed" && err != nil {
+				t.Fatalf("exiting helper blocked startup after a completed update: %v", err)
+			}
+			if phase == "staged" {
+				if err == nil || !strings.Contains(err.Error(), "both missing") {
+					t.Fatalf("recovery did not re-read the helper's interrupted installation: %v", err)
+				}
+				if pending, err := readPortableUpdatePlan(root); err != nil || pending.Phase != "applying" {
+					t.Fatalf("recovery discarded the interrupted installation: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestPortableUpdateModifiedRuntimeDuringStagingIsPreserved(t *testing.T) {
 	root := t.TempDir()
 	updateTestWrite(t, root, "startup.exe", []byte("original working launcher"))
