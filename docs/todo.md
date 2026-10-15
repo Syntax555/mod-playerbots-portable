@@ -62,10 +62,6 @@ and ordinary player actions.
 
 ## Dependency updates
 
-- [ ] Core fork `2a2211cd`: its `2026_09_27_06.sql` world update sets creature
-  modifiers that differ from Individual Progression's era values for about 530
-  creatures, and existing realms would apply them on update. Re-assert the era
-  values after that update, then bump; the core patches already apply.
 - [ ] mod-playerbots `cf1a2a20`, the last commit before the configuration
   rename: refresh the natural-progression, earned-auctions and era-talents
   patches, reduce the upstream-fixes patch to what the pin lacks and adapt

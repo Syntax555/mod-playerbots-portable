@@ -1,0 +1,903 @@
+diff --git a/data/sql/world/updates/2026_10_14_00_creature_era_modifiers.sql b/data/sql/world/updates/2026_10_14_00_creature_era_modifiers.sql
+new file mode 100644
+index 0000000..078d89e
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_14_00_creature_era_modifiers.sql
+@@ -0,0 +1,897 @@
++-- Restore Individual Progression's Vanilla/TBC modifiers after core 2026_09_27_06.sql.
++-- Values come from tbc_creatures.sql and vanilla_creatures.sql at the pinned module revision.
++-- Only replace the upstream-written field; leave other fields and custom values alone.
++-- ROUND accounts for creature_template storing these modifiers as FLOAT.
++
++UPDATE `creature_template` SET `ArmorModifier` = 0.75
++WHERE `entry` = 10806 AND ROUND(`ArmorModifier`, 6) = 0.72;
++
++UPDATE `creature_template` SET `ArmorModifier` = 0.959794
++WHERE `entry` = 22291 AND ROUND(`ArmorModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `ArmorModifier` = 1.0682
++WHERE `entry` = 18295 AND ROUND(`ArmorModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `ArmorModifier` = 1.11436
++WHERE `entry` = 24727 AND ROUND(`ArmorModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `ArmorModifier` = 1.13726
++WHERE `entry` = 17088 AND ROUND(`ArmorModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `ArmorModifier` = 0.85
++WHERE `entry` = 12996 AND ROUND(`ArmorModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `ArmorModifier` = 1.0
++WHERE `entry` = 11831 AND ROUND(`ArmorModifier`, 6) = 1.4;
++
++UPDATE `creature_template` SET `ArmorModifier` = 1.45
++WHERE `entry` = 89 AND ROUND(`ArmorModifier`, 6) = 1.85;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.5
++WHERE `entry` = 20806 AND ROUND(`DamageModifier`, 6) = 0.1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.25
++WHERE `entry` = 25028 AND ROUND(`DamageModifier`, 6) = 0.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.4
++WHERE `entry` = 21331 AND ROUND(`DamageModifier`, 6) = 0.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.34
++WHERE `entry` = 17495 AND ROUND(`DamageModifier`, 6) = 0.23;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.8
++WHERE `entry` = 19686 AND ROUND(`DamageModifier`, 6) = 0.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 22506 AND ROUND(`DamageModifier`, 6) = 0.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.8
++WHERE `entry` = 21306 AND ROUND(`DamageModifier`, 6) = 0.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` = 18201 AND ROUND(`DamageModifier`, 6) = 0.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.4
++WHERE `entry` = 19136 AND ROUND(`DamageModifier`, 6) = 0.35;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 20498 AND ROUND(`DamageModifier`, 6) = 0.4;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.8
++WHERE `entry` = 21040 AND ROUND(`DamageModifier`, 6) = 0.4;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.3
++WHERE `entry` IN (
++    8962, 8965, 16075
++) AND ROUND(`DamageModifier`, 6) = 0.42;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 21736 AND ROUND(`DamageModifier`, 6) = 0.45;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.55
++WHERE `entry` = 18207 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.56
++WHERE `entry` = 24476 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.65
++WHERE `entry` = 4258 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.9
++WHERE `entry` IN (
++    6299, 10277, 11083
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.95
++WHERE `entry` IN (
++    4155, 5500, 5567, 10276
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.0
++WHERE `entry` = 21093 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.05
++WHERE `entry` IN (
++    4087, 4204, 4214, 4254, 5115, 5137, 5141, 5146, 5147, 5165, 5173, 5513,
++    5515, 6297
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.1
++WHERE `entry` IN (
++    4089, 4163, 5117, 5143, 5144, 5167, 5171, 5484, 5491, 5495, 5497, 5517,
++    7312, 8737, 10089, 10090
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` = 20199 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` IN (
++    4091, 4205, 4218
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.45
++WHERE `entry` IN (
++    4090, 4138, 4217
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` IN (
++    4092, 4146, 4219, 5520
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` IN (
++    4161, 5130, 5164, 7230, 7231, 7232
++) AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.7
++WHERE `entry` = 2738 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 21373 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.15
++WHERE `entry` = 6382 AND ROUND(`DamageModifier`, 6) = 0.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 19567 AND ROUND(`DamageModifier`, 6) = 0.57;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.3
++WHERE `entry` = 21722 AND ROUND(`DamageModifier`, 6) = 0.6;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.86
++WHERE `entry` = 21708 AND ROUND(`DamageModifier`, 6) = 0.6;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.85
++WHERE `entry` = 16818 AND ROUND(`DamageModifier`, 6) = 0.64;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 18482 AND ROUND(`DamageModifier`, 6) = 0.65;
++
++UPDATE `creature_template` SET `DamageModifier` = 4
++WHERE `entry` = 10806 AND ROUND(`DamageModifier`, 6) = 0.65;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.5
++WHERE `entry` = 20438 AND ROUND(`DamageModifier`, 6) = 0.7;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.01
++WHERE `entry` = 18294 AND ROUND(`DamageModifier`, 6) = 0.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.15
++WHERE `entry` = 17550 AND ROUND(`DamageModifier`, 6) = 0.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.5
++WHERE `entry` IN (
++    20281, 22902
++) AND ROUND(`DamageModifier`, 6) = 0.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.83
++WHERE `entry` = 16947 AND ROUND(`DamageModifier`, 6) = 0.77;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 19566 AND ROUND(`DamageModifier`, 6) = 0.8;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.866667
++WHERE `entry` = 10925 AND ROUND(`DamageModifier`, 6) = 0.8;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.7
++WHERE `entry` = 2588 AND ROUND(`DamageModifier`, 6) = 0.8;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` = 19190 AND ROUND(`DamageModifier`, 6) = 0.8;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.8
++WHERE `entry` IN (
++    3375, 20747
++) AND ROUND(`DamageModifier`, 6) = 0.85;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` = 26764 AND ROUND(`DamageModifier`, 6) = 0.85;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.3
++WHERE `entry` = 19407 AND ROUND(`DamageModifier`, 6) = 0.9;
++
++UPDATE `creature_template` SET `DamageModifier` = 1
++WHERE `entry` = 2034 AND ROUND(`DamageModifier`, 6) = 0.9;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 15965 AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.8
++WHERE `entry` = 15645 AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1
++WHERE `entry` IN (
++    1770, 2033, 3243, 3415
++) AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.1
++WHERE `entry` = 15949 AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` = 17191 AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.42857
++WHERE `entry` = 2038 AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` = 15402 AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` IN (
++    15924, 16477, 16535
++) AND ROUND(`DamageModifier`, 6) = 0.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.15
++WHERE `entry` IN (
++    2079, 14860
++) AND ROUND(`DamageModifier`, 6) = 0.98;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.01
++WHERE `entry` = 20812 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.27
++WHERE `entry` = 21477 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.3
++WHERE `entry` IN (
++    17877, 18192, 18265, 18596, 18597, 18872, 20770, 21196, 22045, 22442
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.4
++WHERE `entry` IN (
++    17841, 18209, 18369, 18873, 19725, 19726, 19852, 20197, 22420, 22429
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.5
++WHERE `entry` IN (
++    16904, 16977, 17717, 19051, 19693, 20928
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` IN (
++    19569, 21058, 21195, 22464
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.7
++WHERE `entry` IN (
++    18449, 18450, 18452, 18453
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.75
++WHERE `entry` = 21478 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.95
++WHERE `entry` IN (
++    4308, 7603, 8901
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.1
++WHERE `entry` IN (
++    6207, 22860
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` IN (
++    23383, 23435
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.25
++WHERE `entry` = 12380 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.3
++WHERE `entry` IN (
++    16873, 18974, 19881, 22105, 24370, 25001, 25060
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.35
++WHERE `entry` = 21124 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` IN (
++    19493, 19956, 20287, 21323, 21636, 24920, 25002, 25073
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` IN (
++    18451, 19258, 19419, 22940, 24972, 24999
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.7
++WHERE `entry` IN (
++    18180, 18218, 18745, 19137, 19504, 22832
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.75
++WHERE `entry` IN (
++    18858, 18881, 19731, 21324, 21788, 21878
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.8
++WHERE `entry` = 20394 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.850008
++WHERE `entry` = 4851 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` IN (
++    16796, 16834, 16850, 16851, 17139, 17141, 17831, 17834, 17909, 17953, 18004, 18007,
++    18008, 18071, 18074, 18252, 18276, 18333, 18335, 18387, 18389, 18390, 18416, 18446,
++    18459, 18704, 18713, 18715, 18718, 18719, 18760, 18865, 19035, 19141, 19156, 19257,
++    19344, 19417, 19546, 19669, 20101, 20137, 20415, 20512, 20934, 21006, 21133, 21254,
++    21519, 22307, 22337, 22424, 22458
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.15
++WHERE `entry` = 12378 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.2
++WHERE `entry` = 20669 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.4
++WHERE `entry` IN (
++    14528, 18530, 18716, 19293, 19310, 19367, 19409
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.5
++WHERE `entry` = 17969 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.6
++WHERE `entry` IN (
++    17240, 18717, 22364
++) AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.7
++WHERE `entry` = 5263 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.85
++WHERE `entry` = 16817 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` = 19256 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 5.45
++WHERE `entry` = 14823 AND ROUND(`DamageModifier`, 6) = 1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.1
++WHERE `entry` = 1766 AND ROUND(`DamageModifier`, 6) = 1.05;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 21065 AND ROUND(`DamageModifier`, 6) = 1.05;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.75
++WHERE `entry` = 23066 AND ROUND(`DamageModifier`, 6) = 1.05;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.071429
++WHERE `entry` = 5232 AND ROUND(`DamageModifier`, 6) = 1.1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.125000
++WHERE `entry` = 2694 AND ROUND(`DamageModifier`, 6) = 1.1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.8
++WHERE `entry` = 20410 AND ROUND(`DamageModifier`, 6) = 1.1;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.15
++WHERE `entry` = 2611 AND ROUND(`DamageModifier`, 6) = 1.1;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.1
++WHERE `entry` = 5055 AND ROUND(`DamageModifier`, 6) = 1.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.153846
++WHERE `entry` = 5474 AND ROUND(`DamageModifier`, 6) = 1.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` = 1934 AND ROUND(`DamageModifier`, 6) = 1.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.25
++WHERE `entry` = 10928 AND ROUND(`DamageModifier`, 6) = 1.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` = 22835 AND ROUND(`DamageModifier`, 6) = 1.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.7
++WHERE `entry` = 18200 AND ROUND(`DamageModifier`, 6) = 1.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 16252 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.7
++WHERE `entry` = 16242 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.125000
++WHERE `entry` = 2978 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.15
++WHERE `entry` = 16013 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.178571
++WHERE `entry` = 6552 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.25
++WHERE `entry` = 2962 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` = 23864 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` = 25030 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.65
++WHERE `entry` IN (
++    16012, 16014
++) AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 25003 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` = 17238 AND ROUND(`DamageModifier`, 6) = 1.2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.125000
++WHERE `entry` = 8877 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.222222
++WHERE `entry` = 5253 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.235294
++WHERE `entry` = 511 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.259259
++WHERE `entry` = 7396 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.266667
++WHERE `entry` = 8257 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.307692
++WHERE `entry` = 1061 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.333333
++WHERE `entry` IN (
++    11561, 13160
++) AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 20402 AND ROUND(`DamageModifier`, 6) = 1.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.25
++WHERE `entry` = 6510 AND ROUND(`DamageModifier`, 6) = 1.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.280000
++WHERE `entry` = 11918 AND ROUND(`DamageModifier`, 6) = 1.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.307692
++WHERE `entry` = 3117 AND ROUND(`DamageModifier`, 6) = 1.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.35
++WHERE `entry` = 124 AND ROUND(`DamageModifier`, 6) = 1.3;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.3
++WHERE `entry` IN (
++    4666, 23873
++) AND ROUND(`DamageModifier`, 6) = 1.35;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.333333
++WHERE `entry` = 171 AND ROUND(`DamageModifier`, 6) = 1.35;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` = 8437 AND ROUND(`DamageModifier`, 6) = 1.35;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.3
++WHERE `entry` = 21449 AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.7
++WHERE `entry` IN (
++    18020, 18024
++) AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.95
++WHERE `entry` = 8441 AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.35
++WHERE `entry` = 7346 AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` IN (
++    9598, 18030
++) AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.45
++WHERE `entry` = 8319 AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` = 11887 AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 22376 AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` IN (
++    17982, 17986
++) AND ROUND(`DamageModifier`, 6) = 1.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` = 19188 AND ROUND(`DamageModifier`, 6) = 1.65;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 18588 AND ROUND(`DamageModifier`, 6) = 1.65;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.0
++WHERE `entry` = 24830 AND ROUND(`DamageModifier`, 6) = 1.7;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.733333
++WHERE `entry` = 315 AND ROUND(`DamageModifier`, 6) = 1.7;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.75
++WHERE `entry` = 14393 AND ROUND(`DamageModifier`, 6) = 1.7;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.5
++WHERE `entry` = 17310 AND ROUND(`DamageModifier`, 6) = 1.7;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.740741
++WHERE `entry` = 1081 AND ROUND(`DamageModifier`, 6) = 1.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.4
++WHERE `entry` IN (
++    16049, 16050
++) AND ROUND(`DamageModifier`, 6) = 1.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` IN (
++    11518, 17609
++) AND ROUND(`DamageModifier`, 6) = 1.95;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.0
++WHERE `entry` = 3691 AND ROUND(`DamageModifier`, 6) = 10;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 16819 AND ROUND(`DamageModifier`, 6) = 10;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` = 12737 AND ROUND(`DamageModifier`, 6) = 10;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` IN (
++    16830, 16841
++) AND ROUND(`DamageModifier`, 6) = 10;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` IN (
++    18931, 20234
++) AND ROUND(`DamageModifier`, 6) = 11;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` IN (
++    20235, 20236
++) AND ROUND(`DamageModifier`, 6) = 11;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.8
++WHERE `entry` = 20390 AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` IN (
++    20362, 20382
++) AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` IN (
++    16695, 16696, 18895, 20120
++) AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 15.0
++WHERE `entry` = 16694 AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 18439 AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.6
++WHERE `entry` IN (
++    12198, 15007
++) AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` IN (
++    20271, 20272, 20273
++) AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.4
++WHERE `entry` IN (
++    2302, 2804, 3890, 10360, 14981, 14982
++) AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 5.1
++WHERE `entry` IN (
++    347, 907, 5118, 7410, 7427, 12197, 14942, 15006, 15008
++) AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 5.15
++WHERE `entry` = 857 AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 6.0
++WHERE `entry` = 20339 AND ROUND(`DamageModifier`, 6) = 12;
++
++UPDATE `creature_template` SET `DamageModifier` = 15.250000
++WHERE `entry` = 16042 AND ROUND(`DamageModifier`, 6) = 13;
++
++UPDATE `creature_template` SET `DamageModifier` = 15.0
++WHERE `entry` = 8115 AND ROUND(`DamageModifier`, 6) = 14.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 10.0
++WHERE `entry` = 16470 AND ROUND(`DamageModifier`, 6) = 16;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` = 23872 AND ROUND(`DamageModifier`, 6) = 19.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.3
++WHERE `entry` = 19501 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.4
++WHERE `entry` = 19294 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.7
++WHERE `entry` IN (
++    16580, 18038
++) AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.0
++WHERE `entry` = 15991 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` = 16066 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.3
++WHERE `entry` = 17855 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` IN (
++    19541, 23704
++) AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.8
++WHERE `entry` IN (
++    18785, 18809, 21115, 21441
++) AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.15
++WHERE `entry` = 10697 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.5
++WHERE `entry` IN (
++    16822, 18788
++) AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.9
++WHERE `entry` = 20427 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` IN (
++    18940, 22485
++) AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.25
++WHERE `entry` = 10583 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.466667
++WHERE `entry` = 4500 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.5
++WHERE `entry` = 17287 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` = 21858 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 6.5
++WHERE `entry` = 25031 AND ROUND(`DamageModifier`, 6) = 2;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.4
++WHERE `entry` = 6232 AND ROUND(`DamageModifier`, 6) = 2.38;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.4
++WHERE `entry` IN (
++    7286, 15414, 15422
++) AND ROUND(`DamageModifier`, 6) = 2.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.466667
++WHERE `entry` = 16095 AND ROUND(`DamageModifier`, 6) = 2.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.588235
++WHERE `entry` = 7268 AND ROUND(`DamageModifier`, 6) = 2.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.6
++WHERE `entry` IN (
++    7246, 7247
++) AND ROUND(`DamageModifier`, 6) = 2.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` = 22374 AND ROUND(`DamageModifier`, 6) = 2.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.8
++WHERE `entry` IN (
++    5226, 5228, 8095
++) AND ROUND(`DamageModifier`, 6) = 2.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` = 18986 AND ROUND(`DamageModifier`, 6) = 2.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` IN (
++    20118, 20119
++) AND ROUND(`DamageModifier`, 6) = 21.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.4
++WHERE `entry` = 22407 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 19942 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.7
++WHERE `entry` IN (
++    16843, 19444, 22278
++) AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` = 23029 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.5
++WHERE `entry` = 26776 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 12.0
++WHERE `entry` = 25033 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` IN (
++    17479, 20232
++) AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.9
++WHERE `entry` IN (
++    7875, 8384
++) AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.1
++WHERE `entry` IN (
++    5271, 5277, 8282
++) AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.15
++WHERE `entry` = 5283 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.25
++WHERE `entry` = 5267 AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` IN (
++    16820, 16827, 16837, 16842, 16886, 21209
++) AND ROUND(`DamageModifier`, 6) = 3;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.6
++WHERE `entry` = 89 AND ROUND(`DamageModifier`, 6) = 3.15;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.777778
++WHERE `entry` = 193 AND ROUND(`DamageModifier`, 6) = 3.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.1
++WHERE `entry` = 5280 AND ROUND(`DamageModifier`, 6) = 3.25;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.2
++WHERE `entry` = 17087 AND ROUND(`DamageModifier`, 6) = 3.33;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 19676 AND ROUND(`DamageModifier`, 6) = 3.33;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.0
++WHERE `entry` IN (
++    16189, 16192
++) AND ROUND(`DamageModifier`, 6) = 3.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.2
++WHERE `entry` = 11866 AND ROUND(`DamageModifier`, 6) = 3.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.25
++WHERE `entry` IN (
++    352, 523, 931, 1387, 1571, 1572, 1573, 2299, 2409, 2432, 2851, 2858,
++    2859, 2861, 2941, 2995, 3310, 3615, 3838, 3841, 4267, 4312, 4314, 4317,
++    4319, 4321, 4407, 4551, 6026, 6726, 7824, 8018, 8019, 8020, 8609, 8610,
++    10378, 11138, 11139, 11899, 11900, 11901, 12578, 12596, 12616, 12740
++) AND ROUND(`DamageModifier`, 6) = 3.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.4
++WHERE `entry` IN (
++    7435, 9447, 9449
++) AND ROUND(`DamageModifier`, 6) = 3.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.65
++WHERE `entry` = 7823 AND ROUND(`DamageModifier`, 6) = 3.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 5.0
++WHERE `entry` = 17901 AND ROUND(`DamageModifier`, 6) = 3.65;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.7
++WHERE `entry` = 9448 AND ROUND(`DamageModifier`, 6) = 3.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.8
++WHERE `entry` IN (
++    7436, 13118
++) AND ROUND(`DamageModifier`, 6) = 3.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` = 10954 AND ROUND(`DamageModifier`, 6) = 3.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 5.833333
++WHERE `entry` = 10949 AND ROUND(`DamageModifier`, 6) = 3.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 23247 AND ROUND(`DamageModifier`, 6) = 4;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.5
++WHERE `entry` = 18585 AND ROUND(`DamageModifier`, 6) = 4;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.25
++WHERE `entry` = 15076 AND ROUND(`DamageModifier`, 6) = 4;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.8
++WHERE `entry` = 7667 AND ROUND(`DamageModifier`, 6) = 4;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.85
++WHERE `entry` = 16184 AND ROUND(`DamageModifier`, 6) = 4;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.3
++WHERE `entry` = 18584 AND ROUND(`DamageModifier`, 6) = 4.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.4
++WHERE `entry` = 19720 AND ROUND(`DamageModifier`, 6) = 4.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.25
++WHERE `entry` = 8479 AND ROUND(`DamageModifier`, 6) = 4.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.4
++WHERE `entry` = 15421 AND ROUND(`DamageModifier`, 6) = 4.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 6.34
++WHERE `entry` = 19480 AND ROUND(`DamageModifier`, 6) = 4.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.0
++WHERE `entry` = 18408 AND ROUND(`DamageModifier`, 6) = 40;
++
++UPDATE `creature_template` SET `DamageModifier` = 0.6
++WHERE `entry` = 14527 AND ROUND(`DamageModifier`, 6) = 5;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.0
++WHERE `entry` = 24674 AND ROUND(`DamageModifier`, 6) = 5;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 18003 AND ROUND(`DamageModifier`, 6) = 5;
++
++UPDATE `creature_template` SET `DamageModifier` = 6.6
++WHERE `entry` = 10321 AND ROUND(`DamageModifier`, 6) = 5;
++
++UPDATE `creature_template` SET `DamageModifier` = 5.733333
++WHERE `entry` = 10596 AND ROUND(`DamageModifier`, 6) = 5.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 2.0
++WHERE `entry` = 22006 AND ROUND(`DamageModifier`, 6) = 6;
++
++UPDATE `creature_template` SET `DamageModifier` = 6.272727
++WHERE `entry` = 10220 AND ROUND(`DamageModifier`, 6) = 6.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 10.0
++WHERE `entry` = 19855 AND ROUND(`DamageModifier`, 6) = 6.75;
++
++UPDATE `creature_template` SET `DamageModifier` = 1.6
++WHERE `entry` = 2704 AND ROUND(`DamageModifier`, 6) = 7;
++
++UPDATE `creature_template` SET `DamageModifier` = 3.2
++WHERE `entry` IN (
++    11868, 11869, 11870
++) AND ROUND(`DamageModifier`, 6) = 7;
++
++UPDATE `creature_template` SET `DamageModifier` = 4.266667
++WHERE `entry` IN (
++    11865, 11867, 13084
++) AND ROUND(`DamageModifier`, 6) = 7;
++
++UPDATE `creature_template` SET `DamageModifier` = 7.55
++WHERE `entry` = 10437 AND ROUND(`DamageModifier`, 6) = 7.5;
++
++UPDATE `creature_template` SET `DamageModifier` = 9.6
++WHERE `entry` = 10301 AND ROUND(`DamageModifier`, 6) = 9.5;
