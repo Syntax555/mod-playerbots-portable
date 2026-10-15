@@ -26,10 +26,10 @@ GAMEPLAY = (
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestLfgProgression",
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression",
-    "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestFormationMovement",
+    "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestMultiBotRoleStrategies", "TestFormationMovement",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
-    "TestPlayerbotUpstreamFixes", "TestProfileKeys", "TestDocumentation",
+    "TestPlayerbotUpstreamFixes", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
 )
 
 

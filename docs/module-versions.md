@@ -9,7 +9,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Component | Upstream repository | Locked revision | Role |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `2a2211cd8f3d` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `037c01418b5d` | Natural progression, earned auctions and era-aware bots |
+| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `cf1a2a20c173` | Natural progression, earned auctions and era-aware bots |
 | AutoBalance | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) | `1d707cb61a09` | Instance scaling by actual party size |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `60336b349cce` | Earned content milestones and expansion access |
 | Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `da0bdfbc7240` | Autonomous earned-era parties and player-led clears without event shortcuts |
@@ -55,12 +55,19 @@ separate core copy and module/addon exports, then applies patches in manifest
 order. Preparation and packaging checks include patch hashes and verify addon
 files against the prepared source.
 
-`mod-playerbots-upstream-fixes.patch` carries upstream Playerbots commits
-`5dc162f3` (no item reads after a destroy or stack merge can free the item),
-`45112ef7` (queued chat commands resolve their sender when they run),
-`c583bc22` (addon messages do not command bots) and `c9398d16` (RPG quest-giver
-search skips despawned quest givers). The patch is dropped once the locked
-Playerbots revision contains these commits.
+The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
+(queued chat commands resolve their sender when they run) and `c583bc22`
+(addon messages do not command bots). `mod-playerbots-upstream-fixes.patch`
+only carries `c9398d16`: RPG quest-giver search skips despawned quest givers.
+The regression fixture checks all four fixes against the prepared sources.
+
+The natural-progression, earned-auctions and era-talents patches target this
+pin. Natural progression uses the upstream ammunition checks and preserves
+queue-assigned battleground brackets. The era bridge resolves historical
+Tree of Life spells when deciding whether a healer should keep blanketing
+instead of attacking. The MultiBot role patch uses the canonical class
+strategy names for commands and status display: Warrior `prot`, Priest
+`disc`, and Paladin `holy`, `ret` and `prot`.
 
 The client packager uses IP's locked base archive, merges generated spell and
 skill rows and German text, and preserves other entries byte for byte.
@@ -92,8 +99,10 @@ default feature branch; other components follow their default branch. MultiBot
 Chatless and MultiBot Bridge move only together, and a newer pair needs a
 review of new bridge endpoints, such as pet taming, against natural progression.
 
-Playerbots revisions from `ed54b459` rename every `AiPlayerbot.*` key to
-`Playerbots.*` without reading the old names, so such a pin also needs renamed
-profile and launcher keys and a launcher migration that carries users'
-existing `AiPlayerbot.*` values. `cmake/tests/TestProfileKeys.py` fails while a
-shipped profile key is no longer read by the prepared sources.
+The Playerbots pin `cf1a2a20` is the direct parent of `ed54b459` and retains
+`AiPlayerbot.*` configuration names. Revisions from `ed54b459` rename every
+`AiPlayerbot.*` key to `Playerbots.*` without reading the old names, so such a
+pin also needs renamed profile and launcher keys and a launcher migration
+that carries users' existing `AiPlayerbot.*` values.
+`cmake/tests/TestProfileKeys.py` fails while a shipped profile key is no longer
+read by the prepared sources.
