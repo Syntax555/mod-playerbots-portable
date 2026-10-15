@@ -62,12 +62,10 @@ and ordinary player actions.
 
 ## Dependency updates
 
-- [ ] mod-playerbots `cf1a2a20`, the last commit before the configuration
-  rename: refresh the natural-progression, earned-auctions and era-talents
-  patches, reduce the upstream-fixes patch to what the pin lacks and adapt
-  MultiBot's role toggles to the renamed strategies. A pin past `ed54b459`
-  also needs a launcher migration of every `AiPlayerbot.*` key;
-  `TestProfileKeys` fails until the profiles match.
+- [ ] Before moving Playerbots beyond the current `cf1a2a20` pin to
+  `ed54b459` or later, migrate every `AiPlayerbot.*` profile and launcher key
+  to `Playerbots.*`, preserving users' existing values and managed baselines.
+  `TestProfileKeys` must pass against the renamed configuration readers.
 - [ ] Offer generic fixes upstream (formation velocity guard, the
   `resetTalentsCost` underflow, the empty random-battleground guard and the
   Individual Progression filter fixes) to shrink the patch set.

@@ -1,4 +1,4 @@
-"""Check the backported upstream Playerbots crash and chat fixes.
+"""Check upstream Playerbots crash and chat fixes and the local RPG guard.
 
 The production chat hooks, queued command dispatch, RPG quest-giver search and
 smart item destruction run against small engine stubs. Destroyed items are

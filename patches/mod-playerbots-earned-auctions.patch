@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 5be123e..56f7933 100644
+index 5be9190..e5a6a12 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -91,6 +91,13 @@ AiPlayerbot.RandomBotAutologin = 1
@@ -258,10 +258,10 @@ index ce688b7..d983362 100644
 +
  #endif
 diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
-index 6556dfb..9ddfd5d 100644
+index 9adf689..45dd61d 100644
 --- a/src/Ai/Base/ValueContext.h
 +++ b/src/Ai/Base/ValueContext.h
-@@ -283,6 +283,7 @@ public:
+@@ -281,6 +281,7 @@ public:
          creators["should home bind"] = &ValueContext::should_home_bind;
          creators["should repair"] = &ValueContext::should_repair;
          creators["natural maintenance"] = &ValueContext::natural_maintenance;
@@ -269,7 +269,7 @@ index 6556dfb..9ddfd5d 100644
          creators["can repair"] = &ValueContext::can_repair;
          creators["should sell"] = &ValueContext::should_sell;
          creators["can sell"] = &ValueContext::can_sell;
-@@ -438,6 +439,7 @@ private:
+@@ -434,6 +435,7 @@ private:
      static UntypedValue* possible_rpg_targets(PlayerbotAI* botAI) { return new PossibleRpgTargetsValue(botAI); }
      static UntypedValue* possible_new_rpg_targets(PlayerbotAI* botAI) { return new PossibleNewRpgTargetsValue(botAI); }
      static UntypedValue* possible_new_rpg_game_objects(PlayerbotAI* botAI) { return new PossibleNewRpgGameObjectsValue(botAI); }
@@ -1494,7 +1494,7 @@ index 0000000..8b6bec2
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 911b961..51af4fe 100644
+index 0736dbb..21c6627 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -82,6 +82,9 @@ bool PlayerbotAIConfig::Initialize()
@@ -1508,7 +1508,7 @@ index 911b961..51af4fe 100644
      if (!enabled)
      {
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 2676563..f0a162c 100644
+index a5dff8e..b61fd2e 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -107,6 +107,8 @@ public:
@@ -1521,7 +1521,7 @@ index 2676563..f0a162c 100644
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index f0619c6..6fd2f11 100644
+index 9bd0bcc..5f490f3 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -16,6 +16,7 @@
@@ -1532,7 +1532,7 @@ index f0619c6..6fd2f11 100644
  #include "GlobalScript.h"
  #include "GuildTaskMgr.h"
  #include "PlayerScript.h"
-@@ -497,6 +498,7 @@ class PlayerbotsWorldScript : public WorldScript
+@@ -501,6 +502,7 @@ class PlayerbotsWorldScript : public WorldScript
  public:
      PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
          WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED,
@@ -1540,7 +1540,7 @@ index f0619c6..6fd2f11 100644
          WORLDHOOK_ON_UPDATE,
          WORLDHOOK_ON_SHUTDOWN
      }) {}
-@@ -534,6 +536,8 @@ public:
+@@ -538,6 +540,8 @@ public:
          LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
      }
  

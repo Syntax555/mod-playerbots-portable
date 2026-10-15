@@ -25,7 +25,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
-      "revision": "037c01418b5d01506917a3db9b44fd56ac5f965c",
+      "revision": "cf1a2a20c1731e94cea5556844f5f98a482d926c",
       "source": "mod-playerbots",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
@@ -131,7 +131,8 @@
       "patches": [
         "patches/multibot-inventory-money.patch",
         "patches/multibot-options-initialization.patch",
-        "patches/multibot-era-talent-inspect.patch"
+        "patches/multibot-era-talent-inspect.patch",
+        "patches/multibot-role-strategies.patch"
       ]
     }
   ],
