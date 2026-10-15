@@ -79,8 +79,6 @@ and ordinary player actions.
 - [ ] A MySQL Windows service under a system account cannot be opened by a
   normal user, so the update guard refuses every update. Read the image path
   without opening the process.
-- [ ] When `OpenProcess` is denied, check the image name from the process
-  snapshot instead of treating the process as gone.
 - [ ] The update journal is rewritten, manifest included, once per installed
   file. Change the format only with a recovery path for older launchers.
 - [ ] Close the short window in which `startup.exe` is missing between moving
