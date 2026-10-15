@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -401,6 +402,53 @@ func TestMySQLCleanupFindsChildrenStartedAfterInitialSnapshot(t *testing.T) {
 				t.Fatal("late-child cleanup stopped a same-executable foreign listener")
 			}
 		})
+	}
+}
+
+func TestMySQLCleanupSkipsExitedSnapshotCandidates(t *testing.T) {
+	if runProcessTestInPrivateConsole(t) {
+		return
+	}
+	foreign, _, _ := startMySQLProcessTree(t, 0, "")
+	defer foreign.Wait()
+	defer finishMySQLProcess(foreign)
+	cmd, _, children := startMySQLProcessTree(t, 1, "")
+	defer cmd.Wait()
+	defer killMySQLProcessTree(cmd.Process)
+	child, err := openMySQLProcess(uint32(children[0].Pid), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer child.close()
+	parents, err := mysqlProcessParents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parents[child.pid] != uint32(cmd.Process.Pid) {
+		t.Fatal("live child was not present in the original snapshot")
+	}
+	if err := syscall.TerminateProcess(child.handle, 1); err != nil {
+		t.Fatal(err)
+	}
+	if status, err := syscall.WaitForSingleObject(child.handle, 3000); err != nil || status != syscall.WAIT_OBJECT_0 {
+		t.Fatalf("fixture child did not exit: wait=%d, %v", status, err)
+	}
+	currentParents, err := mysqlProcessParents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := currentParents[child.pid]; present {
+		t.Fatal("fresh snapshot included an exited process with a retained handle")
+	}
+	tracker := trackedMySQLProcess(cmd.Process)
+	tracker.mu.Lock()
+	added, err := tracker.collectOwnedChildrenLocked(parents)
+	tracker.mu.Unlock()
+	if err != nil || added != 0 {
+		t.Fatalf("stale snapshot adopted an exited child or failed discovery: added=%d, %v", added, err)
+	}
+	if alive, _ := isProcessAlive(foreign.Process.Pid); !alive {
+		t.Fatal("stale-child discovery affected a foreign listener")
 	}
 }
 
