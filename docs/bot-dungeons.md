@@ -118,6 +118,9 @@ Shadow Flame, and Suppression Devices are disarmed only by rogues casting
 Disarm Trap. Raid entry keeps native attunements and Individual Progression
 requirements. Molten Core's runes must be doused with Aqual Quintessence; bots
 do not douse them.
+Hunters must earn Tranquilizing Shot. Natural progression also keeps a bot's
+own crowd control in place when its formerly mind-controlled target returns
+to the raid; it does not cancel those auras artificially.
 AutoBalance scales raid difficulty to the number of players and bots present.
 
 ## Travel and encounters
@@ -143,6 +146,9 @@ that stall for five minutes stop an autonomous attempt. Corpses, loot
 eligibility and paid character upkeep remain subject to the core's rules.
 Encounter tactics and real navigation can still fail; the module does not turn
 such failures into completed runs.
+
+Natural progression disables `.dc lab run` and `.dc lab batch`, including
+their background test-party provisioning. Lab status and stop remain available.
 
 ## Configuration
 
@@ -170,6 +176,7 @@ Raid Clear's tactics are set in `configs/modules/mod_raid_clear.conf`:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `RaidClear.Enable` | `1` | Master switch, read at startup |
+| `RaidClear.Bots.TeachTranquilizingShot` | `0` | Automatic spell teaching is disabled; natural progression refuses it even with a custom `1` |
 | `RaidClear.KillOrder` | `1` | The main tank marks the add to kill first; damage dealers attack it |
 | `RaidClear.Tanks.AssignMainTank` | `1` | Give the Main Tank flag to the first tank when nobody has it |
 | `RaidClear.Tanks.Split` | `1` | Other tanks act as off-tanks |
