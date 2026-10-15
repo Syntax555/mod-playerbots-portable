@@ -93,8 +93,6 @@ and ordinary player actions.
 
 ## Release and tests
 
-- [ ] Re-running an older successful main build can replace a pending
-  publication of a newer build until the next push.
 - [ ] Measure a compiler cache for the Windows compile step.
 - [ ] Build `mpqread` once in the client job and pass it to the fixtures that
   read the client patch.

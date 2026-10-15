@@ -87,6 +87,8 @@ class FakeGitHub:
         self.draft_id = 100
         self.upload_count = 0
         self.retag_count = 0
+        self.builds = []
+        self.artifacts = {}
 
     @property
     def writes(self):
@@ -122,6 +124,14 @@ class FakeGitHub:
     def workflow_files(self, commit):
         self.calls.append(("workflow_files", commit))
         return {".github/workflows/release.yml": self.workflow_version(commit)}
+
+    def successful_main_builds(self):
+        self.calls.append(("successful_main_builds",))
+        return iter(copy.deepcopy(self.builds))
+
+    def build_artifacts(self, run_id):
+        self.calls.append(("build_artifacts", run_id))
+        return iter(copy.deepcopy(self.artifacts.get(run_id, [])))
 
     def history(self, commit):
         seen, pending = set(), [commit]
@@ -266,6 +276,106 @@ class FakeGitHub:
     def list_releases(self):
         self.calls.append(("list_releases",))
         return copy.deepcopy(list(self.releases.values()))
+
+
+class BuildSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.client = FakeGitHub()
+        self.client.main_values = [NEWER_SHA]
+        self.client.builds = [self.build(20, NEWER_SHA), self.build(10, SHA)]
+        self.client.artifacts = {run_id: self.artifacts() for run_id in (10, 20)}
+
+    @staticmethod
+    def build(run_id, sha, **fields):
+        return {"id": run_id, "run_number": run_id, "head_sha": sha, "head_branch": "main",
+                "head_repository": {"full_name": REPOSITORY}, "event": "push",
+                "status": "completed", "conclusion": "success", **fields}
+
+    @staticmethod
+    def artifacts():
+        return [{"name": name, "expired": False, "size_in_bytes": 100}
+                for name in sorted(publisher.BUILD_ARTIFACTS)]
+
+    def test_old_rerun_selects_newer_successful_build_without_reading_older_artifacts(self):
+        self.client.builds.reverse()
+        self.client.builds[0]["id"] = 30
+        self.client.artifacts[30] = self.client.artifacts.pop(10)
+        self.client.builds[0]["updated_at"] = "2026-10-15T12:00:00Z"
+        self.client.builds[1]["updated_at"] = "2026-10-14T12:00:00Z"
+        self.assertEqual({"run_id": 20, "sha": NEWER_SHA}, publisher.select_build(self.client))
+        self.assertEqual([("build_artifacts", 20)],
+                         [call for call in self.client.calls if call[0] == "build_artifacts"])
+        self.assertEqual([], self.client.writes)
+
+    def test_main_may_advance_while_the_newest_successful_build_still_publishes(self):
+        self.client.builds.pop(0)
+        self.assertEqual({"run_id": 10, "sha": SHA}, publisher.select_build(self.client))
+
+    def test_force_push_excludes_builds_removed_from_main_history(self):
+        self.client.main_values = [FORCED_SHA]
+        self.client.builds.append(self.build(5, OLDER_SHA))
+        self.client.artifacts[5] = self.artifacts()
+        self.assertEqual({"run_id": 5, "sha": OLDER_SHA}, publisher.select_build(self.client))
+        self.assertNotIn(("build_artifacts", 20), self.client.calls)
+        self.assertNotIn(("build_artifacts", 10), self.client.calls)
+
+    def test_only_completed_successful_same_repository_main_pushes_and_dispatches_are_used(self):
+        for fields in ({"status": "in_progress"}, {"conclusion": "failure"},
+                       {"event": "pull_request"}, {"head_branch": "codex/change"},
+                       {"head_repository": {"full_name": "other/repository"}},
+                       {"head_repository": None}, {"head_sha": "main"}, {"id": "20"},
+                       {"run_number": None}, {"run_number": "20"}):
+            with self.subTest(fields=fields):
+                self.client.builds[0] = self.build(20, NEWER_SHA, **fields)
+                self.assertEqual({"run_id": 10, "sha": SHA}, publisher.select_build(self.client))
+        self.client.builds[0] = self.build(20, NEWER_SHA, event="workflow_dispatch")
+        self.assertEqual({"run_id": 20, "sha": NEWER_SHA}, publisher.select_build(self.client))
+
+    def test_missing_expired_empty_or_duplicate_packages_fall_back_to_an_available_build(self):
+        for artifacts in (self.artifacts()[:1],
+                          [{**artifact, "expired": True} for artifact in self.artifacts()],
+                          [{**artifact, "size_in_bytes": 0} for artifact in self.artifacts()],
+                          self.artifacts() + self.artifacts()[:1]):
+            with self.subTest(artifacts=artifacts):
+                self.client.artifacts[20] = artifacts
+                self.assertEqual({"run_id": 10, "sha": SHA}, publisher.select_build(self.client))
+
+    def test_packages_from_different_runs_are_never_combined(self):
+        self.client.artifacts[20] = self.artifacts()[:1]
+        self.client.artifacts[10] = self.artifacts()[1:]
+        self.assertIsNone(publisher.select_build(self.client))
+        self.assertEqual([], self.client.writes)
+
+    def test_invalid_main_and_failed_action_queries_do_not_select_a_build(self):
+        self.client.main_values = ["main"]
+        with self.assertRaisesRegex(publisher.PublishError, "invalid main revision"):
+            publisher.select_build(self.client)
+        self.client.main_values = [NEWER_SHA]
+        with patch.object(self.client, "build_artifacts", side_effect=publisher.APIError(403, "Forbidden")), \
+                self.assertRaises(publisher.APIError):
+            publisher.select_build(self.client)
+        self.assertEqual([], self.client.writes)
+
+    def test_selection_cli_writes_the_same_selected_run_and_revision_to_actions_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            output.write_text("existing=value\n", encoding="utf-8")
+            with patch.object(sys, "argv", ["publish_latest.py", "--select-build-output", str(output)]), \
+                    patch.object(publisher, "GitHubClient", return_value=self.client), \
+                    patch("sys.stdout", new_callable=io.StringIO):
+                self.assertEqual(0, publisher.main())
+            self.assertEqual(f"existing=value\nrun_id=20\nsha={NEWER_SHA}\n", output.read_text())
+
+    def test_selection_cli_clearly_skips_when_no_build_has_packages(self):
+        self.client.artifacts.clear()
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            with patch.object(sys, "argv", ["publish_latest.py", "--select-build-output", str(output)]), \
+                    patch.object(publisher, "GitHubClient", return_value=self.client), \
+                    patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                self.assertEqual(0, publisher.main())
+            self.assertFalse(output.exists())
+            self.assertIn("publication skipped", stdout.getvalue())
 
 
 class PublicationTests(unittest.TestCase):
@@ -953,6 +1063,34 @@ class PublicationTests(unittest.TestCase):
 
 
 class ClientTests(unittest.TestCase):
+    def test_successful_build_query_is_lazy_and_uses_the_original_workflow_run_listing(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        with patch.object(client, "_request", return_value={"workflow_runs": [{"id": 20}, {"id": 10}]}) as request:
+            runs = client.successful_main_builds()
+            request.assert_not_called()
+            self.assertEqual([{"id": 20}, {"id": 10}], list(runs))
+        request.assert_called_once_with(
+            "GET", "/actions/workflows/release.yml/runs?branch=main&status=success&per_page=100&page=1")
+
+    def test_action_listings_fetch_following_pages_and_keep_artifacts_within_the_selected_run(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        for method, key, path in ((client.successful_main_builds, "workflow_runs",
+                                  "/actions/workflows/release.yml/runs?branch=main&status=success&"),
+                                 (lambda: client.build_artifacts(123), "artifacts",
+                                  "/actions/runs/123/artifacts?")):
+            with self.subTest(key=key), patch.object(client, "_request", side_effect=[
+                    {key: [{"id": number} for number in range(100)]}, {key: [{"id": 100}]}]) as request:
+                self.assertEqual(101, len(list(method())))
+                self.assertEqual([(("GET", f"{path}per_page=100&page={page}"),) for page in (1, 2)],
+                                 request.call_args_list)
+
+    def test_invalid_actions_listing_is_rejected(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        for response in ([], {}, {"workflow_runs": None}, {"workflow_runs": {}}):
+            with self.subTest(response=response), patch.object(client, "_request", return_value=response), \
+                    self.assertRaisesRegex(publisher.PublishError, "invalid Actions listing"):
+                list(client.successful_main_builds())
+
     def test_compare_uses_immutable_commit_range_without_pagination(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
         with patch.object(client, "_request", return_value={"status": "ahead"}) as request:

@@ -170,9 +170,11 @@ contains the matching verified packages. Build artifacts are also available from
 eligible successful Actions runs.
 
 Builds of `main` run one at a time: a running build always finishes, and a newer
-push replaces any waiting build so the newest commit builds next. A verified
-build is published when its commit is still part of `main` and is not older than
-the current Latest.
+push replaces any waiting build so the newest commit builds next. Each
+publication selects the most recently created eligible successful `main` build
+with available server and client artifacts, so re-running an older build cannot
+replace a newer build waiting for publication. The selected build is published
+when its commit is still part of `main` and is not older than the current Latest.
 
 Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP,
 recording each file's size and SHA-256 hash. Latest contains three ZIPs, this
