@@ -66,6 +66,11 @@ func isProcessAlive(pid int) (bool, uint32) {
 	}
 	handle, err := syscall.OpenProcess(syscall.SYNCHRONIZE|processQueryLimitedInformation, false, uint32(pid))
 	if err != nil {
+		if errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+			if _, snapshotErr := snapshotProcessName(pid); !errors.Is(snapshotErr, os.ErrProcessDone) {
+				return true, stillActive
+			}
+		}
 		return false, 0
 	}
 	defer syscall.CloseHandle(handle)
@@ -79,14 +84,17 @@ func isProcessAlive(pid int) (bool, uint32) {
 	return false, exitCode
 }
 
-// processExecutable returns the program file of a running process. It returns
-// os.ErrProcessDone when pid names no process that this user can observe.
+// processExecutable returns the full image path, or the snapshot's image name
+// when access is denied. A missing live process returns os.ErrProcessDone.
 func processExecutable(pid int) (string, error) {
 	if pid <= 0 {
 		return "", os.ErrProcessDone
 	}
 	handle, err := syscall.OpenProcess(syscall.SYNCHRONIZE|processQueryLimitedInformation, false, uint32(pid))
 	if err != nil {
+		if errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+			return snapshotProcessName(pid)
+		}
 		return "", os.ErrProcessDone
 	}
 	defer syscall.CloseHandle(handle)
@@ -94,6 +102,29 @@ func processExecutable(pid int) (string, error) {
 		return "", os.ErrProcessDone
 	}
 	return processImagePath(handle)
+}
+
+func snapshotProcessName(pid int) (string, error) {
+	var name string
+	found := false
+	err := forEachProcess(func(entry *syscall.ProcessEntry32) error {
+		// Toolhelp retains exited processes while their handles remain open.
+		if int(entry.ProcessID) == pid && entry.Threads != 0 {
+			found = true
+			name = syscall.UTF16ToString(entry.ExeFile[:])
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", os.ErrProcessDone
+	}
+	if name == "" {
+		return "", errors.New("process snapshot is missing the image name")
+	}
+	return name, nil
 }
 
 // watchProcessExit opens pid at once. The returned wait then observes that

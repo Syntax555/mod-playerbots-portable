@@ -282,6 +282,18 @@ func updateProcessActive(root string, pid int) bool {
 	if err != nil {
 		return true
 	}
+	if !filepath.IsAbs(executable) {
+		// Windows snapshots expose only the image name of protected processes.
+		if strings.EqualFold(executable, "startup.exe") || strings.EqualFold(executable, "helper.exe") {
+			return true
+		}
+		for _, folder := range []string{root, filepath.Join(root, portableUpdateDirectory)} {
+			if _, err := os.Stat(filepath.Join(folder, executable)); !errors.Is(err, os.ErrNotExist) {
+				return true
+			}
+		}
+		return false
+	}
 	folder, err := os.Stat(filepath.Dir(executable))
 	if err != nil {
 		return true
