@@ -3,15 +3,14 @@
   python3 cmake/tests/run_fixtures.py check     fail when a fixture is not wired into CI
   python3 cmake/tests/run_fixtures.py gameplay  run the gameplay fixtures in order
 
-A fixture is wired when it is listed below, when the release workflow names
-its path, or when a wired fixture starts it.
+A fixture is wired when it is listed below or when the release workflow names
+its path.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -22,7 +21,10 @@ GAMEPLAY_COMMAND = "cmake/tests/run_fixtures.py gameplay"
 # Native no-cheat and gameplay fixtures, checked against the prepared sources,
 # and the documentation check.
 GAMEPLAY = (
-    "TestEarnedProgression", "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
+    "TestEarnedProgression", "TestEarnedBotBrackets", "TestEarnedAuctions", "TestStrictEarnedProgression",
+    "TestEarnedEraPrices", "TestEraTalents", "TestPlayerbotEraBattlegrounds", "TestEarnedEraBattlegrounds",
+    "TestEarnedArenaCore", "TestBattlegroundEraRules", "TestEarnedEraPvpRules", "TestWindowsResourceIncludes",
+    "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestEraEvents", "TestLfgProgression",
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression",
@@ -37,11 +39,6 @@ def fixtures() -> set[str]:
     return {path.name for path in TESTS.glob("Test*") if path.suffix in (".py", ".ps1") and path.is_file()}
 
 
-def started_by(name: str) -> set[str]:
-    text = (TESTS / name).read_text(encoding="utf-8")
-    return set(re.findall(r"""with_name\(\s*['"](Test\w+\.(?:py|ps1))['"]\s*\)""", text))
-
-
 def wiring_errors() -> list[str]:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     available = fixtures()
@@ -52,14 +49,6 @@ def wiring_errors() -> list[str]:
         wired |= {f"{name}.py" for name in GAMEPLAY} & available
     else:
         errors.append(f"The release workflow does not run {GAMEPLAY_COMMAND}")
-    pending = list(wired)
-    while pending:
-        for child in started_by(pending.pop()) - wired:
-            if child not in available:
-                errors.append(f"A fixture starts {child}, which does not exist")
-                continue
-            wired.add(child)
-            pending.append(child)
     errors += [f"{name} does not run in CI: list it in cmake/tests/run_fixtures.py or call it from "
                ".github/workflows/release.yml" for name in sorted(available - wired)]
     return errors
