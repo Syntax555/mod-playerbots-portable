@@ -100,6 +100,40 @@ assert sum(source.count('XPSOURCE_BATTLEGROUND)') for source in (player_cpp, que
 give_xp = function(player_cpp, 'void Player::GiveXP(')
 assert 'bool recruitAFriend = GetsRecruitAFriendBonus(true);' in give_xp and 'bonus_xp = 2 * xp;' in give_xp
 assert 'bonus_xp = victim ? GetXPRestBonus(xp) : 0;' in give_xp
+# The 3.3.5 core applies experience auras to kills only; quests and exploration reach the gain
+# hook as their own sources before GiveXP, and exploration reports the hook's amount.
+assert 'SPELL_AURA_MOD_XP_PCT' not in give_xp
+assert sum(len(re.findall(r'\w\(SPELL_AURA_MOD_XP_PCT\b', path.read_text(encoding='utf-8', errors='replace')))
+           for path in (core / 'src/server/game').rglob('*.cpp')) == 1
+explore_xp = between(function(player_cpp, 'void Player::CheckAreaExploreAndOutdoor('),
+                     'sScriptMgr->OnPlayerGiveXP(this, XP, nullptr, PlayerXPSource::XPSOURCE_EXPLORE);',
+                     'SendExplorationExperience(areaId, XP);')
+assert '\n                GiveXP(XP, nullptr);\n' in explore_xp
+assert sum(source.count('XPSOURCE_EXPLORE)') for source in (player_cpp, quest_cpp, killer)) == 1
+quest_give = between(reward, 'sScriptMgr->OnPlayerQuestComputeXP(this, quest, XP);', 'GiveXP(XP, nullptr, 1.0f, isLFGReward);')
+assert ('OnPlayerGiveXP(this, XP, nullptr, isLFGReward ? PlayerXPSource::XPSOURCE_QUEST_DF : '
+        'PlayerXPSource::XPSOURCE_QUEST);') in quest_give
+# Thrallmar's and Honor Hold's Favor: GiveXP adds their 5% to every gain in the zones where
+# spell_area keeps them, and they are the only source of the aura 200 effect the policy leaves out.
+assert ('if ((zone == AREA_HELLFIRE_PENINSULA || zone == AREA_HELLFIRE_RAMPARTS || zone == AREA_MAGTHERIDONS_LAIR || '
+        'zone == AREA_THE_BLOOD_FURNACE || zone == AREA_THE_SHATTERED_HALLS) && '
+        "HasAnyAuras(32096 /*Thrallmar's Favor*/, 32098 /*Honor Hold's Favor*/))\n"
+        '        favored_exp_mult = 0.05f;') in give_xp
+area_defines = read('src/server/game/Maps/AreaDefines.h')
+favored_zones = {int(re.search(rf'\b{name} += (\d+),', area_defines)[1]) for name in (
+    'AREA_HELLFIRE_PENINSULA', 'AREA_HELLFIRE_RAMPARTS', 'AREA_MAGTHERIDONS_LAIR', 'AREA_THE_BLOOD_FURNACE',
+    'AREA_THE_SHATTERED_HALLS')}
+favor_areas = {}
+for row in era_generator.table_rows(read('data/sql/base/db_world/spell_area.sql'), 'spell_area'):
+    favor_areas.setdefault(row['spell'], set()).add(int(row['area']))
+assert favor_areas['32096'] == favor_areas['32098'] == favored_zones and '32172' not in favor_areas
+linked = [(row['spell_trigger'], row['type']) for row in era_generator.table_rows(
+    read('data/sql/base/db_world/spell_linked_spell.sql'), 'spell_linked_spell') if row['spell_effect'] == '32172']
+assert sorted(linked) == [('32096', '2'), ('32098', '2')]
+favor_script = function(read('src/server/scripts/Spells/spell_item.cpp'), 'class spell_item_thrallmar_and_honor_hold_favor')
+assert 'GetTarget()->CastSpell(GetTarget(), SPELL_BUFFBOT_BUFF_EFFECT, true);' in favor_script
+assert re.search(r'SPELL_BUFFBOT_BUFF_EFFECT += 32172\b', read('src/server/scripts/Spells/spell_item.cpp'))
+assert {int(spell) for spell in re.findall(r'spellId == (\d+)', function(policy, 'constexpr bool CoreAppliedXPBonus('))} == {32172}
 assert ('if (level < sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n            if (level % 2 == 0)'
         in function(player_cpp, 'void Player::GiveLevel('))
 refer = read('src/server/game/Handlers/ReferAFriendHandler.cpp')
@@ -771,7 +805,8 @@ std::map<std::string,std::string> OptionOff() {
 }
 std::map<std::string,std::string> StrictOff() { return {{"IndividualProgression.EraExperience","1"}}; }
 
-AuraEffect heirloomKill{{57353},10}, heirloomQuest{{57353},10}, wickerman{{24705},10}, transform{{69711},-100},
+AuraEffect heirloomKill{{57353},10}, heirloomQuest{{57353},10}, wickerman{{24705},10}, auchindoun{{33377},5},
+    favor{{32172},5}, transform{{69711},-100},
     penaltyKill{{99001},-50}, penaltyQuest{{99001},-50};
 bool bot=false;
 Player Character(uint8 stage,uint8 level) {
@@ -827,6 +862,15 @@ void QuestCases() {
         player->m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill};
     tbcPenalty.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&penaltyKill,&transform};
     assert(TurnIn(tbcHoliday,Q(1318))==9075 && TurnIn(tbcPenalty,Q(1318))==8250);
+    Player tbcFavored=Character(8,60);
+    tbcFavored.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&favor};
+    assert(TurnIn(tbcFavored,Q(1318))==8250);
+    // The quest rate applies and truncates first: 775 * 1.25 = 968, then 1064 with Wickerman.
+    world.rates[RATE_XP_QUEST]=1.25f;
+    Player tbcRated=Character(8,68);
+    tbcRated.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman};
+    assert(TurnIn(tbcRated,Q(7563))==1064);
+    world.rates[RATE_XP_QUEST]=1.0f;
     assert(TurnIn(vanillaHoliday,Q(2))==1960 && TurnIn(wrathHoliday,Q(1318))==1450);
     // Reductions count from the quest level of the value's era: Rise, Obsidion! is level 52
     // in 1.12 and 46 in 3.3.5, Rage of Blood level 58 in 2.4.3 and -1 in 3.3.5.
@@ -889,6 +933,11 @@ void QuestCases() {
         }
     }
     world.rates[RATE_XP_QUEST]=1.0f;
+    // 2.4.3 bonuses also raise quests that keep their 3.3.5 value.
+    unlisted.Level=60; unlisted.RewardXPDifficulty=5;
+    Player tbcUnlisted=Character(8,60);
+    tbcUnlisted.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill};
+    assert(tbcUnlisted.CalculateQuestRewardXP(&unlisted)==9550 && tbcUnlisted.RewardQuestXP(&unlisted)==10505);
 }
 
 void KillCases() {
@@ -908,8 +957,19 @@ void KillCases() {
         // mangos-tbc; penalties and later bonuses do not, and quest gains were raised before.
         assert(GiveXP(plain,500,XPSOURCE_BATTLEGROUND)==(stage==13 ? 500u : 0u));
         assert(GiveXP(plain,500,XPSOURCE_KILL)==500 && GiveXP(holiday,500,XPSOURCE_QUEST)==500);
+        assert(GiveXP(holiday,500,XPSOURCE_QUEST_DF)==500);
         assert(GiveXP(heirloom,500,XPSOURCE_EXPLORE)==500 && GiveXP(penalized,500,XPSOURCE_EXPLORE)==500);
         assert(GiveXP(transformed,500,XPSOURCE_EXPLORE)==500 && GiveXP(holiday,500,XPSOURCE_EXPLORE)==(stage==8 ? 550u : 500u));
+        assert(GiveXP(holiday,505,XPSOURCE_EXPLORE)==(stage==8 ? 555u : 505u));
+        // One effect at a time with truncation: 200 -> 209 -> 229, where the product gives 231.
+        Player stacked=Character(stage,level);
+        stacked.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&auchindoun,&wickerman};
+        assert(GiveXP(stacked,200,XPSOURCE_EXPLORE)==(stage==8 ? 229u : 200u));
+        // GiveXP adds the Hellfire favor itself; in TBC its aura counts on no gain, as in 2.4.3.
+        // KillRewarder truncates 200 * 1.05f to 209.
+        Player favored=Character(stage,level);
+        favored.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&favor};
+        assert(KillXP(&favored,200)==(stage==13 ? 209u : 199u) && GiveXP(favored,500,XPSOURCE_EXPLORE)==500);
     }
 }
 
@@ -947,6 +1007,10 @@ void RestCases() {
 void MoneyCases() {
     assert(Money(0,60,90003)==1875 && Money(0,60,90004)==31250 && Money(8,70,90005)==54000);
     assert(Money(13,70,90005)==0 && Money(0,59,90003)==0 && Money(0,60,90006)==0 && Money(8,60,90003)==0);
+    Player cappedHoliday=Character(8,70);
+    cappedHoliday.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman};
+    TurnIn(cappedHoliday,Q(90005));
+    assert(cappedHoliday.money==54000);
     world.rates[RATE_REWARD_BONUS_MONEY]=2.0f;
     assert(Money(0,60,90003)==3750);
     world.rates[RATE_REWARD_BONUS_MONEY]=1.0f;
@@ -1015,12 +1079,12 @@ std::vector<int64> Observe() {
         for (uint32 id : {2u,26u,1318u,2881u,3566u,3803u,7563u,8905u,9492u,90001u,90002u,90003u,90005u,90006u,90007u}) {
             Player player=Character(stage,level), aura=Character(stage,level);
             aura.m_modAuras[SPELL_AURA_MOD_XP_QUEST_PCT]={&heirloomQuest,&penaltyQuest};
-            aura.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill,&penaltyKill};
+            aura.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&auchindoun,&wickerman,&favor,&heirloomKill,&penaltyKill};
             seen.insert(seen.end(),{WindowXP(&player,&Q(id)),TurnIn(player,Q(id)),TurnIn(player,Q(id)),player.money,
                                     TurnIn(aura,Q(id))});
         }
         Player kill=Character(stage,level);
-        kill.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill,&penaltyKill};
+        kill.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&auchindoun,&wickerman,&favor,&heirloomKill,&penaltyKill};
         seen.insert(seen.end(),{KillXP(&kill,200),GiveXP(kill,500,XPSOURCE_BATTLEGROUND),GiveXP(kill,500,XPSOURCE_KILL),
                                 GiveXP(kill,500,XPSOURCE_EXPLORE)});
         Player rest=Character(stage,level);
@@ -1136,16 +1200,34 @@ MUTATIONS = (
      'if (!sIndividualProgression->questXpFix)'),
     ('battleground source', 'EraExperience.cpp', 'if (xpSource == XPSOURCE_BATTLEGROUND)\n        {', 'if (true)\n        {'),
     ('TBC battleground XP', 'EraExperiencePolicy.h', 'return era >= Wrath;', 'return era >= TBC;'),
-    ('Vanilla experience auras', 'EraExperiencePolicy.h', 'return era == TBC && !WrathOnlyXPBonus(spellId);',
-     'return !WrathOnlyXPBonus(spellId);'),
-    ('TBC bonus on quests', 'EraExperience.cpp', '        xp *= GeneralXPBonus(player, era);\n', ''),
-    ('TBC bonus on exploration', 'EraExperience.cpp', '            amount *= GeneralXPBonus(player, era);\n', ''),
+    ('Vanilla experience auras', 'EraExperiencePolicy.h', 'return era == TBC && !WrathOnlyXPBonus(spellId) &&',
+     'return !WrathOnlyXPBonus(spellId) &&'),
+    ('TBC bonus on quests', 'EraExperience.cpp', 'xpValue = WithGeneralXPBonus(player, era, xp);', 'xpValue = xp;'),
+    ('TBC bonus on exploration', 'EraExperience.cpp', '            amount = WithGeneralXPBonus(player, era, amount);\n', ''),
+    ('bonus product', 'EraExperience.cpp',
+     '''    for (AuraEffect const* effect : player->GetAuraEffectsByType(SPELL_AURA_MOD_XP_PCT))
+        if (EraExperiencePolicy::GeneralXPBonus(era, effect->GetId(), effect->GetAmount()))
+            xp = uint32(xp * (1.0f + effect->GetAmount() / 100.0f));
+
+    return xp;''',
+     '''    return uint32(xp * player->GetTotalAuraMultiplier(SPELL_AURA_MOD_XP_PCT, [era](AuraEffect const* effect)
+    {
+        return EraExperiencePolicy::GeneralXPBonus(era, effect->GetId(), effect->GetAmount());
+    }));'''),
+    ('bonus rounding', 'EraExperience.cpp', 'xp = uint32(xp * (1.0f + effect->GetAmount() / 100.0f));',
+     'xp = uint32(std::lround(xp * (1.0f + effect->GetAmount() / 100.0f)));'),
+    ('favor on quests and exploration', 'EraExperiencePolicy.h',
+     'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);',
+     'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);'),
+    ('favor on TBC kills', 'EraExperiencePolicy.h',
+     'return era == TBC && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);',
+     'return era == TBC && !WrathOnlyXPBonus(spellId);'),
     ('exploration not hooked', 'EraExperience.cpp', '(xpSource != XPSOURCE_KILL && xpSource != XPSOURCE_EXPLORE)',
      '(xpSource != XPSOURCE_KILL)'),
-    ('general penalties', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);',
-     'return era == TBC && amount != 0 && !WrathOnlyXPBonus(spellId);'),
-    ('general Wrath bonuses', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);',
-     'return era == TBC && amount > 0 && spellId;'),
+    ('general penalties', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId)',
+     'return era == TBC && amount != 0 && !WrathOnlyXPBonus(spellId)'),
+    ('general Wrath bonuses', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId)',
+     'return era == TBC && amount > 0 && spellId'),
     ('general Vanilla bonuses', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 &&', 'return era <= TBC && amount > 0 &&'),
     ('heirloom in TBC', 'EraExperiencePolicy.h', '        case 57353: // Heirloom Experience Bonus +10%\n', ''),
     ('truncated kill XP', 'EraExperiencePolicy.h', 'std::uint32_t(std::lround(double(amount) * kept / applied))',

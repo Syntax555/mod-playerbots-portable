@@ -69,7 +69,7 @@ The earned tier selects each character's experience rules: Vanilla before tier
 | Level cap until the next era | 60 | 70 | 80 |
 | Quest XP | 1.12 values from Individual Progression | 2.4.3 values from the TBC DB | 3.3.5 |
 | Battleground objective XP | None | None | Yes |
-| XP bonus effects | None | Holiday and Auchindoun bonuses, on kill, quest and exploration XP | All, including heirlooms |
+| XP bonus effects | None | Holiday and Auchindoun bonuses, on kill, quest and exploration XP | All, including heirlooms; holiday and Auchindoun bonuses on kill XP only |
 | Rested XP at the era cap | None | None | None (core, at 80) |
 | Quest money at the era cap | Quest XP at level 60 × 6.25 copper | Quest XP at level 70 × 6 copper | Core conversion at 80 |
 | Recruit-a-Friend | Unavailable | Unavailable | Unavailable |
