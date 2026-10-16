@@ -59,6 +59,9 @@ and ordinary player actions.
   flight routes, Drain Soul shards for every warlock spec, SelfBot talent
   points, weighted bot specs, Spirit of Zandalar at the Zul'Gurub stage, Halion
   credit in the Twilight Realm and dungeon recruitment at refused portals.
+- [ ] Verify era experience in game: quest values per era, battleground
+  objective XP, heirloom and holiday bonuses, and rest and quest money at the
+  60/70 era caps.
 
 ## Dependency updates
 
@@ -73,6 +76,18 @@ and ordinary player actions.
   enter the same native bracket with different earned eras after a TBC-to-Wrath
   realm transition. Remove it only if the native admission rules make this
   impossible without restricting existing characters or teams.
+- [ ] Decide era experience rules with weak sources: Vanilla repeatable quests
+  paying XP on every turn-in; the 1.12/2.4.3 hunter pet XP requirement; dungeon
+  and raid elite multipliers (Outland ×4.5 versus TBC DB ×2.5/×2.0, Vanilla
+  bosses ×4 versus ×5); gray level 47 at level 60 for group splits, which needs
+  a core patch.
+- [ ] Heirloom item stats and Experience Eliminator availability before Wrath.
+- [ ] Core experience deviations shared by every era: raid groups outside raid
+  maps receive the party bonus, and online rest accrues faster in rest areas.
+- [ ] `HandleAcceptGrantLevel` does not recheck `RecruitAFriend.MaxLevel`, so
+  saved grantable levels of linked accounts can still be accepted by a client
+  that sends the packet without a proposal. Recruit-a-Friend started after the
+  2.4.3 release; decide whether TBC and Wrath characters should regain it.
 
 ## Launcher and updates
 
