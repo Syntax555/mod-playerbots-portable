@@ -17,6 +17,51 @@ import (
 	"unsafe"
 )
 
+func disableDebugPrivilege(t *testing.T) {
+	t.Helper()
+	process, err := syscall.GetCurrentProcess()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var token syscall.Token
+	if err := syscall.OpenProcessToken(process, syscall.TOKEN_ADJUST_PRIVILEGES|syscall.TOKEN_QUERY, &token); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = token.Close() })
+	// An elevated runner can bypass process DACLs while SeDebugPrivilege is enabled.
+	name, err := syscall.UTF16PtrFromString("SeDebugPrivilege")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type tokenPrivileges struct {
+		count      uint32
+		luid       [2]uint32
+		attributes uint32
+	}
+	privileges := tokenPrivileges{count: 1}
+	advapi := syscall.NewLazyDLL("advapi32.dll")
+	ok, _, err := advapi.NewProc("LookupPrivilegeValueW").Call(0, uintptr(unsafe.Pointer(name)), uintptr(unsafe.Pointer(&privileges.luid)))
+	if ok == 0 {
+		t.Fatalf("look up debug privilege: %v", err)
+	}
+	adjust := advapi.NewProc("AdjustTokenPrivileges")
+	var previous tokenPrivileges
+	var size uint32
+	ok, _, err = adjust.Call(uintptr(token), 0, uintptr(unsafe.Pointer(&privileges)), unsafe.Sizeof(previous), uintptr(unsafe.Pointer(&previous)), uintptr(unsafe.Pointer(&size)))
+	const errorNotAllAssigned = syscall.Errno(1300)
+	if ok == 0 || (err != syscall.Errno(0) && !errors.Is(err, errorNotAllAssigned)) {
+		t.Fatalf("disable debug privilege: %v", err)
+	}
+	t.Cleanup(func() {
+		if previous.count != 0 {
+			ok, _, err := adjust.Call(uintptr(token), 0, uintptr(unsafe.Pointer(&previous)), 0, 0, 0)
+			if ok == 0 || err != syscall.Errno(0) {
+				t.Errorf("restore debug privilege: %v", err)
+			}
+		}
+	})
+}
+
 func denyProcessQueries(t *testing.T, pid int) syscall.Handle {
 	t.Helper()
 	const writeDAC = 0x40000
@@ -59,6 +104,7 @@ func denyProcessQueries(t *testing.T, pid int) syscall.Handle {
 }
 
 func TestProcessSnapshotAfterAccessDenied(t *testing.T) {
+	disableDebugPrivilege(t)
 	for _, name := range []string{"STARTUP.EXE", "helper.exe", "renamed.exe", "foreign.exe"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
