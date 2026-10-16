@@ -9226,10 +9226,10 @@ index 0000000..c65b8d0
 +(9665, 60);
 diff --git a/src/EraExperience.cpp b/src/EraExperience.cpp
 new file mode 100644
-index 0000000..5038f20
+index 0000000..29c398a
 --- /dev/null
 +++ b/src/EraExperience.cpp
-@@ -0,0 +1,172 @@
+@@ -0,0 +1,189 @@
 +/*
 +    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
 +*/
@@ -9269,6 +9269,14 @@ index 0000000..5038f20
 +    auto const questLevel = levels.find(id);
 +    return EraExperiencePolicy::HistoricalQuestXP(
 +        value->second, questLevel != levels.end() ? questLevel->second : quest->GetQuestLevel(), level);
++}
++
++float GeneralXPBonus(Player* player, uint8 era)
++{
++    return player->GetTotalAuraMultiplier(SPELL_AURA_MOD_XP_PCT, [era](AuraEffect const* effect)
++    {
++        return EraExperiencePolicy::GeneralXPBonus(era, effect->GetId(), effect->GetAmount());
++    });
 +}
 +
 +void ClearRestAtEraCap(Player* player)
@@ -9325,15 +9333,18 @@ index 0000000..5038f20
 +        {
 +            return EraExperiencePolicy::XPAuraCounts(era, effect->GetId(), effect->GetAmount());
 +        });
++        xp *= GeneralXPBonus(player, era);
 +        xpValue = xp;
 +    }
 +
 +    void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 xpSource) override
 +    {
-+        // Only battleground experience and kills with an experience aura can change.
++        // Only battleground experience, and kills and exploration with an
++        // experience aura, can change.
 +        if (!player || !amount ||
 +            (xpSource != XPSOURCE_BATTLEGROUND &&
-+             (xpSource != XPSOURCE_KILL || player->GetAuraEffectsByType(SPELL_AURA_MOD_XP_PCT).empty())))
++             ((xpSource != XPSOURCE_KILL && xpSource != XPSOURCE_EXPLORE) ||
++              player->GetAuraEffectsByType(SPELL_AURA_MOD_XP_PCT).empty())))
 +            return;
 +
 +        uint8 const era = ExperienceEra(player);
@@ -9342,6 +9353,12 @@ index 0000000..5038f20
 +            if (!EraExperiencePolicy::BattlegroundXP(era))
 +                amount = 0;
 +
++            return;
++        }
++
++        if (xpSource == XPSOURCE_EXPLORE)
++        {
++            amount *= GeneralXPBonus(player, era);
 +            return;
 +        }
 +
@@ -9404,10 +9421,10 @@ index 0000000..5038f20
 +}
 diff --git a/src/EraExperiencePolicy.h b/src/EraExperiencePolicy.h
 new file mode 100644
-index 0000000..d7dc99f
+index 0000000..b7c251b
 --- /dev/null
 +++ b/src/EraExperiencePolicy.h
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,107 @@
 +/*
 +    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
 +*/
@@ -9470,6 +9487,14 @@ index 0000000..d7dc99f
 +        return true;
 +
 +    return era == TBC && !WrathOnlyXPBonus(spellId);
++}
++
++// mangos-tbc applies the experience bonus auras to every gain, quests and
++// exploration included; the 3.3.5 core applies them, and their penalties, to
++// kills only.
++constexpr bool GeneralXPBonus(std::uint8_t era, std::uint32_t spellId, std::int32_t amount)
++{
++    return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);
 +}
 +
 +// Removes ignored bonus effects from experience the core already multiplied.
