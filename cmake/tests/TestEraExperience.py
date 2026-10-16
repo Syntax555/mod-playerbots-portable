@@ -819,6 +819,15 @@ void QuestCases() {
     // A quest that withholds its maximum-level money keeps its 1.12 value in TBC.
     Player proposition=Character(8,60);
     assert(TurnIn(proposition,Q(8905))==6600);
+    // 2.4.3 bonuses raise TBC quest experience, as in mangos-tbc; penalties and Wrath bonuses do not,
+    // and the 3.3.5 core applies them to kills only.
+    Player tbcHoliday=Character(8,60), vanillaHoliday=Character(0,36), wrathHoliday=Character(13,70),
+        tbcPenalty=Character(8,60);
+    for (Player* player : {&tbcHoliday,&vanillaHoliday,&wrathHoliday})
+        player->m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill};
+    tbcPenalty.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&penaltyKill,&transform};
+    assert(TurnIn(tbcHoliday,Q(1318))==9075 && TurnIn(tbcPenalty,Q(1318))==8250);
+    assert(TurnIn(vanillaHoliday,Q(2))==1960 && TurnIn(wrathHoliday,Q(1318))==1450);
     // Reductions count from the quest level of the value's era: Rise, Obsidion! is level 52
     // in 1.12 and 46 in 3.3.5, Rage of Blood level 58 in 2.4.3 and -1 in 3.3.5.
     Player obsidion=Character(0,56), rage=Character(8,64);
@@ -895,10 +904,12 @@ void KillCases() {
         assert(KillXP(&holiday,200)==(stage==13 ? 242u : stage==8 ? 220u : 200u));
         assert(KillXP(&transformed,200)==0 && KillXP(&plain,200)==200);
         assert(KillXP(&penalized,200)==(stage==13 ? 110u : 100u));
-        // Objective experience is Wrath content; kills, quests and exploration are unchanged here.
+        // Objective experience is Wrath content. 2.4.3 bonuses also raise exploration, as in
+        // mangos-tbc; penalties and later bonuses do not, and quest gains were raised before.
         assert(GiveXP(plain,500,XPSOURCE_BATTLEGROUND)==(stage==13 ? 500u : 0u));
-        assert(GiveXP(plain,500,XPSOURCE_KILL)==500 && GiveXP(heirloom,500,XPSOURCE_QUEST)==500);
-        assert(GiveXP(heirloom,500,XPSOURCE_EXPLORE)==500);
+        assert(GiveXP(plain,500,XPSOURCE_KILL)==500 && GiveXP(holiday,500,XPSOURCE_QUEST)==500);
+        assert(GiveXP(heirloom,500,XPSOURCE_EXPLORE)==500 && GiveXP(penalized,500,XPSOURCE_EXPLORE)==500);
+        assert(GiveXP(transformed,500,XPSOURCE_EXPLORE)==500 && GiveXP(holiday,500,XPSOURCE_EXPLORE)==(stage==8 ? 550u : 500u));
     }
 }
 
@@ -1004,12 +1015,14 @@ std::vector<int64> Observe() {
         for (uint32 id : {2u,26u,1318u,2881u,3566u,3803u,7563u,8905u,9492u,90001u,90002u,90003u,90005u,90006u,90007u}) {
             Player player=Character(stage,level), aura=Character(stage,level);
             aura.m_modAuras[SPELL_AURA_MOD_XP_QUEST_PCT]={&heirloomQuest,&penaltyQuest};
+            aura.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill,&penaltyKill};
             seen.insert(seen.end(),{WindowXP(&player,&Q(id)),TurnIn(player,Q(id)),TurnIn(player,Q(id)),player.money,
                                     TurnIn(aura,Q(id))});
         }
         Player kill=Character(stage,level);
         kill.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&wickerman,&heirloomKill,&penaltyKill};
-        seen.insert(seen.end(),{KillXP(&kill,200),GiveXP(kill,500,XPSOURCE_BATTLEGROUND),GiveXP(kill,500,XPSOURCE_KILL)});
+        seen.insert(seen.end(),{KillXP(&kill,200),GiveXP(kill,500,XPSOURCE_BATTLEGROUND),GiveXP(kill,500,XPSOURCE_KILL),
+                                GiveXP(kill,500,XPSOURCE_EXPLORE)});
         Player rest=Character(stage,level);
         rest.SetRestBonus(5000);
         sScriptMgr->OnPlayerLogin(&rest);
@@ -1125,6 +1138,15 @@ MUTATIONS = (
     ('TBC battleground XP', 'EraExperiencePolicy.h', 'return era >= Wrath;', 'return era >= TBC;'),
     ('Vanilla experience auras', 'EraExperiencePolicy.h', 'return era == TBC && !WrathOnlyXPBonus(spellId);',
      'return !WrathOnlyXPBonus(spellId);'),
+    ('TBC bonus on quests', 'EraExperience.cpp', '        xp *= GeneralXPBonus(player, era);\n', ''),
+    ('TBC bonus on exploration', 'EraExperience.cpp', '            amount *= GeneralXPBonus(player, era);\n', ''),
+    ('exploration not hooked', 'EraExperience.cpp', '(xpSource != XPSOURCE_KILL && xpSource != XPSOURCE_EXPLORE)',
+     '(xpSource != XPSOURCE_KILL)'),
+    ('general penalties', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);',
+     'return era == TBC && amount != 0 && !WrathOnlyXPBonus(spellId);'),
+    ('general Wrath bonuses', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);',
+     'return era == TBC && amount > 0 && spellId;'),
+    ('general Vanilla bonuses', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 &&', 'return era <= TBC && amount > 0 &&'),
     ('heirloom in TBC', 'EraExperiencePolicy.h', '        case 57353: // Heirloom Experience Bonus +10%\n', ''),
     ('truncated kill XP', 'EraExperiencePolicy.h', 'std::uint32_t(std::lround(double(amount) * kept / applied))',
      'std::uint32_t(double(amount) * kept / applied)'),
