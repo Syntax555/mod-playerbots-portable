@@ -111,7 +111,7 @@ try {
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',
         'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt',
         'docs/class-quests.md',
-        'CONTRIBUTING.md', 'docs/building.md')) {
+        'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream/README.md', 'docs/upstream/checks.py')) {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
@@ -157,7 +157,7 @@ try {
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons/OldAddon/OldAddon.lua',
-        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'CONTRIBUTING.md', 'docs/building.md',
+        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream/README.md',
         'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
         Write-FixtureText (Join-Path $dist $name) 'obsolete export'
     }
@@ -177,7 +177,7 @@ try {
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons', 'defaults',
-        'licenses/MultiBot', 'CONTRIBUTING.md', 'docs/building.md',
+        'licenses/MultiBot', 'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream',
         'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
         Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Assembly retained $name"
     }
@@ -283,7 +283,8 @@ try {
     }
 
     foreach ($redundant in @('addons/MultiBot/Core.lua', 'defaults/worldserver.conf',
-        'CONTRIBUTING.md', 'docs/building.md', 'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe',
+        'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream/README.md', 'docs/upstream/checks.py',
+        'mysql/include/mysql.h', 'mysql/bin/mysqldump.exe',
         'mysql/docs/INFO_BIN', 'mysql/lib/mecab/dic/ipadic_utf-8/sys.dic', 'mysql/lib/plugin/debug/plugin.dll',
         'mysql/bin/libprotobuf-debug.dll', 'mysql/bin/abseil_dll-debug.dll') + $optionalFiles) {
         Test-NegativeZip "redundant file $redundant" 'Redundant development/client' -ExtraEntries @(@{ Name = $redundant; Bytes = [byte[]]@(1) })

@@ -102,7 +102,7 @@ endif()
 file(REMOVE "${PORTABLE_DIST_DIR}/CONTRIBUTING.md")
 file(COPY "${PORTABLE_SOURCE_DIR}/licenses/" DESTINATION "${PORTABLE_DIST_DIR}/licenses")
 file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"
-    PATTERN "building.md" EXCLUDE)
+    PATTERN "building.md" EXCLUDE PATTERN "upstream" EXCLUDE)
 # Compare manifest contents rather than timestamps when assembling again.
 configure_file("${PORTABLE_SOURCE_DIR}/versions.lock.json"
     "${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)

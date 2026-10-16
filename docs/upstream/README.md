@@ -2,23 +2,22 @@
 
 These proposals contain only generic fixes, exported with `git format-patch`
 from clean upstream revisions. They are review artifacts, outside the ordered
-runtime patch chain. Keep the local fixes until an accepted upstream revision
-is pinned and the corresponding local hunks can be removed safely.
+runtime patch chain and the server ZIP. Keep the local fixes until an accepted
+upstream revision is pinned and the corresponding local hunks can be removed
+safely.
 
-| Fix | Upstream offer | Review artifacts |
+| Fix | Upstream status | Review artifacts |
 | --- | --- | --- |
-| Formation velocity guard | [AzerothCore #28141](https://github.com/azerothcore/azerothcore-wotlk/issues/28141) | [Patch](formation-velocity.patch), [proposal](formation-velocity.md) |
-| Talent reset cost underflow | [AzerothCore #28142](https://github.com/azerothcore/azerothcore-wotlk/issues/28142) | [Patch](talent-reset-cost.patch), [proposal](talent-reset-cost.md) |
-| Empty random-battleground candidates | [AzerothCore #28143](https://github.com/azerothcore/azerothcore-wotlk/issues/28143) | [Patch](random-battleground.patch), [proposal](random-battleground.md) |
-| Empty Individual Progression account filters | Submission blocked by GitHub integration permissions | [Patch](individual-progression-filters.patch), [proposal](individual-progression-filters.md) |
+| Formation velocity guard | Offered in [AzerothCore #28141](https://github.com/azerothcore/azerothcore-wotlk/issues/28141) | [Patch](formation-velocity.patch), [proposal](formation-velocity.md) |
+| Talent reset cost underflow | Offered in [AzerothCore #28142](https://github.com/azerothcore/azerothcore-wotlk/issues/28142) | [Patch](talent-reset-cost.patch), [proposal](talent-reset-cost.md) |
+| Empty random-battleground candidates | Offered in [AzerothCore #28143](https://github.com/azerothcore/azerothcore-wotlk/issues/28143) | [Patch](random-battleground.patch), [proposal](random-battleground.md) |
+| Empty Individual Progression account filters | Not yet submitted | [Patch](individual-progression-filters.patch), [proposal](individual-progression-filters.md) |
 
-The three core offers include the complete minimal diff and validation results.
-Creating a GitHub fork returned HTTP 403, so the proposals were offered as issues
-instead of pull requests. Individual Progression issue creation and a comment on
-the related [account-cache PR #1308](https://github.com/ZhengPeiRu21/mod-individual-progression/pull/1308)
-both returned HTTP 403, `Resource not accessible by integration`. The prepared
-Individual Progression proposal can be submitted unchanged with an account that
-can write to that upstream repository:
+The core issues include the complete minimal diff and validation results.
+Submitting the Individual Progression proposal needs an account that can open
+issues in that repository; the related account-cache change is
+[PR #1308](https://github.com/ZhengPeiRu21/mod-individual-progression/pull/1308).
+The prepared proposal can be submitted unchanged:
 
 ```sh
 gh api --method POST repos/ZhengPeiRu21/mod-individual-progression/issues \
