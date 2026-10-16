@@ -84,10 +84,8 @@ and ordinary player actions.
 - [ ] Heirloom item stats and Experience Eliminator availability before Wrath.
 - [ ] Core experience deviations shared by every era: raid groups outside raid
   maps receive the party bonus, and online rest accrues faster in rest areas.
-- [ ] `HandleAcceptGrantLevel` does not recheck `RecruitAFriend.MaxLevel`, so
-  saved grantable levels of linked accounts can still be accepted by a client
-  that sends the packet without a proposal. Recruit-a-Friend started after the
-  2.4.3 release; decide whether TBC and Wrath characters should regain it.
+- [ ] Recruit-a-Friend started after the 2.4.3 release; decide whether TBC and
+  Wrath characters should regain it.
 
 ## Launcher and updates
 
