@@ -129,6 +129,13 @@ login = function(read('src/server/game/Handlers/CharacterHandler.cpp'), 'void Wo
 assert (login.index('pCurrChar->LoadFromDB(') < login.index('AddPlayerToMap(pCurrChar)')
         < login.index('sScriptMgr->OnPlayerLogin(pCurrChar);'))
 bots = read('modules/mod-playerbots/src/Bot/PlayerbotMgr.cpp')
+# Era crossings are marker quests rewarded through RewardQuest, so the completion hook sees them.
+strict_update = between(function(ip_source, 'void IndividualProgression::UpdateProgressionState('),
+                        'if (IsStrictDefaultProgression())', '        return;\n    }')
+assert (strict_update.index('uint32 const questId = 66000 + newState;')
+        < strict_update.index('player->RewardQuest(quest, 0, player, false, false);'))
+assert 'player->RewardQuest(quest, 0, player, false, false);' in function(
+    ip_source, 'void IndividualProgression::ForceUpdateProgressionState(')
 assert 'botSession->HandlePlayerLoginFromDB(holder);' in function(bots, 'void PlayerbotHolder::HandlePlayerBotLoginCallback(')
 # Hooks run in registration order; era experience registers before IP's player script.
 assert ('for (auto const& script : ScriptRegistry<scriptType>::EnabledHooks[hookType]) { action; }'
@@ -819,6 +826,10 @@ void QuestCases() {
     // Rounding up, quests without a level, dailies and quests without any table value.
     Player vanilla46=Character(0,46), vanilla40=Character(0,40), rewardedDaily=Character(0,40);
     assert(TurnIn(vanilla46,Q(90001))==801 && TurnIn(vanilla40,Q(90002))==500);
+    for (auto [level,want] : std::vector<std::pair<uint8,uint32>>{{47,601},{48,401},{49,201},{50,101},{55,101}}) {
+        Player reduced=Character(0,level);
+        assert(TurnIn(reduced,Q(90001))==want);
+    }
     rewardedDaily.SetRewardedQuest(90007);
     assert(TurnIn(rewardedDaily,Q(90007))==700 && TurnIn(rewardedDaily,Q(90007))==700);
     Player lesson=Character(0,20);
@@ -911,14 +922,15 @@ void RestCases() {
     sScriptMgr->OnPlayerLevelChanged(&tbcReaching,69);
     assert(Rested(tbcReaching,0));
     // Rest gathered in an inn at the cap is gone once the next era is earned.
-    Player capped=Character(7,60), cappedTbc=Character(12,70), below=Character(7,59);
-    for (Player* player : {&capped,&cappedTbc,&below}) player->SetRestBonus(5000);
+    Player capped=Character(7,60), cappedTbc=Character(12,70), below=Character(7,59), belowTbc=Character(12,69);
+    for (Player* player : {&capped,&cappedTbc,&below,&belowTbc}) player->SetRestBonus(5000);
     TurnIn(capped,Q(2));
     assert(Rested(capped,5000));
     TurnIn(capped,Q(66008));
     TurnIn(cappedTbc,Q(66013));
     TurnIn(below,Q(66008));
-    assert(Rested(capped,0) && Rested(cappedTbc,0) && Rested(below,5000));
+    TurnIn(belowTbc,Q(66013));
+    assert(Rested(capped,0) && Rested(cappedTbc,0) && Rested(below,5000) && Rested(belowTbc,5000));
 }
 
 void MoneyCases() {
@@ -1101,6 +1113,8 @@ MUTATIONS = (
      'era > EraExperiencePolicy::Wrath)\n            return;'),
     ('reduction threshold', 'EraExperiencePolicy.h', 'if (above <= 5)', 'if (above <= 6)'),
     ('reduction rounding', 'EraExperiencePolicy.h', '* tenths + 9) / 10', '* tenths) / 10'),
+    ('reduction tenth from +11', 'EraExperiencePolicy.h', 'above >= 10 ? 1', 'above >= 11 ? 1'),
+    ('reduction step +7', 'EraExperiencePolicy.h', ': 2 * (10 - above);', ': (above == 7 ? 5 : 2 * (10 - above));'),
     ('quest level -1', 'EraExperiencePolicy.h', '(questLevel > 0 ? questLevel : std::int32_t(level))', '(questLevel)'),
     ('tables without QuestXPFix', 'EraExperience.cpp', 'if (!sIndividualProgression->questXpFix)\n        return quest->XPValue(level);\n',
      ''),
@@ -1122,6 +1136,7 @@ MUTATIONS = (
      'void OnPlayerLevelChanged(Player* player, uint8 /*oldLevel*/) override\n    {\n        (void)player;'),
     ('era crossing rest', 'EraExperience.cpp', '            player->SetRestBonus(0);\n    }\n};', '            (void)0;\n    }\n};'),
     ('Vanilla cap 61', 'EraExperiencePolicy.h', '(era == Vanilla && level >= 60)', '(era == Vanilla && level >= 61)'),
+    ('Wrath marker below the TBC cap', 'EraExperiencePolicy.h', '(questId == 66013 && level >= 70)', '(questId == 66013)'),
     ('money at realm maximum', 'EraExperience.cpp', 'player->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL) || ', ''),
     ('money at quest level', 'EraExperience.cpp', 'EraQuestXP(quest, era, player->GetLevel())',
      'EraQuestXP(quest, era, uint8(quest->GetQuestLevel()))'),
