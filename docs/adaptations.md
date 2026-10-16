@@ -66,9 +66,11 @@ and schedules. Events require the default Individual Progression chain.
 | Frostmane Hold, quest 287 | The SQL update removes prerequisite 420 only when that is the existing value. Ordinary level/faction checks remain; follow-up quest 291 still requires 287. Existing unrelated custom prerequisites are preserved. |
 | Historical priest quests | Original teacher relations and personal race, level and era gates select historical rank-1 rewards. Later ranks use paid training; native Wrath records are retained. See [class quests](class-quests.md). |
 | EraTalents spell groups | A targeted SQL update removes invalid rank or incompatible aura entries from the custom spell groups. Native rank and aura stacking checks remain in force. |
+| Era experience | Quest values, battleground objective XP, XP bonus effects, and rest and quest money at the era cap follow each character's earned era; 2.4.3 quest values come from the pinned TBC DB. See [experience by era](changing-expansions.md#experience-by-era). |
 | Formation movement | Formation velocity falls back to the creature's native walking speed when the computed movement velocity is effectively zero. Ordinary movement calculations remain in use. |
 
 Source: [era creature modifiers](../patches/mod-individual-progression-creature-era-modifiers.patch),
+[era experience](../patches/mod-individual-progression-era-experience.patch),
 [quest availability](../patches/mod-individual-progression-frostmane-hold.patch),
 [spell-group contracts](../patches/mod-era-talents-spell-groups.patch) and
 [formation movement](../patches/azerothcore-formation-minimum-velocity.patch).

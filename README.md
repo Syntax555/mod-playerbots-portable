@@ -21,8 +21,9 @@ database, configuration and first-run setup.
 ## Highlights
 
 - **Earned progression:** players and bots unlock content through their own
-  milestones. Bots start at level 1 with ordinary starter equipment and earn
-  levels, gold and upgrades. See [progression](docs/changing-expansions.md).
+  milestones, and experience follows each character's era. Bots start at level
+  1 with ordinary starter equipment and earn levels, gold and upgrades. See
+  [progression](docs/changing-expansions.md).
 - **Historical talents:** Era Talents integration selects Vanilla, TBC or Wrath
   talent systems from each character's earned era. Matching client files include
   German and English text and selected restored class spells. See
@@ -180,11 +181,11 @@ complete in-game coverage: full dungeon and raid runs, every class quest and the
 
 The server uses the Wrath core and client. Historical trees use Vanilla 1.12.1
 and TBC Classic 2.5.4 data; TBC is not an exact original 2.4.3 simulation.
-Selected class spells, riding prices and battleground rules follow the earned
-era, while other prices, combat formulas and systems keep core behavior. Bot
-questing, navigation and encounter support vary by content, and some upstream
-encounter actions use movement or combat shortcuts. Existing inventories and
-gold are preserved without verifying their origin. See
+Selected class spells, riding prices, battleground and experience rules follow
+the earned era, while other prices, combat formulas and systems keep core
+behavior. Bot questing, navigation and encounter support vary by content, and
+some upstream encounter actions use movement or combat shortcuts. Existing
+inventories and gold are preserved without verifying their origin. See
 [supported scope](docs/configuration.md#supported-scope) and the
 [roadmap](docs/todo.md).
 

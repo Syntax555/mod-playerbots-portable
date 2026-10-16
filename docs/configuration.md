@@ -32,6 +32,7 @@ See the [update guide](updating.md) for manual installation and offline startup.
 | Fresh characters | Level 1, tier 0, normal starter items, zero gold |
 | Strict earned milestones | Enabled; preceding boss and rewarded-quest markers required |
 | TBC / Wrath access | Earned tiers 8 / 13; XP stops at 60 / 70 until unlocked |
+| Experience rules | Each character's earned era; see [experience by era](changing-expansions.md#experience-by-era) |
 | Expansion races | Same-account earned TBC unlock; alts start at tier 0 |
 | New death knights | Blocked by strict mode; existing characters retained |
 | XP, drops, reputation and honor | Normal 1.0 rates |
@@ -43,9 +44,11 @@ See the [update guide](updating.md) for manual installation and offline startup.
 
 `IndividualProgression.StrictEarnedProgression = 1` depends on the module's
 default chain: enabled IP, an empty `CustomProgression` and
-`DisableDefaultProgression = 0`. Random-bot and human accounts share the gates;
-the account exclusion expressions are empty. GM login starts in ordinary visible
-player mode, but explicit GM administration remains possible.
+`DisableDefaultProgression = 0`. `IndividualProgression.EraExperience = 1`
+applies the era experience rules under the same conditions; its historical quest
+values also need `QuestXPFix = 1`. Random-bot and human accounts share the
+gates; the account exclusion expressions are empty. GM login starts in ordinary
+visible player mode, but explicit GM administration remains possible.
 
 Core expansion access is required for restored Vanilla Naxxramas. Optional realm
 ceilings must be changed through the launcher's linked settings, rather than a
@@ -196,9 +199,9 @@ These are shared settings rather than complete per-character historical rules.
 ## Supported scope
 
 The project uses a Wrath core and client. Historical trees and selected spell,
-price and battleground rules do not replace every combat formula, profession,
-pet system, world-data rule or original patch balance value. TBC talents use
-Classic 2.5.4 rather than exact original 2.4.3 data.
+price, battleground and experience rules do not replace every combat formula,
+profession, pet system, world-data rule or original patch balance value. TBC
+talents use Classic 2.5.4 rather than exact original 2.4.3 data.
 
 Bot pathfinding and encounter tactics depend on upstream AI. Disabling teleport
 recovery can leave bots stuck. Autonomous completion of every class quest,

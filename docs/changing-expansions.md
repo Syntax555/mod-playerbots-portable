@@ -57,6 +57,48 @@ remains available; playing accounts should use ordinary player privileges.
 An already-rewarded transition quest becomes usable once the preceding chain is
 complete and the realm ceiling permits advancement. It is not rewarded twice.
 
+## Experience by era
+
+The earned tier selects each character's experience rules: Vanilla before tier
+8, TBC from tier 8 and Wrath from tier 13.
+`IndividualProgression.EraExperience = 1` enables them for players and bots.
+
+| Rule | Vanilla | TBC | Wrath |
+| --- | --- | --- | --- |
+| XP to the next level | 1.12, levels 1–59 | 2.4.3, levels 60–69 | 3.3.5, levels 70–79 |
+| Level cap until the next era | 60 | 70 | 80 |
+| Quest XP | 1.12 values from Individual Progression | 2.4.3 values from the TBC DB | 3.3.5 |
+| Battleground objective XP | None | None | Yes |
+| XP bonus effects | None | Holiday and Auchindoun bonuses | All, including heirlooms |
+| Rested XP at the era cap | None | None | None (core, at 80) |
+| Quest money at the era cap | Quest XP at level 60 × 6.25 copper | Quest XP at level 70 × 6 copper | Core conversion at 80 |
+| Recruit-a-Friend | Unavailable | Unavailable | Unavailable |
+
+Kill XP, exploration XP, party sharing and rested XP below the cap follow the
+same rules in every era. Quests without a historical value keep their 3.3.5
+value, and `IndividualProgression.QuestXPFix = 0` keeps 3.3.5 quest values in
+every era. Repeating a quest that does not reset daily, weekly or monthly gives
+no XP. Individual Progression re-arms four Vanilla turn-ins
+(`RepeatableVanillaQuestsXP`), such as Troll Necklace Bounty and Morrowgrain;
+each turn-in pays the character's era value. Recruit-a-Friend triple XP, level
+grants, summons and reputation bonus are off realm-wide.
+
+Limits:
+
+- Characters outside their era's level band, such as existing death knights
+  from before strict mode or GM level changes, use their level's table.
+- Heirlooms keep their stats; only their XP bonus is ignored before Wrath. A
+  kill with an ignored bonus can differ by one XP point.
+- The client quest log calculates rewards from its own 3.3.5 data; quest-giver
+  windows show the era value. At the era cap the window still lists XP, and the
+  money is paid on turn-in.
+- In the `vanilla` and `tbc` realm modes, quests at the realm maximum pay the
+  core conversion.
+- Pet XP and the elite multipliers of dungeon and raid creatures use
+  AzerothCore values in every era.
+- Rest gathered in an inn at the era cap gives no XP and is cleared at login,
+  at a level change and when the next era is earned.
+
 ## Accounts and the bot population
 
 Blood elf and draenei creation uses earned markers on the same account. An

@@ -22,7 +22,7 @@ GAMEPLAY_COMMAND = "cmake/tests/run_fixtures.py gameplay"
 # and the documentation check.
 GAMEPLAY = (
     "TestFixtureSupport",
-    "TestEarnedProgression", "TestEarnedBotBrackets", "TestEarnedAuctions", "TestStrictEarnedProgression",
+    "TestEarnedProgression", "TestEraExperience", "TestEarnedBotBrackets", "TestEarnedAuctions", "TestStrictEarnedProgression",
     "TestEarnedEraPrices", "TestEraTalents", "TestPlayerbotEraBattlegrounds", "TestEarnedEraBattlegrounds",
     "TestEarnedArenaCore", "TestBattlegroundEraRules", "TestEarnedEraPvpRules", "TestWindowsResourceIncludes",
     "TestMasterFlightLearning", "TestBotQuestAreaTriggers",

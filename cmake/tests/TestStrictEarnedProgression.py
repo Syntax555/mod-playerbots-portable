@@ -219,6 +219,7 @@ struct IndividualProgression {
     static uint8 GetAccountProgression(uint32 account) { return accounts[account]; }
     uint8 GetPlayerProgressionFromQuests(Player*) const;
     bool IsStrictDefaultProgression() const;
+    bool EraExperienceActive() const { return false; }
     bool HasStrictEarnedMilestone(Player*,uint8) const;
     static bool IsEligibleStrictKill(Player*,Creature*);
     void UpdateProgressionState(Player*,ProgressionState) const;
@@ -239,6 +240,8 @@ struct IndividualProgression {
 std::map<uint32,uint8> IndividualProgression::accounts;
 IndividualProgression progression;
 auto* sIndividualProgression=&progression;
+// Era experience is off here; TestEraExperience covers quest money at era caps.
+uint32 IndividualProgression_EraCapQuestMoney(Player*,Quest const*) { assert(false); return 0; }
 '''
 
 tests = r'''
