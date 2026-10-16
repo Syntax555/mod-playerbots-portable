@@ -9,13 +9,21 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core, reject_mutants, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    reject_mutants,
+    run_fixture,
+    source_argument,
+)
 
 
 repository = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, default=prepared_core(repository))
-parser.add_argument('--module', type=Path)
+source_argument(parser, 'core', default=prepared_core(repository))
+source_argument(parser, 'module')
 args = parser.parse_args()
 module = args.module or args.core / 'modules/mod-era-events'
 production = (module / 'src/EraEvents.cpp').read_text()
@@ -503,7 +511,7 @@ int main() {
 
 def build(directory, executable):
     return [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-            '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+            *SANITIZER_FLAGS, '-no-pie',
             '-I', str(directory), str(directory / 'fixture.cpp'), '-o', str(executable)]
 
 

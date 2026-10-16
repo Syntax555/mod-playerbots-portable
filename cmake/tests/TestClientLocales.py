@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from FixtureSupport import make_wdbc, wdbc
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("client_locales", ROOT / "cmake/ClientLocales.py")
@@ -37,15 +39,12 @@ def fixture(filename, records, numeric_bias=0):
                 else:
                     values[start + locale] = 0
         rows.append(struct.pack(f"<{fields}I", *values))
-    return (struct.pack("<4s4I", b"WDBC", len(rows), fields, fields * 4, len(strings))
-            + b"".join(rows) + bytes(strings))
+    return make_wdbc(rows, bytes(strings), fields)
 
 
 def decoded(raw):
-    _, count, fields, row_size, _ = struct.unpack_from("<4s4I", raw)
-    rows = [list(struct.unpack_from(f"<{fields}I", raw, 20 + index * row_size))
-            for index in range(count)]
-    return rows, raw[20 + count * row_size:]
+    rows, strings = wdbc(raw)
+    return [list(struct.unpack(f"<{len(row) // 4}I", row)) for row in rows], strings
 
 
 def value(raw, key, field):

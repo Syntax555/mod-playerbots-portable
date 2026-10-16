@@ -8,12 +8,12 @@ import sqlite3
 import struct
 import subprocess
 
-from FixtureSupport import prepared_core
+from FixtureSupport import prepared_core, source_argument
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path)
-parser.add_argument('--module', type=Path)
+source_argument(parser, 'core')
+source_argument(parser, 'module')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)

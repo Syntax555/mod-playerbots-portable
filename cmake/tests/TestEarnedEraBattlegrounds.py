@@ -6,12 +6,19 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path,
+source_argument(parser,
                     default=prepared_core(repo) / 'modules/mod-individual-progression')
 args = parser.parse_args()
 module = args.source
@@ -509,7 +516,7 @@ with tempfile.TemporaryDirectory(prefix='earned-era-bg-') as scratch:
     source.write_text(prelude + earned_era + bridge + production + native_skirmish + checks)
     binary = folder / 'fixture'
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
+                    *SANITIZER_FLAGS, '-g',
                     str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=TIMEOUT)
     original = source.read_text()
@@ -524,7 +531,7 @@ with tempfile.TemporaryDirectory(prefix='earned-era-bg-') as scratch:
         assert old in original, f'{label} mutation was not applied'
         source.write_text(original.replace(old, new))
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pthread',
-                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g',
+                        *SANITIZER_FLAGS, '-g',
                         str(source), '-o', str(binary)], check=True)
         result = subprocess.run([str(binary)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 check=False, timeout=TIMEOUT)

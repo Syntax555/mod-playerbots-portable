@@ -12,12 +12,12 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import prepared_core
+from FixtureSupport import prepared_core, source_argument
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, default=prepared_core(repo))
+source_argument(parser, default=prepared_core(repo))
 args = parser.parse_args()
 cmake = shutil.which('cmake')
 assert cmake, 'CMake is required to verify resource compiler metadata'

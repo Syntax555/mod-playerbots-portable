@@ -12,7 +12,14 @@ import sqlite3
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 def numeric_row(path, quest_id):
@@ -25,8 +32,8 @@ def numeric_row(path, quest_id):
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, help='prepared core source directory')
-parser.add_argument('--module', type=Path, help='prepared Individual Progression module')
+source_argument(parser, 'core', help='prepared core source directory')
+source_argument(parser, 'module', help='prepared Individual Progression module')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
@@ -225,6 +232,6 @@ with tempfile.TemporaryDirectory(prefix='frostmane-hold-') as temporary:
     executable = temporary / 'fixture'
     cpp.write_text(fixture)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(cpp), '-o', str(executable)], check=True)
+        *SANITIZER_FLAGS, str(cpp), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
 print('Native quest eligibility: before/after, level, Alliance/Horde, follow-up, Senir and custom gates passed')

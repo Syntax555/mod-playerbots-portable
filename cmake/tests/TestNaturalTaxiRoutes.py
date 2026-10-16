@@ -11,7 +11,14 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    run_fixture,
+)
 
 
 repository = Path(__file__).resolve().parents[2]
@@ -666,7 +673,7 @@ int main()
 
 
 COMPILE = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1', '-D_GLIBCXX_ASSERTIONS',
-           '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
+           *SANITIZER_FLAGS]
 
 
 def build(directory, sources, name):

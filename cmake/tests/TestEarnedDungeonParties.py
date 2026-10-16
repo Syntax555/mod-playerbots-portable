@@ -7,7 +7,15 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core, reject_mutants
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    reject_mutants,
+    source_argument,
+)
 
 
 STUBS = r'''
@@ -503,7 +511,7 @@ def native_contracts(core, source):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--source',type=Path)
+    source_argument(parser)
     args=parser.parse_args()
     repo=Path(__file__).resolve().parents[2]
     core=prepared_core(repo)
@@ -537,7 +545,7 @@ def main():
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')
         flags=['-std=c++20','-O1','-Wall','-Wextra','-Wno-unused-parameter','-I',str(work)]
         if os.name!='nt':
-            flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer','-no-pie']
+            flags+=[*SANITIZER_FLAGS,'-no-pie']
         subprocess.run([compiler,*flags,str(work/'fixture.cpp'),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True,timeout=TIMEOUT)
         mutations=[

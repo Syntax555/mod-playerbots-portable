@@ -11,7 +11,14 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    run_fixture,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -34,7 +41,7 @@ def compile_run(directory, name, source, includes=()):
     cpp = directory / (name + '.cpp')
     cpp.write_text(source)
     jobs.append(([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-                  '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie', '-pthread',
+                  *SANITIZER_FLAGS, '-no-pie', '-pthread',
                   *[flag for include in includes for flag in ('-I', str(include))],
                   str(cpp), '-o', str(directory / name)], None))
 

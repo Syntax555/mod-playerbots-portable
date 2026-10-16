@@ -12,15 +12,22 @@ import sqlite3
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path,
-                    default=prepared_core(repo) / 'modules/mod-individual-progression',
-                    help='prepared Individual Progression module directory')
-parser.add_argument('--core', type=Path, default=prepared_core(repo), help='prepared core directory')
+source_argument(parser,
+                default=prepared_core(repo) / 'modules/mod-individual-progression',
+                help='prepared Individual Progression module directory')
+source_argument(parser, 'core', default=prepared_core(repo), help='prepared core directory')
 args = parser.parse_args()
 module = args.source
 core = args.core
@@ -432,7 +439,7 @@ with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
         assert not old or source.count(old) == 1, label
         target.write_text(source.replace(old, new) if old else source)
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
-                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+                        *SANITIZER_FLAGS,
                         '-I', str(module / 'src'), str(target), '-o', str(executable)], check=True)
         result = subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
         if not old:

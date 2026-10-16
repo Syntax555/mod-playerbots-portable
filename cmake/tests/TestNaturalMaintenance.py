@@ -13,7 +13,15 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    run_fixture,
+    source_argument,
+)
 
 
 def declaration(source, opening):
@@ -21,7 +29,7 @@ def declaration(source, opening):
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+source_argument(parser, help='prepared Playerbots src directory')
 args = parser.parse_args()
 module = args.source or prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-playerbots/src'
 values_header = (module / 'Ai/Base/Value/MaintenanceValues.h').read_text()
@@ -1147,8 +1155,8 @@ def build(directory, parts, name):
         text = text.replace('@@' + key.upper() + '@@', parts[key])
     (directory / (name + '.cpp')).write_text(text + tests)
     executable = directory / name
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-fsanitize=address,undefined',
-                    '-fno-omit-frame-pointer', '-I', str(module / 'Bot'), str(directory / (name + '.cpp')),
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers',
+                    *SANITIZER_FLAGS, '-I', str(module / 'Bot'), str(directory / (name + '.cpp')),
                     '-o', str(executable)], check=True)
     return run_fixture([str(executable)])
 

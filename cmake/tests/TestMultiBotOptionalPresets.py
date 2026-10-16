@@ -11,11 +11,11 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import TIMEOUT, cxx, function, prepared_core, source_argument
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, help='prepared core source directory')
+source_argument(parser, 'core', help='prepared core source directory')
 parser.add_argument('--bridge', type=Path, help='bridge source override')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]

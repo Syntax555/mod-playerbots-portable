@@ -10,13 +10,21 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    run_fixture,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, default=prepared_core(repo))
-parser.add_argument('--module', type=Path)
+source_argument(parser, 'core', default=prepared_core(repo))
+source_argument(parser, 'module')
 args = parser.parse_args()
 module = args.module or args.core / 'modules/mod-individual-progression'
 trainer_source = (args.core / 'src/server/game/Entities/Creature/Trainer.cpp').read_text()
@@ -228,7 +236,7 @@ with tempfile.TemporaryDirectory(prefix='portable-era-prices-') as temporary:
         (variant_path / 'prices.cpp').write_text(source)
         executable = variant_path / 'prices'
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
-                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                        *SANITIZER_FLAGS, '-no-pie',
                         str(variant_path / 'prices.cpp'), '-o', str(executable)], check=True)
         return run_fixture([str(executable)])
 

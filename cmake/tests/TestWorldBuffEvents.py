@@ -18,12 +18,21 @@ import struct
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, in_parallel, prepared_core, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    run_fixture,
+    source_argument,
+    wdbc,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, help='prepared core directory')
-parser.add_argument('--module', type=Path, help='prepared world-buff module directory')
+source_argument(parser, 'core', help='prepared core directory')
+source_argument(parser, 'module', help='prepared world-buff module directory')
 parser.add_argument('--baseline-repository', type=Path, help='Git cache containing the pinned upstream commit')
 parser.add_argument('--spell-dbc', type=Path, help='pinned English Spell.dbc used by historical client packaging')
 parser.add_argument('--duration-dbc', type=Path, help='pinned stock SpellDuration.dbc')
@@ -54,11 +63,9 @@ durations = {42: (3600000, 0, 3600000), 367: (7200000, 0, 7200000)}
 
 
 def dbc_records(data, fields):
-    magic, count, actual_fields, record_size, string_size = struct.unpack_from('<4s4I', data)
-    assert magic == b'WDBC' and actual_fields == fields and record_size == fields * 4
-    assert len(data) == 20 + count * record_size + string_size
-    return {record[0]: record for record in struct.iter_unpack(
-        '<' + 'I' * fields, data[20:20 + count * record_size])}
+    rows, _ = wdbc(data, fields)
+    records = (struct.unpack(f'<{fields}I', row) for row in rows)
+    return {record[0]: record for record in records}
 
 
 def verify_spell_contracts(data):
@@ -868,7 +875,7 @@ with tempfile.TemporaryDirectory(prefix='portable-world-buff-events-') as direct
         source.write_text(fixture + '\n' + source_text + '\n' + loader_text + '\n' + tests)
         executable = temporary / name
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                        *SANITIZER_FLAGS, '-no-pie',
                         '-I', str(temporary), str(source), '-o', str(executable)], check=True)
         return run_fixture([str(executable)], env=environment)
 

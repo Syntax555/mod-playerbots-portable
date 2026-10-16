@@ -12,7 +12,13 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 def enum(source, name):
@@ -23,8 +29,8 @@ def enum(source, name):
 
 repository = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, default=prepared_core(repository), help='prepared core directory')
-parser.add_argument('--source', type=Path, help='prepared Individual Progression module directory')
+source_argument(parser, 'core', default=prepared_core(repository), help='prepared core directory')
+source_argument(parser, help='prepared Individual Progression module directory')
 args = parser.parse_args()
 core = args.core
 module = args.source or core / 'modules/mod-individual-progression'
@@ -274,7 +280,7 @@ with tempfile.TemporaryDirectory(prefix='portable-map-gates-') as directory:
         executable = temporary / 'gates'
         source.write_text(source_text)
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-g', '-O1',
-                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(source), '-o', str(executable)],
+                        *SANITIZER_FLAGS, str(source), '-o', str(executable)],
                        check=True)
         result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=120, check=False)
         if failure is None:

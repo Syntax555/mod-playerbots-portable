@@ -8,10 +8,9 @@ has none of these refusals, must fail every check.
 """
 
 import argparse
-from pathlib import Path
 import re
 
-from FixtureSupport import function, pinned_source, prepared_core
+from FixtureSupport import function, pinned_source, prepared_core, source_argument
 
 
 # Comments and string or character literal contents, blanked so that braces and
@@ -196,7 +195,7 @@ def failing(bridge):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, help='MultiBotBridge.cpp to check instead of the prepared one')
+    source_argument(parser, help='MultiBotBridge.cpp to check instead of the prepared one')
     args = parser.parse_args()
     path = args.source or prepared_core() / 'modules/mod-multibot-bridge/src/MultiBotBridge.cpp'
     if not path.is_file():
