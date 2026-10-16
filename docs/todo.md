@@ -76,9 +76,6 @@ and ordinary player actions.
 
 ## Launcher and updates
 
-- [ ] A MySQL Windows service under a system account cannot be opened by a
-  normal user, so the update guard refuses every update. Read the image path
-  without opening the process.
 - [ ] The update journal is rewritten, manifest included, once per installed
   file. Change the format only with a recovery path for older launchers.
 - [ ] Sign `UPDATE_MANIFEST.json` so a token that can upload release assets
