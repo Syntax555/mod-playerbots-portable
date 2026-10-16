@@ -105,6 +105,8 @@ assert ('if (level < sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAY
 refer = read('src/server/game/Handlers/ReferAFriendHandler.cpp')
 assert ('else if (target->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n'
         '        error = ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I;') in refer
+accept_grant = function(refer, 'void WorldSession::HandleAcceptGrantLevel(')
+assert accept_grant.count('GiveLevel(') == 1 and refer.count('GiveLevel(') == 1
 assert ('if (source != REPUTATION_SOURCE_SPELL && GetsRecruitAFriendBonus(false))\n'
         '        percent *= 1.0f + sWorld->getRate(RATE_REPUTATION_RECRUIT_A_FRIEND_BONUS);') in player_cpp
 world_cpp = read('src/server/game/World/World.cpp')
@@ -433,6 +435,7 @@ inline World world;
 inline World* sWorld=&world;
 template<class... Args> void LogInfo(Args&&...) {}
 #define LOG_INFO(...) LogInfo(__VA_ARGS__)
+#define LOG_DEBUG(...) LogInfo(__VA_ARGS__)
 struct ConfigMgr {
     std::map<std::string,std::string> values;
     template<class T> T GetOption(std::string const& name,T const& def,bool=true) const {
@@ -498,13 +501,14 @@ struct Unit {
     float GetTotalAuraMultiplier(AuraType auratype) const;
     float GetTotalAuraMultiplier(AuraType auraType,std::function<bool(AuraEffect const*)> const& predicate) const;
 };
+struct Player; struct WorldPacket;
 struct WorldSession {
-    uint32 account=1, recruiter=0; bool recruits=false, bot=false;
+    uint32 account=1, recruiter=0; bool recruits=false, bot=false; Player* _player=nullptr;
     uint32 GetAccountId() const { return account; }
     uint32 GetRecruiterId() const { return recruiter; }
     bool IsARecruiter() const { return recruits; }
+    void HandleAcceptGrantLevel(WorldPacket& recvData);
 };
-struct Player;
 struct GroupReference {
     Player* player=nullptr; GroupReference* following=nullptr;
     Player* GetSource() const { return player; }
@@ -519,10 +523,13 @@ struct Group {
     GroupReference* GetFirstMember() { return members.empty() ? nullptr : &members[0]; }
 };
 struct Player : Unit {
-    uint8 level=1; bool inWorld=true; mutable WorldSession session; Group* group=nullptr; float _restBonus=0;
+    uint8 level=1, grantableLevels=0; bool inWorld=true; mutable WorldSession session; Group* group=nullptr; float _restBonus=0;
     int64 money=0; std::unordered_set<uint32> m_RewardedQuests; std::map<uint32,uint32> fields;
     std::map<std::pair<uint32,uint8>,uint8> bytes;
     uint8 GetLevel() const { return level; }
+    void GiveLevel(uint8 newLevel) { level=newLevel; }
+    uint8 GetGrantableLevels() const { return grantableLevels; }
+    void SetGrantableLevels(uint8 levels) { grantableLevels=levels; }
     bool IsInWorld() const { return inWorld; }
     WorldSession* GetSession() const { return &session; }
     Group* GetGroup() const { return group; }
@@ -543,7 +550,23 @@ struct Player : Unit {
     void ModifyMoney(int64 change) { money+=change; }
     uint32 RewardQuestXP(Quest const* quest);
 };
-struct Creature; struct ObjectGuid { using LowType=uint32; };
+struct Creature;
+struct ObjectGuid {
+    using LowType=uint32; uint64 raw=0;
+    struct PackedGuidReader { ObjectGuid& guid; };
+    PackedGuidReader ReadAsPacked() { return {*this}; }
+};
+struct WorldPacket {
+    uint64 guid=0;
+    WorldPacket& operator>>(ObjectGuid::PackedGuidReader reader) { reader.guid.raw=guid; return *this; }
+};
+namespace ObjectAccessor {
+inline std::map<uint64,Player*> players;
+inline Player* GetPlayer(Player const&,ObjectGuid const guid) {
+    auto const player=players.find(guid.raw);
+    return player==players.end() ? nullptr : player->second;
+}
+}
 struct ChatHandler {
     explicit ChatHandler(WorldSession*) {}
     void SendSysMessage(char const*) {}
@@ -671,6 +694,7 @@ tests = r'''
 
 @TABLES@
 @CORE_FUNCTIONS@
+@ACCEPT_GRANT@
 @IP_FUNCTIONS@
 int progressionUpdates=0;
 void IndividualProgression::UpdateProgressionState(Player*,ProgressionState) const { ++progressionUpdates; }
@@ -917,6 +941,16 @@ void RecruitCases(bool active) {
     assert(world.getRate(RATE_REPUTATION_RECRUIT_A_FRIEND_BONUS)==(active ? 0.0f : 0.1f));
     recruit.SetRestBonus(5000);
     assert(recruit.bytes.at({PLAYER_BYTES_2,3})==(active ? REST_STATE_RESTED : REST_STATE_RAF_LINKED));
+    // Levels saved before activation: accepting without a proposal keeps RecruitAFriend.MaxLevel.
+    recruit.level=40; recruit.grantableLevels=2; recruiter.session._player=&recruiter;
+    Player capped=Character(0,60); capped.session.account=2; capped.session._player=&capped;
+    ObjectAccessor::players={{1,&recruit}};
+    WorldPacket accept; accept.guid=1;
+    recruiter.session.HandleAcceptGrantLevel(accept);
+    assert(recruiter.GetLevel()==(active ? 30 : 31) && recruit.GetGrantableLevels()==(active ? 2 : 1));
+    capped.session.HandleAcceptGrantLevel(accept);
+    assert(capped.GetLevel()==60 && recruit.GetGrantableLevels()==(active ? 2 : 1));
+    ObjectAccessor::players.clear();
 }
 
 std::size_t EraTableQueries() {
@@ -1037,7 +1071,8 @@ int main() {
 }
 '''
 
-for placeholder, text in (('@TABLES@', tables), ('@CORE_FUNCTIONS@', core_functions), ('@IP_FUNCTIONS@', ip_functions),
+for placeholder, text in (('@TABLES@', tables), ('@CORE_FUNCTIONS@', core_functions), ('@ACCEPT_GRANT@', accept_grant),
+                          ('@IP_FUNCTIONS@', ip_functions),
                           ('@LEGACY_HOOKS@', legacy_hooks), ('@WORLD_LOADING@', world_loading),
                           ('@REWARD_XP@', reward_xp), ('@WINDOW_XP@', window_xp), ('@KILL_XP@', kill_xp)):
     assert tests.count(placeholder) == 1, placeholder
@@ -1096,6 +1131,8 @@ MUTATIONS = (
      'if (false)\n                moneyRew ='),
     ('Recruit-a-Friend level', 'EraExperience.cpp',
      'sWorld->setIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL, 0);', ''),
+    ('Recruit-a-Friend accept limit', 'fixture.cpp',
+     'if (_player->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n        return;\n', ''),
     ('Recruit-a-Friend inverted', 'EraExperience.cpp', 'if (!sIndividualProgression->EraExperienceActive())\n            return;\n\n        sWorld',
      'if (sIndividualProgression->EraExperienceActive())\n            return;\n\n        sWorld'),
     ('TBC table always loaded', 'fixture.cpp',

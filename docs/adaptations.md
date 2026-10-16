@@ -70,7 +70,8 @@ and schedules. Events require the default Individual Progression chain.
 | Formation movement | Formation velocity falls back to the creature's native walking speed when the computed movement velocity is effectively zero. Ordinary movement calculations remain in use. |
 
 Source: [era creature modifiers](../patches/mod-individual-progression-creature-era-modifiers.patch),
-[era experience](../patches/mod-individual-progression-era-experience.patch),
+[era experience](../patches/mod-individual-progression-era-experience.patch) with its
+[Recruit-a-Friend grant limit](../patches/azerothcore-recruit-a-friend-grant-limit.patch),
 [quest availability](../patches/mod-individual-progression-frostmane-hold.patch),
 [spell-group contracts](../patches/mod-era-talents-spell-groups.patch) and
 [formation movement](../patches/azerothcore-formation-minimum-velocity.patch).
