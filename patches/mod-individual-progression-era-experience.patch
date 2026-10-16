@@ -9226,10 +9226,10 @@ index 0000000..c65b8d0
 +(9665, 60);
 diff --git a/src/EraExperience.cpp b/src/EraExperience.cpp
 new file mode 100644
-index 0000000..29c398a
+index 0000000..6d6e7af
 --- /dev/null
 +++ b/src/EraExperience.cpp
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,190 @@
 +/*
 +    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
 +*/
@@ -9271,12 +9271,14 @@ index 0000000..29c398a
 +        value->second, questLevel != levels.end() ? questLevel->second : quest->GetQuestLevel(), level);
 +}
 +
-+float GeneralXPBonus(Player* player, uint8 era)
++// One effect at a time with truncation, as mangos-tbc's Player::GiveXP.
++uint32 WithGeneralXPBonus(Player* player, uint8 era, uint32 xp)
 +{
-+    return player->GetTotalAuraMultiplier(SPELL_AURA_MOD_XP_PCT, [era](AuraEffect const* effect)
-+    {
-+        return EraExperiencePolicy::GeneralXPBonus(era, effect->GetId(), effect->GetAmount());
-+    });
++    for (AuraEffect const* effect : player->GetAuraEffectsByType(SPELL_AURA_MOD_XP_PCT))
++        if (EraExperiencePolicy::GeneralXPBonus(era, effect->GetId(), effect->GetAmount()))
++            xp = uint32(xp * (1.0f + effect->GetAmount() / 100.0f));
++
++    return xp;
 +}
 +
 +void ClearRestAtEraCap(Player* player)
@@ -9333,8 +9335,7 @@ index 0000000..29c398a
 +        {
 +            return EraExperiencePolicy::XPAuraCounts(era, effect->GetId(), effect->GetAmount());
 +        });
-+        xp *= GeneralXPBonus(player, era);
-+        xpValue = xp;
++        xpValue = WithGeneralXPBonus(player, era, xp);
 +    }
 +
 +    void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 xpSource) override
@@ -9358,7 +9359,7 @@ index 0000000..29c398a
 +
 +        if (xpSource == XPSOURCE_EXPLORE)
 +        {
-+            amount *= GeneralXPBonus(player, era);
++            amount = WithGeneralXPBonus(player, era, amount);
 +            return;
 +        }
 +
@@ -9421,10 +9422,10 @@ index 0000000..29c398a
 +}
 diff --git a/src/EraExperiencePolicy.h b/src/EraExperiencePolicy.h
 new file mode 100644
-index 0000000..b7c251b
+index 0000000..5e578f3
 --- /dev/null
 +++ b/src/EraExperiencePolicy.h
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,114 @@
 +/*
 +    Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
 +*/
@@ -9479,6 +9480,13 @@ index 0000000..b7c251b
 +    }
 +}
 +
++// Thrallmar's and Honor Hold's Favor cast this effect, and Player::GiveXP
++// already adds their 5% to every gain in Hellfire Peninsula.
++constexpr bool CoreAppliedXPBonus(std::uint32_t spellId)
++{
++    return spellId == 32172; // [PH] Buffbot Buff Effect
++}
++
 +// 1.12 had no experience aura; 2.4.3 had the holiday and Auchindoun bonuses.
 +// Penalties always apply.
 +constexpr bool XPAuraCounts(std::uint8_t era, std::uint32_t spellId, std::int32_t amount)
@@ -9486,7 +9494,7 @@ index 0000000..b7c251b
 +    if (amount <= 0 || era > TBC)
 +        return true;
 +
-+    return era == TBC && !WrathOnlyXPBonus(spellId);
++    return era == TBC && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);
 +}
 +
 +// mangos-tbc applies the experience bonus auras to every gain, quests and
@@ -9494,7 +9502,7 @@ index 0000000..b7c251b
 +// kills only.
 +constexpr bool GeneralXPBonus(std::uint8_t era, std::uint32_t spellId, std::int32_t amount)
 +{
-+    return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);
++    return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);
 +}
 +
 +// Removes ignored bonus effects from experience the core already multiplied.
