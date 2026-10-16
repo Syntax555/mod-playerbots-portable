@@ -11,19 +11,6 @@ index 408b99d..aa1ea82 100644
          if (!GetConfig().teachTranquilizingShot || !bot->IsClass(CLASS_HUNTER) ||
              bot->GetLevel() < TRANQUILIZING_SHOT_LEVEL || bot->HasSpell(SPELL_TRANQUILIZING_SHOT))
              return;
-diff --git a/src/Raids/BlackwingLair/BwlPositions.cpp b/src/Raids/BlackwingLair/BwlPositions.cpp
-index 083c608..5f0253a 100644
---- a/src/Raids/BlackwingLair/BwlPositions.cpp
-+++ b/src/Raids/BlackwingLair/BwlPositions.cpp
-@@ -854,7 +854,7 @@ public:
-                 continue;
- 
-             botAI->RequestSpellInterrupt();
--            botAI->ResetActionDuration();
-+            botAI->SetNextCheckDelay(0);
-         }
-     }
- };
 diff --git a/src/Raids/BlackwingLair/BwlRaidClear.cpp b/src/Raids/BlackwingLair/BwlRaidClear.cpp
 index 15617c3..b36c964 100644
 --- a/src/Raids/BlackwingLair/BwlRaidClear.cpp
@@ -60,45 +47,10 @@ index 15617c3..b36c964 100644
          using namespace RaidClear::BlackwingLair;
          if (player->GetMapId() != MAP_ID || !RaidClear::GetConfig().IsRaidEnabled(MAP_ID) || !GET_PLAYERBOT_AI(player))
              return;
-diff --git a/src/Raids/MoltenCore/McRaidClear.cpp b/src/Raids/MoltenCore/McRaidClear.cpp
-index c4ce317..ca184ae 100644
---- a/src/Raids/MoltenCore/McRaidClear.cpp
-+++ b/src/Raids/MoltenCore/McRaidClear.cpp
-@@ -247,7 +247,7 @@ public:
-                 continue;
- 
-             botAI->RequestSpellInterrupt();
--            botAI->ResetActionDuration();
-+            botAI->SetNextCheckDelay(0);
-         }
-     }
- };
-diff --git a/src/Raids/OnyxiasLair/OnyRaidClear.cpp b/src/Raids/OnyxiasLair/OnyRaidClear.cpp
-index 9f22e31..326ff57 100644
---- a/src/Raids/OnyxiasLair/OnyRaidClear.cpp
-+++ b/src/Raids/OnyxiasLair/OnyRaidClear.cpp
-@@ -860,7 +860,7 @@ public:
-                 continue;
- 
-             botAI->RequestSpellInterrupt();
--            botAI->ResetActionDuration();
-+            botAI->SetNextCheckDelay(0);
-         }
-     }
- };
 diff --git a/src/Raids/ZulGurub/ZgRaidClear.cpp b/src/Raids/ZulGurub/ZgRaidClear.cpp
-index eb517b3..fe0a1f1 100644
+index eb517b3..f836745 100644
 --- a/src/Raids/ZulGurub/ZgRaidClear.cpp
 +++ b/src/Raids/ZulGurub/ZgRaidClear.cpp
-@@ -499,7 +499,7 @@ public:
-                 continue;
- 
-             botAI->RequestSpellInterrupt();
--            botAI->ResetActionDuration();
-+            botAI->SetNextCheckDelay(0);
-         }
-     }
- };
 @@ -1125,6 +1125,8 @@ namespace
      std::vector<std::pair<Player*, uint32>> ControlsToLetGo(Player* bot)
      {
