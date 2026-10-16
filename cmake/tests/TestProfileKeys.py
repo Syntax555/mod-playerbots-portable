@@ -12,7 +12,7 @@ import argparse
 from pathlib import Path
 import re
 
-from FixtureSupport import prepared_core
+from FixtureSupport import prepared_core, source_argument
 
 
 # Families whose full key names are assembled at runtime from source literals.
@@ -91,7 +91,7 @@ def problems(keys, literals):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', type=Path, help='prepared core checkout with its modules')
+    source_argument(parser, help='prepared core checkout with its modules')
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[2]
     core = args.source or prepared_core(repository)

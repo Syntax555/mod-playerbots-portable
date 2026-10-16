@@ -12,6 +12,8 @@ import tempfile
 import unittest
 import zipfile
 
+from FixtureSupport import make_wdbc as dbc
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("era_client_package", ROOT / "cmake/PackageEraClient.py")
@@ -355,10 +357,6 @@ class HistoricalNoticeInputTests(unittest.TestCase):
             notice.unlink()
             with self.assertRaises(FileNotFoundError):
                 PACKAGE.historical_class_files(root, lock)
-
-
-def dbc(rows, strings=b"\0", fields=234):
-    return struct.pack("<4s4I", b"WDBC", len(rows), fields, fields * 4, len(strings)) + b"".join(rows) + strings
 
 
 def record(spell, name_offset=0, localized_fields=None):

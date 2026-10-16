@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import re
 
-from FixtureSupport import prepared_core
+from FixtureSupport import prepared_core, source_argument
 
 
 # Module patch -> release copy. A new module core patch fails until it is mapped.
@@ -65,7 +65,7 @@ def problems(copies: dict[str, str], originals: dict[str, str], allowed: list[tu
 
 repository = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--module', type=Path, default=prepared_core(repository) / 'modules/mod-era-talents',
+source_argument(parser, 'module', default=prepared_core(repository) / 'modules/mod-era-talents',
                     help='prepared mod-era-talents directory')
 args = parser.parse_args()
 lock = json.loads((repository / 'versions.lock.json').read_text())

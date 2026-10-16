@@ -13,12 +13,18 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
-parser.add_argument('--core', type=Path, help='prepared core source directory')
+source_argument(parser, help='prepared Playerbots src directory')
+source_argument(parser, 'core', help='prepared core source directory')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
@@ -719,7 +725,7 @@ with tempfile.TemporaryDirectory(prefix='portable-master-flight-') as temporary:
     ]
     executable = temporary / 'flight-learning'
     command = [cxx(), '-std=c++20', '-pthread', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-               '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
+               *SANITIZER_FLAGS]
     command += [argument for path in includes for argument in ('-I', str(path))]
     command += [str(temporary / 'production.cpp'), str(temporary / 'tests.cpp'),
                 *production_sources, '-o', str(executable)]

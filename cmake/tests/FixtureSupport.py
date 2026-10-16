@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import urllib.request
@@ -19,11 +20,33 @@ REPOSITORY = Path(__file__).resolve().parents[2]
 # Seconds a fixture or mutant executable may run. Mutants remove loop and budget
 # bounds on purpose, so a hang must fail instead of holding the CI job.
 TIMEOUT = 60
+SANITIZER_FLAGS = ('-fsanitize=address,undefined', '-fno-omit-frame-pointer')
 
 
 def prepared_core(repository=REPOSITORY):
     """The generated core checkout that contains the prepared modules."""
     return repository / '.module-cache/prepared-core'
+
+
+def source_argument(parser, name='source', **options):
+    """Add a fixture's source directory option, preserving its default and help."""
+    parser.add_argument('--' + name, type=Path, **options)
+
+
+def wdbc(data, fields=None):
+    """Read raw WDBC records and their string block independently of production readers."""
+    assert len(data) >= 20
+    magic, count, actual_fields, record_size, string_size = struct.unpack_from('<4s4I', data)
+    assert magic == b'WDBC' and actual_fields > 0 and record_size == actual_fields * 4
+    assert fields is None or actual_fields == fields
+    end = 20 + count * record_size
+    assert len(data) == end + string_size
+    return [data[offset:offset + record_size] for offset in range(20, end, record_size)], data[end:]
+
+
+def make_wdbc(rows, strings=b'\0', fields=234):
+    """Build independent WDBC fixture bytes from raw records."""
+    return struct.pack('<4s4I', b'WDBC', len(rows), fields, fields * 4, len(strings)) + b''.join(rows) + strings
 
 
 def function(source, signature):

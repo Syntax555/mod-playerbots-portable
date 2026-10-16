@@ -13,12 +13,18 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
-parser.add_argument('--core', type=Path, help='prepared core source directory')
+source_argument(parser, help='prepared Playerbots src directory')
+source_argument(parser, 'core', help='prepared core source directory')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
@@ -773,7 +779,7 @@ with tempfile.TemporaryDirectory(prefix='portable-loot-roll-policy-') as directo
         core / 'src/server/game/Server/Protocol', core / 'src/server/game/Entities/Object',
     ]
     command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-               '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie']
+               *SANITIZER_FLAGS, '-no-pie']
     command += [argument for path in includes for argument in ('-I', str(path))]
     command += [str(source), '-o', str(executable)]
     subprocess.run(command, check=True)

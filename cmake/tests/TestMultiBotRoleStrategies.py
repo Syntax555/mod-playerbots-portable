@@ -13,6 +13,7 @@ from FixtureSupport import (
     git_apply,
     multibot_sources,
     prepared_core,
+    source_argument,
     unpatched,
 )
 
@@ -143,7 +144,7 @@ def run_lua(lua, directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--addon-source', type=Path, help='pinned pristine or prepared MultiBot source')
-    parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+    source_argument(parser, help='prepared Playerbots src directory')
     parser.add_argument('--lua', default=shutil.which('lua5.1') or shutil.which('lua'), help='Lua 5.1 executable')
     args = parser.parse_args()
     if not args.lua:

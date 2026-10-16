@@ -6,7 +6,14 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core, run_fixture
+from FixtureSupport import (
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    run_fixture,
+    source_argument,
+)
 
 
 STUBS = r'''
@@ -134,7 +141,7 @@ int main(){
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--source',type=Path)
+    source_argument(parser)
     args=parser.parse_args()
     repo=Path(__file__).resolve().parents[2]
     core=prepared_core(repo)

@@ -6,7 +6,15 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core, reject_mutants
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    reject_mutants,
+    source_argument,
+)
 
 
 STUBS = r'''
@@ -125,7 +133,7 @@ int main(){
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--source',type=Path)
+    source_argument(parser)
     args=parser.parse_args()
     core=prepared_core()
     source=args.source or core/'modules/mod-dungeon-clear/src'
@@ -156,7 +164,7 @@ def main():
         (work/'fixture.cpp').write_text('#include <cstdint>\nusing uint32=std::uint32_t;\n'+constants+'\n'+code+HARNESS)
         flags=['-std=c++20','-O1','-Wall','-Wextra','-Wno-unused-parameter']
         if os.name!='nt':
-            flags+=['-fsanitize=address,undefined','-fno-omit-frame-pointer','-no-pie']
+            flags+=[*SANITIZER_FLAGS,'-no-pie']
         def build(directory,exe):
             return [compiler,*flags,str(directory/'fixture.cpp'),'-o',str(exe)]
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')

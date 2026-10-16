@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import SANITIZER_FLAGS, TIMEOUT, cxx, function, prepared_core
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -171,6 +171,6 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-brackets-') as director
     cpp = Path(directory) / 'brackets.cpp'
     binary = Path(directory) / 'brackets'
     cpp.write_text(source)
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
-                    '-fno-omit-frame-pointer', '-no-pie', '-I', str(pb / 'Bot'), str(cpp), '-o', str(binary)], check=True)
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    '-no-pie', '-I', str(pb / 'Bot'), str(cpp), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=TIMEOUT)

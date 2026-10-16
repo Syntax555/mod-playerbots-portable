@@ -13,7 +13,14 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 def declaration(source, opening):
@@ -21,7 +28,7 @@ def declaration(source, opening):
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+source_argument(parser, help='prepared Playerbots src directory')
 args = parser.parse_args()
 module = args.source or prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-playerbots/src'
 ai_header = (module / 'Bot/PlayerbotAI.h').read_text()
@@ -404,7 +411,7 @@ def build(directory, parts, name):
     executable = directory / name
     # The pre-fix chat hooks ignore their language parameter, so mutants must still compile.
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer', str(directory / (name + '.cpp')),
+                    *SANITIZER_FLAGS, str(directory / (name + '.cpp')),
                     '-o', str(executable)], check=True)
     return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
 

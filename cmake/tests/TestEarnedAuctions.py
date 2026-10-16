@@ -11,12 +11,12 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, prepared_core
+from FixtureSupport import SANITIZER_FLAGS, TIMEOUT, cxx, prepared_core, source_argument
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path,
+source_argument(parser,
                     default=prepared_core(repo) / 'modules/mod-playerbots/src',
                     help='prepared Playerbots src directory')
 parser.add_argument('--travel-source', type=Path,
@@ -914,7 +914,7 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporar
     executable = Path(temporary) / 'auctions'
     target.write_text(source)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                    *SANITIZER_FLAGS, '-no-pie',
                     '-g', '-I', str(module), '-I', str(travel_module),
                     str(target), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)

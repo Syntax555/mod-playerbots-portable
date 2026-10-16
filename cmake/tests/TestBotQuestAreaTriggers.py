@@ -13,12 +13,18 @@ import resource
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, help='prepared core source directory')
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+source_argument(parser, 'core', help='prepared core source directory')
+source_argument(parser, help='prepared Playerbots src directory')
 parser.add_argument('--baseline', type=Path, help='original pinned Playerbots src directory')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
@@ -652,7 +658,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-area-trigger-') as tempora
                        .replace('QUEST_TRIGGERS', ',\n'.join(quest_triggers)))
         executable = temporary / label
         command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-                   '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
+                   *SANITIZER_FLAGS]
         command += [argument for path in includes for argument in ('-I', str(path))]
         subprocess.run(command + [str(cpp), '-o', str(executable)], check=True)
         subprocess.run([str(executable)] + (['baseline'] if label == 'baseline' else []),

@@ -11,12 +11,19 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core, run_fixture
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    run_fixture,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+source_argument(parser, help='prepared Playerbots src directory')
 parser.add_argument('--era-source', type=Path, help='prepared EraTalents module directory')
 args = parser.parse_args()
 core = prepared_core(repo)
@@ -176,7 +183,7 @@ with tempfile.TemporaryDirectory(prefix='portable-era-tree-') as temporary:
             assert text != fixture, 'Tree of Life mutation did not apply'
         source.write_text(text)
         subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-                        '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                        *SANITIZER_FLAGS, '-no-pie',
                         '-I', str(work), '-I', str(module / 'Bot'), str(source), '-o', str(executable)], check=True)
         result = run_fixture([str(executable)])
         if mutated:

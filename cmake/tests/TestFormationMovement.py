@@ -11,11 +11,17 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, help='prepared core source directory')
+source_argument(parser, 'core', help='prepared core source directory')
 parser.add_argument('--baseline', type=Path, help='original pinned core source directory')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
@@ -307,7 +313,7 @@ with tempfile.TemporaryDirectory(prefix='portable-formation-') as temporary:
         cpp.write_text(fixture + production + tests)
         executable = temporary / name
         command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-g', '-O1',
-                   '-fsanitize=address,undefined', '-fno-omit-frame-pointer']
+                   *SANITIZER_FLAGS]
         if name == 'original':
             command.append('-DORIGINAL_CORE')
         command += [str(cpp), '-o', str(executable)]

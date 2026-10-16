@@ -12,11 +12,18 @@ import re
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, help='prepared Playerbots src directory')
+source_argument(parser, help='prepared Playerbots src directory')
 args = parser.parse_args()
 module = args.source or prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-playerbots/src'
 warlock = module / 'Ai/Class/Warlock'
@@ -173,8 +180,8 @@ def build(directory, parts, name):
     text = text.replace('REGISTERED', registration.group(1))
     (directory / (name + '.cpp')).write_text(text)
     executable = directory / name
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
-                    '-fno-omit-frame-pointer', str(directory / (name + '.cpp')), '-o', str(executable)], check=True)
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    str(directory / (name + '.cpp')), '-o', str(executable)], check=True)
     return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
 
 

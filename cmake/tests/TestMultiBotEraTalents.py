@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 
 from FixtureSupport import (
+    SANITIZER_FLAGS,
     TIMEOUT,
     cxx,
     function,
@@ -171,7 +172,7 @@ auto* sWorld=&world;
     source.write_text(code)
     compiler = cxx()
     subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                    *SANITIZER_FLAGS, '-no-pie',
                     str(source), '-o', str(binary)], check=True)
     result = subprocess.run([str(binary)], check=True, capture_output=True, text=True, timeout=TIMEOUT)
     return [line.split('~', 2) for line in result.stdout.splitlines()]

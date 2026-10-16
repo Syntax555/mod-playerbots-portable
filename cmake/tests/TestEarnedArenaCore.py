@@ -5,12 +5,19 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--source', type=Path, default=prepared_core(repo), help='Prepared core source tree')
+source_argument(parser, default=prepared_core(repo), help='Prepared core source tree')
 core = parser.parse_args().source
 
 
@@ -296,6 +303,6 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-arena-') as temporary:
     executable = Path(temporary) / 'arena'
     source.write_text(fixture)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
-                    '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-no-pie',
+                    *SANITIZER_FLAGS, '-no-pie',
                     str(source), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)

@@ -12,6 +12,7 @@ from FixtureSupport import (
     prepared_core,
     reject_mutants,
     run_fixture,
+    source_argument,
 )
 
 
@@ -217,7 +218,7 @@ def native_checks(sources):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source', type=Path, help='mod-raid-clear/src to check instead of the prepared one')
+    source_argument(parser, help='mod-raid-clear/src to check instead of the prepared one')
     args = parser.parse_args()
     source = args.source or prepared_core() / 'modules/mod-raid-clear/src'
     if not source.is_dir():

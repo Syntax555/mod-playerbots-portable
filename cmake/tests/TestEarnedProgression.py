@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import SANITIZER_FLAGS, TIMEOUT, cxx, function, prepared_core
 
 
 root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
@@ -227,5 +227,5 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
     executable = Path(temporary) / 'regression'
     target.write_text(source)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
-                    '-fsanitize=address,undefined', str(target), '-o', str(executable)], check=True)
+                    *SANITIZER_FLAGS, str(target), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)

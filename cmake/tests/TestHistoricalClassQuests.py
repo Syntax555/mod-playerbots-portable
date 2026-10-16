@@ -19,7 +19,17 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, pinned_source, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    make_wdbc,
+    pinned_source,
+    prepared_core,
+    source_argument,
+    wdbc,
+)
 import yaml
 
 
@@ -86,7 +96,7 @@ def compile_run(temporary, name, source, expected=True):
     cpp.write_text(source)
     command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror']
     if os.name != 'nt':
-        command += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie']
+        command += [*SANITIZER_FLAGS, '-fno-pie', '-no-pie']
     subprocess.run(command + [str(cpp), '-o', str(executable)], check=True)
     result = subprocess.run([str(executable)], text=True, capture_output=True, check=False, timeout=TIMEOUT)
     if expected:
@@ -97,7 +107,7 @@ def compile_run(temporary, name, source, expected=True):
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path)
+source_argument(parser, 'core')
 parser.add_argument('--ip', type=Path)
 parser.add_argument('--era', type=Path)
 parser.add_argument('--base-dbc', type=Path)
@@ -673,19 +683,15 @@ assert set(range(948081, 948088)) | {948089, 948090, 948091} <= set(helpers)
 
 
 def decoded_dbc(data):
-    magic, count, fields, size, strings_size = struct.unpack_from('<4s4I', data)
-    assert magic == b'WDBC' and fields == 234 and size == 936
-    strings = 20 + count * size
-    assert len(data) == strings + strings_size
+    rows, strings = wdbc(data, 234)
     records = {}
-    for number in range(count):
-        raw = data[20 + number * size:20 + (number + 1) * size]
+    for raw in rows:
         typed = []
         for index, field_type in enumerate(types):
             value = struct.unpack_from('<f' if field_type == 'float' else '<i' if field_type == 'signed' else '<I', raw, index * 4)[0]
             if field_type == 'string':
-                end = data.index(b'\0', strings + value)
-                value = data[strings + value:end].decode('utf-8')
+                end = strings.index(b'\0', value)
+                value = strings[value:end].decode('utf-8')
             typed.append(value)
         records[typed[0]] = (typed, raw)
     return records
@@ -839,7 +845,7 @@ with tempfile.TemporaryDirectory(prefix='historical-class-spells-') as directory
             records.append(client._encode_record(row, pool))
         strings = b'\0' + pool.appended()
         base = temporary / 'base.dbc'
-        base.write_bytes(struct.pack('<4s4I', b'WDBC', len(records), 234, 936, len(strings)) + b''.join(records) + strings)
+        base.write_bytes(make_wdbc(records, strings))
     output = temporary / 'Spell.dbc'
     client.build(dataset_paths, base, output)
     emitted = decoded_dbc(output.read_bytes())

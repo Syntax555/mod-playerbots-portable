@@ -16,13 +16,20 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, default=prepared_core(repo))
-parser.add_argument('--module', type=Path)
+source_argument(parser, 'core', default=prepared_core(repo))
+source_argument(parser, 'module')
 parser.add_argument('--base-dbc', type=Path)
 args = parser.parse_args()
 module = args.module or args.core / 'modules/mod-era-talents'
@@ -375,7 +382,7 @@ with tempfile.TemporaryDirectory(prefix='portable-era-spell-groups-') as tempora
     source = path / 'spell-groups.cpp'
     binary = path / 'spell-groups'
     source.write_text(stub + methods + checks)
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fmax-errors=5', '-fsanitize=address,undefined',
-                    '-fno-omit-frame-pointer', '-no-pie', str(source), '-o', str(binary)], check=True)
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fmax-errors=5', *SANITIZER_FLAGS,
+                    '-no-pie', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=TIMEOUT)
 print('Era spell groups: 13-row migration is targeted and idempotent; spell/rank data and stock rules unchanged')

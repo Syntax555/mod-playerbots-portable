@@ -6,11 +6,18 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--source', type=Path, help='prepared Playerbots module directory')
+source_argument(parser, help='prepared Playerbots module directory')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
 module = args.source if args.source else prepared_core(repo) / 'modules/mod-playerbots'
@@ -454,7 +461,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-era-bg-') as temporary:
     (tmp / 'fixture.cpp').write_text(fixture)
     executable = tmp / 'fixture'
     command = [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-pedantic', '-pthread',
-               '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie',
+               *SANITIZER_FLAGS, '-fno-pie', '-no-pie',
                '-I', str(tmp), str(tmp / 'fixture.cpp'), str(tmp / 'BattlegroundQueuePolicy.cpp'), '-o', str(executable)]
     subprocess.run(command, check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)

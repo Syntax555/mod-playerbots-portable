@@ -11,11 +11,18 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import cxx, function, pinned_source, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    pinned_source,
+    prepared_core,
+    source_argument,
+)
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--core', type=Path, help='prepared core source directory')
+source_argument(parser, 'core', help='prepared core source directory')
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
@@ -787,7 +794,7 @@ with tempfile.TemporaryDirectory(prefix='multibot-trainer-money-') as directory:
     executable = temporary / 'trainer-money'
     subprocess.run(
         [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-         '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+         *SANITIZER_FLAGS,
          str(source), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=30,
                    env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
