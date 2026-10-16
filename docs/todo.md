@@ -92,8 +92,6 @@ and ordinary player actions.
 ## Release and tests
 
 - [ ] Measure a compiler cache for the Windows compile step.
-- [ ] Build `mpqread` once in the client job and pass it to the fixtures that
-  read the client patch.
 - [ ] Share the sanitizer build flags, the `--source`/`--core`/`--module`
   arguments and the WDBC helpers through `FixtureSupport`, and move the child
   fixtures of `TestEarnedProgression` into `run_fixtures.py` groups.

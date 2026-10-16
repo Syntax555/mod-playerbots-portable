@@ -165,11 +165,12 @@ jobs:
         run: |
           curl --fail --location --output output/SpellDuration.dbc "$LOCALE_RAW_URL/dbc/SpellDuration.dbc"
           python3 cmake/tests/TestWorldBuffEvents.py --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip" --duration-dbc output/SpellDuration.dbc \
-            --spell-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc"
+            --spell-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --mpq-reader .module-cache/mpqread
 
       - name: Verify historical class quest spells in the packaged client
         run: |
-          python3 cmake/tests/TestHistoricalClassQuests.py --base-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip"
+          python3 cmake/tests/TestHistoricalClassQuests.py --base-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip" \
+            --mpq-reader .module-cache/mpqread
 
       - name: Upload verified historical client ZIP
         uses: actions/upload-artifact@v7

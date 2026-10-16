@@ -580,6 +580,7 @@ def build(args):
         verified_files, verified_manifest = verify_zip(output, lock)
         if verified_files != files or verified_manifest != manifest:
             raise ValueError("Packaged client files differ from verified build inputs")
+        shutil.copy2(mpqread, cache / "mpqread")
         print(f"Verified historical client ZIP: {output} ({len(files)} files, generation {generation})")
         print(f"SHA-256: {sha(output.read_bytes())}")
 
