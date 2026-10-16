@@ -137,8 +137,12 @@ assert {int(spell) for spell in re.findall(r'spellId == (\d+)', function(policy,
 assert ('if (level < sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n            if (level % 2 == 0)'
         in function(player_cpp, 'void Player::GiveLevel('))
 refer = read('src/server/game/Handlers/ReferAFriendHandler.cpp')
-assert ('else if (target->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n'
-        '        error = ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I;') in refer
+for check in ('else if (target->GetTeamId() != _player->GetTeamId())\n        error = ERR_REFER_A_FRIEND_DIFFERENT_FACTION;',
+              'else if (target->GetLevel() >= _player->GetLevel())\n        error = ERR_REFER_A_FRIEND_TARGET_TOO_HIGH;',
+              'else if (target->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n'
+              '        error = ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I;',
+              'else if (target->GetGroup() != _player->GetGroup())\n        error = ERR_REFER_A_FRIEND_NOT_IN_GROUP;'):
+    assert check in function(refer, 'void WorldSession::HandleGrantLevel('), check
 accept_grant = function(refer, 'void WorldSession::HandleAcceptGrantLevel(')
 assert accept_grant.count('GiveLevel(') == 1 and refer.count('GiveLevel(') == 1
 assert ('if (source != REPUTATION_SOURCE_SPELL && GetsRecruitAFriendBonus(false))\n'
@@ -458,6 +462,7 @@ enum ServerConfigs { CONFIG_MAX_PLAYER_LEVEL, CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_
     CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL_DIFFERENCE, RATE_REPUTATION_RECRUIT_A_FRIEND_BONUS, RATE_XP_QUEST,
     RATE_XP_QUEST_DF, RATE_REST_MAX_BONUS, RATE_REWARD_BONUS_MONEY };
 enum UpdateFields { PLAYER_BYTES_2=1, PLAYER_NEXT_LEVEL_XP=2, PLAYER_REST_STATE_EXPERIENCE=3 };
+enum TeamId { TEAM_ALLIANCE, TEAM_HORDE };
 struct World {
     std::map<int,uint32> ints; std::map<int,float> rates;
     // WorldConfig defaults, which Initialize restores before OnAfterConfigLoad.
@@ -565,6 +570,7 @@ struct Group {
 };
 struct Player : Unit {
     uint8 level=1, grantableLevels=0; bool inWorld=true; mutable WorldSession session; Group* group=nullptr; float _restBonus=0;
+    TeamId team=TEAM_ALLIANCE;
     int64 money=0; std::unordered_set<uint32> m_RewardedQuests; std::map<uint32,uint32> fields;
     std::map<std::pair<uint32,uint8>,uint8> bytes;
     uint8 GetLevel() const { return level; }
@@ -574,6 +580,7 @@ struct Player : Unit {
     bool IsInWorld() const { return inWorld; }
     WorldSession* GetSession() const { return &session; }
     Group* GetGroup() const { return group; }
+    TeamId GetTeamId() const { return team; }
     bool IsInMap(Player const*) const { return true; }
     bool IsAtRecruitAFriendDistance(Player const*) const { return true; }
     @QUEST_REWARDED@
@@ -1028,15 +1035,26 @@ void RecruitCases(bool active) {
     assert(world.getRate(RATE_REPUTATION_RECRUIT_A_FRIEND_BONUS)==(active ? 0.0f : 0.1f));
     recruit.SetRestBonus(5000);
     assert(recruit.bytes.at({PLAYER_BYTES_2,3})==(active ? REST_STATE_RESTED : REST_STATE_RAF_LINKED));
-    // Levels saved before activation: accepting without a proposal keeps RecruitAFriend.MaxLevel.
+    // Levels saved before activation: accepting without a proposal keeps every check of the proposal.
     recruit.level=40; recruit.grantableLevels=2; recruiter.session._player=&recruiter;
-    Player capped=Character(0,60); capped.session.account=2; capped.session._player=&capped;
     ObjectAccessor::players={{1,&recruit}};
     WorldPacket accept; accept.guid=1;
     recruiter.session.HandleAcceptGrantLevel(accept);
     assert(recruiter.GetLevel()==(active ? 30 : 31) && recruit.GetGrantableLevels()==(active ? 2 : 1));
-    capped.session.HandleAcceptGrantLevel(accept);
-    assert(capped.GetLevel()==60 && recruit.GetGrantableLevels()==(active ? 2 : 1));
+    uint8 const saved=recruit.GetGrantableLevels();
+    auto refused=[&](Player recipient,uint8 granterLevel) {
+        recipient.session.account=2; recipient.session._player=&recipient; recruit.level=granterLevel;
+        uint8 const level=recipient.GetLevel();
+        recipient.session.HandleAcceptGrantLevel(accept);
+        recruit.level=40;
+        return recipient.GetLevel()==level && recruit.GetGrantableLevels()==saved;
+    };
+    // RecruitAFriend.MaxLevel, the granter's level, the faction and the group each refuse alone.
+    Player capped=Character(0,60), equal=Character(0,40), foreign=Character(0,30), outside=Character(0,30);
+    capped.group=equal.group=foreign.group=&group; foreign.team=TEAM_HORDE;
+    assert(refused(capped,65) && refused(equal,40) && refused(foreign,40) && refused(outside,40));
+    Player below=Character(0,59); below.group=&group;
+    assert(refused(below,65)==active);
     ObjectAccessor::players.clear();
 }
 
@@ -1251,7 +1269,11 @@ MUTATIONS = (
     ('Recruit-a-Friend level', 'EraExperience.cpp',
      'sWorld->setIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL, 0);', ''),
     ('Recruit-a-Friend accept limit', 'fixture.cpp',
-     'if (_player->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n        return;\n', ''),
+     '_player->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL) ||', ''),
+    ('Recruit-a-Friend accept above the granter', 'fixture.cpp', '_player->GetLevel() >= other->GetLevel() || ', ''),
+    ('Recruit-a-Friend accept across factions', 'fixture.cpp', '_player->GetTeamId() != other->GetTeamId() ||', ''),
+    ('Recruit-a-Friend accept outside the group', 'fixture.cpp',
+     ' ||\n        _player->GetGroup() != other->GetGroup())', ')'),
     ('Recruit-a-Friend inverted', 'EraExperience.cpp', 'if (!sIndividualProgression->EraExperienceActive())\n            return;\n\n        sWorld',
      'if (sIndividualProgression->EraExperienceActive())\n            return;\n\n        sWorld'),
     ('TBC table always loaded', 'fixture.cpp',
