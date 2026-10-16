@@ -81,8 +81,6 @@ and ordinary player actions.
   without opening the process.
 - [ ] The update journal is rewritten, manifest included, once per installed
   file. Change the format only with a recovery path for older launchers.
-- [ ] Close the short window in which `startup.exe` is missing between moving
-  the old launcher to the backup and installing the new one.
 - [ ] Sign `UPDATE_MANIFEST.json` so a token that can upload release assets
   cannot push code to installations.
 - [ ] Evaluate starting `mysqld` with `--no-monitor` and tracking the server
