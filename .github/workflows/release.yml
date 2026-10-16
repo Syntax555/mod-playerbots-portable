@@ -315,7 +315,9 @@ jobs:
           Write-Output '::add-matcher::.github/problem-matchers/msvc.json'
           cmake --build build --config Release --parallel 2 2>&1 | Tee-Object -Variable buildLog
           $buildExitCode = $LASTEXITCODE
-          if ($buildExitCode -ne 0 -and @($buildLog | Where-Object { "$_" -match '\berror C1060\b' }).Count -gt 0) {
+          # cl.exe reports C1060; MSBuild's CL task can also run out of memory itself.
+          $memoryFailure = '\berror C1060\b|\bSystem[.]OutOfMemoryException\b'
+          if ($buildExitCode -ne 0 -and @($buildLog | Where-Object { "$_" -match $memoryFailure }).Count -gt 0) {
               # Keep successful objects and retry the memory failure with one native project.
               Write-Output 'Compiler memory exhaustion: retrying with one parallel project.'
               $env:CMAKE_BUILD_PARALLEL_LEVEL = '1'
