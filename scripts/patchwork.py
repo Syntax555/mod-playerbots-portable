@@ -5,7 +5,8 @@
       Extract the pinned upstream revision of the core, module or addon that
       lists the patch in versions.lock.json, apply the preceding patches of its
       chain and commit them as tag 'base', then apply the target patch to the
-      working tree. Prints the work tree; edit the sources there.
+      working tree. Prints the work tree; edit the sources there. A new patch
+      is listed in the chain first and starts from an empty work tree diff.
 
   python3 scripts/patchwork.py save <work tree>
       Regenerate the patch from the work tree and check that the complete
@@ -100,7 +101,9 @@ def open_patch(patch):
     git(tree, 'add', '-A')
     git(tree, 'commit', '-qm', 'base', '--allow-empty')
     git(tree, 'tag', 'base')
-    apply(tree, root / patch)
+    # A patch listed in the lock without a file yet starts empty at its position.
+    if (root / patch).exists():
+        apply(tree, root / patch)
     (tree / '.git' / 'patchwork.json').write_text(json.dumps({'repository': str(root), 'patch': patch}))
     print(tree)
 

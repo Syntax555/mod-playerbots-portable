@@ -30,10 +30,12 @@ cmake -P cmake/PrepareModules.cmake
 ```
 
 `open` extracts the pinned upstream revision, commits the preceding patches of
-the chain as tag `base` and applies the target patch. `save` regenerates the
-patch from the work tree and checks that the whole chain still applies to the
-pinned revision; if a later patch of the chain stops applying, open and save
-that one too. Delete the work trees under `.module-cache/patchwork/` afterwards.
+the chain as tag `base` and applies the target patch. A new patch is listed at
+its position in `versions.lock.json` first; `open` then starts it empty. `save`
+regenerates the patch from the work tree and checks that the whole chain still
+applies to the pinned revision; if a later patch of the chain stops applying,
+open and save that one too. Delete the work trees under
+`.module-cache/patchwork/` afterwards.
 
 Compile each changed C++ file against `.module-cache/prepared-core`, then run
 the fixtures and the other checks the change touches, as the
