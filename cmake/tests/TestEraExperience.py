@@ -199,7 +199,12 @@ assert len(ip_values) == 5657
 revisions = {source['name']: source['revision'] for source in lock['historicalClassData']['sources']}
 # entry: (RewMoneyMaxLevel, QuestLevel, value) recorded from tbc-db ebe51a83.
 TBC_SPOTS = {2: (1500, 30, 2500), 5: (240, 20, 400), 1318: (4950, 60, 8250), 9372: (37500, 63, 10417),
-             9492: (75900, 70, 12650), 2881: (0, 45, 0), 3803: (2820, 55, 4700), 7563: (4650, 58, 7750)}
+             9492: (75900, 70, 12650), 5401: (0, 55, 0), 7563: (4650, 58, 7750)}
+# Rows tbc-db ebe51a83 cannot hold a 2.4.3 value for: RewMoneyMaxLevel of six times the full value
+# (Striking Back 11953: 57300, Avast Ye, Scallywag 1036: 5700, The New Frontier 1004: 4950,
+# Morrowgrain to Darnassus 3803: 2820) and zero with withheld money (An Earnest Proposition 8905,
+# Hero of the Mag'har 10212, Troll Necklace Bounty 2881).
+TBC_ABSENT = {11953, 1036, 1004, 3803, 8905, 10212, 2881}
 # entry: QuestLevel recorded from classic-db ec4f596; patch 2.3.0 lowered these.
 VANILLA_LEVEL_SPOTS = {2: 30, 3566: 52, 630: 51, 618: 50, 3371: 55}
 TBC_HEADER = ('DROP TABLE IF EXISTS `custom_quest_xp_tbc`;\nCREATE TABLE `custom_quest_xp_tbc` (\n'
@@ -232,6 +237,15 @@ def check_era_values(text):
     assert 26 not in values and 27 not in values and all(level > 0 for _, level in values.values())
     for entry, (money, level, xp) in TBC_SPOTS.items():
         assert era_generator.full_xp(level, money) == xp and values.get(entry) == (xp, level), entry
+    assert not TBC_ABSENT & set(values)
+    # Every value stays within 1.5 times the larger of the quest's 1.12 and 3.3.5 values, and no
+    # quest that withholds its maximum-level money (QUEST_FLAGS_NO_MONEY_FROM_XP, _HIDDEN_REWARDS) is 0.
+    for entry, (xp, level) in values.items():
+        quest = core_quests[entry]
+        assert xp or not int(quest['Flags']) & era_generator.NO_MONEY_FLAGS, entry
+        native_level = int(quest['QuestLevel']) if int(quest['QuestLevel']) > 0 else level
+        reference = max(ip_values.get(entry, 0), era_generator.native_full_xp(native_level, int(quest['RewardXPDifficulty'])))
+        assert 2 * xp <= 3 * reference, (entry, xp, reference)
     assert set(levels) <= set(ip_values) and all(level > 0 for level in levels.values())
     for entry, level in VANILLA_LEVEL_SPOTS.items():
         assert levels.get(entry) == level, entry
@@ -239,21 +253,36 @@ def check_era_values(text):
 
 
 assert core_quests[26]['QuestLevel'] == core_quests[27]['QuestLevel'] == '-1'
+assert era_generator.NO_MONEY_FLAGS == sum(int(re.search(rf'\b{name} += (0x[0-9A-F]+),', quest_h)[1], 16)
+                                           for name in ('QUEST_FLAGS_NO_MONEY_FROM_XP', 'QUEST_FLAGS_HIDDEN_REWARDS'))
 assert core_quests[7563]['QuestLevel'] == '-1' and core_quests[3566]['QuestLevel'] == '46'
 era_text = era_sql.read_text()
 tbc_values, vanilla_levels = check_era_values(era_text)
-assert len(tbc_values) == 5703 and sum(1 for xp, _ in tbc_values.values() if xp == 0) == 904
+assert len(tbc_values) == 5503 and sum(1 for xp, _ in tbc_values.values() if xp == 0) == 730
 assert len(vanilla_levels) == 3664
 if args.classic_db and args.tbc_db:
     assert era_generator.generate(args.classic_db, args.tbc_db, core) == era_text, 'regenerated era quest tables differ'
     print('Era quest tables regenerate byte for byte from the classic-db and tbc-db checkouts')
 after_26 = min(entry for entry in tbc_values if entry > 26)
+
+
+def tbc_row(entry, xp, level):
+    following = min(other for other in tbc_values if other > entry)
+    return era_text.replace(f'\n({following}, ', f'\n({entry}, {xp}, {level}),\n({following}, ', 1)
+
+
 for label, mutant, divisor in (
     ('spot value', era_text.replace('\n(1318, 8250, 60),', '\n(1318, 8251, 60),'), 3.6),
     ('spot row', era_text.replace('\n(9492, 12650, 70),', ''), 3.6),
     ('TBC quest level', era_text.replace('\n(7563, 7750, 58),', '\n(7563, 7750, -1),'), 3.6),
     ('level -1 row', era_text.replace(f'\n({after_26}, ', f'\n(26, 400, 1),\n({after_26}, ', 1), 3.6),
     ('1.12 quest level', era_text.replace('\n(3566, 52),', '\n(3566, 46),'), 3.6),
+    ('Striking Back ten times too high', tbc_row(11953, 95500, 60), 3.6),
+    ('Avast Ye, Scallywag ten times too high', tbc_row(1036, 9500, 60), 3.6),
+    ('The New Frontier ten times too high', tbc_row(1004, 8250, 55), 3.6),
+    ('A Little Luck ten times too high', tbc_row(6606, 9500, 60), 3.6),
+    ('withheld money as no experience', tbc_row(8905, 0, 60), 3.6),
+    ("Chen's Empty Keg withheld money as no experience", tbc_row(822, 0, 24), 3.6),
     ('generator divisor', era_text, 3.5),
 ):
     assert divisor != 3.6 or mutant != era_text, label
@@ -313,38 +342,9 @@ special_flags = {int(row['ID']): row['SpecialFlags'] for row in era_generator.ta
     read('data/sql/base/db_world/quest_template_addon.sql'), 'quest_template_addon')}
 quest_rows = ',\n'.join(
     '{{{}, {QuestLevel}, {RewardXPDifficulty}, {Flags}, {}}}'.format(entry, special_flags.get(entry, '0'), **core_quests[entry])
-    for entry in (2, 26, 1318, 2881, 3566, 3803, 7563, 9492))
-# QuestXP.dbc Exp[1..8] for levels 1-100, recorded from the pinned client data
-# (Haeniken/TrinityCore-3.3.5-data-multilang b21c949 dbc/deDE/QuestXP.dbc,
-# SHA-256 ae88d842e994dccad08d58983f8c524c0aa51a3557ebbb5aa687098298a7b8d5); Exp[0] and Exp[9] are 0.
-QUEST_XP = '''
-    10 20 40 60 80 100 120 160 | 15 45 85 130 170 215 255 340 | 25 65 125 190 250 315 380 500 | 35 90 180 270 355 445 540 710
-    45 110 225 335 450 560 670 900 | 55 135 270 405 540 680 810 1080 | 65 160 315 475 630 790 950 1260 | 70 175 350 530 700 880 1050 1400
-    80 195 390 590 780 980 1150 1560 | 85 210 420 630 840 1050 1250 1680 | 90 220 440 660 880 1100 1300 1760 | 90 225 455 680 910 1150 1350 1820
-    90 230 455 680 910 1150 1350 1820 | 100 245 490 740 980 1250 1450 1960 | 105 270 540 800 1050 1350 1600 2100 | 115 290 580 880 1150 1450 1750 2300
-    125 315 630 950 1250 1600 1900 2500 | 135 340 680 1000 1350 1700 2050 2700 | 145 365 730 1100 1450 1800 2200 2900 | 155 390 780 1150 1550 1950 2350 3100
-    165 415 830 1250 1650 2050 2500 3300 | 175 435 870 1300 1750 2200 2600 3500 | 185 460 920 1400 1850 2300 2750 3700 | 195 485 970 1450 1950 2400 2900 3900
-    200 510 1000 1500 2000 2550 3050 4000 | 210 530 1050 1600 2100 2650 3150 4200 | 220 550 1100 1650 2200 2750 3300 4400 | 230 570 1150 1700 2300 2850 3400 4600
-    235 590 1200 1750 2350 2950 3550 4700 | 245 610 1200 1850 2450 3050 3650 4900 | 250 630 1250 1900 2540 3150 3800 5080 | 270 670 1350 2000 2710 3350 4050 5420
-    290 720 1450 2150 2900 3600 4350 5800 | 310 770 1550 2300 3100 3850 4650 6200 | 330 820 1650 2450 3300 4100 4950 6600 | 350 870 1750 2600 3500 4350 5250 7000
-    370 920 1850 2750 3710 4600 5550 7420 | 390 980 1950 2900 3920 4900 5850 7840 | 410 1030 2050 3100 4140 5150 6200 8280 | 435 1090 2150 3250 4370 5450 6550 8740
-    455 1140 2250 3400 4590 5700 6850 9180 | 480 1200 2400 3600 4820 6000 7200 9640 | 505 1260 2500 3750 5050 6300 7550 10100 | 525 1320 2600 3950 5290 6600 7900 10580
-    550 1380 2750 4150 5540 6900 8300 11080 | 575 1440 2850 4300 5790 7200 8650 11580 | 600 1510 3000 4500 6040 7550 9050 12080 | 625 1570 3100 4700 6290 7850 9400 12580
-    655 1630 3250 4900 6550 8150 9800 13100 | 680 1700 3400 5100 6810 8500 10200 13620 | 705 1760 3500 5300 7070 8800 10600 14140 | 730 1830 3650 5500 7340 9150 11000 14680
-    760 1900 3800 5700 7610 9500 11400 15220 | 785 1970 3900 5900 7890 9850 11800 15780 | 815 2040 4050 6100 8170 10200 12250 16340 | 845 2110 4200 6300 8450 10550 12650 16900
-    870 2180 4350 6500 8730 10900 13050 17460 | 900 2250 4500 6750 9020 11250 13500 18040 | 930 2320 4650 6950 9310 11600 13950 18620 | 955 2380 4750 7150 9550 11900 14300 19100
-    970 2400 4850 7300 9800 12200 14700 19600 | 1000 2550 5000 7600 10050 12600 15050 20100 | 1050 2600 5250 7800 10400 12950 15550 20800 | 1080 2650 5400 8050 10750 13350 16000 21500
-    1100 2700 5500 8250 11000 13750 16500 22000 | 1130 2850 5650 8550 11300 14150 17000 22600 | 1160 2900 5800 8750 11650 14600 17450 23300 | 1200 3050 6000 9000 12000 14950 17950 24000
-    1230 3100 6150 9250 12300 15400 18450 24600 | 1250 3150 6250 9500 12650 15800 19000 25300 | 2000 5050 10050 15100 20100 25150 30150 40200 | 2050 5100 10150 15250 20300 25400 30450 40600
-    2050 5150 10250 15400 20500 25650 30750 41000 | 2100 5200 10400 15550 20750 25950 31150 41500 | 2100 5250 10500 15700 20950 26200 31450 41900 | 2100 5300 10600 15850 21150 26450 31750 42300
-    2150 5350 10700 16050 21400 26750 32100 42800 | 2150 5400 10800 16200 21600 27000 32400 43200 | 2200 5450 10900 16350 21800 27250 32700 43600 | 2200 5500 11050 16550 22050 27550 33100 44100
-    2250 5550 11150 16700 22250 27800 33400 44500 | 2250 5650 11250 16900 22500 28150 33750 45000 | 2250 5700 11350 17050 22700 28400 34050 45400 | 2300 5750 11500 17200 22950 28700 34450 45900
-    2300 5800 11600 17400 23200 29000 34800 46400 | 2350 5850 11700 17550 23400 29250 35100 46800 | 2350 5900 11850 17750 23650 29550 35500 47300 | 2400 6000 11950 17950 23900 29900 35850 47800
-    2400 6050 12050 18100 24100 30150 36150 48200 | 2450 6100 12200 18250 24350 30450 36550 48700 | 2450 6150 12300 18450 24600 30750 36900 49200 | 2500 6200 12450 18650 24850 31050 37300 49700
-    2500 6300 12550 18850 25100 31400 37650 50200 | 2550 6350 12700 19000 25350 31700 38050 50700 | 2550 6400 12800 19200 25600 32000 38400 51200 | 2600 6450 12950 19400 25850 32300 38800 51700
-    2600 6550 13050 19600 26100 32650 39150 52200 | 2650 6600 13200 19750 26350 32950 39550 52700 | 2650 6650 13300 19950 26600 33250 39900 53200 | 2700 6700 13450 20150 26850 33550 40300 53700
-'''
-quest_xp_rows = [row.split() for row in QUEST_XP.replace('|', '\n').split('\n') if row.strip()]
+    for entry in (2, 26, 1318, 2881, 3566, 3803, 7563, 8905, 9492))
+# QuestXP.dbc Exp[1..8] of the pinned client data, recorded with the generator; Exp[0] and Exp[9] are 0.
+quest_xp_rows = [[str(xp) for xp in row] for row in era_generator.QUEST_XP]
 assert len(quest_xp_rows) == 100 and all(len(row) == 8 for row in quest_xp_rows)
 assert quest_xp_rows[59] == ['955', '2380', '4750', '7150', '9550', '11900', '14300', '19100']
 tables = '\n'.join((
@@ -355,6 +355,9 @@ tables = '\n'.join((
     'inline std::vector<std::vector<uint32>> const QuestXpRows{' + ','.join(
         '{' + ','.join(row) + '}' for row in quest_xp_rows) + '};',
     'struct QuestRow { uint32 id; int32 level; uint32 difficulty, flags, specialFlags; };',
+    'inline constexpr uint32 NativeFullXp[][10]{' + ','.join('{' + ','.join(
+        str(era_generator.native_full_xp(level, difficulty)) for difficulty in range(10)) + '}'
+        for level in range(1, len(quest_xp_rows) + 1)) + '};',
     'inline std::vector<QuestRow> const QuestRows{' + quest_rows + '};',
 ))
 
@@ -778,9 +781,13 @@ void QuestCases() {
     assert(TurnIn(necklace,Q(2881))==390 && WindowXP(&necklace,&Q(2881))==0 && TurnIn(necklace,Q(2881))==0);
     sIndividualProgression->repeatableVanillaQuestsXp=true;
     assert(TurnIn(necklace,Q(2881))==0 && !necklace.IsQuestRewarded(2881) && TurnIn(necklace,Q(2881))==390);
+    // Neither has a usable 2.4.3 value; TBC-era turn-ins pay the 1.12 value.
     Player tbcNecklace=Character(8,60), morrowgrain=Character(0,55), tbcMorrowgrain=Character(8,60);
-    assert(TurnIn(tbcNecklace,Q(2881))==0 && TurnIn(morrowgrain,Q(3803))==560 && TurnIn(tbcMorrowgrain,Q(3803))==4700);
-    assert(TurnIn(tbcMorrowgrain,Q(3803))==4700);
+    assert(TurnIn(tbcNecklace,Q(2881))==39 && TurnIn(morrowgrain,Q(3803))==560 && TurnIn(tbcMorrowgrain,Q(3803))==560);
+    assert(TurnIn(tbcMorrowgrain,Q(3803))==560);
+    // A quest that withholds its maximum-level money keeps its 1.12 value in TBC.
+    Player proposition=Character(8,60);
+    assert(TurnIn(proposition,Q(8905))==6600);
     // Reductions count from the quest level of the value's era: Rise, Obsidion! is level 52
     // in 1.12 and 46 in 3.3.5, Rage of Blood level 58 in 2.4.3 and -1 in 3.3.5.
     Player obsidion=Character(0,56), rage=Character(8,64);
@@ -948,7 +955,7 @@ void ConfigCases() {
 std::vector<int64> Observe() {
     std::vector<int64> seen;
     for (uint8 stage : {0,7,8,12,13}) for (uint8 level : {30,36,45,59,60,69,70}) {
-        for (uint32 id : {2u,26u,1318u,2881u,3566u,3803u,7563u,9492u,90001u,90002u,90003u,90005u,90006u,90007u}) {
+        for (uint32 id : {2u,26u,1318u,2881u,3566u,3803u,7563u,8905u,9492u,90001u,90002u,90003u,90005u,90006u,90007u}) {
             Player player=Character(stage,level), aura=Character(stage,level);
             aura.m_modAuras[SPELL_AURA_MOD_XP_QUEST_PCT]={&heirloomQuest,&penaltyQuest};
             seen.insert(seen.end(),{WindowXP(&player,&Q(id)),TurnIn(player,Q(id)),TurnIn(player,Q(id)),player.money,
@@ -989,6 +996,11 @@ int main() {
         QuestXPEntry entry{level,{}};
         for (std::size_t i=0;i<8;++i) entry.Exp[i+1]=QuestXpRows[level-1][i];
         sQuestXPStore.rows.push_back(entry);
+    }
+    // The generator's 3.3.5 reference is the core value at the quest's level.
+    for (uint32 level=1;level<=std::size(NativeFullXp);++level) for (uint32 difficulty=0;difficulty<10;++difficulty) {
+        Quest quest; quest.Level=int32(level); quest.RewardXPDifficulty=difficulty;
+        assert(quest.XPValue(uint8(level))==NativeFullXp[level-1][difficulty]);
     }
     for (QuestRow const& row : QuestRows) {
         AddQuest(row.id,row.level,row.difficulty,row.flags);
