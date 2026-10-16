@@ -54,9 +54,10 @@ release workflow when they need its build outputs.
 Documentation describes the current product. Keep the README focused on
 downloads, setup, features and useful limits, and put configuration and
 technical details in the linked guides. The server ZIP contains `README.md`,
-`THIRD_PARTY_NOTICES.md` and `docs/` without `building.md`, so those files link
-to `docs/building.md` and this guide by their GitHub URLs; the documentation
-check in the gameplay fixtures enforces this.
+`THIRD_PARTY_NOTICES.md` and `docs/` without `building.md` and the upstream
+proposals in `docs/upstream/`, so those files link to them and this guide by
+their GitHub URLs; the documentation check in the gameplay fixtures enforces
+this.
 
 Release notes use [.github/RELEASE_TEMPLATE.md](.github/RELEASE_TEMPLATE.md),
 which accepts the fields `{repository_url}`, `{source_url}`, `{commit_url}` and

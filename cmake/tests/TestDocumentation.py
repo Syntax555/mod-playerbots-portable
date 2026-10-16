@@ -25,15 +25,17 @@ import publish_latest as publisher
 GITHUB = 'https://github.com/Syntax555/mod-playerbots-portable'
 DOWNLOAD = '/releases/latest/download/'
 ASSETS = set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME}
-# The server ZIP layout from AssembleDistribution.cmake; CONTRIBUTING.md and
-# docs/building.md stay out, so packaged documents link to them on GitHub.
+# The server ZIP layout from AssembleDistribution.cmake; CONTRIBUTING.md,
+# docs/building.md and docs/upstream/ stay out, so packaged documents link to
+# them on GitHub.
 ZIP_FILES = {'README.md', 'THIRD_PARTY_NOTICES.md', 'LICENSE', 'versions.lock.json'}
 ZIP_TREES = ('docs/', 'patches/', 'licenses/')
-ZIP_EXCLUDED = {'docs/building.md'}
+ZIP_EXCLUDED = {'docs/building.md', 'docs/upstream'}
 ASSEMBLY = (
     'file(REMOVE "${PORTABLE_DIST_DIR}/CONTRIBUTING.md")',
     'file(COPY "${PORTABLE_SOURCE_DIR}/licenses/" DESTINATION "${PORTABLE_DIST_DIR}/licenses")',
-    'file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"\n    PATTERN "building.md" EXCLUDE)',
+    ('file(COPY "${PORTABLE_SOURCE_DIR}/docs/" DESTINATION "${PORTABLE_DIST_DIR}/docs"\n'
+     '    PATTERN "building.md" EXCLUDE PATTERN "upstream" EXCLUDE)'),
     '"${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)',
     'foreach(document README.md THIRD_PARTY_NOTICES.md)',
     'file(CONFIGURE OUTPUT "${PORTABLE_DIST_DIR}/LICENSE"',
@@ -49,7 +51,8 @@ def documents(root):
 
 
 def packaged(name):
-    return name in ZIP_FILES or name.startswith(ZIP_TREES) and name not in ZIP_EXCLUDED
+    excluded = any(name == path or name.startswith(f'{path}/') for path in ZIP_EXCLUDED)
+    return name in ZIP_FILES or name.startswith(ZIP_TREES) and not excluded
 
 
 def prose(text):
@@ -156,6 +159,8 @@ def self_check():
         root = Path(directory)
         (root / 'docs').mkdir()
         (root / 'docs/building.md').write_text('# Build\n')
+        (root / 'docs/upstream').mkdir()
+        (root / 'docs/upstream/README.md').write_text('# Proposals\n')
         (root / 'docs/guide.md').write_text('# Guide\n\n## Start `here`\n\n## Start here\n')
         (root / 'CONTRIBUTING.md').write_text('[guide](docs/guide.md#start-here-1) [build](docs/building.md)\n')
         (root / 'README.md').write_text('\n'.join((
@@ -169,6 +174,8 @@ def self_check():
             '[wrapped\nlink](docs/wrapped.md)': 'docs/wrapped.md does not exist',
             '[anchor](docs/guide.md#start)': 'docs/guide.md has no heading #start',
             '[unzipped](docs/building.md)': 'docs/building.md is not in the server ZIP',
+            '[proposal](docs/upstream/README.md)': 'docs/upstream/README.md is not in the server ZIP',
+            '[proposals](docs/upstream)': 'docs/upstream is not in the server ZIP',
             '[contributing](CONTRIBUTING.md)': 'CONTRIBUTING.md is not in the server ZIP',
             f'[asset]({GITHUB}{DOWNLOAD}other.zip)': 'other.zip is not a published release asset',
             f'[main]({GITHUB}/blob/main/docs/missing.md)': 'docs/missing.md does not exist',

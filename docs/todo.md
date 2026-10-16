@@ -65,10 +65,11 @@ and ordinary player actions.
 
 ## Dependency updates
 
-- [ ] Submit the [prepared Individual Progression filter fix](upstream/README.md)
-  upstream when repository permissions allow.
-- [ ] Track the [generic core proposals](upstream/README.md), then pin accepted
-  fixes and remove their corresponding local hunks.
+- [ ] Submit the prepared Individual Progression filter fix upstream when
+  repository permissions allow; see the
+  [upstream proposals](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/upstream/README.md).
+- [ ] Track the generic core proposals, then pin accepted fixes and remove
+  their corresponding local hunks.
 
 ## Core and module patches
 
