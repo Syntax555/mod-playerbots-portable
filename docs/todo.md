@@ -93,7 +93,6 @@ and ordinary player actions.
 
 - [ ] Measure a compiler cache for the Windows compile step.
 - [ ] Share the sanitizer build flags, the `--source`/`--core`/`--module`
-  arguments and the WDBC helpers through `FixtureSupport`, and move the child
-  fixtures of `TestEarnedProgression` into `run_fixtures.py` groups.
+  arguments and the WDBC helpers through `FixtureSupport`.
 - [ ] Optional: replace the two submodules with the lock-driven fetch used for
   the other modules.
