@@ -139,8 +139,8 @@ assert ('if (level < sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAY
 refer = read('src/server/game/Handlers/ReferAFriendHandler.cpp')
 for check in ('else if (target->GetTeamId() != _player->GetTeamId())\n        error = ERR_REFER_A_FRIEND_DIFFERENT_FACTION;',
               'else if (target->GetLevel() >= _player->GetLevel())\n        error = ERR_REFER_A_FRIEND_TARGET_TOO_HIGH;',
-              'else if (target->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n'
-              '        error = ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I;',
+              ('else if (target->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL))\n'
+               '        error = ERR_REFER_A_FRIEND_GRANT_LEVEL_MAX_I;'),
               'else if (target->GetGroup() != _player->GetGroup())\n        error = ERR_REFER_A_FRIEND_NOT_IN_GROUP;'):
     assert check in function(refer, 'void WorldSession::HandleGrantLevel('), check
 accept_grant = function(refer, 'void WorldSession::HandleAcceptGrantLevel(')
