@@ -10,9 +10,84 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestPortableUpdateInspectsProcessesAfterAccessDenied(t *testing.T) {
+	disableDebugPrivilege(t)
+	for _, name := range []string{"authserver.exe", "WORLDSERVER.EXE", "mysqld.exe", "STARTUP.EXE"} {
+		t.Run(name, func(t *testing.T) {
+			for _, inside := range []bool{false, true} {
+				location := "outside"
+				if inside {
+					location = "inside"
+				}
+				t.Run(location, func(t *testing.T) {
+					root := filepath.Join(t.TempDir(), "portable realm ä")
+					if err := os.Mkdir(root, 0755); err != nil {
+						t.Fatal(err)
+					}
+					folder := root + "-other"
+					if inside {
+						folder = filepath.Join(root, "bin")
+					}
+					executable := filepath.Join(folder, name)
+					cmd := updateTestStartIdleProcess(t, executable)
+					handle := denyProcessQueries(t, cmd.Process.Pid)
+					probe, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(cmd.Process.Pid))
+					if err == nil {
+						_ = syscall.CloseHandle(probe)
+					}
+					if !errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+						t.Fatalf("process DACL did not deny the update guard's query: %v", err)
+					}
+					image, err := processImagePathByPID(uint32(cmd.Process.Pid))
+					if err != nil || !filepath.IsAbs(image) {
+						t.Fatalf("inaccessible process image is not an absolute path: image=%q err=%v", image, err)
+					}
+					actual, err := os.Stat(image)
+					if err != nil {
+						t.Fatalf("native process image cannot be inspected: image=%q err=%v", image, err)
+					}
+					expected, err := os.Stat(executable)
+					if err != nil || !os.SameFile(actual, expected) {
+						t.Fatalf("native image does not identify the running executable: image=%q err=%v", image, err)
+					}
+					if err := ensurePortableUpdateStopped(root, cmd.Process.Pid); err != nil {
+						t.Fatalf("excluded process blocked an update: %v", err)
+					}
+					err = ensurePortableUpdateStopped(root, os.Getpid())
+					if inside {
+						if err == nil || !strings.Contains(err.Error(), strings.ToLower(name)+" is running") {
+							t.Fatalf("inaccessible installation process was not detected: %v", err)
+						}
+					} else if err != nil {
+						t.Fatalf("inaccessible process in a sibling installation blocked the update: %v", err)
+					}
+					if err := syscall.TerminateProcess(handle, 0); err != nil {
+						t.Fatal(err)
+					}
+					if err := cmd.Wait(); err != nil {
+						t.Fatal(err)
+					}
+					if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
+						t.Fatalf("exited process with a retained handle blocked an update: %v", err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestProcessImagePathByPIDRejectsMissingProcesses(t *testing.T) {
+	for _, pid := range []uint32{0, ^uint32(0)} {
+		if image, err := processImagePathByPID(pid); err == nil || image != "" {
+			t.Fatalf("missing process %d returned an image: image=%q err=%v", pid, image, err)
+		}
+	}
+}
 
 func updateTestLockBackup(t *testing.T, root string) *os.File {
 	t.Helper()

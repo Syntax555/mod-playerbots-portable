@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 )
+
+var procNtQuerySystemInformation = syscall.NewLazyDLL("ntdll.dll").NewProc("NtQuerySystemInformation")
 
 func syncUpdateDirectory(directory string) error {
 	// Files and the journal are flushed with File.Sync. Windows does not offer
@@ -28,17 +31,25 @@ func ensurePortableUpdateStopped(root string, excludedPID int) error {
 	var running error
 	err := forEachProcess(func(entry *syscall.ProcessEntry32) error {
 		name := strings.ToLower(syscall.UTF16ToString(entry.ExeFile[:]))
-		if int(entry.ProcessID) == excludedPID || (name != "authserver.exe" && name != "worldserver.exe" && name != "mysqld.exe" && name != "startup.exe") {
+		if entry.Threads == 0 || int(entry.ProcessID) == excludedPID || (name != "authserver.exe" && name != "worldserver.exe" && name != "mysqld.exe" && name != "startup.exe") {
 			return nil
 		}
 		handle, err := syscall.OpenProcess(processQueryLimitedInformation, false, entry.ProcessID)
+		var image string
+		if err == nil {
+			image, err = processImagePath(handle)
+			syscall.CloseHandle(handle)
+		}
+		if err != nil {
+			// A system-account MySQL service can deny process handles. Its
+			// image can still be queried without opening the process.
+			image, err = processImagePathByPID(entry.ProcessID)
+		}
 		if err != nil {
 			running = fmt.Errorf("cannot verify that %s is outside this installation; stop it before updating", name)
 			return running
 		}
-		image, err := processImagePath(handle)
-		syscall.CloseHandle(handle)
-		if err != nil || portableUpdateProcessPath(root, image) {
+		if portableUpdateProcessPath(root, image) {
 			running = fmt.Errorf("%s is running; stop the realm and MySQL before updating", name)
 			return running
 		}
@@ -52,6 +63,32 @@ func ensurePortableUpdateStopped(root string, excludedPID int) error {
 		return fmt.Errorf("cannot inspect running processes before update: %w", err)
 	}
 	return ensureRealmStopped(root)
+}
+
+func processImagePathByPID(pid uint32) (string, error) {
+	var image [32767]uint16
+	query := struct {
+		processID uintptr
+		name      struct {
+			length, maximumLength uint16
+			buffer                *uint16
+		}
+	}{processID: uintptr(pid)}
+	query.name.maximumLength = uint16(len(image) * 2)
+	query.name.buffer = &image[0]
+	const systemProcessIDInformation = 88
+	status, _, _ := procNtQuerySystemInformation.Call(systemProcessIDInformation,
+		uintptr(unsafe.Pointer(&query)), unsafe.Sizeof(query), 0)
+	if status != 0 || query.name.length == 0 || query.name.length%2 != 0 || int(query.name.length) > len(image)*2 {
+		return "", fmt.Errorf("query process %d image: NTSTATUS %#x", pid, status)
+	}
+	path := syscall.UTF16ToString(image[:query.name.length/2])
+	if !strings.HasPrefix(path, `\Device\`) {
+		return "", fmt.Errorf("query process %d returned an invalid image path", pid)
+	}
+	// GLOBALROOT exposes the native device path to os.Stat. The update guard
+	// compares ancestor file identities, including junctions and drive aliases.
+	return `\\?\GLOBALROOT` + path, nil
 }
 
 // portableUpdateProcessPath reports whether executable lies inside root.
