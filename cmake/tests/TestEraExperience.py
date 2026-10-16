@@ -4,7 +4,7 @@ Individual Progression's era experience script, its legacy quest-XP and
 quest-money hooks and its configuration loader run with the core's quest,
 aura, rest and Recruit-a-Friend functions against doubles of the realm. Every
 case also runs with the option off and with strict progression off, where
-nothing may change. The level table, the generated 2.4.3 quest values and the
+nothing may change. The level table, the generated era quest tables and the
 experience auras of the pinned client data are checked as data.
 """
 
@@ -35,12 +35,13 @@ from FixtureSupport import (
 repo = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 source_argument(parser, 'core', default=prepared_core(repo), help='prepared core directory')
-source_argument(parser, 'tbc-db', help='CMaNGOS tbc-db checkout to regenerate the 2.4.3 quest values from')
+source_argument(parser, 'classic-db', help='CMaNGOS classic-db checkout to regenerate the era quest tables from')
+source_argument(parser, 'tbc-db', help='CMaNGOS tbc-db checkout to regenerate the era quest tables from')
 args = parser.parse_args()
 core = args.core
 module = core / 'modules/mod-individual-progression'
 sys.path.insert(0, str(repo / 'scripts'))
-import generate_tbc_quest_xp as tbc_generator
+import generate_era_quest_xp as era_generator
 
 
 def read(path):
@@ -189,57 +190,82 @@ for label, old, new in (('level 30', '(30, 47400)', '(30, 47500)'), ('level 60 f
         raise AssertionError(f'Era level table check accepted {label}')
 
 
-# The generated 2.4.3 quest values.
-tbc_sql = module / 'data/sql/world/updates/2026_10_16_00_tbc_quest_xp.sql'
-core_quests = {int(row['ID']): row for row in tbc_generator.table_rows(read(tbc_generator.CORE_QUESTS), 'quest_template')}
+# The generated era quest tables: 2.4.3 values with their quest levels, and the
+# 1.12 quest levels of Individual Progression's values.
+era_sql = module / 'data/sql/world/updates/2026_10_16_01_era_quest_xp.sql'
+core_quests = {int(row['ID']): row for row in era_generator.table_rows(read(era_generator.CORE_QUESTS), 'quest_template')}
+ip_values = era_generator.ip_values(read(era_generator.IP_QUESTS))
+assert len(ip_values) == 5657
 revisions = {source['name']: source['revision'] for source in lock['historicalClassData']['sources']}
 # entry: (RewMoneyMaxLevel, QuestLevel, value) recorded from tbc-db ebe51a83.
 TBC_SPOTS = {2: (1500, 30, 2500), 5: (240, 20, 400), 1318: (4950, 60, 8250), 9372: (37500, 63, 10417),
-             9492: (75900, 70, 12650), 2881: (0, 45, 0), 3803: (2820, 55, 4700)}
+             9492: (75900, 70, 12650), 2881: (0, 45, 0), 3803: (2820, 55, 4700), 7563: (4650, 58, 7750)}
+# entry: QuestLevel recorded from classic-db ec4f596; patch 2.3.0 lowered these.
+VANILLA_LEVEL_SPOTS = {2: 30, 3566: 52, 630: 51, 618: 50, 3371: 55}
+TBC_HEADER = ('DROP TABLE IF EXISTS `custom_quest_xp_tbc`;\nCREATE TABLE `custom_quest_xp_tbc` (\n'
+              '    `entry` int unsigned NOT NULL,\n    `xpValue` int unsigned NOT NULL,\n    `questLevel` int NOT NULL,\n'
+              '    PRIMARY KEY (`entry`)\n) ENGINE=InnoDB;\n\n'
+              'INSERT INTO `custom_quest_xp_tbc` (`entry`, `xpValue`, `questLevel`) VALUES\n')
+LEVEL_HEADER = ('DROP TABLE IF EXISTS `custom_quest_xp_level`;\nCREATE TABLE `custom_quest_xp_level` (\n'
+                '    `entry` int unsigned NOT NULL,\n    `questLevel` int NOT NULL,\n    PRIMARY KEY (`entry`)\n'
+                ') ENGINE=InnoDB;\n\nINSERT INTO `custom_quest_xp_level` (`entry`, `questLevel`) VALUES\n')
 
 
-def check_tbc_values(text):
-    header = ('DROP TABLE IF EXISTS `custom_quest_xp_tbc`;\nCREATE TABLE `custom_quest_xp_tbc` (\n'
-              '    `entry` int unsigned NOT NULL,\n    `xpValue` int unsigned NOT NULL,\n    PRIMARY KEY (`entry`)\n'
-              ') ENGINE=InnoDB;\n\nINSERT INTO `custom_quest_xp_tbc` (`entry`, `xpValue`) VALUES\n')
-    assert header in text and text.endswith(');\n')
-    assert f"tbc-db {revisions['cmangos-tbc-db']}" in text and f"mangos-tbc {revisions['cmangos-mangos-tbc']}" in text
+def table_body(text, header, columns):
     body = text[text.index(header) + len(header):]
-    rows = [(int(entry), int(xp)) for entry, xp in re.findall(r'^\((\d+), (\d+)\)[,;]$', body, re.MULTILINE)]
+    body = body[:body.index(';\n') + 2]
+    rows = [tuple(int(value) for value in row) for row in re.findall(
+        r'^\(' + ', '.join([r'(-?\d+)'] * columns) + r'\)[,;]$', body, re.MULTILINE)]
     assert len(rows) == body.count('\n') and rows
-    entries = [entry for entry, _ in rows]
+    entries = [row[0] for row in rows]
     assert entries == sorted(set(entries)) and set(entries) <= set(core_quests)
-    values = dict(rows)
-    assert 26 not in values and 27 not in values
+    return {row[0]: row[1:] for row in rows}
+
+
+def check_era_values(text):
+    assert text.count(TBC_HEADER) == text.count(LEVEL_HEADER) == 1 and text.index(TBC_HEADER) < text.index(LEVEL_HEADER)
+    assert text.endswith(');\n')
+    for name in ('cmangos-classic-db', 'cmangos-tbc-db', 'cmangos-mangos-tbc'):
+        assert f"{name.split('-', 1)[1]} {revisions[name]}" in text, name
+    values = table_body(text, TBC_HEADER, 3)
+    levels = {entry: level for entry, (level,) in table_body(text, LEVEL_HEADER, 2).items()}
+    assert 26 not in values and 27 not in values and all(level > 0 for _, level in values.values())
     for entry, (money, level, xp) in TBC_SPOTS.items():
-        assert tbc_generator.full_xp(level, money) == xp and values.get(entry) == xp, entry
-    return values
+        assert era_generator.full_xp(level, money) == xp and values.get(entry) == (xp, level), entry
+    assert set(levels) <= set(ip_values) and all(level > 0 for level in levels.values())
+    for entry, level in VANILLA_LEVEL_SPOTS.items():
+        assert levels.get(entry) == level, entry
+    return values, levels
 
 
 assert core_quests[26]['QuestLevel'] == core_quests[27]['QuestLevel'] == '-1'
-tbc_text = tbc_sql.read_text()
-tbc_values = check_tbc_values(tbc_text)
-assert len(tbc_values) == 5703 and sum(1 for xp in tbc_values.values() if xp == 0) == 904
-if args.tbc_db:
-    assert tbc_generator.generate(args.tbc_db, core) == tbc_text, 'regenerated 2.4.3 quest values differ'
-    print('2.4.3 quest values regenerate byte for byte from the tbc-db checkout')
+assert core_quests[7563]['QuestLevel'] == '-1' and core_quests[3566]['QuestLevel'] == '46'
+era_text = era_sql.read_text()
+tbc_values, vanilla_levels = check_era_values(era_text)
+assert len(tbc_values) == 5703 and sum(1 for xp, _ in tbc_values.values() if xp == 0) == 904
+assert len(vanilla_levels) == 3664
+if args.classic_db and args.tbc_db:
+    assert era_generator.generate(args.classic_db, args.tbc_db, core) == era_text, 'regenerated era quest tables differ'
+    print('Era quest tables regenerate byte for byte from the classic-db and tbc-db checkouts')
 after_26 = min(entry for entry in tbc_values if entry > 26)
 for label, mutant, divisor in (
-    ('spot value', tbc_text.replace('\n(1318, 8250),', '\n(1318, 8251),'), 3.6),
-    ('spot row', tbc_text.replace('\n(9492, 12650),', ''), 3.6),
-    ('level -1 row', tbc_text.replace(f'\n({after_26}, ', f'\n(26, 400),\n({after_26}, ', 1), 3.6),
-    ('generator divisor', tbc_text, 3.5),
+    ('spot value', era_text.replace('\n(1318, 8250, 60),', '\n(1318, 8251, 60),'), 3.6),
+    ('spot row', era_text.replace('\n(9492, 12650, 70),', ''), 3.6),
+    ('TBC quest level', era_text.replace('\n(7563, 7750, 58),', '\n(7563, 7750, -1),'), 3.6),
+    ('level -1 row', era_text.replace(f'\n({after_26}, ', f'\n(26, 400, 1),\n({after_26}, ', 1), 3.6),
+    ('1.12 quest level', era_text.replace('\n(3566, 52),', '\n(3566, 46),'), 3.6),
+    ('generator divisor', era_text, 3.5),
 ):
-    assert divisor != 3.6 or mutant != tbc_text, label
-    tbc_generator.DIVISORS[63] = tbc_generator.float32(divisor)
+    assert divisor != 3.6 or mutant != era_text, label
+    era_generator.DIVISORS[63] = era_generator.float32(divisor)
     try:
-        check_tbc_values(mutant)
+        check_era_values(mutant)
     except AssertionError:
-        print(f'2.4.3 quest value mutation rejected: {label}')
+        print(f'Era quest table mutation rejected: {label}')
     else:
-        raise AssertionError(f'2.4.3 quest value check accepted {label}')
+        raise AssertionError(f'Era quest table check accepted {label}')
     finally:
-        tbc_generator.DIVISORS[63] = tbc_generator.float32(3.6)
+        era_generator.DIVISORS[63] = era_generator.float32(3.6)
 
 
 # Experience auras of the pinned 3.3.5 client: the 2.4.3 bonuses plus the
@@ -274,22 +300,20 @@ for path in [core / 'data/sql/base/db_world/spell_group.sql', *core.glob('data/s
     text = path.read_text(encoding='utf-8', errors='replace')
     if 'spell_group`' in text:
         assert not xp_spells & {int(number) for number in re.findall(r'\b\d+\b', text)}, path
-heirloom_items = [row for row in tbc_generator.table_rows(read('data/sql/base/db_world/item_template.sql'), 'item_template')
+heirloom_items = [row for row in era_generator.table_rows(read('data/sql/base/db_world/item_template.sql'), 'item_template')
                   if {'57353', '71354'} & {row[f'spellid_{slot}'] for slot in range(1, 6)}]
 assert heirloom_items and {row['Quality'] for row in heirloom_items} == {'7'}
-print(f'Era experience data: level table, {len(tbc_values)} 2.4.3 quest values, {len(xp_auras)} client '
+print(f'Era experience data: level table, {len(tbc_values)} 2.4.3 quest values, {len(vanilla_levels)} 1.12 quest '
+      f'levels, {len(xp_auras)} client '
       f'experience auras and {len(heirloom_items)} heirlooms checked')
 
 
 # Production quest rows used by the cases.
-special_flags = {int(row['ID']): row['SpecialFlags'] for row in tbc_generator.table_rows(
+special_flags = {int(row['ID']): row['SpecialFlags'] for row in era_generator.table_rows(
     read('data/sql/base/db_world/quest_template_addon.sql'), 'quest_template_addon')}
 quest_rows = ',\n'.join(
     '{{{}, {QuestLevel}, {RewardXPDifficulty}, {Flags}, {}}}'.format(entry, special_flags.get(entry, '0'), **core_quests[entry])
-    for entry in (2, 26, 1318, 2881, 3803, 9492))
-ip_values = re.findall(r'^\((\d+), (\d+)\)[,;]$', (module / 'data/sql/world/base/quest_xp_table.sql').read_text(),
-                       re.MULTILINE)
-assert len(ip_values) == 5657
+    for entry in (2, 26, 1318, 2881, 3566, 3803, 7563, 9492))
 # QuestXP.dbc Exp[1..8] for levels 1-100, recorded from the pinned client data
 # (Haeniken/TrinityCore-3.3.5-data-multilang b21c949 dbc/deDE/QuestXP.dbc,
 # SHA-256 ae88d842e994dccad08d58983f8c524c0aa51a3557ebbb5aa687098298a7b8d5); Exp[0] and Exp[9] are 0.
@@ -324,9 +348,10 @@ quest_xp_rows = [row.split() for row in QUEST_XP.replace('|', '\n').split('\n') 
 assert len(quest_xp_rows) == 100 and all(len(row) == 8 for row in quest_xp_rows)
 assert quest_xp_rows[59] == ['955', '2380', '4750', '7150', '9550', '11900', '14300', '19100']
 tables = '\n'.join((
-    'inline std::vector<std::pair<uint32,uint32>> const IpQuestXp{' + ','.join(f'{{{a},{b}}}' for a, b in ip_values) + '};',
-    'inline std::vector<std::pair<uint32,uint32>> const TbcQuestXp{' + ','.join(
-        f'{{{a},{b}}}' for a, b in tbc_values.items()) + '};',
+    'inline constexpr int64 IpQuestXp[][2]{' + ','.join(f'{{{a},{b}}}' for a, b in ip_values.items()) + '};',
+    'inline constexpr int64 TbcQuestXp[][3]{' + ','.join(f'{{{a},{b},{c}}}' for a, (b, c) in tbc_values.items()) + '};',
+    'inline constexpr int64 VanillaQuestLevels[][2]{' + ','.join(
+        f'{{{a},{b}}}' for a, b in vanilla_levels.items()) + '};',
     'inline std::vector<std::vector<uint32>> const QuestXpRows{' + ','.join(
         '{' + ','.join(row) + '}' for row in quest_xp_rows) + '};',
     'struct QuestRow { uint32 id; int32 level; uint32 difficulty, flags, specialFlags; };',
@@ -357,6 +382,7 @@ stub = r'''
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <iterator>
 #include <iostream>
 #include <list>
 #include <map>
@@ -417,15 +443,18 @@ struct ConfigMgr {
 };
 inline ConfigMgr configMgr;
 inline ConfigMgr* sConfigMgr=&configMgr;
-struct Field { uint32 value; template<class T> T Get() const { return T(value); } };
+struct Field { int64 value; template<class T> T Get() const { return T(value); } };
 struct ResultSet {
-    std::vector<std::pair<uint32,uint32>> rows; std::size_t row=0;
-    Field operator[](std::size_t index) const { return {index ? rows[row].second : rows[row].first}; }
+    std::vector<std::vector<int64>> rows; std::size_t row=0;
+    Field operator[](std::size_t index) const { return {rows[row].at(index)}; }
     bool NextRow() { return ++row<rows.size(); }
 };
 using QueryResult=std::shared_ptr<ResultSet>;
 struct Database {
-    std::map<std::string,std::vector<std::pair<uint32,uint32>>> tables; std::vector<std::string> queries;
+    std::map<std::string,std::vector<std::vector<int64>>> tables; std::vector<std::string> queries;
+    template<std::size_t Columns,std::size_t Rows> void Set(std::string const& sql,int64 const (&rows)[Rows][Columns]) {
+        for (auto const& row : rows) tables[sql].emplace_back(std::begin(row),std::end(row));
+    }
     QueryResult Query(char const* sql) {
         queries.push_back(sql);
         auto const table=tables.find(sql);
@@ -752,6 +781,10 @@ void QuestCases() {
     Player tbcNecklace=Character(8,60), morrowgrain=Character(0,55), tbcMorrowgrain=Character(8,60);
     assert(TurnIn(tbcNecklace,Q(2881))==0 && TurnIn(morrowgrain,Q(3803))==560 && TurnIn(tbcMorrowgrain,Q(3803))==4700);
     assert(TurnIn(tbcMorrowgrain,Q(3803))==4700);
+    // Reductions count from the quest level of the value's era: Rise, Obsidion! is level 52
+    // in 1.12 and 46 in 3.3.5, Rage of Blood level 58 in 2.4.3 and -1 in 3.3.5.
+    Player obsidion=Character(0,56), rage=Character(8,64);
+    assert(TurnIn(obsidion,Q(3566))==7600 && TurnIn(rage,Q(7563))==6200);
     // Rounding up, quests without a level, dailies and quests without any table value.
     Player vanilla46=Character(0,46), vanilla40=Character(0,40), rewardedDaily=Character(0,40);
     assert(TurnIn(vanilla46,Q(90001))==801 && TurnIn(vanilla40,Q(90002))==500);
@@ -879,21 +912,32 @@ void RecruitCases(bool active) {
     assert(recruit.bytes.at({PLAYER_BYTES_2,3})==(active ? REST_STATE_RESTED : REST_STATE_RAF_LINKED));
 }
 
+std::size_t EraTableQueries() {
+    return std::count_if(WorldDatabase.queries.begin(),WorldDatabase.queries.end(),[](std::string const& query) {
+        return query=="SELECT entry, xpValue, questLevel FROM custom_quest_xp_tbc" ||
+               query=="SELECT entry, questLevel FROM custom_quest_xp_level";
+    });
+}
+
 void ConfigCases() {
     Configure(Active());
     assert(sIndividualProgression->eraExperience && sIndividualProgression->EraExperienceActive());
-    assert(sIndividualProgression->questXpTbcMap.size()==TbcQuestXp.size()+1);
-    assert(std::count(WorldDatabase.queries.begin(),WorldDatabase.queries.end(),"SELECT entry, xpValue FROM custom_quest_xp_tbc")==1);
+    assert(sIndividualProgression->questXpTbcMap.size()==std::size(TbcQuestXp)+1);
+    assert(sIndividualProgression->questLevelTbcMap.size()==std::size(TbcQuestXp));
+    assert(sIndividualProgression->questLevelMap.size()==std::size(VanillaQuestLevels));
+    assert(EraTableQueries()==2);
     RecruitCases(true);
     for (auto values : {OptionOff(),StrictOff()}) {
         Configure(values);
         assert(sIndividualProgression->questXpTbcMap.size()==1 && !sIndividualProgression->EraExperienceActive());
-        assert(std::count(WorldDatabase.queries.begin(),WorldDatabase.queries.end(),"SELECT entry, xpValue FROM custom_quest_xp_tbc")==0);
+        assert(sIndividualProgression->questLevelTbcMap.empty() && sIndividualProgression->questLevelMap.empty());
+        assert(EraTableQueries()==0);
         RecruitCases(false);
     }
     auto noFix=Active(); noFix["IndividualProgression.QuestXPFix"]="0";
     Configure(noFix);
     assert(sIndividualProgression->questXpTbcMap.size()==1 && sIndividualProgression->EraExperienceActive());
+    assert(sIndividualProgression->questLevelTbcMap.empty() && sIndividualProgression->questLevelMap.empty());
     // Without historical values every era keeps the native quest value.
     Player tbc=Character(8,60), vanilla=Character(0,30);
     assert(TurnIn(tbc,Q(1318))==14300 && TurnIn(vanilla,Q(2))==2450);
@@ -904,7 +948,7 @@ void ConfigCases() {
 std::vector<int64> Observe() {
     std::vector<int64> seen;
     for (uint8 stage : {0,7,8,12,13}) for (uint8 level : {30,36,45,59,60,69,70}) {
-        for (uint32 id : {2u,26u,1318u,2881u,3803u,9492u,90001u,90002u,90003u,90005u,90006u,90007u}) {
+        for (uint32 id : {2u,26u,1318u,2881u,3566u,3803u,7563u,9492u,90001u,90002u,90003u,90005u,90006u,90007u}) {
             Player player=Character(stage,level), aura=Character(stage,level);
             aura.m_modAuras[SPELL_AURA_MOD_XP_QUEST_PCT]={&heirloomQuest,&penaltyQuest};
             seen.insert(seen.end(),{WindowXP(&player,&Q(id)),TurnIn(player,Q(id)),TurnIn(player,Q(id)),player.money,
@@ -954,8 +998,9 @@ int main() {
     AddQuest(90006,40,5,QUEST_FLAGS_NO_MONEY_FROM_XP); AddQuest(90007,40,5,QUEST_FLAGS_DAILY); AddQuest(90008,40);
     // Individual Progression's player_progression.sql markers for TBC and Wrath.
     AddQuest(66008,60,0,1024); AddQuest(66013,60,0,1024);
-    WorldDatabase.tables["SELECT entry, xpValue FROM custom_quest_xp"]=IpQuestXp;
-    WorldDatabase.tables["SELECT entry, xpValue FROM custom_quest_xp_tbc"]=TbcQuestXp;
+    WorldDatabase.Set("SELECT entry, xpValue FROM custom_quest_xp",IpQuestXp);
+    WorldDatabase.Set("SELECT entry, xpValue, questLevel FROM custom_quest_xp_tbc",TbcQuestXp);
+    WorldDatabase.Set("SELECT entry, questLevel FROM custom_quest_xp_level",VanillaQuestLevels);
     AddSC_individual_progression_era_experience();
     new IndividualPlayerProgression();
     assert(playerScripts.size()==2 && playerScripts[0]->name=="IndividualProgressionEraExperience");
@@ -1003,8 +1048,8 @@ MUTATIONS = (
      'PLAYERHOOK_ON_QUEST_COMPUTE_EXP,'),
     ('repeat rule', 'EraExperience.cpp', 'bool const rewarded = player->IsQuestRewarded(', 'bool const rewarded = false && player->IsQuestRewarded('),
     ('withheld reward', 'EraExperience.cpp', '(!xpValue && quest->XPValue(level))', '(false && quest->XPValue(level))'),
-    ('TBC table ignored', 'EraExperience.cpp', 'era == EraExperiencePolicy::TBC ? tbc.find(',
-     'era == EraExperiencePolicy::Wrath ? tbc.find('),
+    ('TBC table ignored', 'EraExperience.cpp', 'era == EraExperiencePolicy::TBC && tbc.count(id)',
+     'era == EraExperiencePolicy::Wrath && tbc.count(id)'),
     ('Wrath not skipped', 'EraExperience.cpp', 'era > EraExperiencePolicy::TBC)\n            return;',
      'era > EraExperiencePolicy::Wrath)\n            return;'),
     ('reduction threshold', 'EraExperiencePolicy.h', 'if (above <= 5)', 'if (above <= 6)'),
@@ -1044,6 +1089,17 @@ MUTATIONS = (
     ('TBC table always loaded', 'fixture.cpp',
      'if (sIndividualProgression->questXpFix && sIndividualProgression->EraExperienceActive())', 'if (true)'),
     ('TBC table kept on reload', 'fixture.cpp', 'sIndividualProgression->questXpTbcMap.clear();', ''),
+    ('era quest level ignored', 'EraExperience.cpp', 'questLevel != levels.end() ? questLevel->second :',
+     'questLevel != levels.end() ? quest->GetQuestLevel() :'),
+    ('TBC values with 1.12 levels', 'EraExperience.cpp',
+     'tbcValue ? sIndividualProgression->questLevelTbcMap : sIndividualProgression->questLevelMap',
+     'sIndividualProgression->questLevelMap'),
+    ('1.12 values with TBC levels', 'EraExperience.cpp',
+     'tbcValue ? sIndividualProgression->questLevelTbcMap : sIndividualProgression->questLevelMap',
+     'sIndividualProgression->questLevelTbcMap'),
+    ('TBC levels not loaded', 'fixture.cpp',
+     'sIndividualProgression->questLevelTbcMap.insert({entry, (*result)[2].Get<int32>()});', ''),
+    ('1.12 levels kept on reload', 'fixture.cpp', 'sIndividualProgression->questLevelMap.clear();', ''),
 )
 
 with tempfile.TemporaryDirectory(prefix='portable-era-experience-') as temporary:

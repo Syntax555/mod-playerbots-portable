@@ -6,8 +6,9 @@ Source projects and revisions:
   ec4f596146be6467ea93c57397858e329e2db852
   Full_DB/ClassicDB_1_12_1_z2815.sql.gz:
   quest_template, creature_questrelation, creature_involvedrelation,
-  npc_trainer and npc_trainer_template records; player_xp_for_level as the
-  reference the source fixtures compare Individual Progression's table with.
+  npc_trainer and npc_trainer_template records; quest_template QuestLevel for
+  the 1.12 quest level table; player_xp_for_level as the reference the source
+  fixtures compare Individual Progression's table with.
 - CMaNGOS tbc-db
   https://github.com/cmangos/tbc-db
   ebe51a83b0fde5397f0ecd82a36cb6c40f667d36
@@ -28,7 +29,7 @@ Source projects and revisions:
 Selected historical quest, trainer, spell, rank, triggered-effect and quest
 experience data are adapted to the server's per-character progression gates,
 generated era Spell.dbc records and Individual Progression's custom_quest_xp_tbc
-table. No complete CMaNGOS database or core is distributed here. The source
+and custom_quest_xp_level tables. No complete CMaNGOS database or core is distributed here. The source
 revisions and local adaptations are recorded in versions.lock.json and in the
 client package's SOURCE_MANIFEST.json.
 
