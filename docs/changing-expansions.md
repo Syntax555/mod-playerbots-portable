@@ -77,10 +77,13 @@ The earned tier selects each character's experience rules: Vanilla before tier
 Kill XP, exploration XP, party sharing and rested XP below the cap follow the
 same rules in every era. An era quest value is reduced by the character's
 levels above the quest's level in that era, since patch 2.3.0 lowered many
-quest levels. Quests without a historical value keep their 3.3.5 value, and
+quest levels. TBC-era characters receive the 1.12 value where the TBC DB has
+no usable 2.4.3 value: quests that withhold their money at the maximum level
+and the few quests whose stored value is ten times too high. Quests without a
+historical value keep their 3.3.5 value, and
 `IndividualProgression.QuestXPFix = 0` keeps 3.3.5 quest values in every era.
-Repeating a quest that does not reset daily, weekly or monthly gives
-no XP. Individual Progression re-arms four Vanilla turn-ins
+Repeating a quest that does not reset daily, weekly or monthly gives no XP.
+Individual Progression re-arms four Vanilla turn-ins
 (`RepeatableVanillaQuestsXP`), such as Troll Necklace Bounty and Morrowgrain;
 each turn-in pays the character's era value. Recruit-a-Friend triple XP, level
 grants, summons and reputation bonus are off realm-wide.

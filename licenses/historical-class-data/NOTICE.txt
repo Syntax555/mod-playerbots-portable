@@ -13,9 +13,9 @@ Source projects and revisions:
   https://github.com/cmangos/tbc-db
   ebe51a83b0fde5397f0ecd82a36cb6c40f667d36
   Full_DB/TBCDB_1.11.0_Vengeance_One_A_Cmangos_Story.sql.gz:
-  npc_trainer and npc_trainer_template records; quest_template QuestLevel and
-  RewMoneyMaxLevel for the 2.4.3 quest experience table; player_xp_for_level
-  as a fixture reference.
+  npc_trainer and npc_trainer_template records; quest_template QuestLevel,
+  RewMoneyMaxLevel and QuestFlags for the 2.4.3 quest experience table;
+  player_xp_for_level as a fixture reference.
 - CMaNGOS mangos-classic
   https://github.com/cmangos/mangos-classic
   8ec338a1704e7dcb1c0213eb7ed58f9231ade40f
