@@ -62,6 +62,22 @@ func renameUpdateFile(from, to string) error {
 	return retryUpdateFileOperation(func() error { return os.Rename(from, to) })
 }
 
+func backupUpdateFile(target, backup string, op portableUpdateOperation) error {
+	if !strings.EqualFold(op.File.Path, "startup.exe") || op.Remove {
+		return renameUpdateFile(target, backup)
+	}
+	// Keep the launcher available until the staged file replaces it. Publish
+	// only a complete backup so recovery never mistakes a partial copy for one.
+	original := portableUpdateFile{Size: op.OriginalSize, SHA256: op.OriginalSHA256}
+	if err := copyVerifiedUpdateFile(target, backup+".tmp", original, 0700); err != nil {
+		return err
+	}
+	if err := renameUpdateFile(backup+".tmp", backup); err != nil {
+		return err
+	}
+	return syncUpdateDirectory(filepath.Dir(backup))
+}
+
 func removeUpdateFile(filename string) error {
 	return retryUpdateFileOperation(func() error { return os.Remove(filename) })
 }
@@ -393,7 +409,7 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portab
 			return rollbackUpdateAfterError(root, plan, err)
 		}
 		if op.HadOriginal {
-			if err := renameUpdateFile(target, backup); err != nil {
+			if err := backupUpdateFile(target, backup, *op); err != nil {
 				return rollbackUpdateAfterError(root, plan, err)
 			}
 		}
@@ -461,11 +477,15 @@ func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
 			if digest, err := hashUpdateFile(backup, op.OriginalSize); err != nil || digest != op.OriginalSHA256 {
 				return fmt.Errorf("rollback backup failed original-file verification: %s", op.File.Path)
 			}
-			if err := unstageUpdateFile(target, stage); err != nil {
-				return err
-			}
-			if err := renameUpdateFile(backup, target); err != nil {
-				return err
+			// A copied launcher backup may exist before replacement starts.
+			// Keep the intact original and the verified staged download then.
+			if digest, err := hashUpdateFile(target, op.OriginalSize); err != nil || digest != op.OriginalSHA256 {
+				if err := unstageUpdateFile(target, stage); err != nil {
+					return err
+				}
+				if err := renameUpdateFile(backup, target); err != nil {
+					return err
+				}
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err

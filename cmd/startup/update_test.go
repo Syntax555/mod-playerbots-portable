@@ -434,15 +434,99 @@ func TestPortableUpdateRejectsLinksAndWrongArchiveInventory(t *testing.T) {
 	}
 }
 
+func TestPortableUpdateBackupKeepsLauncherInstalled(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		remove bool
+		keep   bool
+	}{
+		{"startup.exe", false, true},
+		{"STARTUP.EXE", false, true},
+		{"bin/worldserver.exe", false, false},
+		{"startup.exe", true, false},
+	} {
+		t.Run(fmt.Sprintf("%s/remove=%v", test.name, test.remove), func(t *testing.T) {
+			root := t.TempDir()
+			original, staged := []byte("working installed file"), []byte("verified replacement")
+			updateTestWrite(t, root, test.name, original)
+			updateTestWrite(t, root, portableUpdateDirectory+"/stage/000000", staged)
+			backup := filepath.Join(root, portableUpdateDirectory, "backup", "000000")
+			if err := os.MkdirAll(filepath.Dir(backup), 0700); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(root, filepath.FromSlash(test.name))
+			op := portableUpdateOperation{
+				File: portableUpdateFile{Path: test.name}, HadOriginal: true, Remove: test.remove,
+				OriginalSize: int64(len(original)), OriginalSHA256: updateTestDigest(original),
+			}
+			if err := backupUpdateFile(target, backup, op); err != nil {
+				t.Fatal(err)
+			}
+			if digest, err := hashUpdateFile(backup, op.OriginalSize); err != nil || digest != op.OriginalSHA256 {
+				t.Fatalf("backup does not match the verified original: %v", err)
+			}
+			got, err := os.ReadFile(target)
+			if test.keep {
+				if err != nil || !bytes.Equal(got, original) {
+					t.Fatalf("launcher disappeared before its replacement was installed: %v", err)
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("ordinary backup did not move the original file: %v", err)
+			}
+			if got, err := os.ReadFile(filepath.Join(root, portableUpdateDirectory, "stage", "000000")); err != nil || !bytes.Equal(got, staged) {
+				t.Fatalf("backup changed the staged replacement: %v", err)
+			}
+			if _, err := os.Lstat(backup + ".tmp"); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("completed backup left its temporary copy: %v", err)
+			}
+		})
+	}
+}
+
+func TestPortableUpdateLauncherBackupFailureKeepsInstalledRelease(t *testing.T) {
+	root := t.TempDir()
+	original := []byte("working installed launcher")
+	updateTestWrite(t, root, "startup.exe", original)
+	files := updateTestFiles()
+	archive, manifest := updateTestArchive(t, files, "")
+	server, _, _ := updateTestRangeServer(t, archive)
+	plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launcher portableUpdateOperation
+	for _, op := range plan.Operations {
+		if op.File.Path == "startup.exe" {
+			launcher = op
+		}
+	}
+	// An existing temporary backup must fail without moving the launcher.
+	updateTestWrite(t, root, portableUpdateDirectory+"/"+launcher.Backup+".tmp", []byte("unfinished backup"))
+	if err := applyPortableUpdate(root, plan, nil); err == nil {
+		t.Fatal("update ignored the failed launcher backup")
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "startup.exe")); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("failed backup changed the installed launcher: %v", err)
+	}
+	staged := filepath.Join(root, portableUpdateDirectory, launcher.Stage)
+	if digest, err := hashUpdateFile(staged, launcher.File.Size); err != nil || digest != launcher.File.SHA256 {
+		t.Fatalf("failed backup lost the verified replacement launcher: %v", err)
+	}
+	if plan.Phase != "rolled-back" {
+		t.Fatalf("failed backup left update in phase %q", plan.Phase)
+	}
+}
+
 func TestPortableUpdateInterruptedCommitRestoresCompletePreviousVersion(t *testing.T) {
-	for _, crash := range []string{"original-moved", "new-installed", "marked-applied", "new-file-installed"} {
+	for _, crash := range []string{"original-moved", "new-installed", "marked-applied", "new-file-installed", "original-copied", "partial-copy", "complete-copy", "new-installed-from-copy"} {
 		t.Run(crash, func(t *testing.T) {
 			root := t.TempDir()
 			old := []byte("old working launcher")
 			if crash != "new-file-installed" {
 				updateTestWrite(t, root, "startup.exe", old)
 			}
-			archive, manifest := updateTestArchive(t, updateTestFiles(), "")
+			files := updateTestFiles()
+			archive, manifest := updateTestArchive(t, files, "")
 			server, _, _ := updateTestRangeServer(t, archive)
 			plan, err := stagePortableUpdate(context.Background(), root, manifest, nil, server.Client(), server.URL, nil)
 			if err != nil {
@@ -457,11 +541,20 @@ func TestPortableUpdateInterruptedCommitRestoresCompletePreviousVersion(t *testi
 				}
 				op.State = "applying"
 				if op.HadOriginal {
-					if err := os.Rename(filepath.Join(root, op.File.Path), filepath.Join(root, portableUpdateDirectory, op.Backup)); err != nil {
-						t.Fatal(err)
+					switch crash {
+					case "original-copied", "new-installed-from-copy":
+						updateTestWrite(t, root, portableUpdateDirectory+"/"+op.Backup, old)
+					case "partial-copy":
+						updateTestWrite(t, root, portableUpdateDirectory+"/"+op.Backup+".tmp", old[:len(old)/2])
+					case "complete-copy":
+						updateTestWrite(t, root, portableUpdateDirectory+"/"+op.Backup+".tmp", old)
+					default:
+						if err := os.Rename(filepath.Join(root, op.File.Path), filepath.Join(root, portableUpdateDirectory, op.Backup)); err != nil {
+							t.Fatal(err)
+						}
 					}
 				}
-				if crash != "original-moved" {
+				if crash == "new-installed" || crash == "marked-applied" || crash == "new-file-installed" || crash == "new-installed-from-copy" {
 					if err := os.Rename(filepath.Join(root, portableUpdateDirectory, op.Stage), filepath.Join(root, op.File.Path)); err != nil {
 						t.Fatal(err)
 					}
@@ -483,6 +576,11 @@ func TestPortableUpdateInterruptedCommitRestoresCompletePreviousVersion(t *testi
 				}
 			} else if err != nil || !bytes.Equal(got, old) {
 				t.Fatalf("previous launcher not restored: %v", err)
+			}
+			launcher := files["startup.exe"]
+			cached := filepath.Join(root, filepath.FromSlash(portableUpdateCacheDirectory), updateTestDigest(launcher))
+			if digest, err := hashUpdateFile(cached, int64(len(launcher))); err != nil || digest != updateTestDigest(launcher) {
+				t.Fatalf("interrupted update lost the verified replacement launcher: %v", err)
 			}
 			if err := recoverPortableUpdate(root); err != nil {
 				t.Fatalf("repeat recovery is not safe: %v", err)
