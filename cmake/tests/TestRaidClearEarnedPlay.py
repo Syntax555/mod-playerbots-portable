@@ -102,7 +102,7 @@ struct Player {
 };
 struct GroupReference { Player* player; GroupReference* nextRef=nullptr; Player* GetSource(){return player;} GroupReference* next(){return nextRef;} };
 struct Group { GroupReference* first=nullptr; GroupReference* GetFirstMember(){return first;} };
-struct PlayerbotAIBase { uint32 nextAICheckDelay=0; void SetNextCheckDelay(uint32 const delay); bool CanUpdateAI(); };
+struct PlayerbotAIBase { uint32 nextAICheckDelay=0; void SetNextCheckDelay(uint32 const delay); void ResetActionDuration(); bool CanUpdateAI(); };
 struct PlayerbotAI : PlayerbotAIBase {
  bool canCast=true,canPay=true,cast=true; uint32 casts=0; std::string spell; Player* target=nullptr;
  uint32 interruptRequests=0; void RequestSpellInterrupt(){++interruptRequests;}
@@ -172,8 +172,7 @@ def native_checks(sources):
     for index, relative in enumerate(('Raids/BlackwingLair/BwlPositions.cpp', 'Raids/MoltenCore/McRaidClear.cpp',
                                       'Raids/OnyxiasLair/OnyRaidClear.cpp', ZG)):
         text = sources[relative]
-        assert 'ResetActionDuration' not in text
-        calls = re.findall(r'botAI->RequestSpellInterrupt\(\);\s*botAI->SetNextCheckDelay\(0\);', text)
+        calls = re.findall(r'botAI->RequestSpellInterrupt\(\);\s*botAI->ResetActionDuration\(\);', text)
         assert len(calls) == 1, f'{relative} must wake the pinned AI scheduler after requesting interruption'
         wakeups.append(f'void WakeRaidBot{index}(PlayerbotAI* botAI) {{ {calls[0]} }}')
     zg = sources[ZG]
@@ -181,7 +180,8 @@ def native_checks(sources):
     # selection. Aura-effect ownership and removal match the native contract.
     controls = zg[zg.index('    struct Control\n'):zg.index('    struct ControlClaim\n')]
     production = controls + '\n'.join(function(text, signature) for text, signature in (
-        (base, 'void PlayerbotAIBase::SetNextCheckDelay('), (base, 'bool PlayerbotAIBase::CanUpdateAI()'),
+        (base, 'void PlayerbotAIBase::SetNextCheckDelay('), (base, 'void PlayerbotAIBase::ResetActionDuration()'),
+        (base, 'bool PlayerbotAIBase::CanUpdateAI()'),
         (sources[DISCIPLINE], 'void TeachRaidSpells(Player* bot)'),
         (zg, 'int32 CharmLeftMs('), (zg, 'Player* MemberToControl('),
         (zg, 'std::vector<std::pair<Player*, uint32>> ControlsToLetGo('),
@@ -212,7 +212,7 @@ def native_checks(sources):
             ('removal without caster ownership', 'production.inc',
              'RemoveAurasDueToSpell(spellId, bot->GetGUID())', 'RemoveAurasDueToSpell(spellId, 0)'),
             ('raid danger leaves the bot asleep', 'production.inc',
-             'botAI->SetNextCheckDelay(0);', 'botAI->SetNextCheckDelay(5000);'),
+             'botAI->ResetActionDuration();', 'botAI->SetNextCheckDelay(5000);'),
         ), build, 'Raid Clear earned play')
 
 
