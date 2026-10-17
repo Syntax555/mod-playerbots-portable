@@ -9,6 +9,7 @@ realm or replace the full core/module compile check.
 
 import argparse
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -40,9 +41,16 @@ values_source = (args.source / 'Ai/Base/Value/MaintenanceValues.cpp').read_text(
 item_header = (args.core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
 auction_header = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.h').read_text()
 auction_source = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.cpp').read_text()
+shared_defines = (args.core / 'src/server/shared/SharedDefines.h').read_text()
 native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
-    (item_header, 'enum ItemSubclassWeapon'), (auction_header, 'enum MailAuctionAnswers')))
+    (item_header, 'enum ItemSubclassWeapon'), (auction_header, 'enum MailAuctionAnswers'),
+    (shared_defines, 'enum ItemQualities')))
+# Doubles for these producers keep their native shape.
+assert 'uint32 TotemCategory;' in item_header
+assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
+assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in (
+    args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
 # Receipts carry the subject the core writes; the parser must keep reading that format.
 subject_writer = function(auction_source, 'std::string AuctionEntry::BuildAuctionMailSubject(MailAuctionAnswers response) const')
 util_header = (args.core / 'src/common/Utilities/Util.h').read_text()
@@ -56,6 +64,48 @@ auction_rules = '\n'.join([
     function(auction_source, 'uint32 AuctionEntry::GetAuctionCut() const'),
 ])
 assert "strm << item_template << \":0:\" << response << ':' << Id << ':' << itemCount;" in subject_writer
+
+
+def sql_values(row):
+    values, value, quoted, index = [], '', False, 0
+    while index < len(row):
+        char = row[index]
+        if quoted and char == '\\':
+            value += row[index + 1]
+            index += 1
+        elif char == "'":
+            quoted = not quoted
+        elif char == ',' and not quoted:
+            values.append(value)
+            value = ''
+        else:
+            value += char
+        index += 1
+    return values + [value]
+
+
+def tool_rows():
+    """Every tool the upstream usage marks as needed for a skill, with its pinned item data."""
+    usage_source = (args.source / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
+    body = function(usage_source, 'bool ItemUsageValue::IsItemNeededForSkill(ItemTemplate const* proto)')
+    skills = {int(entry): set(re.findall(r'SKILL_[A-Z]+', needs))
+              for entry, needs in re.findall(r'case (\d+):[^\n]*\n\s*return ([^;]+);', body)}
+    table = (args.core / 'data/sql/base/db_world/item_template.sql').read_text(encoding='utf-8')
+    create = table.split('CREATE TABLE `item_template` (')[1].split(') ENGINE')[0]
+    columns = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
+    rows = {}
+    for line in table.splitlines():
+        if line.startswith('(') and line.split(',', 1)[0][1:].isdigit() and int(line.split(',', 1)[0][1:]) in skills:
+            values = dict(zip(columns, sql_values(line.rstrip(',;')[1:-1]), strict=True))
+            rows[int(values['entry'])] = values
+    assert len(skills) >= 20 and set(rows) == set(skills), sorted(set(skills) - set(rows))
+    gathering = {'SKILL_MINING', 'SKILL_SKINNING', 'SKILL_FISHING', 'SKILL_HERBALISM'}
+    # The data distinguishes gathering from crafting tools only if both kinds exist.
+    assert {bool(needs & gathering) for needs in skills.values()} == {True, False}
+    return ',\n'.join(
+        f'    {{{entry}, {row["class"]}, {row["subclass"]}, {row["TotemCategory"]}, '
+        f'{"true" if skills[entry] & gathering else "false"}}}'
+        for entry, row in sorted(rows.items()))
 
 
 policy_tests = r'''
@@ -119,9 +169,17 @@ void PolicyTests()
                                   "2589::3:17:20", "2589:0:3:17:20 ", "-1:0:3:17:20", "4294967296:0:3:17:20",
                                   ":0:3:17:20", "2589:0:3:17:", "+2589:0:3:17:20"})
         assert(!ParseAuctionSubject(malformed));
-    assert(RelistAllowed({0, 0}, 0) && RelistAllowed({MaxUnsoldListings - 1, 100}, 100));
-    assert(!RelistAllowed({MaxUnsoldListings, 100}, 100 + UnsoldMemorySeconds - 1));
-    assert(RelistAllowed({MaxUnsoldListings, 100}, 100 + UnsoldMemorySeconds));
+    assert(RelistAllowed({0, 0}, 0, 0) && RelistAllowed({MaxUnsoldListings - 1, 100}, 100, 43200));
+    assert(!RelistAllowed({MaxUnsoldListings, 100}, 100 + UnsoldMemorySeconds - 1, 43200));
+    assert(RelistAllowed({MaxUnsoldListings, 100}, 100 + UnsoldMemorySeconds, 43200));
+    // Week-long listings are remembered for three rounds.
+    assert(!RelistAllowed({MaxUnsoldListings, 100}, 100 + 3 * UnsoldMemorySeconds - 1, UnsoldMemorySeconds));
+    assert(RelistAllowed({MaxUnsoldListings, 100}, 100 + 3 * UnsoldMemorySeconds, UnsoldMemorySeconds));
+    UnsoldRecord record;
+    CountUnsold(record, 1000, 43200); assert(record.unsold == 1 && record.last == 1000);
+    CountUnsold(record, 44199, 43200); assert(record.unsold == 1 && record.last == 1000);
+    CountUnsold(record, 44200, 43200); assert(record.unsold == 2 && record.last == 44200);
+    CountUnsold(record, 44200, 0); assert(record.unsold == 3);
 
     assert(ReceiptReady(true, false, 0, 100, 200, 100));
     assert(!ReceiptReady(false, false, 0, 100, 200, 100));
@@ -161,7 +219,7 @@ using int32 = std::int32_t;
 constexpr uint32 MINUTE = 60, MIN_AUCTION_TIME = 43200;
 constexpr uint8 INVENTORY_SLOT_BAG_0 = 0, INVENTORY_SLOT_BAG_START = 19,
     INVENTORY_SLOT_BAG_END = 23, INVENTORY_SLOT_ITEM_START = 23, INVENTORY_SLOT_ITEM_END = 39;
-constexpr int ITEM_FIELD_DURATION = 1, ITEM_QUALITY_NORMAL = 1, ITEM_FLAG_CONJURED = 2, BIND_QUEST_ITEM = 4,
+constexpr int ITEM_FIELD_DURATION = 1, ITEM_FLAG_CONJURED = 2, BIND_QUEST_ITEM = 4,
     PLAYERSPELL_REMOVED = 1, MAX_SPELL_REAGENTS = 8, NULL_BAG = 255, NULL_SLOT = 255,
     EQUIP_ERR_OK = 0, GAMEOBJECT_TYPE_MAILBOX = 1, UNIT_NPC_FLAG_MAILBOX = 2,
     UNIT_NPC_FLAG_AUCTIONEER = 4, MAIL_AUCTION = 2, MAIL_STATE_DELETED = 3,
@@ -192,7 +250,7 @@ struct ItemTemplate
     struct Spell { int SpellId = 0; };
     std::array<Spell, 5> Spells{};
     uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = 1, SubClass = 0,
-        Bonding = 0;
+        Bonding = 0, TotemCategory = 0;
     bool conjured = false, petFood = false;
     bool HasFlag(int) const { return conjured; }
 };
@@ -277,10 +335,11 @@ struct AiObjectContext
 struct Player;
 struct PlayerbotAI
 {
-    Player* bot = nullptr; AiObjectContext context; bool master = false;
+    Player* bot = nullptr; AiObjectContext context; bool master = false, realGuild = false;
     Player* GetBot() const { return bot; }
     AiObjectContext* GetAiObjectContext() { return &context; }
     bool HasGameClientMaster() const { return master; }
+    bool IsInRealGuild() const { return realGuild; }
 };
 struct MailItemInfo { uint32 item_guid; };
 struct Mail
@@ -320,12 +379,17 @@ struct AuctionHouseObject
     AuctionEntry* GetAuction(uint32 id) const
     { auto it = auctions.find(id); return it == auctions.end() ? nullptr : it->second; }
 };
-constexpr int RATE_AUCTION_DEPOSIT = 1, RATE_AUCTION_CUT = 2;
+constexpr int RATE_AUCTION_DEPOSIT = 1, RATE_AUCTION_CUT = 2, RATE_AUCTION_TIME = 3;
 struct World
 {
-    float rate = 1, cutRate = 1;
-    float getRate(int which) const { return which == RATE_AUCTION_CUT ? cutRate : rate; }
+    float rate = 1, cutRate = 1, timeRate = 1;
+    float getRate(int which) const
+    { return which == RATE_AUCTION_CUT ? cutRate : which == RATE_AUCTION_TIME ? timeRate : rate; }
 } world;
+struct ToolRow { uint32 entry, cls, subclass, totem; bool gathers; };
+std::vector<ToolRow> const tools{
+@@TOOLS@@
+};
 auto* sWorld = &world;
 #define LOG_DEBUG(...)
 struct AuctionHouseMgr
@@ -490,7 +554,7 @@ void WorldSession::HandleAuctionPlaceBid(WorldPacket& packet)
 namespace EarnedAuction
 {
 bool IsEnabled(PlayerbotAI*); bool HasSurplus(PlayerbotAI*);
-bool HasVendorSurplus(PlayerbotAI*); bool SellsToVendor(PlayerbotAI*, ItemUsage);
+bool HasVendorSurplus(PlayerbotAI*); bool SellsToVendor(PlayerbotAI*, Item*, ItemUsage);
 bool ShouldReserveForAuction(PlayerbotAI*, Item*, ItemUsage); bool QueueVisit(PlayerbotAI*, ObjectGuid, bool);
 }
 '''
@@ -590,11 +654,12 @@ struct Scenario
         AuctionEntry auction; auction.Id = 7; auction.item_template = item.GetEntry(); auction.itemCount = item.count;
         return auction.BuildAuctionMailSubject(response);
     }
+    std::int64_t Listing() const { return std::int64_t(MIN_AUCTION_TIME * double(world.timeRate)); }
     // List the stack, let the auction expire and collect the returned stack.
     void Unsold(Item& item)
     {
         assert(Visit()); assert(bot.session.lastItem == item.guid && !bot.GetItemByGuid(item.guid));
-        Receipt(&item).subject = Subject(item, AUCTION_EXPIRED); auctionMgr.items.erase(item.guid);
+        now += Listing(); Receipt(&item).subject = Subject(item, AUCTION_EXPIRED); auctionMgr.items.erase(item.guid);
         assert(Visit(true)); assert(bot.GetItemByGuid(item.guid) == &item);
         now += sPlayerbotAIConfig.earnedAuctionInterval;
     }
@@ -996,26 +1061,47 @@ void ServiceTests()
         assert(!HasSurplus(&s.bot.ai) && ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_VENDOR));
         SkillLineAbilityEntry tailoring{2, SKILL_TAILORING, 99}; spellMgr.abilities.insert({99, &tailoring});
         assert(HasSurplus(&s.bot.ai) && !ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_VENDOR));
+        // SelfBots and altbots belong to players who craft.
+        s.bot.ai.master = true; assert(ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_VENDOR));
+        s.bot.ai.master = false; s.bot.random = false; assert(ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_VENDOR));
     }
     {
         // Of profession items, natural bots buy only gathering tools.
         Scenario s; Item& cloth = s.MakeItem(100, 1, ITEM_USAGE_SKILL); cloth.proto.Class = ITEM_CLASS_TRADE_GOODS;
         s.Offer(cloth); assert(!s.Visit()); assert(!s.bot.session.buys && s.bot.money == 10000);
+        for (ToolRow const& tool : tools)
+        {
+            ItemTemplate proto; proto.ItemId = tool.entry; proto.Class = tool.cls; proto.SubClass = tool.subclass;
+            proto.TotemCategory = tool.totem; assert(GatheringTool(&proto) == tool.gathers);
+        }
     }
     {
-        Scenario s; Item& pick = s.MakeItem(100, 1, ITEM_USAGE_SKILL); pick.proto.Class = ITEM_CLASS_WEAPON;
-        pick.proto.SubClass = ITEM_SUBCLASS_WEAPON_MISC; s.Offer(pick);
+        // A Blacksmith Hammer serves crafting.
+        Scenario s; Item& hammer = s.MakeItem(5956, 1, ITEM_USAGE_SKILL); hammer.proto.Class = ITEM_CLASS_WEAPON;
+        hammer.proto.SubClass = ITEM_SUBCLASS_WEAPON_MISC; hammer.proto.TotemCategory = 162; s.Offer(hammer);
+        assert(!s.Visit()); assert(!s.bot.session.buys && s.bot.money == 10000);
+    }
+    {
+        Scenario s; Item& pick = s.MakeItem(2901, 1, ITEM_USAGE_SKILL); pick.proto.Class = ITEM_CLASS_WEAPON;
+        pick.proto.SubClass = ITEM_SUBCLASS_WEAPON_MISC; pick.proto.TotemCategory = 165; s.Offer(pick);
         assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.money == 9500);
     }
     {
         // Natural upkeep has no disenchanting: a random bot sells outgrown bound gear.
         Scenario s; Item& gear = s.BagItem(100, 1, ITEM_USAGE_DISENCHANT); gear.bound = true;
-        assert(SellsToVendor(&s.bot.ai, ITEM_USAGE_DISENCHANT) && HasVendorSurplus(&s.bot.ai));
+        gear.proto.Quality = ITEM_QUALITY_UNCOMMON;
+        assert(SellsToVendor(&s.bot.ai, &gear, ITEM_USAGE_DISENCHANT) && HasVendorSurplus(&s.bot.ai));
         s.bot.ai.master = true; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.ai.master = false;
         s.bot.random = false; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.random = true;
-        sPlayerbotAIConfig.naturalProgression = false; assert(!SellsToVendor(&s.bot.ai, ITEM_USAGE_DISENCHANT));
-        assert(SellsToVendor(nullptr, ITEM_USAGE_VENDOR) && SellsToVendor(nullptr, ITEM_USAGE_AH));
-        assert(!SellsToVendor(nullptr, ITEM_USAGE_DISENCHANT) && !SellsToVendor(&s.bot.ai, ITEM_USAGE_EQUIP));
+        // Vendors refuse gear without a price, which would hold a bot at the vendor.
+        gear.proto.SellPrice = 0; assert(!HasVendorSurplus(&s.bot.ai)); gear.proto.SellPrice = 100;
+        // As with disenchanting, a bot in a real guild keeps rare gear.
+        s.bot.ai.realGuild = true; assert(HasVendorSurplus(&s.bot.ai));
+        gear.proto.Quality = ITEM_QUALITY_RARE; assert(!HasVendorSurplus(&s.bot.ai));
+        s.bot.ai.realGuild = false; assert(HasVendorSurplus(&s.bot.ai));
+        sPlayerbotAIConfig.naturalProgression = false; assert(!SellsToVendor(&s.bot.ai, &gear, ITEM_USAGE_DISENCHANT));
+        assert(SellsToVendor(nullptr, nullptr, ITEM_USAGE_VENDOR) && SellsToVendor(nullptr, nullptr, ITEM_USAGE_AH));
+        assert(!SellsToVendor(nullptr, &gear, ITEM_USAGE_DISENCHANT) && !SellsToVendor(&s.bot.ai, &gear, ITEM_USAGE_EQUIP));
     }
     {
         // The parser reads the subjects the core writes.
@@ -1038,6 +1124,36 @@ void ServiceTests()
         now += UnsoldMemorySeconds; assert(HasSurplus(&s.bot.ai)); // Forgotten after a week.
     }
     {
+        // Stacks listed together return together and count as one unsold round.
+        Scenario s; Item& first = s.BagItem(100, 5); Item& second = s.BagItem(100, 5);
+        for (uint32 round = 0; round < MaxUnsoldListings; ++round)
+        {
+            assert(HasSurplus(&s.bot.ai));
+            assert(s.Visit()); assert(!s.bot.GetItemByGuid(first.guid) && !s.bot.GetItemByGuid(second.guid));
+            now += s.Listing();
+            for (Item* stack : {&first, &second})
+            {
+                s.Receipt(stack).subject = s.Subject(*stack, AUCTION_EXPIRED);
+                auctionMgr.items.erase(stack->guid);
+            }
+            assert(s.Visit(true)); assert(s.bot.GetItemByGuid(first.guid) && s.bot.GetItemByGuid(second.guid));
+            now += sPlayerbotAIConfig.earnedAuctionInterval;
+        }
+        assert(!HasSurplus(&s.bot.ai));
+    }
+    {
+        // Long Rate.Auction.Time listings still count both unsold rounds.
+        Scenario s; world.timeRate = 14; Item& item = s.BagItem(100, 5);
+        for (uint32 expiry = 0; expiry < MaxUnsoldListings; ++expiry)
+        {
+            assert(HasSurplus(&s.bot.ai));
+            s.Unsold(item);
+        }
+        assert(!HasSurplus(&s.bot.ai));
+        now += UnsoldMemorySeconds; assert(!HasSurplus(&s.bot.ai));
+        now += 3 * s.Listing(); assert(HasSurplus(&s.bot.ai));
+    }
+    {
         // A sale shows demand and clears the record.
         Scenario s; Item& item = s.BagItem(100, 5);
         for (uint32 expiry = 0; expiry < MaxUnsoldListings; ++expiry)
@@ -1047,11 +1163,14 @@ void ServiceTests()
         assert(s.Visit(true)); assert(HasSurplus(&s.bot.ai) && s.bot.money == 10200);
     }
     {
-        // A returned stack counts once, when it is actually taken back.
+        // A returned stack counts once, when it is actually taken back, however
+        // long full bags leave it in the mail.
         Scenario s; Item& item = s.BagItem(100, 5);
-        assert(s.Visit()); s.Receipt(&item).subject = s.Subject(item, AUCTION_EXPIRED);
+        assert(s.Visit()); now += s.Listing(); Mail& mail = s.Receipt(&item);
+        mail.subject = s.Subject(item, AUCTION_EXPIRED); mail.expire_time = now + 3 * s.Listing();
         auctionMgr.items.erase(item.guid); s.bot.session.rejectItem = true;
-        assert(!s.Visit(true)); now += sPlayerbotAIConfig.earnedAuctionInterval; s.bot.session.rejectItem = false;
+        assert(!s.Visit(true)); now += s.Listing(); assert(!s.Visit(true)); s.bot.session.rejectItem = false;
+        now += sPlayerbotAIConfig.earnedAuctionInterval;
         assert(s.Visit(true)); assert(s.bot.GetItemByGuid(item.guid) == &item && HasSurplus(&s.bot.ai));
         now += sPlayerbotAIConfig.earnedAuctionInterval; s.Unsold(item); assert(!HasSurplus(&s.bot.ai));
     }
@@ -1059,6 +1178,7 @@ void ServiceTests()
         // Won purchases and unreadable receipts are no unsold stock.
         Scenario s; s.BagItem(100, 5);
         Item& bought = s.MakeItem(100, 2); s.Receipt(&bought).subject = s.Subject(bought, AUCTION_WON);
+        assert(s.Visit(true)); now += s.Listing();
         Item& odd = s.MakeItem(100, 1); s.Receipt(&odd).subject = "100:0:3:7";
         assert(s.Visit(true)); assert(s.bot.inventory.size() == 3 && HasSurplus(&s.bot.ai));
         for (Item* item : {&bought, &odd}) assert(s.bot.GetItemByGuid(item->guid) == item);
@@ -1161,10 +1281,13 @@ production = {
 }
 
 
+tools = tool_rows()
+
+
 def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
     text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
-    text = text.replace('@@AUCTIONRULES@@', auction_rules)
+    text = text.replace('@@AUCTIONRULES@@', auction_rules).replace('@@TOOLS@@', tools)
     # The policy header is compiled from a private copy, so mutants can change it.
     headers = Path(directory) / name
     headers.mkdir()
@@ -1203,18 +1326,33 @@ mutations = [
     ('purchase while one is pending', 'service', 'bool const bought = !state.pendingPurchase && ', 'bool const bought = '),
     ('receipt deleted with attachments', 'service', 'if (AuctionReceipt(mail, now) && !mail->money && mail->items.empty())',
      'if (AuctionReceipt(mail, now))'),
-    ('recipe reagents protected', 'service', ' || IsProfessionSpell(spellId)', ''),
-    ('profession materials bought', 'service',
-     ('(usage == ITEM_USAGE_SKILL && proto->Class == ITEM_CLASS_WEAPON &&\n'
-      '                             proto->SubClass == ITEM_SUBCLASS_WEAPON_MISC)'), 'usage == ITEM_USAGE_SKILL'),
+    ('recipe reagents protected', 'service', '(!_crafts && IsProfessionSpell(spellId))', '(!_crafts && false)'),
+    ('SelfBot recipe reagents sold', 'service',
+     'return !sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) || ai->HasGameClientMaster();',
+     'return !sRandomPlayerbotMgr.IsRandomBot(ai->GetBot());'),
+    ('altbot recipe reagents sold', 'service',
+     'return !sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) || ai->HasGameClientMaster();',
+     'return ai->HasGameClientMaster();'),
+    ('profession materials bought', 'service', '(usage == ITEM_USAGE_SKILL && GatheringTool(proto))',
+     'usage == ITEM_USAGE_SKILL'),
+    ('crafting tools bought', 'service', '        default:\n            return false;\n    }\n}\n\nbool BuyUseful',
+     '        default:\n            return true;\n    }\n}\n\nbool BuyUseful'),
+    ('fishing poles refused', 'service',
+     ('    if (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE)\n'
+      '        return true;\n'), ''),
+    ('multi-tools refused', 'service', '        case 161:  // Gnomish Army Knife\n', ''),
     ('bound gear vendored outside natural progression', 'service',
-     'usage == ITEM_USAGE_DISENCHANT && sPlayerbotAIConfig.naturalProgression && ai', 'usage == ITEM_USAGE_DISENCHANT && ai'),
+     'proto->SellPrice && sPlayerbotAIConfig.naturalProgression &&', 'proto->SellPrice &&'),
     ('bound gear vendored for a bot a player owns', 'service',
-     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus',
-     '!ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus'),
+     'ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster() &&\n           (proto',
+     'ai->GetBot() && !ai->HasGameClientMaster() &&\n           (proto'),
     ('bound gear vendored with a game-client master', 'service',
-     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus',
-     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot());\n}\n\nbool HasVendorSurplus'),
+     'ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster() &&\n           (proto',
+     'ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) &&\n           (proto'),
+    ('unpriced gear vendored', 'service', 'proto && proto->SellPrice && ', 'proto && '),
+    ('rare gear of a real guild vendored', 'service', '|| !ai->IsInRealGuild())', '|| !ai->IsInRealGuild() || true)'),
+    ('uncommon gear of a real guild kept', 'service', 'proto->Quality <= ITEM_QUALITY_UNCOMMON',
+     'proto->Quality < ITEM_QUALITY_UNCOMMON'),
     ('profession test without the skill line', 'profession', 'IsProfessionSkill(it->second->SkillLine)', 'true'),
     ('unsold stock listed again', 'service', 'return CanList(ai, item) && RelistAllowed(ai, item) && ',
      'return CanList(ai, item) && '),
@@ -1227,8 +1365,16 @@ mutations = [
     ('returned stock holds up purchases', 'service', 'if (!subject || subject->response == AUCTION_WON)',
      'if (!subject || subject->response == AUCTION_WON || subject)'),
     ('unsold record never forgotten', 'policy',
-     'return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now);',
-     'return record.unsold < MaxUnsoldListings || (UnsoldForgotten(record, now) && false);'),
+     'return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now, listing);',
+     'return record.unsold < MaxUnsoldListings || (UnsoldForgotten(record, now, listing) && false);'),
+    ('stacks of one round counted apart', 'policy', 'now - record.last < round)', 'now - record.last < round * 0)'),
+    ('memory shorter than long listings', 'policy', 'UnsoldMemorySeconds, 3 * listing)', 'UnsoldMemorySeconds, 0 * listing)'),
+    ('listing duration without Rate.Auction.Time', 'service', '* sWorld->getRate(RATE_AUCTION_TIME);',
+     '* (sWorld->getRate(RATE_AUCTION_TIME) * 0 + 1);'),
+    ('returned stacks counted apart', 'service', 'Unsold().Record(stock, now, ListingSeconds(), ListingSeconds());',
+     'Unsold().Record(stock, now, 0, ListingSeconds());'),
+    ('refusals wait for a listing round', 'service', 'Unsold().Record(StockKey(bot, item), now, 0, ListingSeconds());',
+     'Unsold().Record(StockKey(bot, item), now, ListingSeconds(), ListingSeconds());'),
     ('subject with a second field accepted', 'policy', '    if (fields[1])\n        return {};\n', ''),
     ('partial subject field accepted', 'policy', 'parsed != last', 'false'),
     ('listing that cannot repay its deposit', 'service',
@@ -1241,8 +1387,8 @@ mutations = [
     ('house cut ignored', 'service', 'return sale.GetAuctionCut();', 'return 0 * sale.GetAuctionCut();'),
     ('listing below twice the vendor price', 'policy', 'buyout < floor || ', 'buyout < floor * 0 || '),
     ('refusal not counted', 'service',
-     '            if (refused.insert(Stock(item)).second)\n                Unsold().Record(StockKey(bot, item), now);',
-     '            if (refused.insert(Stock(item)).second)\n                Unsold().Allowed(StockKey(bot, item), now);'),
+     '            if (refused.insert(Stock(item)).second)\n                Unsold().Record(StockKey(bot, item), now, 0, ListingSeconds());',
+     '            if (refused.insert(Stock(item)).second)\n                Unsold().Allowed(StockKey(bot, item), now, ListingSeconds());'),
     ('refusals counted per stack', 'service', 'if (refused.insert(Stock(item)).second)', 'if (refused.insert(Stock(item)).second || true)'),
     ('same-account listings undercut', 'service',
      'if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId() || !offer || !unit)',

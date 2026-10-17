@@ -13,29 +13,33 @@ and blocked movement prevent market trips.
 ## What bots can trade
 
 Sellers keep quest items, needed equipment, reagents of learned class spells,
-supplies and the hunter's last pet food. Natural bots do not craft, so profession
-materials are kept only within Playerbots' ordinary stack limits. Equipped, bound,
-conjured, temporary and otherwise ineligible items are not listed. Each listing
-transfers an existing whole stack and pays its normal deposit from the bot's
-balance. Automatic vendor selling also protects these essentials under natural
+supplies and the hunter's last pet food. Random bots do not craft, so they keep
+profession materials only within Playerbots' ordinary stack limits; SelfBots and
+altbots keep the reagents of their learned recipes. Equipped, bound, conjured,
+temporary and otherwise ineligible items are not listed. Each listing transfers
+an existing whole stack and pays its normal deposit from the bot's balance.
+Automatic vendor selling also protects these essentials under natural
 progression. Natural upkeep does not disenchant, so a random bot with Enchanting
-sells outgrown bound gear to a vendor.
+sells outgrown bound gear that a vendor buys. In a guild led by a player it
+keeps rare and better gear, as it would from disenchanting.
 
-Buyers select useful equipment, supplies or gathering tools while reserving
-money for ordinary upkeep. Each purchase costs at most a quarter of the current
-balance and must fit the available category budget. Bots cannot buy their own
-or same-account auctions. They wait while an outstanding bid or an uncollected
-won item exists. Other bots' auctions are eligible because the buyer pays and
-the seller gives up the actual item.
+Buyers select useful equipment, supplies or gathering tools (mining picks,
+skinning knives and fishing poles) while reserving money for ordinary upkeep.
+Each purchase costs at most a quarter of the current balance and must fit the
+available category budget. Bots cannot buy their own or same-account auctions.
+They wait while an outstanding bid or an uncollected won item exists. Other
+bots' auctions are eligible because the buyer pays and the seller gives up the
+actual item.
 
 A bot maintains at most 20 listings, at most two of the same item, and attempts
 at most two new listings and one buyout per visit. Bots list for the 12-hour
 duration, which `Rate.Auction.Time` scales.
 
-An item that expires unsold or is refused a listing twice is not listed again
-for a week; the bot sells it to a vendor instead. A completed sale of the item
-clears that record. The record is kept in server memory, so a restart forgets
-it.
+An item that returns unsold in two listing rounds, or is refused a listing
+twice, is not listed again for a week, or for three listing durations if that is
+longer. Stacks returning within one listing duration count as one round. The bot
+sells such stock to a vendor instead. A completed sale of the item clears that
+record. The record is kept in server memory, so a restart forgets it.
 
 ## Pricing and travel
 
