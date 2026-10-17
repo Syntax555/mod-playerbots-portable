@@ -79,6 +79,15 @@ On a machine with more memory, adjust `CL_MPCount` and
 `CMAKE_BUILD_PARALLEL_LEVEL` before building. Increasing both limits can
 multiply the number of active compiler processes.
 
+Windows compiles only within RAM plus page files. If the build stops with
+`fatal error C1060: compiler is out of heap space`, enlarge the page file or
+lower `CL_MPCount` to `1`, then run the same build command again; compiled
+objects are kept. The release workflow adds a 32 GB page file before compiling,
+keeps compiler diagnostics as plain text (`UseStructuredOutput=false`) and
+retries a memory failure with one parallel project, and with one compiler
+worker when the modules project failed. A final step reports peak commit and
+page-file use.
+
 To generate the native server projects before starting the full C++ build:
 
 ```powershell

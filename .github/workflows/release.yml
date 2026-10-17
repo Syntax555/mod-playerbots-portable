@@ -191,6 +191,9 @@ jobs:
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
       # MSBuild supplies /MP2 without changing the core's native /MP option.
       CL_MPCount: '2'
+      # Keep compiler diagnostics as text: MSBuild's background SARIF reader
+      # fails the whole CL task when it cannot allocate memory.
+      UseStructuredOutput: 'false'
       # Bundled runtime dependencies. Change a version together with the
       # SHA-256 of its exact download.
       MYSQL_VERSION: '8.0.40'
@@ -308,6 +311,110 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "Windows resource compilation failed: $application" }
           }
 
+      - name: Add page file for the C++ compile
+        # Windows commits memory only up to RAM plus page files, and the long
+        # modules compile can exhaust that on the 16 GB runner and lose the
+        # runner itself. NtCreatePagingFile adds a page file without a reboot;
+        # an active one cannot shrink, so the new one goes on a drive that has
+        # none. Failure only warns: the compile and its memory retry still run.
+        shell: powershell
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pageGB = 32
+          $source = @'
+          using System;
+          using System.ComponentModel;
+          using System.Runtime.InteropServices;
+          using System.Text;
+
+          public static class LivePageFile
+          {
+              [StructLayout(LayoutKind.Sequential)]
+              struct LUID { public uint Low; public int High; }
+
+              [StructLayout(LayoutKind.Sequential)]
+              struct TOKEN_PRIVILEGES { public uint Count; public LUID Luid; public uint Attributes; }
+
+              [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+              struct UNICODE_STRING { public ushort Length; public ushort MaximumLength; public string Buffer; }
+
+              [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+              static extern bool LookupPrivilegeValue(string system, string name, out LUID luid);
+              [DllImport("advapi32.dll", SetLastError = true)]
+              static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+              [DllImport("advapi32.dll", SetLastError = true)]
+              static extern bool AdjustTokenPrivileges(IntPtr token, bool disableAll, ref TOKEN_PRIVILEGES state, uint length, IntPtr previous, IntPtr returned);
+              [DllImport("kernel32.dll")]
+              static extern IntPtr GetCurrentProcess();
+              [DllImport("kernel32.dll", SetLastError = true)]
+              static extern bool CloseHandle(IntPtr handle);
+              [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+              static extern uint QueryDosDevice(string device, StringBuilder target, int max);
+              [DllImport("ntdll.dll", CharSet = CharSet.Unicode)]
+              static extern int NtCreatePagingFile(ref UNICODE_STRING name, ref long minimum, ref long maximum, uint priority);
+
+              public static string Add(string drive, long size)
+              {
+                  LUID luid;
+                  if (!LookupPrivilegeValue(null, "SeCreatePagefilePrivilege", out luid)) throw new Win32Exception();
+                  IntPtr token;
+                  if (!OpenProcessToken(GetCurrentProcess(), 0x28 /* TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY */, out token)) throw new Win32Exception();
+                  try
+                  {
+                      var state = new TOKEN_PRIVILEGES { Count = 1, Luid = luid, Attributes = 2 /* SE_PRIVILEGE_ENABLED */ };
+                      if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero)) throw new Win32Exception();
+                      int adjusted = Marshal.GetLastWin32Error();
+                      if (adjusted != 0) throw new Win32Exception(adjusted);
+                  }
+                  finally { CloseHandle(token); }
+                  var device = new StringBuilder(260);
+                  if (QueryDosDevice(drive, device, device.Capacity) == 0) throw new Win32Exception();
+                  string path = device.ToString() + @"\pagefile.sys";
+                  var name = new UNICODE_STRING { Length = (ushort)(path.Length * 2), MaximumLength = (ushort)((path.Length + 1) * 2), Buffer = path };
+                  long minimum = size, maximum = size;
+                  int status = NtCreatePagingFile(ref name, ref minimum, ref maximum, 0);
+                  if (status != 0) throw new Exception(string.Format("NtCreatePagingFile({0}) returned NTSTATUS 0x{1:X8}", path, status));
+                  return path;
+              }
+          }
+          '@
+          function Write-PageFileWarning([string]$Title, [string]$Message) {
+              $Message = $Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::warning title=${Title}::$Message"
+          }
+          try {
+              $os = Get-CimInstance Win32_OperatingSystem
+              # The memory report after the compile compares its peak with this limit.
+              # Windows PowerShell's UTF-8 Out-File would start the step's GITHUB_ENV with a BOM.
+              [IO.File]::AppendAllText($env:GITHUB_ENV, "PORTABLE_COMMIT_LIMIT_MB=$([int64]($os.TotalVirtualMemorySize / 1KB))`n")
+              'RAM {0:N1} GB, commit limit {1:N1} GB, system-managed page file: {2}' -f ($os.TotalVisibleMemorySize / 1MB), ($os.TotalVirtualMemorySize / 1MB), (Get-CimInstance Win32_ComputerSystem).AutomaticManagedPagefile
+              $pageFiles = @(Get-CimInstance Win32_PageFileUsage)
+              $pageFiles | ForEach-Object { 'Page file {0}: {1} MB' -f $_.Name, $_.AllocatedBaseSize }
+              # The build tree is on D:, and either drive keeps 30 GB for the build.
+              $pageDrive = $null
+              foreach ($letter in 'D', 'C') {
+                  $volume = Get-Volume -DriveLetter $letter -ErrorAction SilentlyContinue
+                  if (-not $volume) { continue }
+                  '{0}: {1:N0} of {2:N0} GB free' -f $letter, ($volume.SizeRemaining / 1GB), ($volume.Size / 1GB)
+                  $hasPageFile = @($pageFiles | Where-Object { $_.Name -like "${letter}:\*" }).Count -gt 0
+                  if (-not $pageDrive -and -not $hasPageFile -and $volume.SizeRemaining -ge ($pageGB + 30) * 1GB) { $pageDrive = $letter }
+              }
+              if (-not $pageDrive) { throw "No drive without a page file has $($pageGB + 30) GB free." }
+              Add-Type -TypeDefinition $source
+              $path = [LivePageFile]::Add("${pageDrive}:", [int64]$pageGB * 1GB)
+          } catch {
+              Write-PageFileWarning 'Page file not added' $_.Exception.Message
+              exit 0
+          }
+          "Added $pageGB GB page file $path."
+          try {
+              'Commit limit now {0:N1} GB' -f ((Get-CimInstance Win32_OperatingSystem).TotalVirtualMemorySize / 1MB)
+          } catch {
+              Write-PageFileWarning 'Commit limit unknown' $_.Exception.Message
+          }
+
       - name: Compile and assemble complete distribution
         run: |
           . ./scripts/WriteActionsError.ps1
@@ -317,10 +424,18 @@ jobs:
           $buildExitCode = $LASTEXITCODE
           # cl.exe reports C1060; MSBuild's CL task can also run out of memory itself.
           $memoryFailure = '\berror C1060\b|\bSystem[.]OutOfMemoryException\b'
-          if ($buildExitCode -ne 0 -and @($buildLog | Where-Object { "$_" -match $memoryFailure }).Count -gt 0) {
+          $memoryFailures = @($buildLog | Where-Object { "$_" -match $memoryFailure })
+          if ($buildExitCode -ne 0 -and $memoryFailures.Count -gt 0) {
               # Keep successful objects and retry the memory failure with one native project.
-              Write-Output 'Compiler memory exhaustion: retrying with one parallel project.'
+              # Idle MSBuild nodes of the failed attempt would keep their memory.
+              Get-Process -Name MSBuild, cl, VCTIP, mspdbsrv -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
               $env:CMAKE_BUILD_PARALLEL_LEVEL = '1'
+              # The modules project compiles alone, so only fewer compiler workers
+              # relieve it; the CL task ignores /MP when it checks current objects.
+              if (@($memoryFailures | Where-Object { "$_" -match '\bmodules[.]vcxproj\b' }).Count -gt 0) {
+                  $env:CL_MPCount = '1'
+              }
+              Write-Output "Compiler memory exhaustion: retrying with one parallel project and CL_MPCount=$env:CL_MPCount."
               cmake --build build --config Release --parallel 1 2>&1 | Tee-Object -Variable buildLog
               $buildExitCode = $LASTEXITCODE
           }
@@ -341,6 +456,51 @@ jobs:
               }
               exit $buildExitCode
           }
+
+      - name: Report compile memory use
+        # Peak commit above the limit measured before the page file was added
+        # shows that the compile needed it; page-file use only shows paging.
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          $source = @'
+          using System;
+          using System.ComponentModel;
+          using System.Runtime.InteropServices;
+
+          public static class CommitInfo
+          {
+              [StructLayout(LayoutKind.Sequential)]
+              struct PERFORMANCE_INFORMATION
+              {
+                  public uint cb;
+                  public UIntPtr CommitTotal, CommitLimit, CommitPeak, PhysicalTotal, PhysicalAvailable,
+                      SystemCache, KernelTotal, KernelPaged, KernelNonpaged, PageSize;
+                  public uint HandleCount, ProcessCount, ThreadCount;
+              }
+
+              [DllImport("kernel32.dll", SetLastError = true)]
+              static extern bool K32GetPerformanceInfo(ref PERFORMANCE_INFORMATION information, uint size);
+
+              // Peak commit and current commit limit in bytes.
+              public static ulong[] Read()
+              {
+                  var information = new PERFORMANCE_INFORMATION();
+                  information.cb = (uint)Marshal.SizeOf(typeof(PERFORMANCE_INFORMATION));
+                  if (!K32GetPerformanceInfo(ref information, information.cb)) throw new Win32Exception();
+                  ulong page = information.PageSize.ToUInt64();
+                  return new[] { information.CommitPeak.ToUInt64() * page, information.CommitLimit.ToUInt64() * page };
+              }
+          }
+          '@
+          Add-Type -TypeDefinition $source
+          $peak, $limit = [CommitInfo]::Read()
+          $before = if ($env:PORTABLE_COMMIT_LIMIT_MB) { '{0:N1} GB' -f ([double]$env:PORTABLE_COMMIT_LIMIT_MB / 1KB) } else { 'unknown' }
+          'Peak commit {0:N1} GB; commit limit {1:N1} GB, {2} before the added page file' -f ($peak / 1GB), ($limit / 1GB), $before
+          Get-CimInstance Win32_PageFileUsage | ForEach-Object { 'Page file {0}: {1} MB, peak use {2} MB' -f $_.Name, $_.AllocatedBaseSize, $_.PeakUsage }
+          Get-Process -Name MSBuild, cl, VCTIP, Tracker -ErrorAction SilentlyContinue |
+              ForEach-Object { '{0} {1}: peak private memory {2:N1} GB' -f $_.Name, $_.Id, ($_.PeakPagedMemorySize64 / 1GB) }
 
       - name: Bundle Visual C++ runtime
         run: |
