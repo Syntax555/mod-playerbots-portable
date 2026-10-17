@@ -439,10 +439,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..856755f
+index 0000000..9a79f18
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,719 @@
+@@ -0,0 +1,777 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -457,6 +457,7 @@ index 0000000..856755f
 +#include <memory>
 +#include <mutex>
 +#include <optional>
++#include <set>
 +#include <shared_mutex>
 +#include <string>
 +#include <tuple>
@@ -659,15 +660,15 @@ index 0000000..856755f
 +    return true;
 +}
 +
-+// Each bot's unsold auction stock, learned from its own expired receipts on the
-+// world thread. Map-thread surplus decisions read it, so access is locked. The
-+// record lives with the server process.
++// Each bot's unsold auction stock, learned on the world thread from its own expired
++// receipts and from listings it refused. Map-thread surplus decisions read it, so
++// access is locked. The record lives with the server process.
 +class UnsoldStock
 +{
 +public:
 +    using Key = std::tuple<ObjectGuid::LowType, uint32, int32>;
 +
-+    void Expired(Key const& key, time_t now)
++    void Record(Key const& key, time_t now)
 +    {
 +        std::unique_lock lock(_lock);
 +        std::erase_if(_records, [now](auto const& record) { return UnsoldForgotten(record.second, now); });
@@ -712,11 +713,43 @@ index 0000000..856755f
 +    return Unsold().Allowed(StockKey(ai->GetBot(), item), GameTime::GetGameTime().count());
 +}
 +
++// The core's own cut of a sale at this price.
++uint32 SaleCut(AuctionHouseEntry const* house, uint32 price)
++{
++    AuctionEntry sale{};
++    sale.bid = price;
++    sale.auctionHouseEntry = house;
++    return sale.GetAuctionCut();
++}
++
++uint32 NeutralDeposit(Item* item)
++{
++    AuctionHouseEntry const* neutral = AuctionHouseMgr::GetAuctionHouseEntryFromHouse(AuctionHouseId::Neutral);
++    return neutral ? AuctionHouseMgr::GetAuctionDeposit(neutral, MIN_AUCTION_TIME, item, item->GetCount()) : 0;
++}
++
++// Whether a listing at the ordinary price could repay its deposit, judged by the
++// neutral house's deposit and cut, the largest. The core's static rules read only
++// item, DBC and configuration data, never live auction collections.
++bool Listable(Item* item)
++{
++    float const rate = sWorld->getRate(RATE_AUCTION_DEPOSIT);
++    if (!std::isfinite(rate) || rate < 0)
++        return false;
++    ItemTemplate const* proto = item->GetTemplate();
++    uint32 const count = item->GetCount();
++    ListingPrices const prices = PriceListing(proto->BuyPrice, proto->BuyCount, proto->SellPrice, count, 0);
++    AuctionHouseEntry const* neutral = AuctionHouseMgr::GetAuctionHouseEntryFromHouse(AuctionHouseId::Neutral);
++    return prices.buyout && neutral &&
++           WorthListing(prices.buyout, SaleCut(neutral, prices.buyout), uint64(proto->SellPrice) * count,
++                        NeutralDeposit(item));
++}
++
 +bool TradableSurplus(PlayerbotAI* ai, Item* item, ProgressionSupplies& supplies)
 +{
 +    // Item usage can inspect equipment, skills and inventories. Reject items that
 +    // cannot be listed before evaluating it.
-+    return CanList(ai, item) && RelistAllowed(ai, item) && Usage(ai, item) == ITEM_USAGE_AH &&
++    return CanList(ai, item) && RelistAllowed(ai, item) && Listable(item) && Usage(ai, item) == ITEM_USAGE_AH &&
 +           !NeededForProgression(ai, item, supplies);
 +}
 +
@@ -815,7 +848,7 @@ index 0000000..856755f
 +            collected = collected || taken;
 +            // A returned stack counts once, when the core hands it back.
 +            if (taken && expired)
-+                Unsold().Expired(stock, now);
++                Unsold().Record(stock, now);
 +        }
 +        mail = bot->GetMail(id);
 +        // HandleMailDelete does not protect attachments. Only delete after
@@ -830,9 +863,14 @@ index 0000000..856755f
 +    return collected;
 +}
 +
++using StockItem = std::pair<uint32, int32>;
++
++StockItem Stock(Item const* item) { return {item->GetEntry(), item->GetItemRandomPropertyId()}; }
++
 +struct MarketState
 +{
 +    uint32 listings = 0;
++    std::map<StockItem, uint32> listingsByItem;
 +    bool pendingPurchase = false;
 +};
 +
@@ -850,7 +888,11 @@ index 0000000..856755f
 +        for (auto const& [id, auction] : house->GetAuctions())
 +        {
 +            if (auction->owner == bot->GetGUID())
++            {
 +                ++state.listings;
++                if (Item const* listed = sAuctionMgr->GetAItem(auction->item_guid))
++                    ++state.listingsByItem[Stock(listed)];
++            }
 +            if (auction->bidder == bot->GetGUID())
 +                state.pendingPurchase = true;
 +            if (state.listings >= MaxListings && state.pendingPurchase)
@@ -898,51 +940,74 @@ index 0000000..856755f
 +    return ids;
 +}
 +
-+uint32 MarketPrice(AuctionHouseObject* house, std::vector<uint32> const& sample, Item* item)
++// The cheapest unit buyout of each item the bot carries, among the whole house's
++// live offers from other accounts. Its own and same-account listings are no
++// competition to undercut.
++std::map<StockItem, uint32> MarketPrices(Player* bot, AuctionHouseObject* house)
 +{
-+    uint32 best = 0;
++    std::set<uint32> carried;
++    for (ObjectGuid guid : BagItems(bot))
++        if (Item* item = bot->GetItemByGuid(guid))
++            carried.insert(item->GetEntry());
++    std::map<StockItem, uint32> prices;
 +    time_t const now = GameTime::GetGameTime().count();
-+    for (uint32 id : sample)
++    for (auto const& [id, auction] : house->GetAuctions())
 +    {
-+        AuctionEntry* auction = house->GetAuction(id);
-+        if (!auction || auction->expire_time <= now || auction->item_template != item->GetEntry() || !auction->buyout ||
++        if (!carried.contains(auction->item_template) || auction->expire_time <= now || !auction->buyout ||
 +            !auction->itemCount)
 +            continue;
++        uint32 const ownerAccount = sCharacterCache->GetCharacterAccountIdByGuid(auction->owner);
 +        Item* offer = sAuctionMgr->GetAItem(auction->item_guid);
-+        if (!offer || offer->GetItemRandomPropertyId() != item->GetItemRandomPropertyId())
-+            continue;
 +        uint32 const unit = auction->buyout / auction->itemCount;
-+        if (unit && (!best || unit < best))
-+            best = unit;
++        if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId() || !offer || !unit)
++            continue;
++        auto const [found, inserted] = prices.try_emplace(Stock(offer), unit);
++        if (!inserted && unit < found->second)
++            found->second = unit;
 +    }
-+    return best;
++    return prices;
 +}
 +
-+bool SellSurplus(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house, std::vector<uint32> const& sample,
-+                 uint32 listings)
++bool SellSurplus(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house, MarketState const& state)
 +{
 +    bool sold = false;
 +    uint32 listed = 0;
++    uint32 listings = state.listings;
++    std::map<StockItem, uint32> listingsByItem = state.listingsByItem;
 +    AuctionHouseEntry const* entry = AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(auctioneer->GetFaction());
 +    if (!entry)
 +        return false;
-+    ProgressionSupplies supplies(ai->GetBot());
-+    for (ObjectGuid guid : BagItems(ai->GetBot()))
++    Player* bot = ai->GetBot();
++    std::map<StockItem, uint32> const market = MarketPrices(bot, house);
++    std::set<StockItem> refused;
++    time_t const now = GameTime::GetGameTime().count();
++    ProgressionSupplies supplies(bot);
++    for (ObjectGuid guid : BagItems(bot))
 +    {
 +        if (listed >= MaxSalesPerVisit || listings >= MaxListings)
 +            break;
-+        Player* bot = ai->GetBot();
 +        Item* item = bot->GetItemByGuid(guid);
-+        if (!TradableSurplus(ai, item, supplies))
++        if (!TradableSurplus(ai, item, supplies) || listingsByItem[Stock(item)] >= MaxSameItemListings)
 +            continue;
 +        uint32 const count = item->GetCount();
 +        ItemTemplate const* proto = item->GetTemplate();
-+        ListingPrices const prices =
-+            PriceListing(proto->BuyPrice, proto->SellPrice, count, MarketPrice(house, sample, item));
++        auto const offer = market.find(Stock(item));
++        ListingPrices const prices = PriceListing(proto->BuyPrice, proto->BuyCount, proto->SellPrice, count,
++                                                  offer == market.end() ? 0 : offer->second);
 +        uint32 const deposit = sAuctionMgr->GetAuctionDeposit(entry, MIN_AUCTION_TIME, item, count);
-+        uint32 const budget = FreeBudget(ai, NeedMoneyFor::anything);
-+        if (!prices.buyout || deposit > budget || !bot->HasEnoughMoney(deposit))
++        if (!prices.buyout ||
++            !WorthListing(prices.buyout, SaleCut(entry, prices.buyout), uint64(proto->SellPrice) * count, deposit))
++        {
++            // This market leaves no sale that repays the deposit. Refusals count like
++            // unsold listings, once per item and visit, so the vendor takes the stock.
++            if (refused.insert(Stock(item)).second)
++                Unsold().Record(StockKey(bot, item), now);
 +            continue;
++        }
++        uint32 const budget = FreeBudget(ai, NeedMoneyFor::anything);
++        if (deposit > budget || !bot->HasEnoughMoney(deposit))
++            continue;
++        StockItem const stock = Stock(item);
 +        WorldPacket packet(CMSG_AUCTION_SELL_ITEM);
 +        packet << auctioneer->GetGUID() << uint32(1) << guid << count;
 +        packet << prices.bid << prices.buyout << uint32(MIN_AUCTION_TIME / MINUTE);
@@ -954,6 +1019,7 @@ index 0000000..856755f
 +            sold = true;
 +            ++listed;
 +            ++listings;
++            ++listingsByItem[stock];
 +        }
 +    }
 +    return sold;
@@ -989,8 +1055,8 @@ index 0000000..856755f
 +                            (usage == ITEM_USAGE_USE && proto->Class == ITEM_CLASS_CONSUMABLE);
 +        uint32 const budget = PurchaseBudget(ai, usage);
 +        if (!useful || !Affordable(auction->buyout, budget, bot->GetMoney()) ||
-+            !WithinPriceCeiling(auction->buyout, auction->itemCount,
-+                                UnitPriceCeiling(proto->BuyPrice, proto->SellPrice)))
++            !WithinPriceCeiling(auction->buyout,
++                                PriceCeiling(proto->BuyPrice, proto->BuyCount, proto->SellPrice, auction->itemCount)))
 +            continue;
 +        ItemPosCountVec destination;
 +        if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
@@ -1061,7 +1127,7 @@ index 0000000..856755f
 +            return false;
 +        MarketState const state = OwnMarketState(bot);
 +        std::vector<uint32> const sample = SampleMarket(house, botGuid);
-+        bool const sold = SellSurplus(ai, auctioneer, house, sample, state.listings);
++        bool const sold = SellSurplus(ai, auctioneer, house, state);
 +        bool const bought = !state.pendingPurchase && BuyUseful(ai, auctioneer, house, sample);
 +        return sold || bought;
 +    }
@@ -1089,18 +1155,10 @@ index 0000000..856755f
 +    // leveling. There is no gold grant to pay auction deposits.
 +    if (ai->GetAiObjectContext()->GetValue<uint8>("bag space")->Get() >= 80)
 +        return false;
-+    float const rate = sWorld->getRate(RATE_AUCTION_DEPOSIT);
-+    if (!std::isfinite(rate) || rate < 0)
++    // Stock that could not repay its deposit goes to the vendor.
++    if (!Listable(item))
 +        return false;
-+    // Neutral houses charge the largest default deposit. Estimate without
-+    // consulting mutable global auction collections from an AI map thread.
-+    long double const deposit =
-+        std::ceil(std::max<long double>(
-+                      100, static_cast<long double>(item->GetTemplate()->SellPrice) * item->GetCount() * 3 / 4) *
-+                  rate);
-+    if (deposit > MaxCopper)
-+        return false;
-+    return FreeBudget(ai, NeedMoneyFor::anything) >= static_cast<uint32>(deposit);
++    return FreeBudget(ai, NeedMoneyFor::anything) >= NeutralDeposit(item);
 +}
 +
 +}  // namespace
@@ -1194,10 +1252,10 @@ index 0000000..7af7a92
 +#endif
 diff --git a/src/Bot/EarnedAuctionPolicy.h b/src/Bot/EarnedAuctionPolicy.h
 new file mode 100644
-index 0000000..943e76c
+index 0000000..2d3f3db
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionPolicy.h
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,127 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1219,6 +1277,7 @@ index 0000000..943e76c
 +{
 +constexpr std::uint32_t MaxListings = 20;
 +constexpr std::uint32_t MaxSalesPerVisit = 2;
++constexpr std::uint32_t MaxSameItemListings = 2;
 +constexpr std::uint32_t MaxMarketScan = 512;
 +constexpr std::uint32_t MaxMailPerVisit = 20;
 +constexpr std::uint32_t MaxCopper = 0x7fffffff;
@@ -1226,11 +1285,16 @@ index 0000000..943e76c
 +constexpr std::uint32_t MaxUnsoldListings = 2;
 +constexpr std::int64_t UnsoldMemorySeconds = 7 * 24 * 3600;
 +
-+inline std::uint32_t UnitPriceCeiling(std::uint32_t vendorBuy, std::uint32_t vendorSell)
++// A bounded valuation of count items keeps ordinary buyers from subsidising
++// arbitrary asking prices: the vendor's price per item, as vendors sell BuyCount
++// items for BuyPrice, or six times the vendor sell price, whichever is higher.
++inline std::uint32_t PriceCeiling(std::uint32_t vendorBuy, std::uint32_t buyCount, std::uint32_t vendorSell,
++                                  std::uint32_t count)
 +{
-+    // A bounded valuation keeps ordinary buyers from subsidising arbitrary asking prices.
-+    std::uint64_t value = std::max<std::uint64_t>(vendorBuy, std::uint64_t(vendorSell) * 6);
-+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(value, MaxCopper));
++    std::uint64_t const bundle = std::max<std::uint32_t>(buyCount, 1);
++    std::uint64_t const vendor = (std::uint64_t(vendorBuy) * count + bundle - 1) / bundle;
++    std::uint64_t const resale = std::min<std::uint64_t>(std::uint64_t(vendorSell) * 6, MaxCopper) * count;
++    return static_cast<std::uint32_t>(std::min<std::uint64_t>(std::max(vendor, resale), MaxCopper));
 +}
 +
 +struct ListingPrices
@@ -1239,23 +1303,28 @@ index 0000000..943e76c
 +    std::uint32_t buyout = 0;
 +};
 +
-+inline ListingPrices PriceListing(std::uint32_t vendorBuy, std::uint32_t vendorSell, std::uint32_t count,
-+                                  std::uint32_t marketUnitPrice)
++inline ListingPrices PriceListing(std::uint32_t vendorBuy, std::uint32_t buyCount, std::uint32_t vendorSell,
++                                  std::uint32_t count, std::uint32_t marketUnitPrice)
 +{
-+    std::uint32_t const ceiling = UnitPriceCeiling(vendorBuy, vendorSell);
-+    if (!ceiling || !vendorSell || !count)
++    if (!vendorSell || !count)
 +        return {};
-+    std::uint64_t const floor = std::uint64_t(vendorSell) * 2;
-+    if (floor > ceiling)
-+        return {};
-+    std::uint64_t unit = std::min<std::uint64_t>(std::uint64_t(vendorSell) * 3, ceiling);
-+    if (marketUnitPrice)
-+        unit = std::clamp<std::uint64_t>(marketUnitPrice > 1 ? marketUnitPrice - 1 : 1, floor, ceiling);
-+    std::uint64_t const buyout = unit * count;
++    // Undercut the cheapest comparable offer. A market at twice the vendor price or
++    // below leaves no room, and a listing above it would not sell first.
++    std::uint64_t const floor = std::min<std::uint64_t>(std::uint64_t(vendorSell) * 2, MaxCopper) * count;
++    std::uint64_t const unit = marketUnitPrice ? marketUnitPrice - 1 : std::uint64_t(vendorSell) * 3;
++    std::uint64_t const buyout = std::min<std::uint64_t>(std::min<std::uint64_t>(unit, MaxCopper) * count,
++                                                         PriceCeiling(vendorBuy, buyCount, vendorSell, count));
 +    std::uint64_t const bid = std::max<std::uint64_t>(std::uint64_t(vendorSell) * count + 1, buyout * 4 / 5);
-+    if (!buyout || buyout > MaxCopper || bid > buyout)
++    if (!buyout || buyout < floor || buyout > MaxCopper || bid > buyout)
 +        return {};
 +    return {static_cast<std::uint32_t>(bid), static_cast<std::uint32_t>(buyout)};
++}
++
++// A sale, after the house cut, must beat vendoring the stack by at least the
++// deposit, which an expired listing loses.
++inline bool WorthListing(std::uint32_t buyout, std::uint32_t cut, std::uint64_t vendorValue, std::uint32_t deposit)
++{
++    return buyout > cut && std::uint64_t(buyout - cut) >= vendorValue + std::max<std::uint32_t>(deposit, 1);
 +}
 +
 +inline bool Affordable(std::uint32_t price, std::uint32_t budget, std::uint32_t money)
@@ -1263,11 +1332,7 @@ index 0000000..943e76c
 +    return price && price <= MaxCopper && price <= budget && price <= money;
 +}
 +
-+inline bool WithinPriceCeiling(std::uint32_t price, std::uint32_t count, std::uint32_t unitCeiling)
-+{
-+    return price && count && unitCeiling && price <= MaxCopper &&
-+           std::uint64_t(price) <= std::uint64_t(count) * unitCeiling;
-+}
++inline bool WithinPriceCeiling(std::uint32_t price, std::uint32_t ceiling) { return price && price <= ceiling; }
 +
 +struct AuctionSubject
 +{

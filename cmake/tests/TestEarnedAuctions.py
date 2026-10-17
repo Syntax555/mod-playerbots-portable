@@ -45,6 +45,16 @@ native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (item_header, 'enum ItemSubclassWeapon'), (auction_header, 'enum MailAuctionAnswers')))
 # Receipts carry the subject the core writes; the parser must keep reading that format.
 subject_writer = function(auction_source, 'std::string AuctionEntry::BuildAuctionMailSubject(MailAuctionAnswers response) const')
+util_header = (args.core / 'src/common/Utilities/Util.h').read_text()
+assert 'template <class T, class U>\ninline T CalculatePct(T base, U pct)' in util_header
+# The deposit, cut and percentage doubles are the core's own definitions.
+auction_rules = '\n'.join([
+    'template <class T, class U>', function(util_header, 'inline T CalculatePct(T base, U pct)'),
+    next(line for line in auction_source.splitlines() if line.startswith('constexpr auto AH_MINIMUM_DEPOSIT = ')),
+    function(auction_source, 'uint32 AuctionHouseMgr::GetAuctionDeposit(AuctionHouseEntry const* entry, uint32 time, '
+                             'Item* pItem, uint32 count)'),
+    function(auction_source, 'uint32 AuctionEntry::GetAuctionCut() const'),
+])
 assert "strm << item_template << \":0:\" << response << ':' << Id << ':' << itemCount;" in subject_writer
 
 
@@ -52,34 +62,43 @@ policy_tests = r'''
 void PolicyTests()
 {
     using namespace EarnedAuction;
-    assert(UnitPriceCeiling(100, 20) == 120);
-    assert(UnitPriceCeiling(1000, 20) == 1000);
-    assert(UnitPriceCeiling(0, 0) == 0);
-    assert(UnitPriceCeiling(UINT32_MAX, UINT32_MAX) == MaxCopper);
+    assert(PriceCeiling(100, 1, 20, 1) == 120 && PriceCeiling(1000, 1, 20, 1) == 1000);
+    assert(PriceCeiling(100, 1, 20, 5) == 600 && PriceCeiling(0, 1, 0, 5) == 0);
+    // Vendors sell BuyCount items for BuyPrice: 200 arrows for 10 copper.
+    assert(PriceCeiling(10, 200, 0, 200) == 10 && PriceCeiling(10, 200, 0, 1000) == 50);
+    assert(PriceCeiling(10, 200, 0, 1) == 1 && PriceCeiling(25, 5, 1, 5) == 30 && PriceCeiling(25, 0, 0, 1) == 25);
+    assert(PriceCeiling(UINT32_MAX, 1, UINT32_MAX, UINT32_MAX) == MaxCopper);
+    assert(PriceCeiling(UINT32_MAX, UINT32_MAX, 0, UINT32_MAX) == MaxCopper);
 
-    auto ordinary = PriceListing(100, 20, 5, 0);
+    auto ordinary = PriceListing(100, 1, 20, 5, 0);
     assert(ordinary.bid == 240 && ordinary.buyout == 300);
-    auto undercut = PriceListing(100, 20, 5, 100);
+    auto undercut = PriceListing(100, 1, 20, 5, 100);
     assert(undercut.bid == 396 && undercut.buyout == 495);
-    auto lowMarket = PriceListing(100, 20, 5, 1);
-    assert(lowMarket.bid == 160 && lowMarket.buyout == 200);
-    auto highMarket = PriceListing(100, 20, 5, UINT32_MAX);
+    // No listing undercuts a market at twice the vendor price.
+    assert(!PriceListing(100, 1, 20, 5, 1).buyout && !PriceListing(100, 1, 20, 5, 40).buyout);
+    assert(PriceListing(100, 1, 20, 5, 41).buyout == 200);
+    auto highMarket = PriceListing(100, 1, 20, 5, UINT32_MAX);
     assert(highMarket.bid == 480 && highMarket.buyout == 600);
-    assert(!PriceListing(100, 0, 5, 50).buyout);
-    assert(!PriceListing(100, 20, 0, 50).buyout);
-    assert(!PriceListing(UINT32_MAX, UINT32_MAX, 1, 50).buyout);
-    assert(!PriceListing(100, 20, UINT32_MAX, 50).buyout);
+    assert(!PriceListing(100, 1, 0, 5, 50).buyout);
+    assert(!PriceListing(100, 1, 20, 0, 50).buyout);
+    assert(!PriceListing(UINT32_MAX, 1, UINT32_MAX, 1, 50).buyout);
+    assert(!PriceListing(100, 1, 20, UINT32_MAX, 50).buyout);
+
+    // A sale after the cut must beat vendoring by at least the deposit.
+    assert(WorthListing(300, 15, 100, 100) && WorthListing(300, 15, 100, 185));
+    assert(!WorthListing(300, 15, 100, 186) && !WorthListing(15, 0, 5, 100) && !WorthListing(10, 10, 0, 0));
+    assert(WorthListing(1, 0, 0, 0) && !WorthListing(100, 0, 100, 0));
     for (std::uint32_t count : {1u, 2u, 20u, 1000u, UINT32_MAX})
         for (std::uint32_t sell : {0u, 1u, 200u, MaxCopper / 2, MaxCopper, UINT32_MAX})
             for (std::uint32_t market : {0u, 1u, 500u, UINT32_MAX})
             {
-                auto prices = PriceListing(UINT32_MAX, sell, count, market);
+                auto prices = PriceListing(UINT32_MAX, 1, sell, count, market);
                 if (prices.buyout)
                 {
                     assert(prices.bid && prices.bid <= prices.buyout);
                     assert(prices.buyout <= MaxCopper);
                     assert(std::uint64_t(prices.buyout) > std::uint64_t(sell) * count);
-                    assert(WithinPriceCeiling(prices.buyout, count, UnitPriceCeiling(UINT32_MAX, sell)));
+                    assert(WithinPriceCeiling(prices.buyout, PriceCeiling(UINT32_MAX, 1, sell, count)));
                 }
                 else
                     assert(!prices.bid);
@@ -90,12 +109,8 @@ void PolicyTests()
     assert(!Affordable(101, 100, 1000));
     assert(!Affordable(101, 1000, 100));
     assert(!Affordable(UINT32_MAX, UINT32_MAX, UINT32_MAX));
-    assert(WithinPriceCeiling(200, 2, 100));
-    assert(!WithinPriceCeiling(201, 2, 100));
-    assert(!WithinPriceCeiling(1, 0, 100));
-    assert(!WithinPriceCeiling(1, 1, 0));
-    assert(!WithinPriceCeiling(UINT32_MAX, UINT32_MAX, UINT32_MAX));
-    assert(WithinPriceCeiling(MaxCopper, UINT32_MAX, UINT32_MAX));
+    assert(WithinPriceCeiling(200, 200) && !WithinPriceCeiling(201, 200));
+    assert(!WithinPriceCeiling(0, 100) && !WithinPriceCeiling(1, 0));
 
     auto subject = ParseAuctionSubject("2589:0:3:17:20");
     assert(subject && subject->item == 2589 && subject->response == 3 && subject->auction == 17 && subject->count == 20);
@@ -129,6 +144,7 @@ fixtures = r'''
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <shared_mutex>
 #include <sstream>
 #include <string>
@@ -138,6 +154,7 @@ fixtures = r'''
 #include <vector>
 using uint8 = std::uint8_t;
 using uint32 = std::uint32_t;
+using uint64 = std::uint64_t;
 using int32 = std::int32_t;
 @@NATIVE@@
 @@PROFESSIONS@@
@@ -174,7 +191,8 @@ struct ItemTemplate
 {
     struct Spell { int SpellId = 0; };
     std::array<Spell, 5> Spells{};
-    uint32 ItemId = 100, BuyPrice = 1000, SellPrice = 100, Quality = 1, Class = 1, SubClass = 0, Bonding = 0;
+    uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = 1, SubClass = 0,
+        Bonding = 0;
     bool conjured = false, petFood = false;
     bool HasFlag(int) const { return conjured; }
 };
@@ -282,13 +300,17 @@ struct WorldPacket
     WorldPacket& operator<<(uint32 value) { data.push_back(value); return *this; }
 };
 enum class AuctionHouseId { Alliance, Horde, Neutral };
-struct AuctionHouseEntry {};
+// DBC deposit percentages are a third of the real ones: 15% and 75% for 12 hours.
+struct AuctionHouseEntry { uint32 houseId = 0, faction = 0, depositPercent = 0, cutPercent = 0; };
+AuctionHouseEntry const factionHouse{2, 12, 5, 5}, neutralHouse{7, 0, 25, 15};
 struct AuctionEntry
 {
     uint32 Id = 0, item_template = 0, itemCount = 0, buyout = 0, bid = 0;
     ObjectGuid item_guid, owner, bidder;
     std::int64_t expire_time = 100000;
+    AuctionHouseEntry const* auctionHouseEntry = &factionHouse;
     std::string BuildAuctionMailSubject(MailAuctionAnswers response) const;
+    uint32 GetAuctionCut() const;
 };
 @@SUBJECT@@
 struct AuctionHouseObject
@@ -298,24 +320,29 @@ struct AuctionHouseObject
     AuctionEntry* GetAuction(uint32 id) const
     { auto it = auctions.find(id); return it == auctions.end() ? nullptr : it->second; }
 };
-constexpr int RATE_AUCTION_DEPOSIT = 1;
-struct World { float rate = 1; float getRate(int) const { return rate; } } world;
+constexpr int RATE_AUCTION_DEPOSIT = 1, RATE_AUCTION_CUT = 2;
+struct World
+{
+    float rate = 1, cutRate = 1;
+    float getRate(int which) const { return which == RATE_AUCTION_CUT ? cutRate : rate; }
+} world;
 auto* sWorld = &world;
+#define LOG_DEBUG(...)
 struct AuctionHouseMgr
 {
     AuctionHouseObject house;
     std::map<ObjectGuid, Item*> items;
-    static AuctionHouseEntry const* GetAuctionHouseEntryFromFactionTemplate(uint32)
-    { static AuctionHouseEntry entry; return &entry; }
+    static AuctionHouseEntry const* GetAuctionHouseEntryFromFactionTemplate(uint32) { return &factionHouse; }
+    static AuctionHouseEntry const* GetAuctionHouseEntryFromHouse(AuctionHouseId house)
+    { return house == AuctionHouseId::Neutral ? &neutralHouse : &factionHouse; }
     AuctionHouseObject* GetAuctionsMap(uint32) { return &house; }
     AuctionHouseObject* GetAuctionsMapByHouseId(AuctionHouseId) { return &house; }
     Item* GetAItem(ObjectGuid guid) const
     { auto it = items.find(guid); return it == items.end() ? nullptr : it->second; }
-    uint32 GetAuctionDeposit(AuctionHouseEntry const*, uint32 duration, Item* item, uint32 count) const
-    { assert(duration == MIN_AUCTION_TIME);
-      return uint32(std::max(100.0f, item->proto.SellPrice * count * 0.15f) * world.rate); }
+    static uint32 GetAuctionDeposit(AuctionHouseEntry const* entry, uint32 time, Item* pItem, uint32 count);
 } auctionMgr;
 auto* sAuctionMgr = &auctionMgr;
+@@AUCTIONRULES@@
 struct CharacterCache
 {
     std::map<ObjectGuid, uint32> accounts;
@@ -447,7 +474,7 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& packet)
     lastItem = {uint32(packet.data[2])}; lastCount = packet.data[3]; lastPrice = packet.data[5];
     Item* item = bot->GetItemByGuid(lastItem); assert(item && lastCount == item->count);
     if (rejectSell) return;
-    depositPaid = auctionMgr.GetAuctionDeposit(nullptr, MIN_AUCTION_TIME, item, item->count);
+    depositPaid = AuctionHouseMgr::GetAuctionDeposit(&factionHouse, MIN_AUCTION_TIME, item, item->count);
     assert(bot->money >= depositPaid); bot->money -= depositPaid;
     bot->inventory.erase(lastItem);
     std::erase_if(bot->backpack, [this](auto const& pair) { return pair.second->guid == lastItem; });
@@ -523,7 +550,7 @@ struct Scenario
         sSkillLineStore.rows = {{SKILL_TAILORING, {SKILL_TAILORING, SKILL_CATEGORY_PROFESSION}},
                                 {SKILL_DEFENSE, {SKILL_DEFENSE, SKILL_CATEGORY_WEAPON}}};
         objectMgr.lookups = 0; spellMgr.lookups = 0;
-        sPlayerbotAIConfig = {}; world.rate = 1; now += 400;
+        sPlayerbotAIConfig = {}; world = {}; now += 400;
         auto& processor = PlayerbotWorldThreadProcessor::instance(); processor.queued.clear(); processor.accept = true;
     }
     Item& MakeItem(uint32 entry = 100, uint32 count = 1, ItemUsage usage = ITEM_USAGE_AH)
@@ -1044,6 +1071,79 @@ void ServiceTests()
         mail.subject = kind == 0 ? s.Subject(mailed, AUCTION_EXPIRED) : kind == 1 ? s.Subject(mailed, AUCTION_WON) : "";
         assert(s.Visit() == (kind == 0)); assert(s.bot.session.buys == (kind == 0 ? 1 : 0));
     }
+    {
+        // A stack whose sale could not repay the deposit goes to the vendor.
+        Scenario s; Item& cheap = s.BagItem(100, 1); cheap.proto.SellPrice = 5;
+        assert(!HasSurplus(&s.bot.ai) && !ShouldReserveForAuction(&s.bot.ai, &cheap, ITEM_USAGE_AH));
+        assert(HasVendorSurplus(&s.bot.ai)); assert(!s.Visit()); assert(!s.bot.session.sells);
+        cheap.count = 20; cheap.proto.SellPrice = 6;
+        assert(HasSurplus(&s.bot.ai) && ShouldReserveForAuction(&s.bot.ai, &cheap, ITEM_USAGE_AH));
+    }
+    {
+        // The house cut counts against the sale.
+        Scenario s; s.BagItem(100, 5); world.cutRate = 30;
+        assert(!HasSurplus(&s.bot.ai)); assert(!s.Visit()); assert(!s.bot.session.sells && s.bot.money == 10000);
+    }
+    {
+        // Undercutting just above the floor at this house would not repay the deposit.
+        Scenario s; Item& item = s.BagItem(100, 1); Item& rival = s.MakeItem(100, 1); s.Offer(rival, 1, 201);
+        assert(HasSurplus(&s.bot.ai)); assert(!s.Visit()); assert(!s.bot.session.sells);
+        auctionMgr.house.GetAuction(1)->buyout = 211; now += sPlayerbotAIConfig.earnedAuctionInterval;
+        assert(s.Visit()); assert(s.bot.session.lastItem == item.guid && s.bot.session.lastPrice == 210);
+    }
+    {
+        // A market already at twice the vendor price is left alone, and the vendor takes the stack.
+        Scenario s; Item& item = s.BagItem(100, 5); Item& rival = s.MakeItem(100, 5); s.Offer(rival, 1, 1000);
+        assert(!s.Visit()); assert(!s.bot.session.sells && HasSurplus(&s.bot.ai));
+        now += sPlayerbotAIConfig.earnedAuctionInterval; assert(!s.Visit());
+        assert(!HasSurplus(&s.bot.ai) && !ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_AH));
+        assert(HasVendorSurplus(&s.bot.ai));
+    }
+    {
+        // Several stacks of one item refused in a visit count once.
+        Scenario s; s.BagItem(100, 5); s.BagItem(100, 5); Item& rival = s.MakeItem(100, 5); s.Offer(rival, 1, 1000);
+        assert(!s.Visit()); assert(HasSurplus(&s.bot.ai));
+    }
+    {
+        // The bot's own and same-account listings are no competition to undercut.
+        Scenario s; Item& item = s.BagItem(100, 1); Item& own = s.MakeItem(100, 1); Item& sibling = s.MakeItem(100, 1);
+        s.Offer(own, 1, 250, s.bot.guid.value, s.bot.session.account);
+        s.Offer(sibling, 2, 260, 556, s.bot.session.account);
+        assert(s.Visit()); assert(s.bot.session.lastItem == item.guid && s.bot.session.lastPrice == 300);
+    }
+    {
+        // Prices come from the whole house, not only the sampled slice.
+        Scenario s; Item& item = s.BagItem(100, 1); Item& filler = s.MakeItem(101, 1); Item& rival = s.MakeItem(100, 1);
+        for (uint32 id = 1; id <= 3 * MaxMarketScan; ++id) s.Offer(filler, id, 500);
+        std::vector<uint32> const sample = SampleMarket(&auctionMgr.house, s.bot.guid);
+        uint32 outside = MaxMarketScan + 1;
+        while (std::find(sample.begin(), sample.end(), outside) != sample.end()) ++outside;
+        s.Offer(rival, outside, 280);
+        assert(s.Visit()); assert(s.bot.session.lastItem == item.guid && s.bot.session.lastPrice == 279);
+    }
+    {
+        // A bot keeps at most two live listings of one item.
+        Scenario s; Item& item = s.BagItem(100, 1); Item& other = s.BagItem(101, 1);
+        for (uint32 id = 1; id <= MaxSameItemListings; ++id)
+        { Item& listed = s.MakeItem(100, 1); s.Offer(listed, id, 300, s.bot.guid.value, s.bot.session.account); }
+        assert(s.Visit()); assert(s.bot.session.sells == 1 && s.bot.session.lastItem == other.guid);
+        assert(s.bot.GetItemByGuid(item.guid) == &item);
+    }
+    {
+        // Listings made in the visit count towards the cap.
+        Scenario s; Item& listed = s.MakeItem(100, 1); s.Offer(listed, 1, 300, s.bot.guid.value, s.bot.session.account);
+        s.BagItem(100, 1); Item& second = s.BagItem(100, 1);
+        assert(s.Visit()); assert(s.bot.session.sells == 1 && s.bot.GetItemByGuid(second.guid) == &second);
+    }
+    {
+        // Purchases value vendor bundles per item: 200 arrows sell for 10 copper.
+        for (uint32 price : {10u, 11u})
+        {
+            Scenario s; Item& arrows = s.MakeItem(100, 200, ITEM_USAGE_AMMO);
+            arrows.proto.BuyPrice = 10; arrows.proto.BuyCount = 200; arrows.proto.SellPrice = 0; s.Offer(arrows, 1, price);
+            assert(s.Visit() == (price == 10)); assert(s.bot.session.buys == (price == 10 ? 1 : 0));
+        }
+    }
     assert(!ShouldReserveForAuction(nullptr, nullptr, ITEM_USAGE_AH));
     std::cout << "Earned auctions: production policy/service, conserved inventory/gold, safe receipts, queued revalidation, travel selection and bounded protection scans passed\n";
 }
@@ -1064,6 +1164,7 @@ production = {
 def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
     text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
+    text = text.replace('@@AUCTIONRULES@@', auction_rules)
     # The policy header is compiled from a private copy, so mutants can change it.
     headers = Path(directory) / name
     headers.mkdir()
@@ -1130,6 +1231,29 @@ mutations = [
      'return record.unsold < MaxUnsoldListings || (UnsoldForgotten(record, now) && false);'),
     ('subject with a second field accepted', 'policy', '    if (fields[1])\n        return {};\n', ''),
     ('partial subject field accepted', 'policy', 'parsed != last', 'false'),
+    ('listing that cannot repay its deposit', 'service',
+     '        if (!prices.buyout ||\n            !WorthListing(prices.buyout, SaleCut(entry, prices.buyout), uint64(proto->SellPrice) * count, deposit))',
+     '        if (!prices.buyout)'),
+    ('stock that cannot repay a deposit kept', 'service',
+     'return CanList(ai, item) && RelistAllowed(ai, item) && Listable(item) && ',
+     'return CanList(ai, item) && RelistAllowed(ai, item) && '),
+    ('stock that cannot repay a deposit reserved', 'service', '    if (!Listable(item))\n        return false;\n', ''),
+    ('house cut ignored', 'service', 'return sale.GetAuctionCut();', 'return 0 * sale.GetAuctionCut();'),
+    ('listing below twice the vendor price', 'policy', 'buyout < floor || ', 'buyout < floor * 0 || '),
+    ('refusal not counted', 'service',
+     '            if (refused.insert(Stock(item)).second)\n                Unsold().Record(StockKey(bot, item), now);',
+     '            if (refused.insert(Stock(item)).second)\n                Unsold().Allowed(StockKey(bot, item), now);'),
+    ('refusals counted per stack', 'service', 'if (refused.insert(Stock(item)).second)', 'if (refused.insert(Stock(item)).second || true)'),
+    ('same-account listings undercut', 'service',
+     'if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId() || !offer || !unit)',
+     'if (!ownerAccount || !offer || !unit)'),
+    ('only the start of the house priced', 'service',
+     'if (!carried.contains(auction->item_template) || auction->expire_time <= now',
+     'if (!carried.contains(auction->item_template) || id > MaxMarketScan || auction->expire_time <= now'),
+    ('same-item listing cap ignored', 'service', ' || listingsByItem[Stock(item)] >= MaxSameItemListings', ''),
+    ('listings in a visit not counted per item', 'service', '++listingsByItem[stock];', 'listingsByItem[stock] += 0;'),
+    ('vendor bundle valued per bundle', 'policy', 'std::uint64_t const bundle = std::max<std::uint32_t>(buyCount, 1);',
+     'std::uint64_t const bundle = std::max<std::uint32_t>(buyCount, 1) * 0 + 1;'),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporary:

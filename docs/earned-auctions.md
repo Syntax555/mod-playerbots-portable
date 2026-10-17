@@ -28,22 +28,29 @@ or same-account auctions. They wait while an outstanding bid or an uncollected
 won item exists. Other bots' auctions are eligible because the buyer pays and
 the seller gives up the actual item.
 
-A bot maintains at most 20 listings and attempts at most two new listings and
-one buyout per visit. Bots list for the 12-hour duration, which
-`Rate.Auction.Time` scales.
+A bot maintains at most 20 listings, at most two of the same item, and attempts
+at most two new listings and one buyout per visit. Bots list for the 12-hour
+duration, which `Rate.Auction.Time` scales.
 
-A stack that expires unsold twice is not listed again for a week; the bot sells
-it to a vendor instead. A completed sale of the item clears that record. The
-record is kept in server memory, so a restart forgets it.
+An item that expires unsold or is refused a listing twice is not listed again
+for a week; the bot sells it to a vendor instead. A completed sale of the item
+clears that record. The record is kept in server memory, so a restart forgets
+it.
 
 ## Pricing and travel
 
-The initial buyout is three times the ordinary vendor sell price per item. For
-comparable listings with the same item and random property, a bot tries to
-undercut the unit buyout by one copper. Prices stay between twice the vendor
-sell price and the higher of vendor buy price or six times vendor sell price.
-Buyers use the same upper valuation limit. This heuristic does not reproduce
-every rare item's player market value.
+A bot undercuts the cheapest comparable buyout in the whole house by one copper
+per item. Comparable offers have the same item and random property and belong
+to another account. Without one, the buyout is three times the vendor sell price
+per item. The starting bid is four fifths of the buyout and always above the
+stack's vendor value.
+
+Buyouts stay between twice the vendor sell price and the higher of the vendor's
+price per item or six times the vendor sell price. A bot lists only when the
+sale, after the house cut, beats vendoring the stack by at least the deposit.
+A market at or below twice the vendor sell price refuses the listing. Buyers use
+the same upper valuation limit. This heuristic does not reproduce every rare
+item's player market value.
 
 Solo bots from level 10 can plan a trip to a compatible or neutral auctioneer on
 the same map and phase within 5,000 yards. They need eligible surplus or at least
@@ -55,7 +62,9 @@ fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable nearb
 auctioneers or mailboxes postpone the visit for fifteen minutes and return the
 bot to ordinary activity, including repairs, sales and training. Trading depends
 on pathfinding and NPC availability. Bots may vendor surplus when bags reach 80%
-usage or their budget cannot cover a conservative whole-stack deposit estimate.
+usage or their budget cannot cover the neutral auction house's deposit for the
+stack. Stock whose ordinary price cannot repay that house's deposit and cut is
+vendored.
 
 ## Mail delivery
 
