@@ -87,7 +87,8 @@ production = {
     ]),
     'travel': '\n'.join(function(travel_source, signature) for signature in (
         'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)',
-        'void PostponeVisit(PlayerbotAI* ai)')),
+        'void PostponeVisit(PlayerbotAI* ai)', 'void RejectVisit(PlayerbotAI* ai, ObjectGuid target)',
+        'ObjectGuid RejectedTarget(PlayerbotAI* ai)')),
     'guard': function(values_source, 'bool CanRunNaturalMaintenance(PlayerbotAI* botAI)'),
     'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
     'helpers': re.search(r'namespace\n\{\n.*?\n\}  // namespace', values_source, re.DOTALL).group(0),
@@ -164,7 +165,9 @@ struct ObjectGuid
     bool IsEmpty() const { return !value; }
     void Clear() { value = 0; }
     bool operator==(ObjectGuid const&) const = default;
+    static ObjectGuid const Empty;
 };
+ObjectGuid const ObjectGuid::Empty{};
 using GuidVector = std::vector<ObjectGuid>;
 
 struct WorldPosition
@@ -609,6 +612,8 @@ void FinishTrip(PlayerbotAI* ai);
 bool ContinueTrip(PlayerbotAI* ai);
 void AbortTrip(PlayerbotAI* ai);
 void PostponeVisit(PlayerbotAI* ai);
+void RejectVisit(PlayerbotAI* ai, ObjectGuid target);
+ObjectGuid RejectedTarget(PlayerbotAI* ai);
 bool Ready(PlayerbotAI* ai) { return EarnedAuction::IsEnabled(ai) && !ai->GetBot()->IsInCombat(); }
 bool CompatibleAuctioneer(PlayerbotAI*, Creature* npc)
 {
@@ -1106,9 +1111,9 @@ void AuctionVisitTests()
     s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
     assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer));
     auctioneer.alive = false;
-    assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+    assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox) && world.plans == 1);
     world.mailboxes.clear();
-    assert(s.Is(s.Evaluate(), Type::SELL, vendor) && world.plans == 1);
+    assert(s.Is(s.Evaluate(), Type::SELL, vendor) && world.plans == 2);
     world.mailboxes[mailbox.guid.value] = &mailbox;
     auctioneer.alive = true;
     s.ai.rpgInfo.earnedAuctionVisitMailbox = true;
@@ -1197,9 +1202,36 @@ void StarvationTests()
         now += 30 * IN_MILLISECONDS;
         assert(s.Is(s.value->Get(), Type::REPAIR, smith));
         assert(s.Tick(0) && s.Tick(0) && world.actions.back().first == "repair");
+        // Another mailbox serves while the unreachable one is skipped for an hour.
         now += EarnedAuctionTravel::TravelBackoffMs;
         mailbox.reachable = true;
+        GameObject& farther = s.Mailbox(40.0f);
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, farther));
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, farther));
+        now += EarnedAuctionTravel::RejectedTargetMs - EarnedAuctionTravel::TravelBackoffMs - 30 * IN_MILLISECONDS - 1;
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = true;
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, farther));
+        now += 1;
         assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox));
+    }
+    {
+        // A nearby mailbox does not take the auctioneer turn from a distant market.
+        Scenario s;
+        WorldPosition market(0, 1000.0f, 0.0f);
+        world.market = &market;
+        s.Mailbox(10.0f);
+        s.DueAuctionVisit();
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+        assert(s.Evaluate().type == Type::AUCTION_TRAVEL && world.plans == 1);
+    }
+    {
+        // Without a market in reach the mailbox still collects old receipts.
+        Scenario s;
+        GameObject& mailbox = s.Mailbox(10.0f);
+        s.DueAuctionVisit();
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+        assert(s.Is(s.Evaluate(), Type::AUCTION_MAIL, mailbox) && world.plans == 1);
     }
     {
         // The same applies to an unreachable auctioneer and to a visit the world thread rejects.
@@ -1213,7 +1245,12 @@ void StarvationTests()
         assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer));
         assert(!s.Tick() && s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
         assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+        // The unreachable auctioneer stays skipped for an hour.
         auctioneer.reachable = true;
+        s.DueAuctionVisit();
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+        assert(s.Is(s.Evaluate(), Type::SELL, vendor));
+        now += EarnedAuctionTravel::RejectedTargetMs;
         world.queueAccepts = false;
         s.DueAuctionVisit();
         assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer) && s.Tick(0));
@@ -1480,8 +1517,34 @@ mutations = [
     ('visit clock not advanced', 'action', 'info.earnedAuctionLastVisit = getMSTime();', ''),
     ('trip guard does not back off', 'travel', 'ai->rpgInfo.earnedAuctionVisitDelay = TravelBackoffMs;', ''),
     ('unreachable mailbox retried', 'action',
-     'EarnedAuctionTravel::PostponeVisit(botAI);\n            value->Set({});',
+     'EarnedAuctionTravel::RejectVisit(botAI, task.target);\n            value->Set({});',
      'EarnedAuctionTravel::AbortTrip(botAI);\n            value->Set({});'),
+    ('unreachable target not remembered', 'action', 'EarnedAuctionTravel::RejectVisit(botAI, task.target);',
+     'EarnedAuctionTravel::RejectVisit(botAI, ObjectGuid::Empty);'),
+    ('rejected mailbox chosen again', 'value',
+     ('                for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))\n'
+      '                    if (guid != rejected)\n                        return {guid, NaturalMaintenanceType::AUCTION_MAIL};'),
+     ('                for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))\n'
+      '                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};')),
+    ('rejected auctioneer chosen again', 'value',
+     'if (guid != rejected && EarnedAuctionTravel::CompatibleAuctioneer(botAI, npc))',
+     'if (EarnedAuctionTravel::CompatibleAuctioneer(botAI, npc))'),
+    ('rejected mailbox chosen on the auctioneer turn', 'value',
+     ('            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))\n'
+      '                if (guid != rejected)\n                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};'),
+     ('            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))\n'
+      '                return {guid, NaturalMaintenanceType::AUCTION_MAIL};')),
+    ('nearby mailbox before a distant market', 'value',
+     ('            if (WorldPosition destination = EarnedAuctionTravel::PlanTrip(botAI))\n'
+      '                return {{}, NaturalMaintenanceType::AUCTION_TRAVEL, 0, 0, destination};\n\n'
+      '            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))\n'
+      '                if (guid != rejected)\n                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};'),
+     ('            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))\n'
+      '                if (guid != rejected)\n                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};\n\n'
+      '            if (WorldPosition destination = EarnedAuctionTravel::PlanTrip(botAI))\n'
+      '                return {{}, NaturalMaintenanceType::AUCTION_TRAVEL, 0, 0, destination};')),
+    ('rejection never expires', 'travel', 'RejectionActive(GetMSTimeDiffToNow(info.earnedAuctionRejectedAt))',
+     '(RejectionActive(GetMSTimeDiffToNow(info.earnedAuctionRejectedAt)) || true)'),
     ('rejected visit retried', 'action', 'else\n            EarnedAuctionTravel::PostponeVisit(botAI);',
      'else\n            EarnedAuctionTravel::AbortTrip(botAI);'),
     ('unreachable NPC not remembered', 'action',

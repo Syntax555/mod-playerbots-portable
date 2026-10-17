@@ -66,13 +66,15 @@ They need eligible surplus or at least one silver available after purchase
 reserves. Nearby auctioneers and mailboxes are searched within 150 yards.
 
 A trip has a ten-minute budget including its final approach. New plans wait
-fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable nearby
-auctioneers or mailboxes postpone the visit for fifteen minutes and return the
-bot to ordinary activity, including repairs, sales and training. Trading depends
-on pathfinding and NPC availability. Bots may vendor surplus when bags reach 80%
-usage or their budget cannot cover the neutral auction house's deposit for the
-stack. Stock whose ordinary price cannot repay that house's deposit and cut is
-vendored.
+fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable
+nearby auctioneers or mailboxes postpone the visit for fifteen minutes and
+return the bot to ordinary activity, including repairs, sales and training. An
+unreachable mailbox or auctioneer is then skipped for an hour, so another can
+serve. On an auctioneer turn without a nearby auctioneer, a distant market in
+reach comes before a nearby mailbox. Trading depends on pathfinding and NPC
+availability. Bots may vendor surplus when bags reach 80% usage or their budget
+cannot cover the neutral auction house's deposit for the stack. Stock whose
+ordinary price cannot repay that house's deposit and cut is vendored.
 
 ## Mail delivery
 
