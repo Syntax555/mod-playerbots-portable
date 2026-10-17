@@ -116,7 +116,7 @@ index 8657a1f..ee73559 100644
      bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
  
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 61e1a98..2d7448e 100644
+index 61e1a98..8859f4e 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -9,6 +9,8 @@
@@ -128,7 +128,7 @@ index 61e1a98..2d7448e 100644
  #include "ItemUsageValue.h"
  #include "PlayerbotFactory.h"
  #include "Playerbots.h"
-@@ -33,7 +35,42 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
+@@ -33,7 +35,46 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
  NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
  {
      if (!CanRunNaturalMaintenance(botAI))
@@ -148,30 +148,34 @@ index 61e1a98..2d7448e 100644
 +        }
 +        if (GetMSTimeDiffToNow(info.earnedAuctionLastVisit) >= info.earnedAuctionVisitDelay)
 +        {
++            ObjectGuid const rejected = EarnedAuctionTravel::RejectedTarget(botAI);
 +            // Alternate browsing and collecting receipts. Do not inspect world-thread mail or AH state here.
 +            if (info.earnedAuctionVisitMailbox)
 +                for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))
-+                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};
++                    if (guid != rejected)
++                        return {guid, NaturalMaintenanceType::AUCTION_MAIL};
 +
 +            for (ObjectGuid guid : AI_VALUE(GuidVector, "possible new rpg targets"))
 +            {
 +                Creature* npc = botAI->GetCreature(guid);
-+                if (EarnedAuctionTravel::CompatibleAuctioneer(botAI, npc))
++                if (guid != rejected && EarnedAuctionTravel::CompatibleAuctioneer(botAI, npc))
 +                    return {guid, NaturalMaintenanceType::AUCTION};
 +            }
 +
-+            // Collect old receipts even after a restart when no auctioneer is nearby.
-+            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))
-+                return {guid, NaturalMaintenanceType::AUCTION_MAIL};
-+
++            // A distant market comes before a nearby mailbox, which would otherwise take
++            // every turn. Old receipts are still collected when no market is in reach.
 +            if (WorldPosition destination = EarnedAuctionTravel::PlanTrip(botAI))
 +                return {{}, NaturalMaintenanceType::AUCTION_TRAVEL, 0, 0, destination};
++
++            for (ObjectGuid guid : AI_VALUE(GuidVector, "natural mailboxes"))
++                if (guid != rejected)
++                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};
 +        }
 +    }
  
      bool const canSell = AI_VALUE(bool, "can sell");
      bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
-@@ -197,6 +234,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
+@@ -197,6 +238,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
  
  bool CanSellValue::Calculate()
  {
@@ -278,7 +282,7 @@ index 0636393..7221642 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index 5f82e99..afdfe69 100644
+index 5f82e99..d752489 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -10,6 +10,8 @@
@@ -353,7 +357,7 @@ index 5f82e99..afdfe69 100644
 +            if (IsWaitingForLastMove(MovementPriority::MOVEMENT_NORMAL) || MoveWorldObjectTo(task.target))
 +                return true;
 +            // An unreachable mailbox or auctioneer must not hold back repairs, sales and training.
-+            EarnedAuctionTravel::PostponeVisit(botAI);
++            EarnedAuctionTravel::RejectVisit(botAI, task.target);
 +            value->Set({});
 +            return false;
 +        }
@@ -401,10 +405,10 @@ index 5b00a59..8dd9bff 100644
  
  class NewRpgDoQuestAction : public NewRpgBaseAction
 diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
-index fd36928..9076d52 100644
+index fd36928..7c4824c 100644
 --- a/src/Ai/World/Rpg/NewRpgInfo.h
 +++ b/src/Ai/World/Rpg/NewRpgInfo.h
-@@ -76,6 +76,17 @@ struct NewRpgInfo
+@@ -76,6 +76,19 @@ struct NewRpgInfo
  
      uint32 startT{0};  // start timestamp of the current status
  
@@ -418,6 +422,8 @@ index fd36928..9076d52 100644
 +    uint32 earnedAuctionTravelStarted{0};
 +    uint32 earnedAuctionTravelLastAttempt{0};
 +    WorldPosition earnedAuctionTravelDestination;
++    ObjectGuid earnedAuctionRejected;
++    uint32 earnedAuctionRejectedAt{0};
 +
      // MOVE_FAR
      float nearestMoveFarDis{FLT_MAX};
@@ -1464,10 +1470,10 @@ index 0000000..59ac112
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravel.cpp b/src/Bot/EarnedAuctionTravel.cpp
 new file mode 100644
-index 0000000..e70e6d8
+index 0000000..ff699e7
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravel.cpp
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,196 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1608,6 +1614,24 @@ index 0000000..e70e6d8
 +    ai->rpgInfo.earnedAuctionVisitDelay = TravelBackoffMs;
 +}
 +
++// An unreachable mailbox or auctioneer would otherwise be chosen for every visit
++// while it stays nearest. Skip it for a while, so another can serve.
++void RejectVisit(PlayerbotAI* ai, ObjectGuid target)
++{
++    if (!ai)
++        return;
++    PostponeVisit(ai);
++    ai->rpgInfo.earnedAuctionRejected = target;
++    ai->rpgInfo.earnedAuctionRejectedAt = getMSTime();
++}
++
++ObjectGuid RejectedTarget(PlayerbotAI* ai)
++{
++    auto const& info = ai->rpgInfo;
++    return RejectionActive(GetMSTimeDiffToNow(info.earnedAuctionRejectedAt)) ? info.earnedAuctionRejected
++                                                                             : ObjectGuid::Empty;
++}
++
 +WorldPosition PlanTrip(PlayerbotAI* ai)
 +{
 +    if (ContinueTrip(ai))
@@ -1648,10 +1672,10 @@ index 0000000..e70e6d8
 +}  // namespace EarnedAuctionTravel
 diff --git a/src/Bot/EarnedAuctionTravel.h b/src/Bot/EarnedAuctionTravel.h
 new file mode 100644
-index 0000000..b5cdae8
+index 0000000..bb7f62c
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravel.h
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,27 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1675,14 +1699,16 @@ index 0000000..b5cdae8
 +void FinishTrip(PlayerbotAI* ai);
 +void AbortTrip(PlayerbotAI* ai);
 +void PostponeVisit(PlayerbotAI* ai);
++void RejectVisit(PlayerbotAI* ai, ObjectGuid target);
++ObjectGuid RejectedTarget(PlayerbotAI* ai);
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravelPolicy.h b/src/Bot/EarnedAuctionTravelPolicy.h
 new file mode 100644
-index 0000000..9bf013b
+index 0000000..19a711a
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravelPolicy.h
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,102 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1704,6 +1730,7 @@ index 0000000..9bf013b
 +constexpr std::uint32_t MinimumPurchaseCopper = 100;
 +constexpr std::uint32_t MaximumTravelTimeMs = 10 * 60 * 1000;
 +constexpr std::uint32_t TravelBackoffMs = 15 * 60 * 1000;
++constexpr std::uint32_t RejectedTargetMs = 60 * 60 * 1000;
 +constexpr float MaximumTravelDistance = 5000.0f;
 +constexpr std::uint32_t NeutralHouseId = 7;
 +
@@ -1780,6 +1807,8 @@ index 0000000..9bf013b
 +inline bool TravelDeadlineReached(std::uint32_t elapsedMs) { return elapsedMs >= MaximumTravelTimeMs; }
 +
 +inline bool TravelBackoffElapsed(std::uint32_t elapsedMs) { return elapsedMs >= TravelBackoffMs; }
++
++inline bool RejectionActive(std::uint32_t elapsedMs) { return elapsedMs < RejectedTargetMs; }
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
