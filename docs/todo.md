@@ -94,8 +94,6 @@ and ordinary player actions.
 
 ## Launcher and updates
 
-- [ ] The update journal is rewritten, manifest included, once per installed
-  file. Change the format only with a recovery path for older launchers.
 - [ ] Sign `UPDATE_MANIFEST.json` so a token that can upload release assets
   cannot push code to installations.
 - [ ] Evaluate starting `mysqld` with `--no-monitor` and tracking the server
