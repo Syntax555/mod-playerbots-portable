@@ -2,7 +2,8 @@
 
 NaturalMaintenanceValue chooses every autonomous gold spend and visit: vendor
 sales, repairs, trainer lessons, food, drink, ammunition, reagents, bags and
-the auction or mailbox visit clock. The production value, action, trigger and
+the auction or mailbox visit clock. Reagents of profession recipes are no supply
+goal, since natural bots do not craft. The production value, action, trigger and
 auction-trip clock run here with fake core objects. Mutation checks confirm
 that the guards, budgets and priorities are required.
 """
@@ -19,6 +20,7 @@ from FixtureSupport import (
     function,
     in_parallel,
     prepared_core,
+    profession_skills,
     run_fixture,
     source_argument,
 )
@@ -72,6 +74,7 @@ production = {
         (player_header, 'enum InventorySlots'), (player_header, 'enum InventoryPackSlots'),
         (item_header, 'enum ItemClass'), (item_header, 'enum ItemSubclassContainer'),
         (usage_header, 'enum ItemUsage : uint32'))),
+    'professions': profession_skills(core),
     'types': '\n'.join([
         declaration(values_header, 'enum class NaturalMaintenanceType : uint8'),
         declaration(values_header, 'struct NaturalMaintenanceTask'),
@@ -86,6 +89,7 @@ production = {
         'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)',
         'void PostponeVisit(PlayerbotAI* ai)')),
     'guard': function(values_source, 'bool CanRunNaturalMaintenance(PlayerbotAI* botAI)'),
+    'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
     'helpers': re.search(r'namespace\n\{\n.*?\n\}  // namespace', values_source, re.DOTALL).group(0),
     'smallest': function(usage_source, 'uint32 ItemUsageValue::GetSmallestBagSize()'),
     'value': function(values_source, 'NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()'),
@@ -125,6 +129,7 @@ enum Classes { CLASS_WARRIOR = 1, CLASS_HUNTER = 3, CLASS_MAGE = 8 };
 enum PlayerSpellState { PLAYERSPELL_UNCHANGED, PLAYERSPELL_CHANGED, PLAYERSPELL_NEW, PLAYERSPELL_REMOVED };
 enum InventoryResult { EQUIP_ERR_OK, EQUIP_ERR_CANT_EQUIP_SKILL };
 @@NATIVE@@
+@@PROFESSIONS@@
 enum ItemSubclassConsumable
 {
     ITEM_SUBCLASS_CONSUMABLE = 0, ITEM_SUBCLASS_POTION = 1, ITEM_SUBCLASS_FLASK = 3, ITEM_SUBCLASS_FOOD = 5,
@@ -340,11 +345,13 @@ auto* sObjectMgr = &objectMgr;
 struct SpellMgr
 {
     std::map<uint32, SpellInfo> spells;
+    SkillLineAbilityMap abilities;
     SpellInfo const* GetSpellInfo(uint32 id) const
     {
         auto const found = spells.find(id);
         return found == spells.end() ? nullptr : &found->second;
     }
+    SkillLineAbilityMapBounds GetSkillLineAbilityMapBounds(uint32 id) const { return abilities.equal_range(id); }
 } spellMgr;
 auto* sSpellMgr = &spellMgr;
 struct PlayerbotAIConfig
@@ -654,6 +661,7 @@ ItemUsage ItemUpgrade(Player* bot, std::string const& qualifier)
 
 @@CLASSES@@
 @@GUARD@@
+@@PROFESSION@@
 @@HELPERS@@
 @@VALUE@@
 @@ACTION@@
@@ -676,6 +684,7 @@ struct Scenario
     std::deque<Bag> containers;
     std::deque<::Item> fillers;
     std::deque<PlayerSpell> learned;
+    std::deque<SkillLineAbilityEntry> abilities;
     std::unique_ptr<NaturalMaintenanceValue> value;
     std::unique_ptr<NewRpgNaturalMaintenanceAction> action;
     std::unique_ptr<NewRpgNaturalMaintenanceTrigger> trigger;
@@ -686,6 +695,9 @@ struct Scenario
         world = Fixture();
         objectMgr = ObjectMgr();
         spellMgr = SpellMgr();
+        sSkillLineStore.rows = {{SKILL_TAILORING, {SKILL_TAILORING, SKILL_CATEGORY_PROFESSION}},
+                                {SKILL_FIRST_AID, {SKILL_FIRST_AID, SKILL_CATEGORY_SECONDARY}},
+                                {SKILL_DEFENSE, {SKILL_DEFENSE, SKILL_CATEGORY_WEAPON}}};
         sPlayerbotAIConfig = PlayerbotAIConfig();
         now = 1000000;
         bot.guid = {7};
@@ -819,6 +831,14 @@ struct Scenario
         info.passive = passive;
         info.Reagent[0] = int32(reagent);
         info.ReagentCount[0] = count;
+    }
+    void SkillLine(uint32 spellId, uint32 skill)
+    {
+        SkillLineAbilityEntry& ability = abilities.emplace_back();
+        ability.ID = uint32(abilities.size());
+        ability.SkillLine = skill;
+        ability.Spell = spellId;
+        spellMgr.abilities.insert({spellId, &ability});
     }
     NaturalMaintenanceTask Evaluate()
     {
@@ -1046,6 +1066,28 @@ void SupplyTests()
     assert(s.Evaluate().type == Type::NONE);
     assert(buys(reagent, NeedMoneyFor::spells) && s.Tick(0));
     assert(world.actions.back() == std::make_pair(std::string("buy"), "item:" + std::to_string(reagent.ItemId)));
+}
+
+void RecipeTests()
+{
+    // Natural bots do not craft: recipe reagents are no supply goal, class-spell reagents are.
+    Scenario s;
+    Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 10.0f);
+    ItemTemplate& thread = s.Template(ITEM_CLASS_REAGENT, 0, 10);
+    ItemTemplate& bandage = s.Template(ITEM_CLASS_REAGENT, 0, 10);
+    ItemTemplate& shard = s.Template(ITEM_CLASS_REAGENT, 0, 10);
+    for (ItemTemplate const* proto : {&thread, &bandage, &shard})
+        s.Stock(vendor, *proto);
+    s.Budget(NeedMoneyFor::spells, 100);
+    s.Learn(600, thread.ItemId, 1);
+    s.SkillLine(600, SKILL_TAILORING);
+    s.Learn(601, bandage.ItemId, 1);
+    s.SkillLine(601, SKILL_FIRST_AID);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Learn(602, shard.ItemId, 1);
+    s.SkillLine(602, SKILL_DEFENSE);
+    NaturalMaintenanceTask const task = s.Evaluate();
+    assert(s.Is(task, Type::BUY, vendor) && task.itemId == shard.ItemId);
 }
 
 void AuctionVisitTests()
@@ -1394,6 +1436,7 @@ int main()
     SellAndRepairTests();
     TrainerTests();
     SupplyTests();
+    RecipeTests();
     AuctionVisitTests();
     AuctionTravelTests();
     StarvationTests();
@@ -1407,8 +1450,8 @@ int main()
 
 def build(directory, parts, name):
     text = prelude
-    for key in ('native', 'types', 'classes', 'travel', 'guard', 'helpers', 'smallest', 'value', 'action', 'trigger',
-                'usage'):
+    for key in ('native', 'professions', 'types', 'classes', 'travel', 'guard', 'profession', 'helpers', 'smallest',
+                'value', 'action', 'trigger', 'usage'):
         text = text.replace('@@' + key.upper() + '@@', parts[key])
     (directory / (name + '.cpp')).write_text(text + tests)
     executable = directory / name
@@ -1427,6 +1470,8 @@ mutations = [
     ('supply above its budget', 'value', 'if (price <= budget && bot->HasEnoughMoney(price))',
      'if (budget && bot->HasEnoughMoney(price))'),
     ('reagents of passive spells', 'value', '!info || info->IsPassive()', '!info'),
+    ('reagents of profession recipes', 'value', ' || IsProfessionSpell(spellId)', ''),
+    ('profession test without the skill line', 'profession', 'IsProfessionSkill(it->second->SkillLine)', 'true'),
     ('repair before vendor sales', 'value', 'if (canSell && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))',
      'if (canSell && !needsRepair && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))'),
     ('purchase without a budget check at the vendor', 'action',

@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 079b3406..9c418490 100644
+index 079b340..9c41849 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -85,6 +85,20 @@ Playerbots.Enabled = 1
@@ -54,7 +54,7 @@ index 079b3406..9c418490 100644
  # Enable bots chatting in guild about certain events
  AIPlayerbot.GuildFeedback = 1
 diff --git a/src/Ai/Base/ActionContext.h b/src/Ai/Base/ActionContext.h
-index 26b56250..a8c657dd 100644
+index 26b5625..a8c657d 100644
 --- a/src/Ai/Base/ActionContext.h
 +++ b/src/Ai/Base/ActionContext.h
 @@ -268,6 +268,7 @@ public:
@@ -74,7 +74,7 @@ index 26b56250..a8c657dd 100644
      static Action* new_rpg_go_grind(PlayerbotAI* botAI) { return new NewRpgGoGrindAction(botAI); }
      static Action* new_rpg_go_camp(PlayerbotAI* botAI) { return new NewRpgGoCampAction(botAI); }
 diff --git a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
-index 03a4b9ba..477007ac 100644
+index 03a4b9b..477007a 100644
 --- a/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
 +++ b/src/Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp
 @@ -43,7 +43,7 @@ void AutoMaintenanceOnLevelupAction::AutoPickTalents()
@@ -120,7 +120,7 @@ index 03a4b9ba..477007ac 100644
          return;
  
 diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
-index 6396770a..4ceb4211 100644
+index 6396770..4ceb421 100644
 --- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 +++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 @@ -8,6 +8,7 @@
@@ -237,7 +237,7 @@ index 6396770a..4ceb4211 100644
      PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, bot->GetLevel());
      if (!pvpDiff)
 diff --git a/src/Ai/Base/Actions/BuyAction.cpp b/src/Ai/Base/Actions/BuyAction.cpp
-index 0da759b7..49fc7737 100644
+index 0da759b..49fc773 100644
 --- a/src/Ai/Base/Actions/BuyAction.cpp
 +++ b/src/Ai/Base/Actions/BuyAction.cpp
 @@ -33,6 +33,10 @@ bool BuyAction::Execute(Event event)
@@ -252,7 +252,7 @@ index 0da759b7..49fc7737 100644
          if (!pCreature)
              continue;
 diff --git a/src/Ai/Base/Actions/ChangeTalentsAction.cpp b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
-index 0a8a5228..3bf7c154 100644
+index 0a8a522..3bf7c15 100644
 --- a/src/Ai/Base/Actions/ChangeTalentsAction.cpp
 +++ b/src/Ai/Base/Actions/ChangeTalentsAction.cpp
 @@ -16,6 +16,9 @@
@@ -285,7 +285,7 @@ index 0a8a5228..3bf7c154 100644
      botAI->TellMaster(out);
  
 diff --git a/src/Ai/Base/Actions/EquipGlyphsAction.cpp b/src/Ai/Base/Actions/EquipGlyphsAction.cpp
-index 761d1af8..2c116d9b 100644
+index 761d1af..2c116d9 100644
 --- a/src/Ai/Base/Actions/EquipGlyphsAction.cpp
 +++ b/src/Ai/Base/Actions/EquipGlyphsAction.cpp
 @@ -97,6 +97,10 @@ bool EquipGlyphsAction::CollectGlyphs(std::vector<uint32> const& itemIds,
@@ -300,7 +300,7 @@ index 761d1af8..2c116d9b 100644
      std::vector<uint32> itemIds;
      std::istringstream iss(event.getParam());
 diff --git a/src/Ai/Base/Actions/FishingAction.cpp b/src/Ai/Base/Actions/FishingAction.cpp
-index e86bfb1a..3b93151b 100644
+index e86bfb1..3b93151 100644
 --- a/src/Ai/Base/Actions/FishingAction.cpp
 +++ b/src/Ai/Base/Actions/FishingAction.cpp
 @@ -383,7 +383,7 @@ bool EquipFishingPoleAction::isUseful()
@@ -313,7 +313,7 @@ index e86bfb1a..3b93151b 100644
          bot->StoreNewItemInBestSlots(FISHING_POLE, 1);  // Try to get a fishing pole
          return true;
 diff --git a/src/Ai/Base/Actions/GreetAction.cpp b/src/Ai/Base/Actions/GreetAction.cpp
-index eb5e418b..b7330b52 100644
+index eb5e418..b7330b5 100644
 --- a/src/Ai/Base/Actions/GreetAction.cpp
 +++ b/src/Ai/Base/Actions/GreetAction.cpp
 @@ -5,13 +5,60 @@
@@ -434,7 +434,7 @@ index eb5e418b..b7330b52 100644
      }
  
 diff --git a/src/Ai/Base/Actions/GreetAction.h b/src/Ai/Base/Actions/GreetAction.h
-index bd00e2f2..cd962f96 100644
+index bd00e2f..cd962f9 100644
 --- a/src/Ai/Base/Actions/GreetAction.h
 +++ b/src/Ai/Base/Actions/GreetAction.h
 @@ -17,6 +17,7 @@ public:
@@ -446,7 +446,7 @@ index bd00e2f2..cd962f96 100644
  
  #endif
 diff --git a/src/Ai/Base/Actions/GuildCreateActions.cpp b/src/Ai/Base/Actions/GuildCreateActions.cpp
-index 605fa684..f1df4e32 100644
+index 605fa68..f1df4e3 100644
 --- a/src/Ai/Base/Actions/GuildCreateActions.cpp
 +++ b/src/Ai/Base/Actions/GuildCreateActions.cpp
 @@ -239,7 +239,7 @@ bool PetitionTurnInAction::Execute(Event /*event*/)
@@ -459,7 +459,7 @@ index 605fa684..f1df4e32 100644
                  bot->ModifyMoney(int32(REQUIRED - have)); // add only the missing amount to bot to reach 10g
              }
 diff --git a/src/Ai/Base/Actions/HireAction.cpp b/src/Ai/Base/Actions/HireAction.cpp
-index 3f9c791b..41e421dc 100644
+index 3f9c791..41e421d 100644
 --- a/src/Ai/Base/Actions/HireAction.cpp
 +++ b/src/Ai/Base/Actions/HireAction.cpp
 @@ -54,7 +54,8 @@ bool HireAction::Execute(Event /*event*/)
@@ -473,7 +473,7 @@ index 3f9c791b..41e421dc 100644
      CharacterDatabase.Execute("UPDATE characters SET account = {} WHERE guid = {}", account,
                                bot->GetGUID().GetCounter());
 diff --git a/src/Ai/Base/Actions/QuestAction.cpp b/src/Ai/Base/Actions/QuestAction.cpp
-index 6028944b..0bf56dee 100644
+index 6028944..0bf56de 100644
 --- a/src/Ai/Base/Actions/QuestAction.cpp
 +++ b/src/Ai/Base/Actions/QuestAction.cpp
 @@ -74,6 +74,10 @@ bool QuestAction::Execute(Event event)
@@ -488,7 +488,7 @@ index 6028944b..0bf56dee 100644
  
      // If player doesn't have the quest
 diff --git a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
-index 79a806d4..43f1a59d 100644
+index 79a806d..43f1a59 100644
 --- a/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
 +++ b/src/Ai/Base/Actions/ReleaseSpiritAction.cpp
 @@ -9,6 +9,7 @@
@@ -676,7 +676,7 @@ index 79a806d4..43f1a59d 100644
          AI_VALUE(uint32, "death count") > 10 ||
          CalculateDeadTime() > 30 * MINUTE
 diff --git a/src/Ai/Base/Actions/ReleaseSpiritAction.h b/src/Ai/Base/Actions/ReleaseSpiritAction.h
-index 9662f263..84835aef 100644
+index 9662f26..84835ae 100644
 --- a/src/Ai/Base/Actions/ReleaseSpiritAction.h
 +++ b/src/Ai/Base/Actions/ReleaseSpiritAction.h
 @@ -36,10 +36,16 @@ public:
@@ -697,7 +697,7 @@ index 9662f263..84835aef 100644
  
  class RepopAction : public SpiritHealerAction
 diff --git a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
-index 6cf8b452..0e3435f7 100644
+index 6cf8b45..0e3435f 100644
 --- a/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
 +++ b/src/Ai/Base/Actions/ReviveFromCorpseAction.cpp
 @@ -95,7 +95,7 @@ bool FindCorpseAction::Execute(Event /*event*/)
@@ -764,7 +764,7 @@ index 6cf8b452..0e3435f7 100644
      // {
      context->GetValue<uint32>("death count")->Set(dCount + 1);
 diff --git a/src/Ai/Base/Actions/SayAction.cpp b/src/Ai/Base/Actions/SayAction.cpp
-index 7ef99113..41a83110 100644
+index 7ef9911..41a8311 100644
 --- a/src/Ai/Base/Actions/SayAction.cpp
 +++ b/src/Ai/Base/Actions/SayAction.cpp
 @@ -221,6 +221,9 @@ void ChatReplyAction::ChatReplyDo(Player* bot, uint32& type, uint32& guid1, std:
@@ -788,7 +788,7 @@ index 7ef99113..41a83110 100644
      std::vector<uint32> incompleteQuests;
      for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
 diff --git a/src/Ai/Base/Actions/TameAction.cpp b/src/Ai/Base/Actions/TameAction.cpp
-index a202d686..38142b82 100644
+index a202d68..38142b8 100644
 --- a/src/Ai/Base/Actions/TameAction.cpp
 +++ b/src/Ai/Base/Actions/TameAction.cpp
 @@ -34,6 +34,10 @@ bool HasBeastMastery(Player* bot)
@@ -803,7 +803,7 @@ index a202d686..38142b82 100644
      std::string param = event.getParam();
      std::istringstream iss(param);
 diff --git a/src/Ai/Base/Actions/TaxiAction.cpp b/src/Ai/Base/Actions/TaxiAction.cpp
-index abd2c7dd..25706b7e 100644
+index abd2c7d..25706b7 100644
 --- a/src/Ai/Base/Actions/TaxiAction.cpp
 +++ b/src/Ai/Base/Actions/TaxiAction.cpp
 @@ -40,7 +40,9 @@ bool TaxiAction::Execute(Event event)
@@ -878,7 +878,7 @@ index abd2c7dd..25706b7e 100644
              movement.taxiNodes.clear();
              movement.Set(nullptr);
 diff --git a/src/Ai/Base/Actions/TeleportAction.cpp b/src/Ai/Base/Actions/TeleportAction.cpp
-index c1efb7f1..cb2c4e13 100644
+index c1efb7f..cb2c4e1 100644
 --- a/src/Ai/Base/Actions/TeleportAction.cpp
 +++ b/src/Ai/Base/Actions/TeleportAction.cpp
 @@ -85,8 +85,18 @@ bool TeleportAction::Execute(Event /*event*/)
@@ -902,7 +902,7 @@ index c1efb7f1..cb2c4e13 100644
          SpellCastTargets targets;
          targets.SetUnitTarget(bot);
 diff --git a/src/Ai/Base/Actions/TrainerAction.cpp b/src/Ai/Base/Actions/TrainerAction.cpp
-index d4465a05..e5d9ef14 100644
+index d4465a0..e5d9ef1 100644
 --- a/src/Ai/Base/Actions/TrainerAction.cpp
 +++ b/src/Ai/Base/Actions/TrainerAction.cpp
 @@ -76,6 +76,14 @@ bool TrainerAction::isPossible()
@@ -1015,7 +1015,7 @@ index d4465a05..e5d9ef14 100644
          botAI->TellError(PlayerbotTextMgr::instance().GetBotTextOrDefault(
              "autogear_command_disabled_error", "autogear command is not allowed, please check the configuration.", {}));
 diff --git a/src/Ai/Base/Actions/UseMeetingStoneAction.cpp b/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
-index 0fdaee40..194898eb 100644
+index 0fdaee4..194898e 100644
 --- a/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
 +++ b/src/Ai/Base/Actions/UseMeetingStoneAction.cpp
 @@ -163,6 +163,10 @@ bool SummonAction::SummonUsingNpcs(Player* summoner, Player* player, bool preser
@@ -1030,7 +1030,7 @@ index 0fdaee40..194898eb 100644
      if (!summoner || summoner == player)
          return false;
 diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
-index e15f70e0..66800f0b 100644
+index e15f70e..66800f0 100644
 --- a/src/Ai/Base/Actions/WorldBuffAction.cpp
 +++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
 @@ -11,6 +11,10 @@
@@ -1045,7 +1045,7 @@ index e15f70e0..66800f0b 100644
  
      std::vector<uint32> buffs = NeedWorldBuffs(bot);  // Get matching buffs
 diff --git a/src/Ai/Base/Actions/XpGainAction.cpp b/src/Ai/Base/Actions/XpGainAction.cpp
-index eec1a605..a69cc6cc 100644
+index eec1a60..a69cc6c 100644
 --- a/src/Ai/Base/Actions/XpGainAction.cpp
 +++ b/src/Ai/Base/Actions/XpGainAction.cpp
 @@ -55,6 +55,9 @@ bool XpGainAction::Execute(Event event)
@@ -1059,7 +1059,7 @@ index eec1a605..a69cc6cc 100644
      {
          return;
 diff --git a/src/Ai/Base/TriggerContext.h b/src/Ai/Base/TriggerContext.h
-index 32ad9aa8..67a4d99d 100644
+index 32ad9aa..67a4d99 100644
 --- a/src/Ai/Base/TriggerContext.h
 +++ b/src/Ai/Base/TriggerContext.h
 @@ -236,6 +236,7 @@ public:
@@ -1079,10 +1079,10 @@ index 32ad9aa8..67a4d99d 100644
      static Trigger* go_camp_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_GO_CAMP); }
      static Trigger* wander_random_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_WANDER_RANDOM); }
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index eace9db9..2c08e3bd 100644
+index eace9db..61e1a98 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
-@@ -5,9 +5,157 @@
+@@ -5,9 +5,166 @@
   */
  
  #include "MaintenanceValues.h"
@@ -1094,6 +1094,15 @@ index eace9db9..2c08e3bd 100644
 +#include "PlayerbotFactory.h"
  #include "Playerbots.h"
 +#include "Trainer.h"
++
++bool IsProfessionSpell(uint32 spellId)
++{
++    SkillLineAbilityMapBounds const bounds = sSpellMgr->GetSkillLineAbilityMapBounds(spellId);
++    for (auto it = bounds.first; it != bounds.second; ++it)
++        if (IsProfessionSkill(it->second->SkillLine))
++            return true;
++    return false;
++}
 +
 +bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
 +{
@@ -1128,7 +1137,7 @@ index eace9db9..2c08e3bd 100644
 +        }
 +    }
 +
-+    // Only reagents for spells already learned can become a paid supply goal.
++    // Only reagents for spells already learned can become a paid supply goal; recipes are not.
 +    std::unordered_map<uint32, uint32> neededReagents;
 +    if (spellBudget)
 +    {
@@ -1138,7 +1147,7 @@ index eace9db9..2c08e3bd 100644
 +                continue;
 +
 +            SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-+            if (!info || info->IsPassive())
++            if (!info || info->IsPassive() || IsProfessionSpell(spellId))
 +                continue;
 +
 +            for (uint8 i = 0; i < MAX_SPELL_REAGENTS; ++i)
@@ -1241,10 +1250,10 @@ index eace9db9..2c08e3bd 100644
  bool CanMoveAroundValue::Calculate()
  {
 diff --git a/src/Ai/Base/Value/MaintenanceValues.h b/src/Ai/Base/Value/MaintenanceValues.h
-index 80db8373..63b7f78d 100644
+index 80db837..d50caeb 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.h
 +++ b/src/Ai/Base/Value/MaintenanceValues.h
-@@ -11,6 +11,37 @@
+@@ -11,6 +11,40 @@
  
  class PlayerbotAI;
  
@@ -1268,6 +1277,9 @@ index 80db8373..63b7f78d 100644
 +// Natural upkeep runs only for a living, idle bot that may move and has no game-client master.
 +bool CanRunNaturalMaintenance(PlayerbotAI* botAI);
 +
++// Natural bots do not craft, so a spell on a profession skill line is no upkeep goal.
++bool IsProfessionSpell(uint32 spellId);
++
 +class NaturalMaintenanceValue : public CalculatedValue<NaturalMaintenanceTask>
 +{
 +public:
@@ -1283,7 +1295,7 @@ index 80db8373..63b7f78d 100644
  {
  public:
 diff --git a/src/Ai/Base/Value/NewPlayerNearbyValue.cpp b/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
-index 014a7167..2014259f 100644
+index 014a716..2014259 100644
 --- a/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
 +++ b/src/Ai/Base/Value/NewPlayerNearbyValue.cpp
 @@ -7,14 +7,42 @@
@@ -1332,7 +1344,7 @@ index 014a7167..2014259f 100644
  
      return ObjectGuid::Empty;
 diff --git a/src/Ai/Base/Value/NewPlayerNearbyValue.h b/src/Ai/Base/Value/NewPlayerNearbyValue.h
-index 6a866727..a3d77826 100644
+index 6a86672..a3d7782 100644
 --- a/src/Ai/Base/Value/NewPlayerNearbyValue.h
 +++ b/src/Ai/Base/Value/NewPlayerNearbyValue.h
 @@ -8,16 +8,23 @@
@@ -1361,7 +1373,7 @@ index 6a866727..a3d77826 100644
  
  class AlreadySeenPlayersValue : public ManualSetValue<GuidSet&>
 diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
-index 527622a3..06363930 100644
+index 527622a..0636393 100644
 --- a/src/Ai/Base/ValueContext.h
 +++ b/src/Ai/Base/ValueContext.h
 @@ -280,6 +280,7 @@ public:
@@ -1381,7 +1393,7 @@ index 527622a3..06363930 100644
      static UntypedValue* should_sell(PlayerbotAI* botAI) { return new ShouldSellValue(botAI); }
      static UntypedValue* can_sell(PlayerbotAI* botAI) { return new CanSellValue(botAI); }
 diff --git a/src/Ai/Class/Hunter/HunterActions.cpp b/src/Ai/Class/Hunter/HunterActions.cpp
-index 88243d22..a75c449c 100644
+index 88243d2..a75c449 100644
 --- a/src/Ai/Class/Hunter/HunterActions.cpp
 +++ b/src/Ai/Class/Hunter/HunterActions.cpp
 @@ -50,6 +50,25 @@ Value<Unit*>* CastFreezingTrap::GetTargetValue()
@@ -1411,7 +1423,7 @@ index 88243d22..a75c449c 100644
          pet->GetHappinessState() != HAPPY)
      {
 diff --git a/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp b/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp
-index 25d3f23f..39dc0dfc 100644
+index 25d3f23..39dc0df 100644
 --- a/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp
 +++ b/src/Ai/Class/Warlock/Strategy/GenericWarlockStrategy.cpp
 @@ -52,6 +52,14 @@ void GenericWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -1430,7 +1442,7 @@ index 25d3f23f..39dc0dfc 100644
          new TriggerNode(
              "too many soul shards",
 diff --git a/src/Ai/Class/Warlock/WarlockActions.cpp b/src/Ai/Class/Warlock/WarlockActions.cpp
-index b07730ab..ae36d5fc 100644
+index b07730a..ae36d5f 100644
 --- a/src/Ai/Class/Warlock/WarlockActions.cpp
 +++ b/src/Ai/Class/Warlock/WarlockActions.cpp
 @@ -118,6 +118,9 @@ bool CastSoulshatterAction::isUseful()
@@ -1454,7 +1466,7 @@ index b07730ab..ae36d5fc 100644
      if (!bot)
          return false;
 diff --git a/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp b/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp
-index ad7a90e0..c11fcaa0 100644
+index ad7a90e..c11fcaa 100644
 --- a/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp
 +++ b/src/Ai/Class/Warlock/WarlockAiObjectContext.cpp
 @@ -146,6 +146,7 @@ public:
@@ -1474,7 +1486,7 @@ index ad7a90e0..c11fcaa0 100644
      static Trigger* HasHealthstone(PlayerbotAI* botAI) { return new HasHealthstoneTrigger(botAI); }
      static Trigger* HasFirestone(PlayerbotAI* botAI) { return new HasFirestoneTrigger(botAI); }
 diff --git a/src/Ai/Class/Warlock/WarlockTriggers.h b/src/Ai/Class/Warlock/WarlockTriggers.h
-index a15a8866..0aec2f3b 100644
+index a15a886..0aec2f3 100644
 --- a/src/Ai/Class/Warlock/WarlockTriggers.h
 +++ b/src/Ai/Class/Warlock/WarlockTriggers.h
 @@ -56,6 +56,13 @@ public:
@@ -1492,7 +1504,7 @@ index a15a8866..0aec2f3b 100644
  {
  public:
 diff --git a/src/Ai/Dungeon/OC/OCActions.cpp b/src/Ai/Dungeon/OC/OCActions.cpp
-index f45671e5..f5194134 100644
+index f45671e..f519413 100644
 --- a/src/Ai/Dungeon/OC/OCActions.cpp
 +++ b/src/Ai/Dungeon/OC/OCActions.cpp
 @@ -42,6 +42,15 @@ bool AvoidUnstableSphereAction::Execute(Event /*event*/)
@@ -1512,7 +1524,7 @@ index f45671e5..f5194134 100644
      // Composition can be adjusted - both 3/1/1 and 2/2/1 are good default comps
      // {Amber, Emerald, Ruby}
 diff --git a/src/Ai/Raid/BWL/BWLActions.cpp b/src/Ai/Raid/BWL/BWLActions.cpp
-index aa5fbd51..9ecd5c33 100644
+index aa5fbd5..9ecd5c3 100644
 --- a/src/Ai/Raid/BWL/BWLActions.cpp
 +++ b/src/Ai/Raid/BWL/BWLActions.cpp
 @@ -31,6 +31,10 @@ static constexpr float VAELASTRASZ_RANGED_BIAS_BOSS_WEIGHT = 1.0f - VAELASTRASZ_
@@ -1536,7 +1548,7 @@ index aa5fbd51..9ecd5c33 100644
          }
      }
 diff --git a/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp b/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
-index 1a1a8974..5c314861 100644
+index 1a1a897..5c31486 100644
 --- a/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
 +++ b/src/Ai/Raid/ICC/Action/ICCActions_SG.cpp
 @@ -489,7 +489,7 @@ bool IccSindragosaFrostBeaconAction::TryDropTombFlares(Unit const* boss)
@@ -1549,7 +1561,7 @@ index 1a1a8974..5c314861 100644
  
      Item* flare = bot->GetItemByEntry(itemId);
 diff --git a/src/Ai/Raid/SSC/SSCActions.cpp b/src/Ai/Raid/SSC/SSCActions.cpp
-index 64ae1cbf..e3941780 100644
+index 64ae1cb..e394178 100644
 --- a/src/Ai/Raid/SSC/SSCActions.cpp
 +++ b/src/Ai/Raid/SSC/SSCActions.cpp
 @@ -2555,6 +2555,10 @@ bool LadyVashjPassTheTaintedCoreAction::IsFourthCorePasserInPosition(Player* fou
@@ -1564,7 +1576,7 @@ index 64ae1cbf..e3941780 100644
          return;
  
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d4bfafe7..5f82e99d 100644
+index d4bfafe..5f82e99 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -7,10 +7,12 @@
@@ -1675,7 +1687,7 @@ index d4bfafe7..5f82e99d 100644
          LOG_DEBUG("playerbots", "[New RPG] {} active taxi path {} (from {} to {}) failed", bot->GetName(),
                    flightMaster->GetEntry(), nodes.empty() ? 0 : nodes.front(), nodes.empty() ? 0 : nodes.back());
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.h b/src/Ai/World/Rpg/Action/NewRpgAction.h
-index d015a87e..5b00a59f 100644
+index d015a87..5b00a59 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.h
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.h
 @@ -99,6 +99,13 @@ public:
@@ -1693,7 +1705,7 @@ index d015a87e..5b00a59f 100644
  {
  public:
 diff --git a/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp b/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
-index 12dbf300..834a0b00 100644
+index 12dbf30..834a0b0 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgBaseAction.cpp
 @@ -108,6 +108,9 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
@@ -1752,7 +1764,7 @@ index 12dbf300..834a0b00 100644
          WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
          packet << (uint8)i;
 diff --git a/src/Ai/World/Rpg/Action/RpgSubActions.cpp b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
-index 4afe6fe9..291b6648 100644
+index 4afe6fe..291b664 100644
 --- a/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 +++ b/src/Ai/World/Rpg/Action/RpgSubActions.cpp
 @@ -13,10 +13,12 @@
@@ -1826,7 +1838,7 @@ index 4afe6fe9..291b6648 100644
  
          // we only check if at least one spell can be learned from the trainer;
 diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
-index 84feab56..fd36928b 100644
+index 84feab5..fd36928 100644
 --- a/src/Ai/World/Rpg/NewRpgInfo.h
 +++ b/src/Ai/World/Rpg/NewRpgInfo.h
 @@ -83,6 +83,9 @@ struct NewRpgInfo
@@ -1840,7 +1852,7 @@ index 84feab56..fd36928b 100644
          Idle,
          GoGrind,
 diff --git a/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp b/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
-index 3658aa89..35bfd15d 100644
+index 3658aa8..35bfd15 100644
 --- a/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
 +++ b/src/Ai/World/Rpg/Strategy/NewRpgStrategy.cpp
 @@ -18,6 +18,8 @@ std::vector<NextAction> NewRpgStrategy::getDefaultActions()
@@ -1853,7 +1865,7 @@ index 3658aa89..35bfd15d 100644
          new TriggerNode(
              "go grind status",
 diff --git a/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp b/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
-index c88f24da..326c879a 100644
+index c88f24d..326c879 100644
 --- a/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
 +++ b/src/Ai/World/Rpg/Trigger/NewRpgTrigger.cpp
 @@ -4,7 +4,15 @@
@@ -1873,7 +1885,7 @@ index c88f24da..326c879a 100644
 +           !AI_VALUE(NaturalMaintenanceTask, "natural maintenance").target.IsEmpty();
 +}
 diff --git a/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h b/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h
-index 9449a3cb..d524e20d 100644
+index 9449a3c..d524e20 100644
 --- a/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h
 +++ b/src/Ai/World/Rpg/Trigger/NewRpgTriggers.h
 @@ -23,4 +23,11 @@ protected:
@@ -1890,7 +1902,7 @@ index 9449a3cb..d524e20d 100644
  #endif
 diff --git a/src/Bot/BattlegroundQueuePolicy.h b/src/Bot/BattlegroundQueuePolicy.h
 new file mode 100644
-index 00000000..4f4b3f2b
+index 0000000..4f4b3f2
 --- /dev/null
 +++ b/src/Bot/BattlegroundQueuePolicy.h
 @@ -0,0 +1,18 @@
@@ -1914,7 +1926,7 @@ index 00000000..4f4b3f2b
 +#endif
 diff --git a/src/Bot/EarnedLevelBracketPolicy.h b/src/Bot/EarnedLevelBracketPolicy.h
 new file mode 100644
-index 00000000..2582f6e1
+index 0000000..2582f6e
 --- /dev/null
 +++ b/src/Bot/EarnedLevelBracketPolicy.h
 @@ -0,0 +1,84 @@
@@ -2003,7 +2015,7 @@ index 00000000..2582f6e1
 +
 +#endif
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
-index eeba8187..c32f69d9 100644
+index eeba818..c32f69d 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
 +++ b/src/Bot/Factory/PlayerbotFactory.cpp
 @@ -255,7 +255,9 @@ bool PlayerbotFactory::IsTrainerSpellAllowedForBot(Player* bot, Trainer::Trainer
@@ -2272,7 +2284,7 @@ index eeba8187..c32f69d9 100644
      if (level < 55)
          return; // Only apply for level 55+ bots
 diff --git a/src/Bot/Factory/RandomPlayerbotFactory.cpp b/src/Bot/Factory/RandomPlayerbotFactory.cpp
-index 23046e1a..0e6a14d9 100644
+index 23046e1..0e6a14d 100644
 --- a/src/Bot/Factory/RandomPlayerbotFactory.cpp
 +++ b/src/Bot/Factory/RandomPlayerbotFactory.cpp
 @@ -5,6 +5,9 @@
@@ -2384,7 +2396,7 @@ index 23046e1a..0e6a14d9 100644
              if (!((1 << (cls - 1)) & CLASSMASK_ALL_PLAYABLE) || !sChrClassesStore.LookupEntry(cls))
                  continue;
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index 7f51eca5..dcd865d6 100644
+index 7f51eca..dcd865d 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
 @@ -145,7 +145,9 @@ PlayerbotAI::PlayerbotAI(Player* bot)
@@ -2441,7 +2453,7 @@ index 7f51eca5..dcd865d6 100644
  bool IsAlliance(uint8 race)
  {
 diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
-index da22f6e7..2819cf8d 100644
+index da22f6e..2819cf8 100644
 --- a/src/Bot/PlayerbotAI.h
 +++ b/src/Bot/PlayerbotAI.h
 @@ -83,6 +83,7 @@ enum BotState
@@ -2463,7 +2475,7 @@ index da22f6e7..2819cf8d 100644
                 ((uint32)mask & (uint32)sPlayerbotAIConfig.BotCheatMask) != 0;
      }
 diff --git a/src/Bot/PlayerbotMgr.cpp b/src/Bot/PlayerbotMgr.cpp
-index 0d599cc9..71f45ac2 100644
+index 0d599cc..71f45ac 100644
 --- a/src/Bot/PlayerbotMgr.cpp
 +++ b/src/Bot/PlayerbotMgr.cpp
 @@ -29,6 +29,8 @@
@@ -2547,7 +2559,7 @@ index 0d599cc9..71f45ac2 100644
  
      PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
 diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
-index d3ecf115..7070ca76 100644
+index d3ecf11..7070ca7 100644
 --- a/src/Bot/RandomBotLevelMgr.cpp
 +++ b/src/Bot/RandomBotLevelMgr.cpp
 @@ -293,6 +293,9 @@ int RandomBotLevelMgr::GetLevelRangeIndex(uint8 level, TeamId team)
@@ -2647,7 +2659,7 @@ index d3ecf115..7070ca76 100644
  
      void OnPlayerLogin(Player* player) override
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 4afebecf..337518fa 100644
+index 4afebec..337518f 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
 @@ -9,6 +9,7 @@
@@ -2852,7 +2864,7 @@ index 4afebecf..337518fa 100644
      if (!botAI)
          return;
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index fca1d7c6..d673b7f7 100644
+index fca1d7c..d673b7f 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
 @@ -134,6 +134,7 @@ public:
@@ -2873,7 +2885,7 @@ index fca1d7c6..d673b7f7 100644
      uint32 AddRandomBots();
      bool ProcessBot(uint32 bot);
 diff --git a/src/Mgr/Travel/TravelMgr.cpp b/src/Mgr/Travel/TravelMgr.cpp
-index a36d7e2c..68ee7de3 100644
+index a36d7e2..68ee7de 100644
 --- a/src/Mgr/Travel/TravelMgr.cpp
 +++ b/src/Mgr/Travel/TravelMgr.cpp
 @@ -4464,17 +4464,19 @@ std::vector<std::vector<uint32>> TravelMgr::GetOptimalFlightDestinations(Player*
@@ -2906,7 +2918,7 @@ index a36d7e2c..68ee7de3 100644
  
          candidateZones.erase(candidateZones.begin() + zoneIndex);
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 3965c01d..50b081f4 100644
+index 3965c01..50b081f 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -81,6 +81,8 @@ bool PlayerbotAIConfig::Initialize()
@@ -2941,7 +2953,7 @@ index 3965c01d..50b081f4 100644
      LevelBracketsEnabled = sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.Enabled", false);
      LevelBracketsIgnoreGuildWithRealPlayers =
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index d0f700d4..e3512e8e 100644
+index d0f700d..e3512e8 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -8,9 +8,12 @@
@@ -2977,7 +2989,7 @@ index d0f700d4..e3512e8e 100644
      bool AnnounceConsumableUse;
  
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index d099421a..ad671626 100644
+index d099421..ad67162 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -362,7 +362,7 @@ public:

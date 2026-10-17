@@ -125,6 +125,41 @@ def pinned_source(module, path):
                           check=True, text=True, capture_output=True).stdout
 
 
+def profession_skills(core):
+    """C++ for the native profession test of a spell's skill lines.
+
+    The production IsPrimaryProfessionSkill and IsProfessionSkill run against a
+    SkillLine.dbc double that holds each skill's category. Skill-line abilities are
+    native-shaped rows that a fixture's SpellMgr double maps to spells.
+    """
+    shared = (core / 'src/server/shared/SharedDefines.h').read_text()
+    header = (core / 'src/server/game/Spells/SpellMgr.h').read_text()
+    source = (core / 'src/server/game/Spells/SpellMgr.cpp').read_text()
+    structures = (core / 'src/server/shared/DataStores/DBCStructure.h').read_text()
+    skill_line = function(structures, 'struct SkillLineEntry')
+    ability = function(structures, 'struct SkillLineAbilityEntry')
+    assert re.search(r'\bint32\s+categoryId;', skill_line) and re.search(r'\buint32\s+SkillLine;', ability)
+    typedefs = ['typedef std::multimap<uint32, SkillLineAbilityEntry const*> SkillLineAbilityMap;',
+                ('typedef std::pair<SkillLineAbilityMap::const_iterator, SkillLineAbilityMap::const_iterator> '
+                 'SkillLineAbilityMapBounds;')]
+    assert all(line in header for line in typedefs)
+    return '\n'.join([
+        function(shared, 'enum SkillType') + ';',
+        function(shared, 'enum SkillCategory') + ';',
+        'struct SkillLineEntry { uint32 id = 0; std::int32_t categoryId = 0; };',
+        'struct SkillLineAbilityEntry { uint32 ID = 0, SkillLine = 0, Spell = 0; };',
+        'struct SkillLineStore',
+        '{',
+        '    std::map<uint32, SkillLineEntry> rows;',
+        '    SkillLineEntry const* LookupEntry(uint32 id) const',
+        '    { auto const found = rows.find(id); return found == rows.end() ? nullptr : &found->second; }',
+        '} sSkillLineStore;',
+        *typedefs,
+        function(source, 'bool IsPrimaryProfessionSkill(uint32 skill)'),
+        function(header, 'inline bool IsProfessionSkill(uint32 skill)'),
+    ])
+
+
 def git_apply(directory, patch, *options):
     subprocess.run(['git', 'apply', *options, str(patch)], cwd=directory, check=True, capture_output=True)
 

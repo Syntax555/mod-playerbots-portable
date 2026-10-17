@@ -12,13 +12,16 @@ and blocked movement prevent market trips.
 
 ## What bots can trade
 
-Sellers keep quest items, needed equipment, profession materials, learned-spell
-reagents, supplies and the hunter's last pet food. Equipped, bound, conjured,
-temporary and otherwise ineligible items are not listed. Each listing transfers
-an existing whole stack and pays its normal deposit from the bot's balance.
-Automatic vendor selling also protects these essentials under natural progression.
+Sellers keep quest items, needed equipment, reagents of learned class spells,
+supplies and the hunter's last pet food. Natural bots do not craft, so profession
+materials are kept only within Playerbots' ordinary stack limits. Equipped, bound,
+conjured, temporary and otherwise ineligible items are not listed. Each listing
+transfers an existing whole stack and pays its normal deposit from the bot's
+balance. Automatic vendor selling also protects these essentials under natural
+progression. Natural upkeep does not disenchant, so a random bot with Enchanting
+sells outgrown bound gear to a vendor.
 
-Buyers select useful equipment, profession materials or supplies while reserving
+Buyers select useful equipment, supplies or gathering tools while reserving
 money for ordinary upkeep. Each purchase costs at most a quarter of the current
 balance and must fit the available category budget. Bots cannot buy their own
 or same-account auctions. They wait while an outstanding bid or uncollected
