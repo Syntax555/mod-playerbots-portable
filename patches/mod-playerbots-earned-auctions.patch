@@ -439,10 +439,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..248bec6
+index 0000000..856755f
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,644 @@
+@@ -0,0 +1,719 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -455,7 +455,11 @@ index 0000000..248bec6
 +#include <cmath>
 +#include <map>
 +#include <memory>
++#include <mutex>
++#include <optional>
++#include <shared_mutex>
 +#include <string>
++#include <tuple>
 +#include <unordered_set>
 +#include <utility>
 +#include <vector>
@@ -655,11 +659,65 @@ index 0000000..248bec6
 +    return true;
 +}
 +
++// Each bot's unsold auction stock, learned from its own expired receipts on the
++// world thread. Map-thread surplus decisions read it, so access is locked. The
++// record lives with the server process.
++class UnsoldStock
++{
++public:
++    using Key = std::tuple<ObjectGuid::LowType, uint32, int32>;
++
++    void Expired(Key const& key, time_t now)
++    {
++        std::unique_lock lock(_lock);
++        std::erase_if(_records, [now](auto const& record) { return UnsoldForgotten(record.second, now); });
++        UnsoldRecord& record = _records[key];
++        ++record.unsold;
++        record.last = now;
++    }
++
++    // A sale shows demand for the item, whatever its random property.
++    void Sold(ObjectGuid::LowType bot, uint32 entry)
++    {
++        std::unique_lock lock(_lock);
++        _records.erase(_records.lower_bound({bot, entry, std::numeric_limits<int32>::min()}),
++                       _records.upper_bound({bot, entry, std::numeric_limits<int32>::max()}));
++    }
++
++    bool Allowed(Key const& key, time_t now) const
++    {
++        std::shared_lock lock(_lock);
++        auto const found = _records.find(key);
++        return found == _records.end() || RelistAllowed(found->second, now);
++    }
++
++private:
++    mutable std::shared_mutex _lock;
++    std::map<Key, UnsoldRecord> _records;
++};
++
++UnsoldStock& Unsold()
++{
++    static UnsoldStock stock;
++    return stock;
++}
++
++UnsoldStock::Key StockKey(Player* bot, Item* item)
++{
++    return {bot->GetGUID().GetCounter(), item->GetEntry(), item->GetItemRandomPropertyId()};
++}
++
++bool RelistAllowed(PlayerbotAI* ai, Item* item)
++{
++    return Unsold().Allowed(StockKey(ai->GetBot(), item), GameTime::GetGameTime().count());
++}
++
 +bool TradableSurplus(PlayerbotAI* ai, Item* item, ProgressionSupplies& supplies)
 +{
 +    // Item usage can inspect equipment, skills and inventories. Reject items that
 +    // cannot be listed before evaluating it.
-+    return CanList(ai, item) && Usage(ai, item) == ITEM_USAGE_AH && !NeededForProgression(ai, item, supplies);
++    return CanList(ai, item) && RelistAllowed(ai, item) && Usage(ai, item) == ITEM_USAGE_AH &&
++           !NeededForProgression(ai, item, supplies);
 +}
 +
 +uint32 FreeBudget(PlayerbotAI* ai, NeedMoneyFor category)
@@ -724,6 +782,10 @@ index 0000000..248bec6
 +        Mail* mail = bot->GetMail(id);
 +        if (!AuctionReceipt(mail, now))
 +            continue;
++        std::optional<AuctionSubject> const subject = ParseAuctionSubject(mail->subject);
++        if (subject && subject->response == AUCTION_SUCCESSFUL)
++            Unsold().Sold(bot->GetGUID().GetCounter(), subject->item);
++        bool const expired = subject && subject->response == AUCTION_EXPIRED;
 +        if (mail->money)
 +        {
 +            uint32 const before = mail->money;
@@ -744,11 +806,16 @@ index 0000000..248bec6
 +            ItemPosCountVec destination;
 +            if (!item || bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
 +                continue;
++            UnsoldStock::Key const stock = StockKey(bot, item);
 +            WorldPacket packet(CMSG_MAIL_TAKE_ITEM);
 +            packet << mailbox << id << itemGuid;
 +            bot->GetSession()->HandleMailTakeItem(packet);
 +            // The core may merge/delete the attachment; never reuse its pointer.
-+            collected = collected || !bot->GetMItem(itemGuid);
++            bool const taken = !bot->GetMItem(itemGuid);
++            collected = collected || taken;
++            // A returned stack counts once, when the core hands it back.
++            if (taken && expired)
++                Unsold().Expired(stock, now);
 +        }
 +        mail = bot->GetMail(id);
 +        // HandleMailDelete does not protect attachments. Only delete after
@@ -794,7 +861,12 @@ index 0000000..248bec6
 +    for (Mail const* mail : bot->GetMails())
 +        if (mail && mail->messageType == MAIL_AUCTION && mail->state != MAIL_STATE_DELETED && mail->expire_time > now &&
 +            !mail->items.empty())
-+            state.pendingPurchase = true;
++        {
++            // Returned stock is no purchase; an unreadable subject counts as one.
++            std::optional<AuctionSubject> const subject = ParseAuctionSubject(mail->subject);
++            if (!subject || subject->response == AUCTION_WON)
++                state.pendingPurchase = true;
++        }
 +    return state;
 +}
 +
@@ -1010,6 +1082,9 @@ index 0000000..248bec6
 +        return true;
 +    if (!IsEnabled(ai) || usage != ITEM_USAGE_AH || !CanList(ai, item))
 +        return false;
++    // Stock that keeps expiring unsold goes to the vendor instead of paying more deposits.
++    if (!RelistAllowed(ai, item))
++        return false;
 +    // Broke bots and full bags may vendor surplus rather than stalling ordinary
 +    // leveling. There is no gold grant to pay auction deposits.
 +    if (ai->GetAiObjectContext()->GetValue<uint8>("bag space")->Get() >= 80)
@@ -1119,10 +1194,10 @@ index 0000000..7af7a92
 +#endif
 diff --git a/src/Bot/EarnedAuctionPolicy.h b/src/Bot/EarnedAuctionPolicy.h
 new file mode 100644
-index 0000000..f0c80c5
+index 0000000..943e76c
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionPolicy.h
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,120 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1132,8 +1207,13 @@ index 0000000..f0c80c5
 +#define PLAYERBOTS_EARNEDAUCTIONPOLICY_H
 +
 +#include <algorithm>
++#include <array>
++#include <charconv>
 +#include <cstdint>
 +#include <limits>
++#include <optional>
++#include <string_view>
++#include <system_error>
 +
 +namespace EarnedAuction
 +{
@@ -1142,6 +1222,9 @@ index 0000000..f0c80c5
 +constexpr std::uint32_t MaxMarketScan = 512;
 +constexpr std::uint32_t MaxMailPerVisit = 20;
 +constexpr std::uint32_t MaxCopper = 0x7fffffff;
++// Stock that expires unsold this often is vendored instead of paying more deposits.
++constexpr std::uint32_t MaxUnsoldListings = 2;
++constexpr std::int64_t UnsoldMemorySeconds = 7 * 24 * 3600;
 +
 +inline std::uint32_t UnitPriceCeiling(std::uint32_t vendorBuy, std::uint32_t vendorSell)
 +{
@@ -1184,6 +1267,48 @@ index 0000000..f0c80c5
 +{
 +    return price && count && unitCeiling && price <= MaxCopper &&
 +           std::uint64_t(price) <= std::uint64_t(count) * unitCeiling;
++}
++
++struct AuctionSubject
++{
++    std::uint32_t item = 0;
++    std::uint32_t response = 0;
++    std::uint32_t auction = 0;
++    std::uint32_t count = 0;
++};
++
++// Reads the core's auction mail subject, "item:0:response:auction:count".
++inline std::optional<AuctionSubject> ParseAuctionSubject(std::string_view subject)
++{
++    std::array<std::uint32_t, 5> fields{};
++    for (std::size_t index = 0; index < fields.size(); ++index)
++    {
++        bool const final = index + 1 == fields.size();
++        std::size_t const end = final ? subject.size() : subject.find(':');
++        if (!end || end == std::string_view::npos)
++            return {};
++        char const* const last = subject.data() + end;
++        auto const [parsed, error] = std::from_chars(subject.data(), last, fields[index]);
++        if (error != std::errc() || parsed != last)
++            return {};
++        subject.remove_prefix(final ? end : end + 1);
++    }
++    if (fields[1])
++        return {};
++    return AuctionSubject{fields[0], fields[2], fields[3], fields[4]};
++}
++
++struct UnsoldRecord
++{
++    std::uint32_t unsold = 0;
++    std::int64_t last = 0;
++};
++
++inline bool UnsoldForgotten(UnsoldRecord record, std::int64_t now) { return now - record.last >= UnsoldMemorySeconds; }
++
++inline bool RelistAllowed(UnsoldRecord record, std::int64_t now)
++{
++    return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now);
 +}
 +
 +inline bool ReceiptReady(bool auctionMail, bool deleted, std::uint32_t cod, std::int64_t delivered,
