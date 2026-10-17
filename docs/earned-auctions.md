@@ -5,10 +5,12 @@ or supplies with their own gold. Purchases and sales use normal auction fees,
 ownership checks and mail delivery. The server adds no generated auction stock
 or artificial buyers.
 
-Trading requires natural progression, earned auctions and a random bot without
-a player master. Bots walk to an auctioneer or mailbox and reach ordinary
-interaction range. Combat, flight, battlegrounds, dungeons, teleport, trading
-and blocked movement prevent market trips.
+Trading requires natural progression, earned auctions and a random bot without a
+player master. As at the auction window, bots below the core's
+`LevelReq.Auction` do not trade at auctioneers; they still collect auction mail.
+Bots walk to an auctioneer or mailbox and reach ordinary interaction range.
+Combat, flight, battlegrounds, dungeons, teleport, trading and blocked movement
+prevent market trips.
 
 ## What bots can trade
 
@@ -32,8 +34,10 @@ bots' auctions are eligible because the buyer pays and the seller gives up the
 actual item.
 
 A bot maintains at most 20 listings, at most two of the same item, and attempts
-at most two new listings and one buyout per visit. Bots list for the 12-hour
-duration, which `Rate.Auction.Time` scales.
+at most two new listings and one buyout per visit. The buyout goes to the most
+useful offer: gear upgrades, then ammunition, consumables and gathering tools;
+within a kind, the offer cheapest against its valuation limit. Bots list for the
+12-hour duration, which `Rate.Auction.Time` scales.
 
 An item that returns unsold in two listing rounds, or is refused a listing
 twice, is not listed again for a week, or for three listing durations if that is
@@ -56,10 +60,10 @@ A market at or below twice the vendor sell price refuses the listing. Buyers use
 the same upper valuation limit. This heuristic does not reproduce every rare
 item's player market value.
 
-Solo bots from level 10 can plan a trip to a compatible or neutral auctioneer on
-the same map and phase within 5,000 yards. They need eligible surplus or at least
-one silver available after purchase reserves. Nearby auctioneers and mailboxes
-are searched within 150 yards.
+Solo bots from level 10, or `LevelReq.Auction` if higher, can plan a trip to a
+compatible or neutral auctioneer on the same map and phase within 5,000 yards.
+They need eligible surplus or at least one silver available after purchase
+reserves. Nearby auctioneers and mailboxes are searched within 150 yards.
 
 A trip has a ten-minute budget including its final approach. New plans wait
 fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable nearby
