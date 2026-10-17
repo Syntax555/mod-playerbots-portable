@@ -55,7 +55,7 @@ index d47202e..4a9dbb1 100644
      if (!master)
          return false;
 diff --git a/src/Ai/Base/Actions/SellAction.cpp b/src/Ai/Base/Actions/SellAction.cpp
-index e395227..0f33cb9 100644
+index e395227..1a0ef6b 100644
 --- a/src/Ai/Base/Actions/SellAction.cpp
 +++ b/src/Ai/Base/Actions/SellAction.cpp
 @@ -6,6 +6,7 @@
@@ -86,7 +86,7 @@ index e395227..0f33cb9 100644
 +        std::string qualifier =
 +            std::to_string(item->GetEntry()) + "," + std::to_string(item->GetItemRandomPropertyId());
 +        ItemUsage usage = context->GetValue<ItemUsage>("item usage", qualifier)->Get();
-+        if (!EarnedAuction::SellsToVendor(botAI, usage))
++        if (!EarnedAuction::SellsToVendor(botAI, item, usage))
 +            return true;
 +        if (EarnedAuction::ShouldReserveForAuction(botAI, item, usage))
              return true;
@@ -439,10 +439,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..9a79f18
+index 0000000..f34b487
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,777 @@
+@@ -0,0 +1,809 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -516,13 +516,17 @@ index 0000000..9a79f18
 +    return value->Get();
 +}
 +
++// Random bots without a player do not craft. Human-owned characters keep the
++// reagents of their recipes.
++bool Crafts(PlayerbotAI* ai) { return !sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) || ai->HasGameClientMaster(); }
++
 +// A decision inspects several bag items without changing quests or learned spells.
 +// Build their protection sets lazily once for that decision, never across ticks,
 +// players or map/world threads. Inventory-dependent pet-food reserves remain live.
 +class ProgressionSupplies
 +{
 +public:
-+    explicit ProgressionSupplies(Player* player) : _bot(player) {}
++    explicit ProgressionSupplies(PlayerbotAI* ai) : _bot(ai->GetBot()), _crafts(Crafts(ai)) {}
 +
 +    bool NeededForQuest(Item* item)
 +    {
@@ -591,8 +595,8 @@ index 0000000..9a79f18
 +            _reagentsStarted = true;
 +            _reagentCursor = spells.cbegin();
 +        }
-+        // Never list _reagents required by a currently learned active spell. Natural bots
-+        // do not craft, so recipe reagents follow ordinary item usage instead.
++        // Never list _reagents required by a currently learned active spell. Bots that
++        // do not craft leave recipe reagents to ordinary item usage.
 +        // An early match is cached without scanning later unrelated spells.
 +        while (_reagentCursor != spells.cend())
 +        {
@@ -600,7 +604,7 @@ index 0000000..9a79f18
 +            if (spell->State == PLAYERSPELL_REMOVED || !spell->Active)
 +                continue;
 +            SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-+            if (!info || info->IsPassive() || IsProfessionSpell(spellId))
++            if (!info || info->IsPassive() || (!_crafts && IsProfessionSpell(spellId)))
 +                continue;
 +            for (uint8 reagent = 0; reagent < MAX_SPELL_REAGENTS; ++reagent)
 +                if (info->Reagent[reagent] > 0)
@@ -614,6 +618,7 @@ index 0000000..9a79f18
 +
 +private:
 +    Player* _bot;
++    bool _crafts;
 +    uint8 _questSlot = 0;
 +    bool _reagentsStarted = false;
 +    bool _reagentsLoaded = false;
@@ -668,13 +673,11 @@ index 0000000..9a79f18
 +public:
 +    using Key = std::tuple<ObjectGuid::LowType, uint32, int32>;
 +
-+    void Record(Key const& key, time_t now)
++    void Record(Key const& key, time_t now, std::int64_t round, std::int64_t listing)
 +    {
 +        std::unique_lock lock(_lock);
-+        std::erase_if(_records, [now](auto const& record) { return UnsoldForgotten(record.second, now); });
-+        UnsoldRecord& record = _records[key];
-+        ++record.unsold;
-+        record.last = now;
++        std::erase_if(_records, [&](auto const& record) { return UnsoldForgotten(record.second, now, listing); });
++        CountUnsold(_records[key], now, round);
 +    }
 +
 +    // A sale shows demand for the item, whatever its random property.
@@ -685,11 +688,11 @@ index 0000000..9a79f18
 +                       _records.upper_bound({bot, entry, std::numeric_limits<int32>::max()}));
 +    }
 +
-+    bool Allowed(Key const& key, time_t now) const
++    bool Allowed(Key const& key, time_t now, std::int64_t listing) const
 +    {
 +        std::shared_lock lock(_lock);
 +        auto const found = _records.find(key);
-+        return found == _records.end() || RelistAllowed(found->second, now);
++        return found == _records.end() || RelistAllowed(found->second, now, listing);
 +    }
 +
 +private:
@@ -708,9 +711,16 @@ index 0000000..9a79f18
 +    return {bot->GetGUID().GetCounter(), item->GetEntry(), item->GetItemRandomPropertyId()};
 +}
 +
++// The core's listing duration, which Rate.Auction.Time scales.
++std::int64_t ListingSeconds()
++{
++    double const seconds = double(MIN_AUCTION_TIME) * sWorld->getRate(RATE_AUCTION_TIME);
++    return std::isfinite(seconds) && seconds > 0 ? std::int64_t(std::min<double>(seconds, UINT32_MAX)) : 0;
++}
++
 +bool RelistAllowed(PlayerbotAI* ai, Item* item)
 +{
-+    return Unsold().Allowed(StockKey(ai->GetBot(), item), GameTime::GetGameTime().count());
++    return Unsold().Allowed(StockKey(ai->GetBot(), item), GameTime::GetGameTime().count(), ListingSeconds());
 +}
 +
 +// The core's own cut of a sale at this price.
@@ -846,9 +856,9 @@ index 0000000..9a79f18
 +            // The core may merge/delete the attachment; never reuse its pointer.
 +            bool const taken = !bot->GetMItem(itemGuid);
 +            collected = collected || taken;
-+            // A returned stack counts once, when the core hands it back.
++            // A returned stack counts when the core hands it back, once per listing round.
 +            if (taken && expired)
-+                Unsold().Record(stock, now);
++                Unsold().Record(stock, now, ListingSeconds(), ListingSeconds());
 +        }
 +        mail = bot->GetMail(id);
 +        // HandleMailDelete does not protect attachments. Only delete after
@@ -981,7 +991,7 @@ index 0000000..9a79f18
 +    std::map<StockItem, uint32> const market = MarketPrices(bot, house);
 +    std::set<StockItem> refused;
 +    time_t const now = GameTime::GetGameTime().count();
-+    ProgressionSupplies supplies(bot);
++    ProgressionSupplies supplies(ai);
 +    for (ObjectGuid guid : BagItems(bot))
 +    {
 +        if (listed >= MaxSalesPerVisit || listings >= MaxListings)
@@ -1001,7 +1011,7 @@ index 0000000..9a79f18
 +            // This market leaves no sale that repays the deposit. Refusals count like
 +            // unsold listings, once per item and visit, so the vendor takes the stock.
 +            if (refused.insert(Stock(item)).second)
-+                Unsold().Record(StockKey(bot, item), now);
++                Unsold().Record(StockKey(bot, item), now, 0, ListingSeconds());
 +            continue;
 +        }
 +        uint32 const budget = FreeBudget(ai, NeedMoneyFor::anything);
@@ -1023,6 +1033,25 @@ index 0000000..9a79f18
 +        }
 +    }
 +    return sold;
++}
++
++// Natural bots gather but do not craft. Mining and skinning tools carry these
++// TotemCategory.dbc tool categories, multi-tools included; fishing takes a pole.
++bool GatheringTool(ItemTemplate const* proto)
++{
++    if (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE)
++        return true;
++    switch (proto->TotemCategory)
++    {
++        case 161:  // Gnomish Army Knife
++        case 165:  // Mining Pick
++        case 166:  // Skinning Knife
++        case 167:  // Hammer Pick
++        case 168:  // Bladed Pickaxe
++            return true;
++        default:
++            return false;
++    }
 +}
 +
 +bool BuyUseful(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house, std::vector<uint32> const& sample)
@@ -1048,10 +1077,8 @@ index 0000000..9a79f18
 +            proto->Class == ITEM_CLASS_KEY || bot->CanUseItem(proto) != EQUIP_ERR_OK)
 +            continue;
 +        ItemUsage const usage = Usage(ai, item);
-+        // Natural bots do not craft: of profession items they buy only gathering tools.
 +        bool const useful = usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_AMMO ||
-+                            (usage == ITEM_USAGE_SKILL && proto->Class == ITEM_CLASS_WEAPON &&
-+                             proto->SubClass == ITEM_SUBCLASS_WEAPON_MISC) ||
++                            (usage == ITEM_USAGE_SKILL && GatheringTool(proto)) ||
 +                            (usage == ITEM_USAGE_USE && proto->Class == ITEM_CLASS_CONSUMABLE);
 +        uint32 const budget = PurchaseBudget(ai, usage);
 +        if (!useful || !Affordable(auction->buyout, budget, bot->GetMoney()) ||
@@ -1173,7 +1200,7 @@ index 0000000..9a79f18
 +{
 +    if (!IsEnabled(ai))
 +        return false;
-+    ProgressionSupplies supplies(ai->GetBot());
++    ProgressionSupplies supplies(ai);
 +    for (ObjectGuid guid : BagItems(ai->GetBot()))
 +        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
 +            if (TradableSurplus(ai, item, supplies))
@@ -1183,30 +1210,35 @@ index 0000000..9a79f18
 +
 +bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage)
 +{
-+    ProgressionSupplies supplies(ai ? ai->GetBot() : nullptr);
++    if (!ai || !ai->GetBot())
++        return false;
++    ProgressionSupplies supplies(ai);
 +    return ShouldReserve(ai, item, usage, supplies);
 +}
 +
-+bool SellsToVendor(PlayerbotAI* ai, ItemUsage usage)
++bool SellsToVendor(PlayerbotAI* ai, Item* item, ItemUsage usage)
 +{
 +    if (usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH)
 +        return true;
 +    // Natural upkeep has no disenchanting, so a random bot sells outgrown bound gear
-+    // instead of keeping it in its bags.
-+    return usage == ITEM_USAGE_DISENCHANT && sPlayerbotAIConfig.naturalProgression && ai && ai->GetBot() &&
-+           sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();
++    // instead of keeping it in its bags. Vendors refuse gear without a price, and
++    // bots in a real guild keep rare gear as they would from disenchanting.
++    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
++    return usage == ITEM_USAGE_DISENCHANT && proto && proto->SellPrice && sPlayerbotAIConfig.naturalProgression && ai &&
++           ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster() &&
++           (proto->Quality <= ITEM_QUALITY_UNCOMMON || !ai->IsInRealGuild());
 +}
 +
 +bool HasVendorSurplus(PlayerbotAI* ai)
 +{
 +    if (!ai || !ai->GetBot())
 +        return false;
-+    ProgressionSupplies supplies(ai->GetBot());
++    ProgressionSupplies supplies(ai);
 +    for (ObjectGuid guid : BagItems(ai->GetBot()))
 +        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
 +        {
 +            ItemUsage const usage = Usage(ai, item);
-+            if (SellsToVendor(ai, usage) && !ShouldReserve(ai, item, usage, supplies))
++            if (SellsToVendor(ai, item, usage) && !ShouldReserve(ai, item, usage, supplies))
 +                return true;
 +        }
 +    return false;
@@ -1222,7 +1254,7 @@ index 0000000..9a79f18
 +}  // namespace EarnedAuction
 diff --git a/src/Bot/EarnedAuction.h b/src/Bot/EarnedAuction.h
 new file mode 100644
-index 0000000..7af7a92
+index 0000000..503cdc5
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.h
 @@ -0,0 +1,24 @@
@@ -1245,17 +1277,17 @@ index 0000000..7af7a92
 +bool IsEnabled(PlayerbotAI* ai);
 +bool HasSurplus(PlayerbotAI* ai);
 +bool HasVendorSurplus(PlayerbotAI* ai);
-+bool SellsToVendor(PlayerbotAI* ai, ItemUsage usage);
++bool SellsToVendor(PlayerbotAI* ai, Item* item, ItemUsage usage);
 +bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage);
 +bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox);
 +}  // namespace EarnedAuction
 +#endif
 diff --git a/src/Bot/EarnedAuctionPolicy.h b/src/Bot/EarnedAuctionPolicy.h
 new file mode 100644
-index 0000000..2d3f3db
+index 0000000..3e96b7a
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionPolicy.h
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,141 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1369,11 +1401,25 @@ index 0000000..2d3f3db
 +    std::int64_t last = 0;
 +};
 +
-+inline bool UnsoldForgotten(UnsoldRecord record, std::int64_t now) { return now - record.last >= UnsoldMemorySeconds; }
-+
-+inline bool RelistAllowed(UnsoldRecord record, std::int64_t now)
++// The memory outlasts the listing rounds it compares, however long they run.
++inline bool UnsoldForgotten(UnsoldRecord record, std::int64_t now, std::int64_t listing)
 +{
-+    return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now);
++    return now - record.last >= std::max<std::int64_t>(UnsoldMemorySeconds, 3 * listing);
++}
++
++inline bool RelistAllowed(UnsoldRecord record, std::int64_t now, std::int64_t listing)
++{
++    return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now, listing);
++}
++
++// Stacks listed in one round return within a listing duration of its first expiry
++// and count once. A refusal, with no round, always counts.
++inline void CountUnsold(UnsoldRecord& record, std::int64_t now, std::int64_t round)
++{
++    if (record.unsold && now - record.last < round)
++        return;
++    ++record.unsold;
++    record.last = now;
 +}
 +
 +inline bool ReceiptReady(bool auctionMail, bool deleted, std::uint32_t cod, std::int64_t delivered,
