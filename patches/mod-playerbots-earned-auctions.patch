@@ -55,7 +55,7 @@ index d47202e..4a9dbb1 100644
      if (!master)
          return false;
 diff --git a/src/Ai/Base/Actions/SellAction.cpp b/src/Ai/Base/Actions/SellAction.cpp
-index e395227..1401d3c 100644
+index e395227..0f33cb9 100644
 --- a/src/Ai/Base/Actions/SellAction.cpp
 +++ b/src/Ai/Base/Actions/SellAction.cpp
 @@ -6,6 +6,7 @@
@@ -66,7 +66,7 @@ index e395227..1401d3c 100644
  #include "Event.h"
  #include "ItemPackets.h"
  #include "ItemUsageValue.h"
-@@ -74,15 +75,23 @@ private:
+@@ -74,14 +75,22 @@ private:
  class SellVendorItemsVisitor : public SellItemsVisitor
  {
  public:
@@ -82,16 +82,16 @@ index e395227..1401d3c 100644
      bool Visit(Item* item) override
      {
 -        ItemUsage usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
+-        if (usage != ITEM_USAGE_VENDOR && usage != ITEM_USAGE_AH)
 +        std::string qualifier =
 +            std::to_string(item->GetEntry()) + "," + std::to_string(item->GetItemRandomPropertyId());
 +        ItemUsage usage = context->GetValue<ItemUsage>("item usage", qualifier)->Get();
-         if (usage != ITEM_USAGE_VENDOR && usage != ITEM_USAGE_AH)
-             return true;
-+        if (EarnedAuction::ShouldReserveForAuction(botAI, item, usage))
++        if (!EarnedAuction::SellsToVendor(botAI, usage))
 +            return true;
++        if (EarnedAuction::ShouldReserveForAuction(botAI, item, usage))
+             return true;
  
          return SellItemsVisitor::Visit(item);
-     }
 @@ -100,7 +109,7 @@ bool SellAction::Execute(Event event)
  
      if (text == "vendor")
@@ -116,7 +116,7 @@ index 8657a1f..ee73559 100644
      bool randomBot = sPlayerbotAIConfig.IsInRandomAccountList(account);
  
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 2c08e3b..69563cc 100644
+index 61e1a98..2d7448e 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -9,6 +9,8 @@
@@ -128,7 +128,7 @@ index 2c08e3b..69563cc 100644
  #include "ItemUsageValue.h"
  #include "PlayerbotFactory.h"
  #include "Playerbots.h"
-@@ -24,7 +26,42 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
+@@ -33,7 +35,42 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
  NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
  {
      if (!CanRunNaturalMaintenance(botAI))
@@ -171,7 +171,7 @@ index 2c08e3b..69563cc 100644
  
      bool const canSell = AI_VALUE(bool, "can sell");
      bool const needsRepair = AI_VALUE(bool, "should repair") && AI_VALUE(bool, "can repair");
-@@ -188,6 +225,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
+@@ -197,6 +234,9 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
  
  bool CanSellValue::Calculate()
  {
@@ -182,7 +182,7 @@ index 2c08e3b..69563cc 100644
              AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_AH))) > 1;
  }
 diff --git a/src/Ai/Base/Value/MaintenanceValues.h b/src/Ai/Base/Value/MaintenanceValues.h
-index 63b7f78..f87521a 100644
+index d50caeb..21d71dc 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.h
 +++ b/src/Ai/Base/Value/MaintenanceValues.h
 @@ -7,6 +7,7 @@
@@ -439,10 +439,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..9dc37fb
+index 0000000..248bec6
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,630 @@
+@@ -0,0 +1,644 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -469,6 +469,7 @@ index 0000000..9dc37fb
 +#include "GameTime.h"
 +#include "Item.h"
 +#include "Mail.h"
++#include "MaintenanceValues.h"
 +#include "ObjectAccessor.h"
 +#include "Opcodes.h"
 +#include "PlayerbotOperation.h"
@@ -585,7 +586,8 @@ index 0000000..9dc37fb
 +            _reagentsStarted = true;
 +            _reagentCursor = spells.cbegin();
 +        }
-+        // Never list _reagents required by a currently learned active spell.
++        // Never list _reagents required by a currently learned active spell. Natural bots
++        // do not craft, so recipe reagents follow ordinary item usage instead.
 +        // An early match is cached without scanning later unrelated spells.
 +        while (_reagentCursor != spells.cend())
 +        {
@@ -593,7 +595,7 @@ index 0000000..9dc37fb
 +            if (spell->State == PLAYERSPELL_REMOVED || !spell->Active)
 +                continue;
 +            SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
-+            if (!info || info->IsPassive())
++            if (!info || info->IsPassive() || IsProfessionSpell(spellId))
 +                continue;
 +            for (uint8 reagent = 0; reagent < MAX_SPELL_REAGENTS; ++reagent)
 +                if (info->Reagent[reagent] > 0)
@@ -908,8 +910,10 @@ index 0000000..9dc37fb
 +            proto->Class == ITEM_CLASS_KEY || bot->CanUseItem(proto) != EQUIP_ERR_OK)
 +            continue;
 +        ItemUsage const usage = Usage(ai, item);
++        // Natural bots do not craft: of profession items they buy only gathering tools.
 +        bool const useful = usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_AMMO ||
-+                            usage == ITEM_USAGE_SKILL ||
++                            (usage == ITEM_USAGE_SKILL && proto->Class == ITEM_CLASS_WEAPON &&
++                             proto->SubClass == ITEM_SUBCLASS_WEAPON_MISC) ||
 +                            (usage == ITEM_USAGE_USE && proto->Class == ITEM_CLASS_CONSUMABLE);
 +        uint32 const budget = PurchaseBudget(ai, usage);
 +        if (!useful || !Affordable(auction->buyout, budget, bot->GetMoney()) ||
@@ -1050,6 +1054,16 @@ index 0000000..9dc37fb
 +    return ShouldReserve(ai, item, usage, supplies);
 +}
 +
++bool SellsToVendor(PlayerbotAI* ai, ItemUsage usage)
++{
++    if (usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH)
++        return true;
++    // Natural upkeep has no disenchanting, so a random bot sells outgrown bound gear
++    // instead of keeping it in its bags.
++    return usage == ITEM_USAGE_DISENCHANT && sPlayerbotAIConfig.naturalProgression && ai && ai->GetBot() &&
++           sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();
++}
++
 +bool HasVendorSurplus(PlayerbotAI* ai)
 +{
 +    if (!ai || !ai->GetBot())
@@ -1059,7 +1073,7 @@ index 0000000..9dc37fb
 +        if (Item* item = ai->GetBot()->GetItemByGuid(guid))
 +        {
 +            ItemUsage const usage = Usage(ai, item);
-+            if ((usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH) && !ShouldReserve(ai, item, usage, supplies))
++            if (SellsToVendor(ai, usage) && !ShouldReserve(ai, item, usage, supplies))
 +                return true;
 +        }
 +    return false;
@@ -1075,10 +1089,10 @@ index 0000000..9dc37fb
 +}  // namespace EarnedAuction
 diff --git a/src/Bot/EarnedAuction.h b/src/Bot/EarnedAuction.h
 new file mode 100644
-index 0000000..a32c6fd
+index 0000000..7af7a92
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.h
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,24 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1098,6 +1112,7 @@ index 0000000..a32c6fd
 +bool IsEnabled(PlayerbotAI* ai);
 +bool HasSurplus(PlayerbotAI* ai);
 +bool HasVendorSurplus(PlayerbotAI* ai);
++bool SellsToVendor(PlayerbotAI* ai, ItemUsage usage);
 +bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage);
 +bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox);
 +}  // namespace EarnedAuction

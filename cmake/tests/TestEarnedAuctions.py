@@ -2,8 +2,9 @@
 
 The fake core handlers model authoritative inventory, gold and mail outcomes,
 including rejected operations. They do not implement the service's decisions.
-The actual module translation unit supplies those decisions under ASan/UBSan.
-This does not start a realm or replace the full core/module compile check.
+The actual module translation unit supplies those decisions under ASan/UBSan,
+and mutation checks confirm that its gates are required. This does not start a
+realm or replace the full core/module compile check.
 """
 
 import argparse
@@ -11,7 +12,16 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import SANITIZER_FLAGS, TIMEOUT, cxx, prepared_core, source_argument
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    profession_skills,
+    run_fixture,
+    source_argument,
+)
 
 
 repo = Path(__file__).resolve().parents[2]
@@ -21,9 +31,16 @@ source_argument(parser,
                     help='prepared Playerbots src directory')
 parser.add_argument('--travel-source', type=Path,
                     help='optional separate src directory for the market-travel policy')
+source_argument(parser, 'core', default=prepared_core(repo), help='prepared core source directory')
 args = parser.parse_args()
 module = args.source / 'Bot'
 travel_module = (args.travel_source or args.source) / 'Bot'
+usage_header = (args.source / 'Ai/Base/Value/ItemUsageValue.h').read_text()
+values_source = (args.source / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
+item_header = (args.core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
+native = '\n'.join(function(source, signature) + ';' for source, signature in (
+    (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
+    (item_header, 'enum ItemSubclassWeapon')))
 
 
 policy_tests = r'''
@@ -100,11 +117,12 @@ fixtures = r'''
 #include <vector>
 using uint8 = std::uint8_t;
 using uint32 = std::uint32_t;
+@@NATIVE@@
+@@PROFESSIONS@@
 constexpr uint32 MINUTE = 60, MIN_AUCTION_TIME = 43200;
 constexpr uint8 INVENTORY_SLOT_BAG_0 = 0, INVENTORY_SLOT_BAG_START = 19,
     INVENTORY_SLOT_BAG_END = 23, INVENTORY_SLOT_ITEM_START = 23, INVENTORY_SLOT_ITEM_END = 39;
-constexpr int ITEM_FIELD_DURATION = 1, ITEM_QUALITY_NORMAL = 1, ITEM_CLASS_CONSUMABLE = 0,
-    ITEM_CLASS_QUEST = 12, ITEM_CLASS_KEY = 13, ITEM_FLAG_CONJURED = 2, BIND_QUEST_ITEM = 4,
+constexpr int ITEM_FIELD_DURATION = 1, ITEM_QUALITY_NORMAL = 1, ITEM_FLAG_CONJURED = 2, BIND_QUEST_ITEM = 4,
     PLAYERSPELL_REMOVED = 1, MAX_SPELL_REAGENTS = 8, NULL_BAG = 255, NULL_SLOT = 255,
     EQUIP_ERR_OK = 0, GAMEOBJECT_TYPE_MAILBOX = 1, UNIT_NPC_FLAG_MAILBOX = 2,
     UNIT_NPC_FLAG_AUCTIONEER = 4, MAIL_AUCTION = 2, MAIL_STATE_DELETED = 3,
@@ -112,8 +130,6 @@ constexpr int ITEM_FIELD_DURATION = 1, ITEM_QUALITY_NORMAL = 1, ITEM_CLASS_CONSU
 constexpr int CMSG_GET_MAIL_LIST = 1, CMSG_MAIL_TAKE_MONEY = 2, CMSG_MAIL_TAKE_ITEM = 3,
     CMSG_MAIL_DELETE = 4, CMSG_AUCTION_SELL_ITEM = 5, CMSG_AUCTION_PLACE_BID = 6;
 constexpr float INTERACTION_DISTANCE = 5;
-enum ItemUsage { ITEM_USAGE_NONE, ITEM_USAGE_AH, ITEM_USAGE_EQUIP, ITEM_USAGE_REPLACE,
-    ITEM_USAGE_AMMO, ITEM_USAGE_SKILL, ITEM_USAGE_USE, ITEM_USAGE_QUEST, ITEM_USAGE_KEEP, ITEM_USAGE_VENDOR };
 enum class NeedMoneyFor : uint32 { gear, ammo, consumables, tradeskill, anything };
 struct ObjectGuid
 {
@@ -135,7 +151,7 @@ struct ItemTemplate
 {
     struct Spell { int SpellId = 0; };
     std::array<Spell, 5> Spells{};
-    uint32 ItemId = 100, BuyPrice = 1000, SellPrice = 100, Quality = 1, Class = 1, Bonding = 0;
+    uint32 ItemId = 100, BuyPrice = 1000, SellPrice = 100, Quality = 1, Class = 1, SubClass = 0, Bonding = 0;
     bool conjured = false, petFood = false;
     bool HasFlag(int) const { return conjured; }
 };
@@ -180,11 +196,14 @@ struct SpellInfo
 struct SpellMgr
 {
     std::map<uint32, SpellInfo> spells;
+    SkillLineAbilityMap abilities;
     mutable unsigned lookups = 0;
     SpellInfo const* GetSpellInfo(uint32 id) const
     { ++lookups; auto it = spells.find(id); return it == spells.end() ? nullptr : &it->second; }
+    SkillLineAbilityMapBounds GetSkillLineAbilityMapBounds(uint32 id) const { return abilities.equal_range(id); }
 } spellMgr;
 auto* sSpellMgr = &spellMgr;
+@@PROFESSION@@
 struct Quest
 {
     std::array<uint32, 6> RequiredItemId{}, ItemDrop{};
@@ -416,7 +435,7 @@ void WorldSession::HandleAuctionPlaceBid(WorldPacket& packet)
 namespace EarnedAuction
 {
 bool IsEnabled(PlayerbotAI*); bool HasSurplus(PlayerbotAI*);
-bool HasVendorSurplus(PlayerbotAI*);
+bool HasVendorSurplus(PlayerbotAI*); bool SellsToVendor(PlayerbotAI*, ItemUsage);
 bool ShouldReserveForAuction(PlayerbotAI*, Item*, ItemUsage); bool QueueVisit(PlayerbotAI*, ObjectGuid, bool);
 }
 '''
@@ -472,7 +491,9 @@ struct Scenario
         static uint32 nextBot = 1;
         bot.guid = {nextBot++}; connected.clear(); connected[bot.guid] = &bot;
         auctionMgr.house.auctions.clear(); auctionMgr.items.clear(); characterCache.accounts.clear();
-        allocatedItems.clear(); objectMgr.quests.clear(); spellMgr.spells.clear();
+        allocatedItems.clear(); objectMgr.quests.clear(); spellMgr.spells.clear(); spellMgr.abilities.clear();
+        sSkillLineStore.rows = {{SKILL_TAILORING, {SKILL_TAILORING, SKILL_CATEGORY_PROFESSION}},
+                                {SKILL_DEFENSE, {SKILL_DEFENSE, SKILL_CATEGORY_WEAPON}}};
         objectMgr.lookups = 0; spellMgr.lookups = 0;
         sPlayerbotAIConfig = {}; world.rate = 1; now += 400;
         auto& processor = PlayerbotWorldThreadProcessor::instance(); processor.queued.clear(); processor.accept = true;
@@ -628,6 +649,9 @@ void ServiceTests()
         Scenario s; for (uint32 id = 100; id < 105; ++id) s.BagItem(id);
         assert(s.Visit()); assert(s.bot.session.sells == int(MaxSalesPerVisit));
         assert(s.bot.inventory.size() == 3 && s.bot.money == 9800);
+        // A repeated visit inside the interval does nothing; the next one sells again.
+        now += sPlayerbotAIConfig.earnedAuctionInterval - 1; assert(!s.Visit()); assert(s.bot.inventory.size() == 3);
+        now += 1; assert(s.Visit()); assert(s.bot.inventory.size() == 1);
     }
     {
         Scenario s; Item& item = s.BagItem(); PlayerSpell spell; s.bot.spells[99] = &spell;
@@ -896,6 +920,35 @@ void ServiceTests()
         assert(s.Visit()); assert(s.bot.session.sells == 1);
         assert(!s.bot.GetItemByGuid(first.guid) && s.bot.GetItemByGuid(second.guid) == &second);
     }
+    {
+        // Natural bots do not craft: a recipe's reagent is ordinary surplus, a class spell's is kept.
+        Scenario s; Item& item = s.BagItem(); PlayerSpell spell; s.bot.spells[99] = &spell;
+        spellMgr.spells[99].Reagent[0] = int(item.GetEntry());
+        SkillLineAbilityEntry defense{1, SKILL_DEFENSE, 99}; spellMgr.abilities.insert({99, &defense});
+        assert(!HasSurplus(&s.bot.ai) && ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_VENDOR));
+        SkillLineAbilityEntry tailoring{2, SKILL_TAILORING, 99}; spellMgr.abilities.insert({99, &tailoring});
+        assert(HasSurplus(&s.bot.ai) && !ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_VENDOR));
+    }
+    {
+        // Of profession items, natural bots buy only gathering tools.
+        Scenario s; Item& cloth = s.MakeItem(100, 1, ITEM_USAGE_SKILL); cloth.proto.Class = ITEM_CLASS_TRADE_GOODS;
+        s.Offer(cloth); assert(!s.Visit()); assert(!s.bot.session.buys && s.bot.money == 10000);
+    }
+    {
+        Scenario s; Item& pick = s.MakeItem(100, 1, ITEM_USAGE_SKILL); pick.proto.Class = ITEM_CLASS_WEAPON;
+        pick.proto.SubClass = ITEM_SUBCLASS_WEAPON_MISC; s.Offer(pick);
+        assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.money == 9500);
+    }
+    {
+        // Natural upkeep has no disenchanting: a random bot sells outgrown bound gear.
+        Scenario s; Item& gear = s.BagItem(100, 1, ITEM_USAGE_DISENCHANT); gear.bound = true;
+        assert(SellsToVendor(&s.bot.ai, ITEM_USAGE_DISENCHANT) && HasVendorSurplus(&s.bot.ai));
+        s.bot.ai.master = true; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.ai.master = false;
+        s.bot.random = false; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.random = true;
+        sPlayerbotAIConfig.naturalProgression = false; assert(!SellsToVendor(&s.bot.ai, ITEM_USAGE_DISENCHANT));
+        assert(SellsToVendor(nullptr, ITEM_USAGE_VENDOR) && SellsToVendor(nullptr, ITEM_USAGE_AH));
+        assert(!SellsToVendor(nullptr, ITEM_USAGE_DISENCHANT) && !SellsToVendor(&s.bot.ai, ITEM_USAGE_EQUIP));
+    }
     assert(!ShouldReserveForAuction(nullptr, nullptr, ITEM_USAGE_AH));
     std::cout << "Earned auctions: production policy/service, conserved inventory/gold, safe receipts, queued revalidation, travel selection and bounded protection scans passed\n";
 }
@@ -903,18 +956,81 @@ int main() { PolicyTests(); TravelTests(); ServiceTests(); }
 '''
 
 
-production = (module / 'EarnedAuction.cpp').read_text()
-# Keep the complete production service; fixtures replace only its includes/core
-# dependencies. Policy remains the actual header included from the prepared module.
-production = '\n'.join(line for line in production.splitlines()
-                       if not line.lstrip().startswith('#include'))
-source = fixtures + production + policy_tests + service_tests
-with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporary:
-    target = Path(temporary) / 'auctions.cpp'
-    executable = Path(temporary) / 'auctions'
-    target.write_text(source)
+production = {
+    # Keep the complete production service; fixtures replace only its includes/core
+    # dependencies. Policy remains the actual header included from the prepared module.
+    'service': '\n'.join(line for line in (module / 'EarnedAuction.cpp').read_text().splitlines()
+                          if not line.lstrip().startswith('#include')),
+    'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
+}
+
+
+def build(directory, parts, name):
+    text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
+    text = text.replace('@@PROFESSION@@', parts['profession'])
+    target = Path(directory) / (name + '.cpp')
+    executable = Path(directory) / name
+    target.write_text(text + parts['service'] + policy_tests + service_tests)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     *SANITIZER_FLAGS, '-no-pie',
                     '-g', '-I', str(module), '-I', str(travel_module),
                     str(target), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
+    return run_fixture([str(executable)], name)
+
+
+mutations = [
+    ('auction trading for a bot a player owns', 'service',
+     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasSurplus',
+     '!ai->HasGameClientMaster();\n}\n\nbool HasSurplus'),
+    ('auction trading with a game-client master', 'service',
+     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasSurplus',
+     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot());\n}\n\nbool HasSurplus'),
+    ('visit during combat', 'service', 'bot->IsAlive() && !bot->IsInCombat() && ', 'bot->IsAlive() && '),
+    ('visit cooldown skipped', 'service', 'now - it->second < interval)', 'now - it->second < interval * 0)'),
+    ('soulbound items listed', 'service', 'item->IsSoulBound() || ', ''),
+    ('quest objectives sold', 'service', 'if (supplies.NeededForQuest(item))\n        return true;', ''),
+    ('listings beyond the cap', 'service', 'if (listed >= MaxSalesPerVisit || listings >= MaxListings)',
+     'if (listed >= MaxSalesPerVisit)'),
+    ('deposit above the budget', 'service', 'deposit > budget || ', 'deposit > (budget | MaxCopper) || '),
+    ('same-account auctions bought', 'service', 'if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId())',
+     'if (!ownerAccount)'),
+    ('purchase above the budget', 'service', 'Affordable(auction->buyout, budget, bot->GetMoney())',
+     'Affordable(auction->buyout, budget | MaxCopper, bot->GetMoney())'),
+    ('purchase without bag space', 'service',
+     ('if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)\n            continue;\n'
+      '        if (!bestId'), '        if (!bestId'),
+    ('purchase while one is pending', 'service', 'bool const bought = !state.pendingPurchase && ', 'bool const bought = '),
+    ('receipt deleted with attachments', 'service', 'if (AuctionReceipt(mail, now) && !mail->money && mail->items.empty())',
+     'if (AuctionReceipt(mail, now))'),
+    ('recipe reagents protected', 'service', ' || IsProfessionSpell(spellId)', ''),
+    ('profession materials bought', 'service',
+     ('(usage == ITEM_USAGE_SKILL && proto->Class == ITEM_CLASS_WEAPON &&\n'
+      '                             proto->SubClass == ITEM_SUBCLASS_WEAPON_MISC)'), 'usage == ITEM_USAGE_SKILL'),
+    ('bound gear vendored outside natural progression', 'service',
+     'usage == ITEM_USAGE_DISENCHANT && sPlayerbotAIConfig.naturalProgression && ai', 'usage == ITEM_USAGE_DISENCHANT && ai'),
+    ('bound gear vendored for a bot a player owns', 'service',
+     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus',
+     '!ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus'),
+    ('bound gear vendored with a game-client master', 'service',
+     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus',
+     'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot());\n}\n\nbool HasVendorSurplus'),
+    ('profession test without the skill line', 'profession', 'IsProfessionSkill(it->second->SkillLine)', 'true'),
+]
+
+with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporary:
+    result = build(temporary, production, 'auctions')
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Earned auctions fixture failed (exit {result.returncode})')
+
+    def rejected(numbered):
+        index, (label, key, old, new) = numbered
+        mutated = {**production, key: production[key].replace(old, new)}
+        if mutated[key] == production[key]:
+            raise SystemExit(f'{label} mutation was not applied')
+        return build(temporary, mutated, f'mutant-{index}').returncode != 0
+
+    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
+        if not result:
+            raise SystemExit(f'Earned auctions fixture did not reject: {label}')
+        print(f'Earned auctions mutation rejected: {label}')
