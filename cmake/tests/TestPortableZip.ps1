@@ -12,7 +12,7 @@ $verifier = Join-Path $cmakeRoot 'VerifyPortableZip.ps1'
 $unmanagedPaths = Get-Content (Join-Path (Split-Path $cmakeRoot -Parent) 'scripts/tests/unmanaged-paths.json') -Raw | ConvertFrom-Json
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('portable-zip-tests-' + [guid]::NewGuid().ToString('N'))
 $source = Join-Path $temporaryRoot 'source with spaces'
-# Packaging always reads the generated core checkout, never the submodule.
+# Packaging always reads the generated core checkout, never a legacy checkout.
 $core = Join-Path $source '.module-cache/prepared-core'
 $dist = Join-Path $temporaryRoot 'distribution with spaces'
 $script:passed = 0
@@ -95,7 +95,7 @@ try {
     $revision = 'a' * 40
     $lock = [ordered]@{
         schemaVersion = 1
-        core = @{ name = 'azerothcore-wotlk'; revision = $revision; source = 'azerothcore-wotlk'; patches = @('patches/core-fixture.patch') }
+        core = @{ name = 'azerothcore-wotlk'; url = 'https://github.com/example/azerothcore-wotlk.git'; revision = $revision; patches = @('patches/core-fixture.patch') }
         modules = @(
             @{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') },
             @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') },
@@ -128,7 +128,7 @@ try {
         'old/db_world/historical.sql')) {
         Write-FixtureText (Join-Path $core "data/sql/$name") "SELECT 1;`n"
     }
-    # SQL from the pristine submodule must never reach the package.
+    # SQL from a legacy root checkout must never reach the package.
     Write-FixtureText (Join-Path $source 'azerothcore-wotlk/data/sql/updates/db_world/unprepared.sql')
     $moduleSql = Join-Path $core 'modules/mod-fixture/data/sql/db_world/current.sql'
     Write-FixtureText $moduleSql "SELECT 1;`n"

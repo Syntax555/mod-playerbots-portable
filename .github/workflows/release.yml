@@ -103,7 +103,6 @@ jobs:
 
       - name: Check gameplay rules against pinned sources
         run: |
-          git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
           python3 cmake/tests/run_fixtures.py gameplay
 
@@ -139,7 +138,6 @@ jobs:
 
       - name: Prepare locked server and addon sources
         run: |
-          git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
           cmake -P cmake/PrepareModules.cmake
 
       - name: Test historical German text and addon behavior
@@ -205,11 +203,10 @@ jobs:
         shell: pwsh
 
     steps:
-      - name: Checkout pinned submodules
+      - name: Checkout source
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
-          submodules: recursive
 
       - name: Setup Go
         uses: actions/setup-go@v7

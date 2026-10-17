@@ -17,6 +17,7 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
+    pinned_source,
     prepared_core,
     source_argument,
 )
@@ -30,7 +31,6 @@ args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
 module = args.source or core / 'modules/mod-playerbots/src'
-baseline = args.baseline or repository / 'mod-playerbots/src'
 
 area_sql = (core / 'data/sql/base/db_world/areatrigger.sql').read_text()
 relation_sql = (core / 'data/sql/base/db_world/areatrigger_involvedrelation.sql').read_text()
@@ -629,8 +629,10 @@ native = '\n'.join(function(source, signature) for source, signature in (
 
 
 def methods(source):
-    actions = (source / 'Ai/Base/Actions/AreaTriggerAction.cpp').read_text()
-    triggers = (source / 'Ai/Base/Trigger/WithinAreaTrigger.cpp').read_text()
+    actions, triggers = ((source / relative).read_text() if source is not None else
+                         pinned_source('mod-playerbots', 'src/' + relative)
+                         for relative in ('Ai/Base/Actions/AreaTriggerAction.cpp',
+                                          'Ai/Base/Trigger/WithinAreaTrigger.cpp'))
     return '\n'.join((
         function(actions, 'bool ReachAreaTriggerAction::Execute'),
         function(actions, 'bool AreaTriggerAction::Execute'),
@@ -649,7 +651,7 @@ with tempfile.TemporaryDirectory(prefix='portable-bot-area-trigger-') as tempora
                 module / 'Bot/Engine/WorldPacket', core / 'src/common', core / 'src/common/Utilities',
                 core / 'src/server/shared/Packets', core / 'src/server/game/Server',
                 core / 'src/server/game/Server/Protocol']
-    for label, source in (('baseline', baseline), ('fixed', module)):
+    for label, source in (('baseline', args.baseline), ('fixed', module)):
         cpp = temporary / f'{label}.cpp'
         cpp.write_text(fixture.replace('NATIVE_DEFINITIONS', definitions)
                        .replace('NATIVE_METHODS', native)

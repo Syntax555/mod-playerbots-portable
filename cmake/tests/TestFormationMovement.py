@@ -15,6 +15,7 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
+    pinned_source,
     prepared_core,
     source_argument,
 )
@@ -26,8 +27,9 @@ parser.add_argument('--baseline', type=Path, help='original pinned core source d
 args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
-baseline = args.baseline or repository / 'azerothcore-wotlk'
 relative = 'src/server/game/Movement/MovementGenerators/FormationMovementGenerator.cpp'
+baseline = ((args.baseline / relative).read_text() if args.baseline else
+            pinned_source('azerothcore-wotlk', relative))
 validator = function((core / 'src/server/game/Movement/Spline/MoveSpline.cpp').read_text(),
                      'bool MoveSplineInitArgs::Validate')
 
@@ -301,8 +303,7 @@ int main()
 
 with tempfile.TemporaryDirectory(prefix='portable-formation-') as temporary:
     temporary = Path(temporary)
-    for name, source_root in [('original', baseline), ('prepared', core)]:
-        source = (source_root / relative).read_text()
+    for name, source in [('original', baseline), ('prepared', (core / relative).read_text())]:
         production = '\n'.join(function(source, signature) for signature in [
             'void FormationMovementGenerator::DoInitialize',
             'bool FormationMovementGenerator::DoUpdate',

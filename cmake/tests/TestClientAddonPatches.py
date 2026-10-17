@@ -18,6 +18,7 @@ CMAKE = os.environ.get("CMAKE_EXECUTABLE") or shutil.which("cmake")
 GIT = shutil.which("git")
 POWERSHELL = shutil.which("pwsh")
 ADDON_URL = "https://github.com/example/MultiBot.git"
+CORE_URL = "https://github.com/example/azerothcore-wotlk.git"
 MODULE_URL = "https://github.com/example/mod-fixture.git"
 MAIN = b'local money = "upstream"\nreturn money\n'
 
@@ -26,12 +27,13 @@ def digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def run(command, *, cwd=None):
+def run(command, *, cwd=None, env=None):
     # Every source commit is already available locally. Make accidental network
     # access fail rather than fetching fixtures or depending on remote service.
     environment = os.environ.copy()
     environment["GIT_ALLOW_PROTOCOL"] = "file"
     environment["GIT_TERMINAL_PROMPT"] = "0"
+    environment.update(env or {})
     return subprocess.run(command, cwd=cwd, env=environment, capture_output=True,
                           text=True, timeout=90, check=False)
 
@@ -74,7 +76,7 @@ class AddonFixture:
         for path in (ROOT / "cmake").iterdir():
             if path.is_file() and path.suffix in (".cmake", ".py", ".ps1"):
                 shutil.copyfile(path, cmake / path.name)
-        self.core = self.root / "core"
+        self.core = self.root / ".module-cache/azerothcore-wotlk"
         core_revision = commit(self.core, {"README.md": b"Fixture core\n",
                                            "modules/CMakeLists.txt": b"# Fixture module directory\n"})
         self.addon_files = {
@@ -108,8 +110,8 @@ class AddonFixture:
                  "interface": 30300, "toc": "MultiBot.toc", "license": "LICENSE",
                  "patches": []}
         self.lock = {"schemaVersion": 1,
-                     "core": {"name": "core", "url": "https://github.com/example/core.git",
-                              "revision": core_revision, "source": "core", "patches": []},
+                     "core": {"name": "azerothcore-wotlk", "url": CORE_URL,
+                              "revision": core_revision, "patches": []},
                      "modules": [module], "clientAddons": [addon]}
         self.write_lock()
 
@@ -142,8 +144,8 @@ class AddonFixture:
                     "--repository", str(self.root), "--addon", "MultiBot",
                     "--destination", str(destination)])
 
-    def prepare(self):
-        return run([CMAKE, "-P", str(self.root / "cmake/PrepareModules.cmake")])
+    def prepare(self, env=None):
+        return run([CMAKE, "-P", str(self.root / "cmake/PrepareModules.cmake")], env=env)
 
     def package(self):
         return run([CMAKE, "-DPACKAGE_VERSION=fixture", "-P",
@@ -356,6 +358,104 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.assertTrue((modules / "mod-fixture/.portable-source").is_file())
         self.assertEqual((modules / "mod-local/keep.cpp").read_bytes(), b"local edit\n")
         self.assertFalse(fixture.prepared.exists())
+
+    def test_preparation_pins_core_and_modules_and_preserves_local_work(self):
+        fixture = self.fixture()
+        for repository, relative, value in (
+            (fixture.core, "README.md", b"Newer core\n"),
+            (fixture.module, "src/module.cpp", b"int module_fixture = 2;\n"),
+        ):
+            (repository / relative).write_bytes(value)
+            git(repository, "commit", "--quiet", "-am", "Newer upstream revision")
+            (repository / relative).write_bytes(b"unfinished local edit\n")
+        legacy = (fixture.root / "azerothcore-wotlk", fixture.root / "mod-playerbots")
+        for directory in legacy:
+            directory.mkdir()
+            (directory / "keep.txt").write_bytes(b"local legacy checkout\n")
+        original = {path: (git(path, "rev-parse", "HEAD"), git(path, "status", "--porcelain"))
+                    for path in (fixture.core, fixture.module)}
+        prepared = fixture.root / ".module-cache/prepared-core"
+
+        def assert_pinned_sources():
+            self.assertEqual(git(prepared, "rev-parse", "HEAD"), fixture.lock["core"]["revision"])
+            self.assertEqual((prepared / "README.md").read_bytes(), b"Fixture core\n")
+            self.assertEqual((prepared / "modules/mod-fixture/src/module.cpp").read_bytes(),
+                             b"int module_fixture = 1;\n")
+
+        self.assertFalse((fixture.root / ".gitmodules").exists())
+        self.successful(fixture.prepare())
+        assert_pinned_sources()
+        self.successful(fixture.prepare())
+        assert_pinned_sources()
+        for path, (head, status) in original.items():
+            self.assertEqual(git(path, "rev-parse", "HEAD"), head)
+            self.assertEqual(git(path, "status", "--porcelain"), status)
+        self.assertEqual((fixture.core / "README.md").read_bytes(), b"unfinished local edit\n")
+        self.assertEqual((fixture.module / "src/module.cpp").read_bytes(), b"unfinished local edit\n")
+        for directory in legacy:
+            self.assertEqual((directory / "keep.txt").read_bytes(), b"local legacy checkout\n")
+
+        script = fixture.root / "cmake/PrepareModules.cmake"
+        source = script.read_text(encoding="utf-8")
+        mutations = (
+            ("core", (
+                ('update-ref refs/heads/portable-pinned "${_core_revision}"',
+                 'update-ref refs/heads/portable-pinned HEAD'),
+                ('checkout --detach --quiet "${_core_revision}"', 'checkout --detach --quiet HEAD'),
+            )),
+            ("module", (
+                ('archive --format=tar "--output=${_archive}" "${_revision}"',
+                 'archive --format=tar "--output=${_archive}" HEAD'),
+            )),
+        )
+        for name, replacements in mutations:
+            with self.subTest(mutation=name):
+                mutated = source
+                for before, after in replacements:
+                    self.assertEqual(mutated.count(before), 1)
+                    mutated = mutated.replace(before, after)
+                script.write_text(mutated, encoding="utf-8")
+                self.successful(fixture.prepare())
+                with self.assertRaises(AssertionError):
+                    assert_pinned_sources()
+
+    def test_preparation_fetches_lock_revisions_without_submodules_and_reuses_cache(self):
+        fixture = self.fixture()
+        core_remote = self.directory / "remote core"
+        module_remote = self.directory / "remote module"
+        fixture.core.rename(core_remote)
+        fixture.module.rename(module_remote)
+        # Keep real Git fetches offline while retaining the manifest's GitHub URL contract.
+        environment = {"GIT_CONFIG_COUNT": "2",
+                       "GIT_CONFIG_KEY_0": f"url.{core_remote.as_uri()}.insteadOf",
+                       "GIT_CONFIG_VALUE_0": CORE_URL,
+                       "GIT_CONFIG_KEY_1": f"url.{module_remote.as_uri()}.insteadOf",
+                       "GIT_CONFIG_VALUE_1": MODULE_URL}
+        prepared = fixture.root / ".module-cache/prepared-core"
+        self.successful(fixture.prepare(environment))
+        self.assertEqual(git(prepared, "rev-parse", "HEAD"), fixture.lock["core"]["revision"])
+        self.assertEqual((prepared / "modules/mod-fixture/src/module.cpp").read_bytes(),
+                         b"int module_fixture = 1;\n")
+        self.assertFalse((fixture.root / "azerothcore-wotlk").exists())
+        self.assertFalse((fixture.root / "mod-playerbots").exists())
+        # Without URL rewrites, any unnecessary network fetch is rejected.
+        self.successful(fixture.prepare())
+
+        for remote, relative, value, entry, output in (
+            (module_remote, "src/module.cpp", b"int module_fixture = 2;\n",
+             fixture.lock["modules"][0], prepared / "modules/mod-fixture/src/module.cpp"),
+            (core_remote, "README.md", b"New pinned core\n", fixture.lock["core"], prepared / "README.md"),
+        ):
+            with self.subTest(source=entry["name"]):
+                (remote / relative).write_bytes(value)
+                git(remote, "commit", "--quiet", "-am", "Advance pinned source")
+                entry["revision"] = git(remote, "rev-parse", "HEAD")
+                fixture.write_lock()
+                self.successful(fixture.prepare(environment))
+                self.assertEqual(output.read_bytes(), value)
+                self.assertEqual(git(prepared, "rev-parse", "HEAD"), fixture.lock["core"]["revision"])
+                self.successful(fixture.prepare())
+                self.assertEqual(output.read_bytes(), value)
 
 
 if __name__ == "__main__":

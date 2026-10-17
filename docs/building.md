@@ -17,11 +17,11 @@ Studio generator. Use x64 dependencies throughout.
 
 ## Build the server bundle
 
-Clone the repository with its submodules, then configure with the paths to your
+Clone the repository, then configure with the paths to your
 dependencies:
 
 ```powershell
-git clone --recurse-submodules https://github.com/Syntax555/mod-playerbots-portable.git
+git clone https://github.com/Syntax555/mod-playerbots-portable.git
 cd mod-playerbots-portable
 cmake -B build -S . `
   -G "Visual Studio 17 2022" -A x64 `
@@ -101,8 +101,9 @@ C++.
 ## Reproducible dependencies
 
 [versions.lock.json](../versions.lock.json) pins the core, modules, addons and
-client-build dependencies. CMake applies the ordered [patches](../patches) to
-managed source copies; the upstream submodules remain at their pinned revisions.
+client-build dependencies. CMake fetches the locked core and module commits into
+`.module-cache/` and applies the ordered [patches](../patches) to managed source
+copies. No submodule initialization is required.
 
 Subsequent configurations reuse the prepared module cache. A changed revision or
 patch rebuilds its managed copy, while unmarked directories are not overwritten.
@@ -111,6 +112,10 @@ Prepare these copies independently with:
 ```powershell
 cmake -P cmake/PrepareModules.cmake
 ```
+
+Existing checkouts of `azerothcore-wotlk/` and `mod-playerbots/` from older
+versions are ignored and left untouched, including local edits. Patch work trees
+use the locked commits in `.module-cache/`.
 
 The server bundle includes the source manifest, patches and applicable license
 files or notices. Record the manifest when reporting a problem or sharing a
@@ -126,7 +131,6 @@ necessary for platform and encounter validation. These commands repeat the
 release workflow's launcher job:
 
 ```bash
-git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
 go test ./...
 go vet ./...
 GOOS=windows GOARCH=amd64 go test -c -o /dev/null ./cmd/startup

@@ -103,5 +103,3 @@ and ordinary player actions.
 ## Release and tests
 
 - [ ] Measure a compiler cache for the Windows compile step.
-- [ ] Optional: replace the two submodules with the lock-driven fetch used for
-  the other modules.

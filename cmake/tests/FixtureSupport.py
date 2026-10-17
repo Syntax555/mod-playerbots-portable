@@ -117,11 +117,11 @@ def reject_mutants(work, mutations, build, name):
         print(f'{name} mutation rejected: {label}')
 
 
-def pinned_source(module, path):
-    """path at the locked revision of module, read from its PrepareModules cache."""
+def pinned_source(name, path):
+    """path at the locked core or module revision, read from its PrepareModules cache."""
     lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
-    revision = next(entry['revision'] for entry in lock['modules'] if entry['name'] == module)
-    return subprocess.run(['git', '-C', str(REPOSITORY / '.module-cache' / module), 'show', f'{revision}:{path}'],
+    revision = next(entry['revision'] for entry in [lock['core'], *lock['modules']] if entry['name'] == name)
+    return subprocess.run(['git', '-C', str(REPOSITORY / '.module-cache' / name), 'show', f'{revision}:{path}'],
                           check=True, text=True, capture_output=True).stdout
 
 
