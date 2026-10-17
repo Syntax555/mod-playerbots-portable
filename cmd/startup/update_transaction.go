@@ -364,6 +364,18 @@ func validateStagedUpdate(root string, plan *portableUpdatePlan, progress *porta
 	return nil
 }
 
+func beginPortableUpdate(root string, plan *portableUpdatePlan) error {
+	plan.Phase = "applying"
+	journal := *plan
+	journal.Operations = append([]portableUpdateOperation(nil), plan.Operations...)
+	// Existing launchers can recover this v1 journal too: untouched originals
+	// still match their hashes, and untouched new files do not exist yet.
+	for i := range journal.Operations {
+		journal.Operations[i].State = "applying"
+	}
+	return writePortableUpdatePlan(root, &journal)
+}
+
 func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portableUpdateProgress) error {
 	if err := ensurePortableUpdateStopped(root, os.Getpid()); err != nil {
 		return err
@@ -374,8 +386,7 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portab
 	}
 	progress.finish()
 	progress.begin("Installing verified files", "files", int64(len(plan.Operations)), 0)
-	plan.Phase = "applying"
-	if err := writePortableUpdatePlan(root, plan); err != nil {
+	if err := beginPortableUpdate(root, plan); err != nil {
 		return err
 	}
 	for i := range plan.Operations {
@@ -405,9 +416,8 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portab
 			return rollbackUpdateAfterError(root, plan, errors.New("a new update destination appeared during staging"))
 		}
 		op.State = "applying"
-		if err := writePortableUpdatePlan(root, plan); err != nil {
-			return rollbackUpdateAfterError(root, plan, err)
-		}
+		// Keep exact progress in memory so a live rollback skips untouched
+		// destinations, including files changed externally since staging.
 		if op.HadOriginal {
 			if err := backupUpdateFile(target, backup, *op); err != nil {
 				return rollbackUpdateAfterError(root, plan, err)
@@ -429,9 +439,6 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portab
 		if err := syncUpdateDirectory(filepath.Dir(target)); err != nil {
 			return rollbackUpdateAfterError(root, plan, err)
 		}
-		// Rollback treats a started operation the same whether or not it
-		// finished, so completed files stay "applying". Recording "applied"
-		// would rewrite the whole journal, manifest included, twice per file.
 		progress.add(1)
 	}
 	plan.Phase = "committed"
