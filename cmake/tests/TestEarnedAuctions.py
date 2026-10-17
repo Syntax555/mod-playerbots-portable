@@ -49,8 +49,11 @@ native = '\n'.join(function(source, signature) + ';' for source, signature in (
 # Doubles for these producers keep their native shape.
 assert 'uint32 TotemCategory;' in item_header
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
-assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in (
-    args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
+auction_handlers = (args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
+assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in auction_handlers
+assert auction_handlers.count('CONFIG_AUCTION_LEVEL_REQ') == 2 and (
+    'if (GetPlayer()->GetLevel() < sWorld->getIntConfig(CONFIG_AUCTION_LEVEL_REQ))'
+    in function(auction_handlers, 'void WorldSession::SendAuctionHello(ObjectGuid guid, Creature* unit)'))
 # Receipts carry the subject the core writes; the parser must keep reading that format.
 subject_writer = function(auction_source, 'std::string AuctionEntry::BuildAuctionMailSubject(MailAuctionAnswers response) const')
 util_header = (args.core / 'src/common/Utilities/Util.h').read_text()
@@ -160,6 +163,12 @@ void PolicyTests()
     assert(!Affordable(101, 1000, 100));
     assert(!Affordable(UINT32_MAX, UINT32_MAX, UINT32_MAX));
     assert(WithinPriceCeiling(200, 200) && !WithinPriceCeiling(201, 200));
+    // Gear outranks consumables; within a tier the better bargain, then the lower price, wins.
+    assert(BetterOffer(RankOffer(0, 900, 1000), RankOffer(2, 100, 5000)));
+    assert(BetterOffer(RankOffer(0, 600, 2000), RankOffer(0, 500, 1000)));
+    assert(BetterOffer(RankOffer(0, 100, 1000), RankOffer(0, 200, 2000)));
+    assert(!BetterOffer(RankOffer(1, 100, 1000), RankOffer(1, 100, 1000)));
+    assert(RankOffer(3, UINT32_MAX, UINT32_MAX).relative == 1000);
     assert(!WithinPriceCeiling(0, 100) && !WithinPriceCeiling(1, 0));
 
     auto subject = ParseAuctionSubject("2589:0:3:17:20");
@@ -379,10 +388,12 @@ struct AuctionHouseObject
     AuctionEntry* GetAuction(uint32 id) const
     { auto it = auctions.find(id); return it == auctions.end() ? nullptr : it->second; }
 };
-constexpr int RATE_AUCTION_DEPOSIT = 1, RATE_AUCTION_CUT = 2, RATE_AUCTION_TIME = 3;
+constexpr int RATE_AUCTION_DEPOSIT = 1, RATE_AUCTION_CUT = 2, RATE_AUCTION_TIME = 3, CONFIG_AUCTION_LEVEL_REQ = 4;
 struct World
 {
     float rate = 1, cutRate = 1, timeRate = 1;
+    uint32 auctionLevel = 1;
+    uint32 getIntConfig(int which) const { assert(which == CONFIG_AUCTION_LEVEL_REQ); return auctionLevel; }
     float getRate(int which) const
     { return which == RATE_AUCTION_CUT ? cutRate : which == RATE_AUCTION_TIME ? timeRate : rate; }
 } world;
@@ -432,7 +443,8 @@ struct Player
 {
     ObjectGuid guid;
     WorldSession session; PlayerbotAI ai;
-    uint32 money = 10000;
+    uint32 money = 10000, level = 80;
+    uint32 GetLevel() const { return level; }
     bool online = true, alive = true, combat = false, flight = false, teleport = false,
         battleground = false, trade = false, range = true, store = true, usable = true, random = true;
     std::map<uint32, Item*> backpack;
@@ -556,6 +568,7 @@ namespace EarnedAuction
 bool IsEnabled(PlayerbotAI*); bool HasSurplus(PlayerbotAI*);
 bool HasVendorSurplus(PlayerbotAI*); bool SellsToVendor(PlayerbotAI*, Item*, ItemUsage);
 bool ShouldReserveForAuction(PlayerbotAI*, Item*, ItemUsage); bool QueueVisit(PlayerbotAI*, ObjectGuid, bool);
+bool MeetsAuctionLevel(Player*);
 }
 '''
 
@@ -563,10 +576,12 @@ service_tests = r'''
 void TravelTests()
 {
     using namespace EarnedAuctionTravel;
-    assert(!CanStartTravel(9, true, UINT32_MAX));
-    assert(!CanStartTravel(10, false, 99));
-    assert(CanStartTravel(10, false, 100));
-    assert(CanStartTravel(10, true, 0));
+    assert(!CanStartTravel(9, 1, true, UINT32_MAX));
+    assert(!CanStartTravel(10, 1, false, 99));
+    assert(CanStartTravel(10, 1, false, 100));
+    assert(CanStartTravel(10, 1, true, 0));
+    // LevelReq.Auction raises the travel level.
+    assert(!CanStartTravel(19, 20, true, 0) && CanStartTravel(20, 20, true, 0) && !CanStartTravel(9, 5, true, 0));
     assert(CompatibleHouse(1, 1) && CompatibleHouse(6, 6));
     assert(CompatibleHouse(1, 7) && CompatibleHouse(6, 7));
     assert(!CompatibleHouse(1, 6) && !CompatibleHouse(0, 7) && !CompatibleHouse(1, 0));
@@ -1076,6 +1091,29 @@ void ServiceTests()
         }
     }
     {
+        // LevelReq.Auction applies as at the auction window; mailboxes stay open.
+        Scenario s; s.BagItem(100, 5); world.auctionLevel = 20; s.bot.level = 19;
+        assert(!MeetsAuctionLevel(&s.bot) && !QueueVisit(&s.bot.ai, s.bot.auctioneer.guid, false));
+        s.Receipt(nullptr, 400); assert(s.Visit(true)); assert(s.bot.money == 10400);
+        auto& processor = PlayerbotWorldThreadProcessor::instance();
+        s.bot.level = 20; assert(QueueVisit(&s.bot.ai, s.bot.auctioneer.guid, false)); s.bot.level = 19;
+        auto operation = std::move(processor.queued.back()); processor.queued.clear();
+        assert(!operation->Execute()); assert(!s.bot.session.sells);
+        s.bot.level = 20; assert(s.Visit()); assert(s.bot.session.sells == 1);
+    }
+    {
+        // A gear upgrade outranks a cheaper consumable.
+        Scenario s; Item& food = s.MakeItem(101, 5, ITEM_USAGE_USE); food.proto.Class = ITEM_CLASS_CONSUMABLE;
+        Item& gear = s.MakeItem(102, 1, ITEM_USAGE_EQUIP); s.Offer(food, 1, 100); s.Offer(gear, 2, 900);
+        assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.session.lastAuction == 2 && s.bot.money == 9100);
+    }
+    {
+        // Within a tier, the offer cheapest against its valuation wins.
+        Scenario s; Item& plain = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); Item& bargain = s.MakeItem(102, 1, ITEM_USAGE_EQUIP);
+        bargain.proto.BuyPrice = 2000; s.Offer(plain, 1, 500); s.Offer(bargain, 2, 600);
+        assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.session.lastAuction == 2 && s.bot.money == 9400);
+    }
+    {
         // A Blacksmith Hammer serves crafting.
         Scenario s; Item& hammer = s.MakeItem(5956, 1, ITEM_USAGE_SKILL); hammer.proto.Class = ITEM_CLASS_WEAPON;
         hammer.proto.SubClass = ITEM_SUBCLASS_WEAPON_MISC; hammer.proto.TotemCategory = 162; s.Offer(hammer);
@@ -1278,6 +1316,7 @@ production = {
                           if not line.lstrip().startswith('#include')),
     'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
     'policy': (module / 'EarnedAuctionPolicy.h').read_text(),
+    'travel': (travel_module / 'EarnedAuctionTravelPolicy.h').read_text(),
 }
 
 
@@ -1288,10 +1327,11 @@ def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
     text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
     text = text.replace('@@AUCTIONRULES@@', auction_rules).replace('@@TOOLS@@', tools)
-    # The policy header is compiled from a private copy, so mutants can change it.
+    # The policy headers are compiled from private copies, so mutants can change them.
     headers = Path(directory) / name
     headers.mkdir()
     (headers / 'EarnedAuctionPolicy.h').write_text(parts['policy'])
+    (headers / 'EarnedAuctionTravelPolicy.h').write_text(parts['travel'])
     target = Path(directory) / (name + '.cpp')
     executable = Path(directory) / (name + '.bin')
     target.write_text(text + parts['service'] + policy_tests + service_tests)
@@ -1322,7 +1362,7 @@ mutations = [
      'Affordable(auction->buyout, budget | MaxCopper, bot->GetMoney())'),
     ('purchase without bag space', 'service',
      ('if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)\n            continue;\n'
-      '        if (!bestId'), '        if (!bestId'),
+      '        OfferRank'), 'OfferRank'),
     ('purchase while one is pending', 'service', 'bool const bought = !state.pendingPurchase && ', 'bool const bought = '),
     ('receipt deleted with attachments', 'service', 'if (AuctionReceipt(mail, now) && !mail->money && mail->items.empty())',
      'if (AuctionReceipt(mail, now))'),
@@ -1333,8 +1373,17 @@ mutations = [
     ('altbot recipe reagents sold', 'service',
      'return !sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) || ai->HasGameClientMaster();',
      'return ai->HasGameClientMaster();'),
-    ('profession materials bought', 'service', '(usage == ITEM_USAGE_SKILL && GatheringTool(proto))',
-     'usage == ITEM_USAGE_SKILL'),
+    ('profession materials bought', 'service', 'else if (usage == ITEM_USAGE_SKILL && GatheringTool(proto))',
+     'else if (usage == ITEM_USAGE_SKILL)'),
+    ('usage tiers ignored', 'service', 'RankOffer(tier, auction->buyout, ceiling)',
+     'RankOffer(tier * 0, auction->buyout, ceiling)'),
+    ('offers ranked by absolute price', 'service', 'RankOffer(tier, auction->buyout, ceiling)',
+     'RankOffer(tier, auction->buyout, ceiling * 0 + 1)'),
+    ('auction level ignored at the auctioneer', 'service', 'else if (MeetsAuctionLevel(bot))',
+     'else if (MeetsAuctionLevel(bot) || true)'),
+    ('auction level ignored when queuing', 'service', ' || (!mailbox && !MeetsAuctionLevel(ai->GetBot()))', ''),
+    ('travel below the auction level', 'travel', 'std::max(MinimumLevel, auctionLevel)',
+     'std::max(MinimumLevel, auctionLevel * 0)'),
     ('crafting tools bought', 'service', '        default:\n            return false;\n    }\n}\n\nbool BuyUseful',
      '        default:\n            return true;\n    }\n}\n\nbool BuyUseful'),
     ('fishing poles refused', 'service',

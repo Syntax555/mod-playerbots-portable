@@ -439,10 +439,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..f34b487
+index 0000000..77f3259
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,809 @@
+@@ -0,0 +1,819 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1059,7 +1059,7 @@ index 0000000..f34b487
 +    Player* bot = ai->GetBot();
 +    time_t const now = GameTime::GetGameTime().count();
 +    uint32 bestId = 0;
-+    uint32 bestPrice = 0;
++    OfferRank best;
 +    for (uint32 id : sample)
 +    {
 +        AuctionEntry* auction = house->GetAuction(id);
@@ -1077,21 +1077,27 @@ index 0000000..f34b487
 +            proto->Class == ITEM_CLASS_KEY || bot->CanUseItem(proto) != EQUIP_ERR_OK)
 +            continue;
 +        ItemUsage const usage = Usage(ai, item);
-+        bool const useful = usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_AMMO ||
-+                            (usage == ITEM_USAGE_SKILL && GatheringTool(proto)) ||
-+                            (usage == ITEM_USAGE_USE && proto->Class == ITEM_CLASS_CONSUMABLE);
++        uint32 tier = 0;
++        if (usage == ITEM_USAGE_AMMO)
++            tier = 1;
++        else if (usage == ITEM_USAGE_USE && proto->Class == ITEM_CLASS_CONSUMABLE)
++            tier = 2;
++        else if (usage == ITEM_USAGE_SKILL && GatheringTool(proto))
++            tier = 3;
++        else if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
++            continue;
 +        uint32 const budget = PurchaseBudget(ai, usage);
-+        if (!useful || !Affordable(auction->buyout, budget, bot->GetMoney()) ||
-+            !WithinPriceCeiling(auction->buyout,
-+                                PriceCeiling(proto->BuyPrice, proto->BuyCount, proto->SellPrice, auction->itemCount)))
++        uint32 const ceiling = PriceCeiling(proto->BuyPrice, proto->BuyCount, proto->SellPrice, auction->itemCount);
++        if (!Affordable(auction->buyout, budget, bot->GetMoney()) || !WithinPriceCeiling(auction->buyout, ceiling))
 +            continue;
 +        ItemPosCountVec destination;
 +        if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
 +            continue;
-+        if (!bestId || auction->buyout < bestPrice)
++        OfferRank const rank = RankOffer(tier, auction->buyout, ceiling);
++        if (!bestId || BetterOffer(rank, best))
 +        {
 +            bestId = id;
-+            bestPrice = auction->buyout;
++            best = rank;
 +        }
 +    }
 +    if (!bestId)
@@ -1100,7 +1106,7 @@ index 0000000..f34b487
 +    // invocation. The core checks current ownership/balance/bid and script hooks again.
 +    uint32 const before = bot->GetMoney();
 +    WorldPacket packet(CMSG_AUCTION_PLACE_BID);
-+    packet << auctioneer->GetGUID() << bestId << bestPrice;
++    packet << auctioneer->GetGUID() << bestId << best.price;
 +    bot->GetSession()->HandleAuctionPlaceBid(packet);
 +    // A successful buyout deletes the auction; never dereference its old pointer.
 +    return bot->GetMoney() < before && !house->GetAuction(bestId);
@@ -1130,7 +1136,7 @@ index 0000000..f34b487
 +            else if (targetGuid.IsAnyTypeCreature())
 +                target = bot->GetNPCIfCanInteractWith(targetGuid, UNIT_NPC_FLAG_MAILBOX);
 +        }
-+        else
++        else if (MeetsAuctionLevel(bot))
 +        {
 +            auctioneer = bot->GetNPCIfCanInteractWith(targetGuid, UNIT_NPC_FLAG_AUCTIONEER);
 +            target = auctioneer;
@@ -1244,9 +1250,13 @@ index 0000000..f34b487
 +    return false;
 +}
 +
++// The core checks the auction window's level requirement only when it greets a
++// player at an auctioneer. The handlers a visit calls do not repeat it.
++bool MeetsAuctionLevel(Player* bot) { return bot->GetLevel() >= sWorld->getIntConfig(CONFIG_AUCTION_LEVEL_REQ); }
++
 +bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox)
 +{
-+    if (!Ready(ai) || !target)
++    if (!Ready(ai) || !target || (!mailbox && !MeetsAuctionLevel(ai->GetBot())))
 +        return false;
 +    return PlayerbotWorldThreadProcessor::instance().QueueOperation(
 +        std::make_unique<EarnedAuctionVisit>(ai->GetBot()->GetGUID(), target, mailbox));
@@ -1254,10 +1264,10 @@ index 0000000..f34b487
 +}  // namespace EarnedAuction
 diff --git a/src/Bot/EarnedAuction.h b/src/Bot/EarnedAuction.h
 new file mode 100644
-index 0000000..503cdc5
+index 0000000..70244cb
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.h
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,26 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1270,11 +1280,13 @@ index 0000000..503cdc5
 +#include "ObjectGuid.h"
 +
 +class Item;
++class Player;
 +class PlayerbotAI;
 +
 +namespace EarnedAuction
 +{
 +bool IsEnabled(PlayerbotAI* ai);
++bool MeetsAuctionLevel(Player* bot);
 +bool HasSurplus(PlayerbotAI* ai);
 +bool HasVendorSurplus(PlayerbotAI* ai);
 +bool SellsToVendor(PlayerbotAI* ai, Item* item, ItemUsage usage);
@@ -1284,10 +1296,10 @@ index 0000000..503cdc5
 +#endif
 diff --git a/src/Bot/EarnedAuctionPolicy.h b/src/Bot/EarnedAuctionPolicy.h
 new file mode 100644
-index 0000000..3e96b7a
+index 0000000..59ac112
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionPolicy.h
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,162 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1304,6 +1316,7 @@ index 0000000..3e96b7a
 +#include <optional>
 +#include <string_view>
 +#include <system_error>
++#include <tuple>
 +
 +namespace EarnedAuction
 +{
@@ -1365,6 +1378,26 @@ index 0000000..3e96b7a
 +}
 +
 +inline bool WithinPriceCeiling(std::uint32_t price, std::uint32_t ceiling) { return price && price <= ceiling; }
++
++// One purchase per visit goes to the most useful tier: gear upgrades, ammunition,
++// consumables, then gathering tools. Within a tier the offer cheapest against its
++// valuation wins, so a cheap item does not beat a bargain upgrade.
++struct OfferRank
++{
++    std::uint32_t tier = 0;
++    std::uint64_t relative = 0;
++    std::uint32_t price = 0;
++};
++
++inline OfferRank RankOffer(std::uint32_t tier, std::uint32_t price, std::uint32_t ceiling)
++{
++    return {tier, ceiling ? std::uint64_t(price) * 1000 / ceiling : UINT64_MAX, price};
++}
++
++inline bool BetterOffer(OfferRank offer, OfferRank best)
++{
++    return std::tie(offer.tier, offer.relative, offer.price) < std::tie(best.tier, best.relative, best.price);
++}
 +
 +struct AuctionSubject
 +{
@@ -1431,10 +1464,10 @@ index 0000000..3e96b7a
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravel.cpp b/src/Bot/EarnedAuctionTravel.cpp
 new file mode 100644
-index 0000000..c75c32c
+index 0000000..e70e6d8
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravel.cpp
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,178 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1461,6 +1494,7 @@ index 0000000..c75c32c
 +#include "Player.h"
 +#include "PlayerbotAI.h"
 +#include "Timer.h"
++#include "World.h"
 +
 +namespace EarnedAuctionTravel
 +{
@@ -1523,8 +1557,9 @@ index 0000000..c75c32c
 +
 +bool CompatibleAuctioneer(PlayerbotAI* ai, Creature* auctioneer)
 +{
-+    if (!ai || !ai->GetBot() || !auctioneer || !auctioneer->IsAlive() ||
-+        !auctioneer->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER) || auctioneer->IsHostileTo(ai->GetBot()))
++    if (!ai || !ai->GetBot() || !EarnedAuction::MeetsAuctionLevel(ai->GetBot()) || !auctioneer ||
++        !auctioneer->IsAlive() || !auctioneer->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER) ||
++        auctioneer->IsHostileTo(ai->GetBot()))
 +        return false;
 +    AuctionHouseEntry const* botHouse =
 +        AuctionHouseMgr::GetAuctionHouseEntryFromFactionTemplate(ai->GetBot()->GetFaction());
@@ -1586,7 +1621,8 @@ index 0000000..c75c32c
 +    info.earnedAuctionTravelClockStarted = true;
 +    info.earnedAuctionTravelLastAttempt = getMSTime();
 +    Player* bot = ai->GetBot();
-+    if (!CanStartTravel(bot->GetLevel(), EarnedAuction::HasSurplus(ai), PurchaseSavings(ai)))
++    if (!CanStartTravel(bot->GetLevel(), sWorld->getIntConfig(CONFIG_AUCTION_LEVEL_REQ), EarnedAuction::HasSurplus(ai),
++                        PurchaseSavings(ai)))
 +        return {};
 +    auto const cache = marketCache.load(std::memory_order_acquire);
 +    if (!cache)
@@ -1643,10 +1679,10 @@ index 0000000..b5cdae8
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravelPolicy.h b/src/Bot/EarnedAuctionTravelPolicy.h
 new file mode 100644
-index 0000000..8b6bec2
+index 0000000..9bf013b
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravelPolicy.h
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,99 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1655,6 +1691,7 @@ index 0000000..8b6bec2
 +#ifndef PLAYERBOTS_EARNEDAUCTIONTRAVELPOLICY_H
 +#define PLAYERBOTS_EARNEDAUCTIONTRAVELPOLICY_H
 +
++#include <algorithm>
 +#include <cmath>
 +#include <cstddef>
 +#include <cstdint>
@@ -1692,9 +1729,10 @@ index 0000000..8b6bec2
 +    float z = 0.0f;
 +};
 +
-+inline bool CanStartTravel(std::uint32_t level, bool hasSurplus, std::uint32_t spendableCopper)
++inline bool CanStartTravel(std::uint32_t level, std::uint32_t auctionLevel, bool hasSurplus,
++                           std::uint32_t spendableCopper)
 +{
-+    return level >= MinimumLevel && (hasSurplus || spendableCopper >= MinimumPurchaseCopper);
++    return level >= std::max(MinimumLevel, auctionLevel) && (hasSurplus || spendableCopper >= MinimumPurchaseCopper);
 +}
 +
 +inline bool CompatibleHouse(std::uint32_t botHouseId, std::uint32_t marketHouseId)
