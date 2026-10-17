@@ -38,9 +38,14 @@ travel_module = (args.travel_source or args.source) / 'Bot'
 usage_header = (args.source / 'Ai/Base/Value/ItemUsageValue.h').read_text()
 values_source = (args.source / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
 item_header = (args.core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
+auction_header = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.h').read_text()
+auction_source = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.cpp').read_text()
 native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
-    (item_header, 'enum ItemSubclassWeapon')))
+    (item_header, 'enum ItemSubclassWeapon'), (auction_header, 'enum MailAuctionAnswers')))
+# Receipts carry the subject the core writes; the parser must keep reading that format.
+subject_writer = function(auction_source, 'std::string AuctionEntry::BuildAuctionMailSubject(MailAuctionAnswers response) const')
+assert "strm << item_template << \":0:\" << response << ':' << Id << ':' << itemCount;" in subject_writer
 
 
 policy_tests = r'''
@@ -92,6 +97,17 @@ void PolicyTests()
     assert(!WithinPriceCeiling(UINT32_MAX, UINT32_MAX, UINT32_MAX));
     assert(WithinPriceCeiling(MaxCopper, UINT32_MAX, UINT32_MAX));
 
+    auto subject = ParseAuctionSubject("2589:0:3:17:20");
+    assert(subject && subject->item == 2589 && subject->response == 3 && subject->auction == 17 && subject->count == 20);
+    assert(ParseAuctionSubject("4294967295:0:6:4294967295:4294967295"));
+    for (char const* malformed : {"", "2589:0:3:17", "2589:0:3:17:20:1", "2589:1:3:17:20", "2589:0:x:17:20",
+                                  "2589::3:17:20", "2589:0:3:17:20 ", "-1:0:3:17:20", "4294967296:0:3:17:20",
+                                  ":0:3:17:20", "2589:0:3:17:", "+2589:0:3:17:20"})
+        assert(!ParseAuctionSubject(malformed));
+    assert(RelistAllowed({0, 0}, 0) && RelistAllowed({MaxUnsoldListings - 1, 100}, 100));
+    assert(!RelistAllowed({MaxUnsoldListings, 100}, 100 + UnsoldMemorySeconds - 1));
+    assert(RelistAllowed({MaxUnsoldListings, 100}, 100 + UnsoldMemorySeconds));
+
     assert(ReceiptReady(true, false, 0, 100, 200, 100));
     assert(!ReceiptReady(false, false, 0, 100, 200, 100));
     assert(!ReceiptReady(true, true, 0, 100, 200, 100));
@@ -111,12 +127,18 @@ fixtures = r'''
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
+#include <sstream>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
 using uint8 = std::uint8_t;
 using uint32 = std::uint32_t;
+using int32 = std::int32_t;
 @@NATIVE@@
 @@PROFESSIONS@@
 constexpr uint32 MINUTE = 60, MIN_AUCTION_TIME = 43200;
@@ -133,6 +155,7 @@ constexpr float INTERACTION_DISTANCE = 5;
 enum class NeedMoneyFor : uint32 { gear, ammo, consumables, tradeskill, anything };
 struct ObjectGuid
 {
+    using LowType = uint32;
     uint32 value = 0;
     uint32 GetCounter() const { return value; }
     bool IsGameObject() const { return value >= 200000; }
@@ -247,6 +270,7 @@ struct Mail
     uint32 messageID = 0, money = 0, COD = 0;
     int messageType = MAIL_AUCTION, state = 0;
     std::int64_t deliver_time = 1000, expire_time = 100000;
+    std::string subject;
     std::vector<MailItemInfo> items;
 };
 using ItemPosCountVec = std::vector<uint32>;
@@ -264,7 +288,9 @@ struct AuctionEntry
     uint32 Id = 0, item_template = 0, itemCount = 0, buyout = 0, bid = 0;
     ObjectGuid item_guid, owner, bidder;
     std::int64_t expire_time = 100000;
+    std::string BuildAuctionMailSubject(MailAuctionAnswers response) const;
 };
+@@SUBJECT@@
 struct AuctionHouseObject
 {
     std::map<uint32, AuctionEntry*> auctions;
@@ -406,6 +432,8 @@ void WorldSession::HandleMailTakeItem(WorldPacket& packet)
         allocatedItems.erase(item->guid); return; // Real core stack merging can free the attachment.
     }
     item->owner = bot->guid; bot->inventory[item->guid] = item;
+    for (uint32 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        if (!bot->backpack.count(slot)) { bot->backpack[slot] = item; break; }
 }
 void WorldSession::HandleMailDelete(WorldPacket& packet)
 {
@@ -529,6 +557,19 @@ struct Scenario
         mail->deliver_time = now; mail->expire_time = now + 1000;
         if (item) { mail->items.push_back({item->guid.value}); bot.attachments[item->guid.value] = item; }
         Mail& result = *mail; mails.push_back(std::move(mail)); bot.mails.push_back(&result); return result;
+    }
+    std::string Subject(Item const& item, MailAuctionAnswers response)
+    {
+        AuctionEntry auction; auction.Id = 7; auction.item_template = item.GetEntry(); auction.itemCount = item.count;
+        return auction.BuildAuctionMailSubject(response);
+    }
+    // List the stack, let the auction expire and collect the returned stack.
+    void Unsold(Item& item)
+    {
+        assert(Visit()); assert(bot.session.lastItem == item.guid && !bot.GetItemByGuid(item.guid));
+        Receipt(&item).subject = Subject(item, AUCTION_EXPIRED); auctionMgr.items.erase(item.guid);
+        assert(Visit(true)); assert(bot.GetItemByGuid(item.guid) == &item);
+        now += sPlayerbotAIConfig.earnedAuctionInterval;
     }
     bool Visit(bool mailbox = false)
     {
@@ -949,6 +990,60 @@ void ServiceTests()
         assert(SellsToVendor(nullptr, ITEM_USAGE_VENDOR) && SellsToVendor(nullptr, ITEM_USAGE_AH));
         assert(!SellsToVendor(nullptr, ITEM_USAGE_DISENCHANT) && !SellsToVendor(&s.bot.ai, ITEM_USAGE_EQUIP));
     }
+    {
+        // The parser reads the subjects the core writes.
+        Scenario s; Item& item = s.MakeItem(2589, 20);
+        auto subject = ParseAuctionSubject(s.Subject(item, AUCTION_EXPIRED));
+        assert(subject && subject->item == 2589 && subject->response == AUCTION_EXPIRED && subject->auction == 7);
+        assert(subject->count == 20);
+    }
+    {
+        // Stock that keeps expiring unsold goes to a vendor instead of paying more deposits.
+        Scenario s; Item& item = s.BagItem(100, 5);
+        for (uint32 expiry = 0; expiry < MaxUnsoldListings; ++expiry)
+        {
+            assert(HasSurplus(&s.bot.ai) && ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_AH));
+            s.Unsold(item);
+        }
+        assert(!HasSurplus(&s.bot.ai) && !ShouldReserveForAuction(&s.bot.ai, &item, ITEM_USAGE_AH));
+        assert(HasVendorSurplus(&s.bot.ai)); assert(!s.Visit());
+        assert(s.bot.session.sells == int(MaxUnsoldListings) && s.bot.money == 10000 - 100 * MaxUnsoldListings);
+        now += UnsoldMemorySeconds; assert(HasSurplus(&s.bot.ai)); // Forgotten after a week.
+    }
+    {
+        // A sale shows demand and clears the record.
+        Scenario s; Item& item = s.BagItem(100, 5);
+        for (uint32 expiry = 0; expiry < MaxUnsoldListings; ++expiry)
+            s.Unsold(item);
+        assert(!HasSurplus(&s.bot.ai));
+        s.Receipt(nullptr, 400).subject = s.Subject(item, AUCTION_SUCCESSFUL);
+        assert(s.Visit(true)); assert(HasSurplus(&s.bot.ai) && s.bot.money == 10200);
+    }
+    {
+        // A returned stack counts once, when it is actually taken back.
+        Scenario s; Item& item = s.BagItem(100, 5);
+        assert(s.Visit()); s.Receipt(&item).subject = s.Subject(item, AUCTION_EXPIRED);
+        auctionMgr.items.erase(item.guid); s.bot.session.rejectItem = true;
+        assert(!s.Visit(true)); now += sPlayerbotAIConfig.earnedAuctionInterval; s.bot.session.rejectItem = false;
+        assert(s.Visit(true)); assert(s.bot.GetItemByGuid(item.guid) == &item && HasSurplus(&s.bot.ai));
+        now += sPlayerbotAIConfig.earnedAuctionInterval; s.Unsold(item); assert(!HasSurplus(&s.bot.ai));
+    }
+    {
+        // Won purchases and unreadable receipts are no unsold stock.
+        Scenario s; s.BagItem(100, 5);
+        Item& bought = s.MakeItem(100, 2); s.Receipt(&bought).subject = s.Subject(bought, AUCTION_WON);
+        Item& odd = s.MakeItem(100, 1); s.Receipt(&odd).subject = "100:0:3:7";
+        assert(s.Visit(true)); assert(s.bot.inventory.size() == 3 && HasSurplus(&s.bot.ai));
+        for (Item* item : {&bought, &odd}) assert(s.bot.GetItemByGuid(item->guid) == item);
+    }
+    for (int kind = 0; kind < 3; ++kind)
+    {
+        // Returned stock in the mailbox does not hold up purchases; won or unreadable mail does.
+        Scenario s; Item& offer = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); s.Offer(offer);
+        Item& mailed = s.MakeItem(100); Mail& mail = s.Receipt(&mailed); mail.deliver_time = now + 10;
+        mail.subject = kind == 0 ? s.Subject(mailed, AUCTION_EXPIRED) : kind == 1 ? s.Subject(mailed, AUCTION_WON) : "";
+        assert(s.Visit() == (kind == 0)); assert(s.bot.session.buys == (kind == 0 ? 1 : 0));
+    }
     assert(!ShouldReserveForAuction(nullptr, nullptr, ITEM_USAGE_AH));
     std::cout << "Earned auctions: production policy/service, conserved inventory/gold, safe receipts, queued revalidation, travel selection and bounded protection scans passed\n";
 }
@@ -962,18 +1057,23 @@ production = {
     'service': '\n'.join(line for line in (module / 'EarnedAuction.cpp').read_text().splitlines()
                           if not line.lstrip().startswith('#include')),
     'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
+    'policy': (module / 'EarnedAuctionPolicy.h').read_text(),
 }
 
 
 def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
-    text = text.replace('@@PROFESSION@@', parts['profession'])
+    text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
+    # The policy header is compiled from a private copy, so mutants can change it.
+    headers = Path(directory) / name
+    headers.mkdir()
+    (headers / 'EarnedAuctionPolicy.h').write_text(parts['policy'])
     target = Path(directory) / (name + '.cpp')
-    executable = Path(directory) / name
+    executable = Path(directory) / (name + '.bin')
     target.write_text(text + parts['service'] + policy_tests + service_tests)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
                     *SANITIZER_FLAGS, '-no-pie',
-                    '-g', '-I', str(module), '-I', str(travel_module),
+                    '-g', '-I', str(headers), '-I', str(module), '-I', str(travel_module),
                     str(target), '-o', str(executable)], check=True)
     return run_fixture([str(executable)], name)
 
@@ -1015,6 +1115,21 @@ mutations = [
      'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster();\n}\n\nbool HasVendorSurplus',
      'sRandomPlayerbotMgr.IsRandomBot(ai->GetBot());\n}\n\nbool HasVendorSurplus'),
     ('profession test without the skill line', 'profession', 'IsProfessionSkill(it->second->SkillLine)', 'true'),
+    ('unsold stock listed again', 'service', 'return CanList(ai, item) && RelistAllowed(ai, item) && ',
+     'return CanList(ai, item) && '),
+    ('unsold stock kept from the vendor', 'service', '    if (!RelistAllowed(ai, item))\n        return false;\n', ''),
+    ('refused take counted as unsold', 'service', 'if (taken && expired)', 'if (expired)'),
+    ('every receipt counted as unsold', 'service',
+     'bool const expired = subject && subject->response == AUCTION_EXPIRED;', 'bool const expired = true;'),
+    ('sale keeps the unsold record', 'service', 'Unsold().Sold(bot->GetGUID().GetCounter(), subject->item);',
+     'Unsold().Sold(0, subject->item);'),
+    ('returned stock holds up purchases', 'service', 'if (!subject || subject->response == AUCTION_WON)',
+     'if (!subject || subject->response == AUCTION_WON || subject)'),
+    ('unsold record never forgotten', 'policy',
+     'return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now);',
+     'return record.unsold < MaxUnsoldListings || (UnsoldForgotten(record, now) && false);'),
+    ('subject with a second field accepted', 'policy', '    if (fields[1])\n        return {};\n', ''),
+    ('partial subject field accepted', 'policy', 'parsed != last', 'false'),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-earned-auctions-') as temporary:

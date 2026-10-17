@@ -24,12 +24,17 @@ sells outgrown bound gear to a vendor.
 Buyers select useful equipment, supplies or gathering tools while reserving
 money for ordinary upkeep. Each purchase costs at most a quarter of the current
 balance and must fit the available category budget. Bots cannot buy their own
-or same-account auctions. They wait while an outstanding bid or uncollected
-auction attachment exists. Other bots' auctions are eligible because the buyer
-pays and the seller gives up the actual item.
+or same-account auctions. They wait while an outstanding bid or an uncollected
+won item exists. Other bots' auctions are eligible because the buyer pays and
+the seller gives up the actual item.
 
 A bot maintains at most 20 listings and attempts at most two new listings and
-one buyout per visit. Auctions last 12 hours.
+one buyout per visit. Bots list for the 12-hour duration, which
+`Rate.Auction.Time` scales.
+
+A stack that expires unsold twice is not listed again for a week; the bot sells
+it to a vendor instead. A completed sale of the item clears that record. The
+record is kept in server memory, so a restart forgets it.
 
 ## Pricing and travel
 
