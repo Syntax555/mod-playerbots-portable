@@ -10,6 +10,7 @@ from FixtureSupport import (
     TIMEOUT,
     cxx,
     function,
+    pinned_source,
     prepared_core,
     source_argument,
 )
@@ -25,11 +26,10 @@ queue = (core / 'src/server/game/Battlegrounds/BattlegroundQueue.cpp').read_text
 mgr = (core / 'src/server/game/Battlegrounds/BattlegroundMgr.cpp').read_text()
 hooks = (core / 'src/server/game/Scripting/ScriptDefines/AllBattlegroundScript.cpp').read_text()
 interfaces = (core / 'src/server/game/Scripting/ScriptDefines/AllBattlegroundScript.h').read_text()
-macros = (core / 'src/server/game/Scripting/ScriptMgrMacros.h')
+macro_path = 'src/server/game/Scripting/ScriptMgrMacros.h'
+macros = core / macro_path
 # A minimal scratch tree can point to the pinned core's unchanged hook-dispatch macro.
-if not macros.exists():
-    macros = repo / 'azerothcore-wotlk/src/server/game/Scripting/ScriptMgrMacros.h'
-macro_text = macros.read_text()
+macro_text = macros.read_text() if macros.exists() else pinned_source('azerothcore-wotlk', macro_path)
 macro_start = macro_text.index('#define CALL_ENABLED_BOOLEAN_HOOKS(')
 macro = macro_text[macro_start:macro_text.index('\n\n', macro_start)]
 selector = function(queue, 'bool BattlegroundQueue::SelectRatedArenaTeams(')

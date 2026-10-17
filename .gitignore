@@ -2,6 +2,9 @@
 /dist
 /output
 /.module-cache
+# Preserve local checkouts left by the former submodules.
+/azerothcore-wotlk
+/mod-playerbots
 /*.cer
 /*.pfx
 *.exe

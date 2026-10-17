@@ -1,6 +1,6 @@
 # Used both by the superbuild and by `cmake -P cmake/PrepareModules.cmake`.
-# The submodules stay pristine. The server always builds from the generated
-# core checkout in .module-cache/prepared-core, which holds the module copies.
+# Locked sources are fetched into .module-cache. The server always builds from
+# the generated core checkout in prepared-core, which holds the module copies.
 cmake_minimum_required(VERSION 3.19)
 
 get_filename_component(PORTABLE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
@@ -31,6 +31,28 @@ function(portable_git)
     if(NOT _result EQUAL 0)
         message(FATAL_ERROR "Git failed (${_result}): ${ARGN}\n${_output}${_error}")
     endif()
+endfunction()
+
+# Fetch only missing pinned commits; cached sources also work offline.
+function(portable_fetch_source name url revision output_variable)
+    string(LENGTH "${revision}" _revision_length)
+    if(NOT name MATCHES "^[A-Za-z0-9_-]+$" OR NOT revision MATCHES "^[a-f0-9]+$"
+        OR NOT _revision_length EQUAL 40
+        OR NOT url MATCHES "^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+[.]git$")
+        message(FATAL_ERROR "Invalid pinned source in versions.lock.json: ${name}")
+    endif()
+    set(_source_dir "${PORTABLE_SOURCE_DIR}/.module-cache/${name}")
+    if(NOT EXISTS "${_source_dir}/.git")
+        file(MAKE_DIRECTORY "${_source_dir}")
+        portable_git(init --quiet "${_source_dir}")
+    endif()
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_source_dir}" cat-file -e "${revision}^{commit}"
+        RESULT_VARIABLE _has_revision OUTPUT_QUIET ERROR_QUIET)
+    if(NOT _has_revision EQUAL 0)
+        message(STATUS "Fetching pinned ${name} ${revision}")
+        portable_git(-C "${_source_dir}" fetch --depth=1 "${url}" "${revision}")
+    endif()
+    set(${output_variable} "${_source_dir}" PARENT_SCOPE)
 endfunction()
 
 # Records a checked-in patch's hash in a stamp and writes the LF copy that is
@@ -73,17 +95,12 @@ function(portable_apply_patches directory)
     endforeach()
 endfunction()
 
-string(JSON _core_source GET "${PORTABLE_VERSIONS_JSON}" core source)
+string(JSON _core_name GET "${PORTABLE_VERSIONS_JSON}" core name)
+string(JSON _core_url GET "${PORTABLE_VERSIONS_JSON}" core url)
 string(JSON _core_revision GET "${PORTABLE_VERSIONS_JSON}" core revision)
-set(PORTABLE_CORE_SOURCE_DIR "${PORTABLE_SOURCE_DIR}/${_core_source}")
-execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${PORTABLE_CORE_SOURCE_DIR}" rev-parse HEAD
-    RESULT_VARIABLE _core_result OUTPUT_VARIABLE _core_head ERROR_QUIET
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-if(NOT _core_result EQUAL 0 OR NOT _core_head STREQUAL _core_revision)
-    message(FATAL_ERROR "Initialize the pinned submodules first: git submodule update --init --recursive.\nExpected AzerothCore ${_core_revision}; found '${_core_head}'.")
-endif()
+portable_fetch_source("${_core_name}" "${_core_url}" "${_core_revision}" PORTABLE_CORE_SOURCE_DIR)
 
-# A local shared clone keeps the original submodule intact and supplies the
+# A local shared clone keeps the source cache intact and supplies the
 # pinned Git revision to genrev. An empty patch list prepares it unchanged.
 string(JSON _core_patch_count ERROR_VARIABLE _core_patch_error
     LENGTH "${PORTABLE_VERSIONS_JSON}" core patches)
@@ -92,7 +109,7 @@ if(_core_patch_error)
 endif()
 set(_core_original "${PORTABLE_CORE_SOURCE_DIR}")
 set(_core_target "${PORTABLE_SOURCE_DIR}/.module-cache/prepared-core")
-set(_core_stamp "prepare: ${_prepare_script_hash}\n${_core_revision}\n")
+set(_core_stamp "prepare: ${_prepare_script_hash}\n${_core_url}\n${_core_revision}\n")
 set(_core_patches)
 if(_core_patch_count GREATER 0)
     math(EXPR _last_core_patch "${_core_patch_count} - 1")
@@ -115,7 +132,9 @@ endif()
 if(NOT _core_stamp STREQUAL _old_core_stamp)
     set(_core_stage "${PORTABLE_SOURCE_DIR}/.module-cache/staging-core")
     file(REMOVE_RECURSE "${_core_stage}")
-    portable_git(clone --shared --no-checkout --quiet "${_core_original}" "${_core_stage}")
+    # A fetch-only cache has no branch; clone would otherwise treat it as empty.
+    portable_git(-C "${_core_original}" update-ref refs/heads/portable-pinned "${_core_revision}")
+    portable_git(clone --shared --no-checkout --branch portable-pinned --quiet "${_core_original}" "${_core_stage}")
     portable_git(-C "${_core_stage}" config core.autocrlf false)
     portable_git(-C "${_core_stage}" checkout --detach --quiet "${_core_revision}")
     portable_apply_patches("${_core_stage}" ${_core_patches})
@@ -133,37 +152,12 @@ foreach(_index RANGE 0 ${_last_module})
     string(JSON _name GET "${PORTABLE_VERSIONS_JSON}" modules ${_index} name)
     string(JSON _url GET "${PORTABLE_VERSIONS_JSON}" modules ${_index} url)
     string(JSON _revision GET "${PORTABLE_VERSIONS_JSON}" modules ${_index} revision)
-    if(NOT _name MATCHES "^mod-[a-z0-9-]+$" OR NOT _revision MATCHES "^[a-f0-9]+$")
-        message(FATAL_ERROR "Invalid module name or revision in versions.lock.json: ${_name}")
-    endif()
-    string(LENGTH "${_revision}" _revision_length)
-    if(NOT _revision_length EQUAL 40 OR NOT _url MATCHES "^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+[.]git$")
-        message(FATAL_ERROR "Each module must have a full commit SHA and GitHub repository URL: ${_name}")
+    if(NOT _name MATCHES "^mod-[a-z0-9-]+$")
+        message(FATAL_ERROR "Invalid module name in versions.lock.json: ${_name}")
     endif()
     list(APPEND PORTABLE_MODULE_NAMES "${_name}")
 
-    string(JSON _source ERROR_VARIABLE _source_error GET "${PORTABLE_VERSIONS_JSON}" modules ${_index} source)
-    if(_source_error)
-        set(_source_dir "${PORTABLE_SOURCE_DIR}/.module-cache/${_name}")
-        if(NOT EXISTS "${_source_dir}/.git")
-            file(MAKE_DIRECTORY "${_source_dir}")
-            portable_git(init --quiet "${_source_dir}")
-        endif()
-        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_source_dir}" cat-file -e "${_revision}^{commit}"
-            RESULT_VARIABLE _has_revision OUTPUT_QUIET ERROR_QUIET)
-        if(NOT _has_revision EQUAL 0)
-            message(STATUS "Fetching pinned ${_name} ${_revision}")
-            portable_git(-C "${_source_dir}" fetch --depth=1 "${_url}" "${_revision}")
-        endif()
-    else()
-        set(_source_dir "${PORTABLE_SOURCE_DIR}/${_source}")
-        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_source_dir}" rev-parse HEAD
-            RESULT_VARIABLE _source_result OUTPUT_VARIABLE _source_head ERROR_QUIET
-            OUTPUT_STRIP_TRAILING_WHITESPACE)
-        if(NOT _source_result EQUAL 0 OR NOT _source_head STREQUAL _revision)
-            message(FATAL_ERROR "Initialize the pinned submodules first: git submodule update --init --recursive.\nExpected ${_name} ${_revision}; found '${_source_head}'.")
-        endif()
-    endif()
+    portable_fetch_source("${_name}" "${_url}" "${_revision}" _source_dir)
 
     set(_patches)
     set(_stamp "prepare: ${_prepare_script_hash}\n${_url}\n${_revision}\n")

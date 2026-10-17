@@ -4,7 +4,6 @@
     "name": "azerothcore-wotlk",
     "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
     "revision": "2a2211cd8f3d157da432ec0175ddd4b8a191931f",
-    "source": "azerothcore-wotlk",
     "patches": [
       "patches/azerothcore-era-shatter.patch",
       "patches/azerothcore-era-corruption.patch",
@@ -26,7 +25,6 @@
       "name": "mod-playerbots",
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
       "revision": "ed54b45939632ff386fbc038705c18b8584ce6d5",
-      "source": "mod-playerbots",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",

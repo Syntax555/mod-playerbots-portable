@@ -1,14 +1,12 @@
 """Replay the core modifier update and the delivered era repair on scoped world rows."""
 
 import argparse
-import json
 from pathlib import Path
 import re
 import sqlite3
 import struct
-import subprocess
 
-from FixtureSupport import prepared_core, source_argument
+from FixtureSupport import pinned_source, prepared_core, source_argument
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -20,9 +18,7 @@ core = args.core or prepared_core(repository)
 module = args.module or core / 'modules/mod-individual-progression'
 relative = 'data/sql/updates/db_world/2026_09_27_06.sql'
 upstream = (core / relative).read_text()
-revision = json.loads((repository / 'versions.lock.json').read_text())['core']['revision']
-assert upstream == subprocess.check_output(
-    ['git', '-C', str(repository / 'azerothcore-wotlk'), 'show', f'{revision}:{relative}'], text=True)
+assert upstream == pinned_source('azerothcore-wotlk', relative)
 migration = module / 'data/sql/world/updates/2026_10_14_00_creature_era_modifiers.sql'
 repair = migration.read_text()
 fields = ('DamageModifier', 'ArmorModifier', 'ExperienceModifier')

@@ -51,10 +51,10 @@ see [launcher options](updating.md#launcher-options).
 
 ## Source preparation
 
-Core and Playerbots submodules remain at their locked commits. CMake prepares a
-separate core copy and module/addon exports, then applies patches in manifest
-order. Preparation and packaging checks include patch hashes and verify addon
-files against the prepared source.
+CMake fetches the locked core, module and addon commits into `.module-cache/`,
+prepares a separate core copy and module/addon exports, then applies patches in
+manifest order. Preparation and packaging checks include patch hashes and
+verify addon files against the prepared source.
 
 The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
 (queued chat commands resolve their sender when they run) and `c583bc22`

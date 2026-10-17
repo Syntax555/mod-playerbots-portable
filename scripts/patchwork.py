@@ -48,8 +48,6 @@ def lock_entry(root, patch):
 
 
 def source_repository(main, kind, entry):
-    if entry.get('source'):
-        return main / entry['source']
     if kind == 'addon':
         return main / '.module-cache' / f"client-addon-{entry['name']}"
     return main / '.module-cache' / entry['name']

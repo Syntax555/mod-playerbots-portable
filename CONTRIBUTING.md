@@ -21,7 +21,6 @@ Core, module and addon changes are ordered patches listed in
 [versions.lock.json](versions.lock.json). Change a patch through its work tree:
 
 ```bash
-git submodule update --init --depth=1 azerothcore-wotlk mod-playerbots
 cmake -P cmake/PrepareModules.cmake
 python3 scripts/patchwork.py open patches/<name>.patch
 # edit the sources in the printed work tree, then:
