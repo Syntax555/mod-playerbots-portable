@@ -17,7 +17,8 @@
       "patches/azerothcore-earned-era-arena-matching.patch",
       "patches/azerothcore-recruit-a-friend-grant-limit.patch",
       "patches/azerothcore-windows-resource-includes.patch",
-      "patches/azerothcore-formation-minimum-velocity.patch"
+      "patches/azerothcore-formation-minimum-velocity.patch",
+      "patches/azerothcore-build-warnings.patch"
     ]
   },
   "modules": [
@@ -62,7 +63,8 @@
       "url": "https://github.com/jrad7/mod-dungeon-clear.git",
       "revision": "da0bdfbc724024929ffade3b0a2e83c2c0087f69",
       "patches": [
-        "patches/mod-dungeon-clear-earned-parties.patch"
+        "patches/mod-dungeon-clear-earned-parties.patch",
+        "patches/mod-dungeon-clear-build-warnings.patch"
       ]
     },
     {
@@ -124,7 +126,8 @@
         "patches/mod-era-talents-german-text.patch",
         "patches/mod-era-talents-spell-groups.patch",
         "patches/mod-era-talents-multibot-inspect.patch",
-        "patches/mod-era-talents-historical-priest-quests.patch"
+        "patches/mod-era-talents-historical-priest-quests.patch",
+        "patches/mod-era-talents-build-warnings.patch"
       ]
     }
   ],
