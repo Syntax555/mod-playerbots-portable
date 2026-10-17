@@ -35,8 +35,9 @@ database, configuration and first-run setup.
   control and encounter tactics, including Molten Core, Blackwing Lair and
   Zul'Gurub. Autonomous raid recruitment remains outside the supported scope.
   See [raid support](docs/bot-dungeons.md#raids).
-- **Earned bot economy:** bots train, repair and buy supplies with their own
-  gold, and trade owned items through normal auctions and mailbox delivery.
+- **Earned bot economy:** bots train, repair and buy supplies and bags with
+  their own gold, and trade owned items through normal auctions and mailbox
+  delivery.
   See [auction trading](docs/earned-auctions.md).
 - **Automatic server updates:** the launcher downloads changed files, verifies
   hashes and preserves characters, databases and custom settings. Matching

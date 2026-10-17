@@ -68,7 +68,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Level, quest and leader-progress synchronization | Disabled |
 | Routine free talent resets / spell grants | Disabled |
 | Ordinary paid training and earned talent allocation | Enabled |
-| Autonomous vendor, repair, training and supply visits | Enabled; paid with the bot's own gold |
+| Autonomous vendor, repair, training, supply and bag visits | Enabled; paid with the bot's own gold |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
 | Automatic use of earned loot upgrades | Enabled |
 | Equipment upgrades / other useful group loot | Need / Greed, subject to native loot eligibility |

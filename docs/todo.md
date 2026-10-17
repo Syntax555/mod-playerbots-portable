@@ -58,7 +58,8 @@ and ordinary player actions.
 - [ ] Verify in-game the behavior covered so far only by fixtures: discovered
   flight routes, Drain Soul shards for every warlock spec, SelfBot talent
   points, weighted bot specs, Spirit of Zandalar at the Zul'Gurub stage, Halion
-  credit in the Twilight Realm and dungeon recruitment at refused portals.
+  credit in the Twilight Realm, dungeon recruitment at refused portals and
+  vendor bag purchases.
 - [ ] Verify era experience in game: quest values per era, battleground
   objective XP, heirloom and holiday bonuses, and rest and quest money at the
   60/70 era caps.

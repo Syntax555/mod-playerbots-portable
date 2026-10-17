@@ -62,12 +62,12 @@ The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
 only carries `c9398d16`: RPG quest-giver search skips despawned quest givers.
 The regression fixture checks all four fixes against the prepared sources.
 
-The natural-progression, earned-auctions and era-talents patches target this
-pin. Natural progression uses the upstream ammunition checks and preserves
-queue-assigned battleground brackets. The era bridge resolves historical
-Tree of Life spells when deciding whether a healer should keep blanketing
-instead of attacking. The MultiBot role patch uses the canonical class
-strategy names for commands and status display: Warrior `prot`, Priest
+The natural-progression, earned-auctions, earned-bags and era-talents patches
+target this pin. Natural progression uses the upstream ammunition checks and
+preserves queue-assigned battleground brackets. The era bridge resolves
+historical Tree of Life spells when deciding whether a healer should keep
+blanketing instead of attacking. The MultiBot role patch uses the canonical
+class strategy names for commands and status display: Warrior `prot`, Priest
 `disc`, and Paladin `holy`, `ret` and `prot`.
 
 The client packager uses IP's locked base archive, merges generated spell and

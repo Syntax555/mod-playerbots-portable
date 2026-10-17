@@ -1,0 +1,144 @@
+diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
+index 69563cc..fcb35ba 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.cpp
++++ b/src/Ai/Base/Value/MaintenanceValues.cpp
+@@ -8,6 +8,7 @@
+ 
+ #include <unordered_map>
+ 
++#include "Bag.h"
+ #include "BudgetValues.h"
+ #include "EarnedAuction.h"
+ #include "EarnedAuctionTravel.h"
+@@ -23,6 +24,64 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
+            !botAI->HasGameClientMaster() && botAI->GetAiObjectContext()->GetValue<bool>("can move around")->Get();
+ }
+ 
++namespace
++{
++bool IsGeneralBag(ItemTemplate const* proto)
++{
++    return proto->Class == ITEM_CLASS_CONTAINER && proto->SubClass == ITEM_SUBCLASS_CONTAINER;
++}
++
++// EquipAction puts a new bag into the first empty slot, else replaces the smallest
++// bag. A general bag must not displace a quiver, ammo pouch or profession bag. A
++// replacement needs a free backpack slot: a bag stored inside the bag it replaces
++// cannot be equipped from there.
++bool ReplaceableBagSize(Player* bot, uint32& size)
++{
++    Bag const* smallest = nullptr;
++    for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
++    {
++        Bag const* bag = bot->GetBagByPos(slot);
++        if (!bag)
++        {
++            size = 0;
++            return true;
++        }
++        if (!smallest || bag->GetBagSize() <= smallest->GetBagSize())
++            smallest = bag;
++    }
++    size = smallest->GetBagSize();
++    if (!IsGeneralBag(smallest->GetTemplate()))
++        return false;
++    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
++        if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
++            return true;
++    return false;
++}
++
++// A carried bag upgrade is equipped by the ordinary upgrade action, or cannot be,
++// for example from inside the bag it would replace. Either way, buy no other.
++bool CarriesBagUpgrade(PlayerbotAI* botAI, uint32 replaceable)
++{
++    Player* bot = botAI->GetBot();
++    auto const upgrade = [&](Item const* item)
++    {
++        ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
++        return proto && IsGeneralBag(proto) && proto->ContainerSlots > replaceable &&
++               botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", proto->ItemId)->Get() ==
++                   ITEM_USAGE_EQUIP;
++    };
++    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
++        if (upgrade(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot)))
++            return true;
++    for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
++        if (Bag const* bag = bot->GetBagByPos(slot))
++            for (uint32 position = 0; position < bag->GetBagSize(); ++position)
++                if (upgrade(bag->GetItemByPos(position)))
++                    return true;
++    return false;
++}
++}  // namespace
++
+ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+ {
+     if (!CanRunNaturalMaintenance(botAI))
+@@ -104,8 +163,16 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+         }
+     }
+ 
++    // Natural random bots start with the backpack alone and buy bags like other gear.
++    // Characters players own keep their gear choices.
++    uint32 const gearBudget =
++        sRandomPlayerbotMgr.IsRandomBot(bot) ? AI_VALUE2(uint32, "free money for", uint32(NeedMoneyFor::gear)) : 0;
++    uint32 replaceableBag = 0;
++    bool const needsBag =
++        gearBudget && ReplaceableBagSize(bot, replaceableBag) && !CarriesBagUpgrade(botAI, replaceableBag);
++
+     bool const needsSupplies = needsFood || needsDrink || ammoSubclass || !neededReagents.empty();
+-    if (!canSell && !needsRepair && !spellBudget && !needsSupplies)
++    if (!canSell && !needsRepair && !spellBudget && !needsSupplies && !needsBag)
+         return {};
+ 
+     // An unreachable or failed NPC must not block the others while it stays nearest.
+@@ -144,19 +211,38 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+             }
+         }
+ 
+-        if (!needsSupplies || !npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
++        if ((!needsSupplies && !needsBag) || !npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
+             continue;
+ 
+         VendorItemData const* stock = npc->GetVendorItems();
+         if (!stock)
+             continue;
+ 
++        ItemTemplate const* bag = nullptr;
++        uint32 bagPrice = 0;
+         for (VendorItem const* item : stock->m_items)
+         {
+             ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item->item);
+             if (!proto || item->ExtendedCost)
+                 continue;
+ 
++            if (needsBag && IsGeneralBag(proto) && proto->ContainerSlots > replaceableBag)
++            {
++                // The largest affordable bag, then the cheaper one. The upgrade check is
++                // the one EquipAction applies once the bag is in the inventory.
++                uint32 const price = uint32(floor(proto->BuyPrice * bot->GetReputationPriceDiscount(npc)));
++                if (price <= gearBudget && bot->HasEnoughMoney(price) &&
++                    (!bag || proto->ContainerSlots > bag->ContainerSlots ||
++                     (proto->ContainerSlots == bag->ContainerSlots && price < bagPrice)) &&
++                    !(item->maxcount && npc->GetVendorItemCurrentCount(item) < proto->BuyCount) &&
++                    AI_VALUE2(ItemUsage, "item upgrade", proto->ItemId) == ITEM_USAGE_EQUIP)
++                {
++                    bag = proto;
++                    bagPrice = price;
++                }
++                continue;
++            }
++
+             // Match the wanted supply from template fields before the costlier usability check.
+             std::string const type = (needsFood || needsDrink) && proto->Class == ITEM_CLASS_CONSUMABLE
+                                          ? ItemUsageValue::GetConsumableType(proto, bot->GetMaxPower(POWER_MANA) > 0)
+@@ -189,6 +275,8 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+             if (price <= budget && bot->HasEnoughMoney(price))
+                 return {guid, NaturalMaintenanceType::BUY, proto->ItemId, uint32(budgetType)};
+         }
++        if (bag)
++            return {guid, NaturalMaintenanceType::BUY, bag->ItemId, uint32(NeedMoneyFor::gear)};
+     }
+ 
+     return {};

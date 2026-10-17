@@ -1,8 +1,8 @@
 """Check natural-mode upkeep selection and execution against small engine stubs.
 
 NaturalMaintenanceValue chooses every autonomous gold spend and visit: vendor
-sales, repairs, trainer lessons, food, drink, ammunition, reagents and the
-auction or mailbox visit clock. The production value, action, trigger and
+sales, repairs, trainer lessons, food, drink, ammunition, reagents, bags and
+the auction or mailbox visit clock. The production value, action, trigger and
 auction-trip clock run here with fake core objects. Mutation checks confirm
 that the guards, budgets and priorities are required.
 """
@@ -30,11 +30,17 @@ def declaration(source, opening):
 
 parser = argparse.ArgumentParser(description=__doc__)
 source_argument(parser, help='prepared Playerbots src directory')
+source_argument(parser, 'core', help='prepared core source directory')
 args = parser.parse_args()
-module = args.source or prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-playerbots/src'
+core = args.core or prepared_core(Path(__file__).resolve().parents[2])
+module = args.source or core / 'modules/mod-playerbots/src'
 values_header = (module / 'Ai/Base/Value/MaintenanceValues.h').read_text()
 values_source = (module / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
 usage_source = (module / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
+usage_header = (module / 'Ai/Base/Value/ItemUsageValue.h').read_text()
+player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
+item_header = (core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
+storage = (core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
 rpg = module / 'Ai/World/Rpg'
 action_header = (rpg / 'Action/NewRpgAction.h').read_text()
 action_source = (rpg / 'Action/NewRpgAction.cpp').read_text()
@@ -47,7 +53,25 @@ rpg_fields = re.findall(r'^    (?:bool|uint32|WorldPosition|ObjectGuid) (?:earne
                         info_header, re.MULTILINE)
 assert len(rpg_fields) >= 9, 'earned-auction visit clock fields were not found in NewRpgInfo'
 
+# The bag doubles follow the native accessors and the upgrade rule EquipAction applies:
+# "item upgrade" is QueryItemUsageForEquip, which accepts only a larger general bag.
+assert 'return item->ToBag();' in function(storage, 'Bag* Player::GetBagByPos(uint8 bag) const')
+assert 'creators["item upgrade"] = &ValueContext::item_upgrade;' in (module / 'Ai/Base/ValueContext.h').read_text()
+assert ('ItemUsage equip = QueryItemUsageForEquip(proto, randomPropertyId);\n    if (equip != ITEM_USAGE_NONE)\n'
+        '        return equip;') in function(usage_source, 'ItemUsage ItemUpgradeValue::Calculate()')
+equip_usage = function(usage_source, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip(')
+assert '{\n    if (bot->CanUseItem(itemProto) != EQUIP_ERR_OK)\n        return ITEM_USAGE_NONE;' in equip_usage
+container = function(equip_usage, 'if (itemProto->Class == ITEM_CLASS_CONTAINER)')
+assert container.count('return ') == 3
+assert 'if (itemProto->SubClass != ITEM_SUBCLASS_CONTAINER)\n            return ITEM_USAGE_NONE;' in container
+assert ('if (GetSmallestBagSize() >= itemProto->ContainerSlots)\n            return ITEM_USAGE_NONE;\n\n'
+        '        return ITEM_USAGE_EQUIP;\n    }') in container
+
 production = {
+    'native': '\n'.join(function(source, signature) + ';' for source, signature in (
+        (player_header, 'enum InventorySlots'), (player_header, 'enum InventoryPackSlots'),
+        (item_header, 'enum ItemClass'), (item_header, 'enum ItemSubclassContainer'),
+        (usage_header, 'enum ItemUsage : uint32'))),
     'types': '\n'.join([
         declaration(values_header, 'enum class NaturalMaintenanceType : uint8'),
         declaration(values_header, 'struct NaturalMaintenanceTask'),
@@ -62,6 +86,8 @@ production = {
         'void FinishTrip(PlayerbotAI* ai)', 'bool ContinueTrip(PlayerbotAI* ai)', 'void AbortTrip(PlayerbotAI* ai)',
         'void PostponeVisit(PlayerbotAI* ai)')),
     'guard': function(values_source, 'bool CanRunNaturalMaintenance(PlayerbotAI* botAI)'),
+    'helpers': re.search(r'namespace\n\{\n.*?\n\}  // namespace', values_source, re.DOTALL).group(0),
+    'smallest': function(usage_source, 'uint32 ItemUsageValue::GetSmallestBagSize()'),
     'value': function(values_source, 'NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()'),
     'action': function(action_source, 'bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)'),
     'trigger': function(trigger_source, 'bool NewRpgNaturalMaintenanceTrigger::IsActive()'),
@@ -88,6 +114,7 @@ prelude = r'''
 #include <vector>
 using uint8 = std::uint8_t;
 using uint32 = std::uint32_t;
+using int8 = std::int8_t;
 using int32 = std::int32_t;
 constexpr uint32 IN_MILLISECONDS = 1000;
 constexpr float INTERACTION_DISTANCE = 5.0f;
@@ -97,7 +124,7 @@ enum Powers { POWER_MANA };
 enum Classes { CLASS_WARRIOR = 1, CLASS_HUNTER = 3, CLASS_MAGE = 8 };
 enum PlayerSpellState { PLAYERSPELL_UNCHANGED, PLAYERSPELL_CHANGED, PLAYERSPELL_NEW, PLAYERSPELL_REMOVED };
 enum InventoryResult { EQUIP_ERR_OK, EQUIP_ERR_CANT_EQUIP_SKILL };
-enum ItemClass { ITEM_CLASS_CONSUMABLE = 0, ITEM_CLASS_WEAPON = 2, ITEM_CLASS_REAGENT = 5, ITEM_CLASS_PROJECTILE = 6 };
+@@NATIVE@@
 enum ItemSubclassConsumable
 {
     ITEM_SUBCLASS_CONSUMABLE = 0, ITEM_SUBCLASS_POTION = 1, ITEM_SUBCLASS_FLASK = 3, ITEM_SUBCLASS_FOOD = 5,
@@ -159,7 +186,7 @@ struct WorldObject
 struct ItemTemplate
 {
     struct ItemSpell { int32 SpellId = 0; uint32 SpellCategory = 0; };
-    uint32 ItemId = 0, Class = ITEM_CLASS_REAGENT, SubClass = 0, BuyPrice = 0, BuyCount = 1;
+    uint32 ItemId = 0, Class = ITEM_CLASS_REAGENT, SubClass = 0, BuyPrice = 0, BuyCount = 1, ContainerSlots = 0;
     ItemSpell Spells[MAX_ITEM_PROTO_SPELLS]{};
 };
 struct VendorItem { uint32 item = 0, maxcount = 0, incrtime = 0, ExtendedCost = 0, stock = 0; };
@@ -180,7 +207,15 @@ struct GameObject : WorldObject {};
 struct Item
 {
     ItemTemplate proto;
+    uint8 slot = 0;
     ItemTemplate const* GetTemplate() const { return &proto; }
+    uint8 GetSlot() const { return slot; }
+};
+struct Bag : Item
+{
+    std::vector<Item*> contents;
+    uint32 GetBagSize() const { return proto.ContainerSlots; }
+    Item* GetItemByPos(uint8 position) const { return position < GetBagSize() ? contents[position] : nullptr; }
 };
 struct PlayerSpell { PlayerSpellState State = PLAYERSPELL_UNCHANGED; bool Active = true; };
 struct SpellInfo
@@ -194,13 +229,15 @@ struct SpellInfo
 };
 struct Player : WorldObject
 {
-    bool alive = true, combat = false, flight = false;
+    bool alive = true, combat = false, flight = false, randomBot = false;
     uint32 money = 10000, maxMana = 100;
     uint8 cls = CLASS_MAGE;
     float discount = 1.0f;
     std::map<uint32, uint32> items;
     std::unordered_map<uint32, PlayerSpell*> spells;
     Item* ranged = nullptr;
+    std::map<uint8, Bag*> bags;
+    std::map<uint8, Item*> pack;
     std::set<uint32> unusable;
     ObjectGuid selection;
     mutable int usableChecks = 0;
@@ -211,8 +248,20 @@ struct Player : WorldObject
     uint8 getClass() const { return cls; }
     Item* GetItemByPos(uint8 bag, uint8 slot) const
     {
-        assert(bag == INVENTORY_SLOT_BAG_0 && slot == EQUIPMENT_SLOT_RANGED);
-        return ranged;
+        assert(bag == INVENTORY_SLOT_BAG_0);
+        if (slot == EQUIPMENT_SLOT_RANGED)
+            return ranged;
+        if (slot >= INVENTORY_SLOT_BAG_START && slot < INVENTORY_SLOT_BAG_END)
+            return GetBagByPos(slot);
+        assert(slot >= INVENTORY_SLOT_ITEM_START && slot < INVENTORY_SLOT_ITEM_END);
+        auto const found = pack.find(slot);
+        return found == pack.end() ? nullptr : found->second;
+    }
+    Bag* GetBagByPos(uint8 slot) const
+    {
+        assert(slot >= INVENTORY_SLOT_BAG_START && slot < INVENTORY_SLOT_BAG_END);
+        auto const found = bags.find(slot);
+        return found == bags.end() ? nullptr : found->second;
     }
     std::unordered_map<uint32, PlayerSpell*> const& GetSpellMap() const { return spells; }
     uint32 GetItemCount(uint32 item, bool inBankAlso) const
@@ -303,6 +352,10 @@ struct PlayerbotAIConfig
     bool naturalProgression = true, earnedAuctions = false, AllowLearnTrainerSpells = true;
     uint32 earnedAuctionInterval = 300;
 } sPlayerbotAIConfig;
+struct RandomPlayerbotMgr
+{
+    bool IsRandomBot(Player* bot) const { return bot && bot->randomBot; }
+} sRandomPlayerbotMgr;
 struct ChatHelper
 {
     static std::string FormatItem(ItemTemplate const* proto) { return "item:" + std::to_string(proto->ItemId); }
@@ -331,8 +384,11 @@ struct Fixture
 
 struct ItemUsageValue
 {
+    Player* bot = nullptr;
     static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
+    uint32 GetSmallestBagSize();
 };
+ItemUsage ItemUpgrade(Player* bot, std::string const& qualifier);
 
 template <class T>
 class Value
@@ -351,6 +407,14 @@ public:
     T Get() override { return value; }
     void Set(T next) override { value = next; }
 };
+class UpgradeValue : public Value<ItemUsage>
+{
+public:
+    Player* bot = nullptr;
+    std::string qualifier;
+    ItemUsage Get() override { return ItemUpgrade(bot, qualifier); }
+    void Set(ItemUsage) override {}
+};
 class ScanValue : public Value<GuidVector>
 {
 public:
@@ -363,7 +427,9 @@ struct AiObjectContext
 {
     std::map<std::string, ManualValue<bool>> flags;
     std::map<std::string, ManualValue<uint32>> numbers;
+    std::map<std::string, UpgradeValue> upgrades;
     std::map<std::string, int> reads;
+    Player* owner = nullptr;
     ScanValue rpgTargets, mailboxes;
     Value<NaturalMaintenanceTask>* maintenance = nullptr;
     template <class T>
@@ -374,6 +440,14 @@ struct AiObjectContext
             return &flags[name];
         else if constexpr (std::is_same_v<T, uint32>)
             return &numbers[name + ":" + qualifier];
+        else if constexpr (std::is_same_v<T, ItemUsage>)
+        {
+            assert(name == "item upgrade");
+            UpgradeValue& upgrade = upgrades[qualifier];
+            upgrade.bot = owner;
+            upgrade.qualifier = qualifier;
+            return &upgrade;
+        }
         else if constexpr (std::is_same_v<T, GuidVector>)
         {
             assert(name == "possible new rpg targets" || name == "natural mailboxes");
@@ -562,9 +636,25 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
     ++world.consumableChecks;
     return ProductionConsumableType(proto, hasMana);
 }
+@@SMALLEST@@
+// ItemUpgradeValue of a bag: QueryItemUsageForEquip's usability check and container
+// branch, which the script asserts in the production source.
+ItemUsage ItemUpgrade(Player* bot, std::string const& qualifier)
+{
+    ItemTemplate const& proto = objectMgr.items.at(uint32(std::stoul(qualifier)));
+    if (bot->unusable.count(proto.ItemId) || proto.Class != ITEM_CLASS_CONTAINER)
+        return ITEM_USAGE_NONE;
+    if (proto.SubClass != ITEM_SUBCLASS_CONTAINER)
+        return ITEM_USAGE_NONE;
+    ItemUsageValue usage{bot};
+    if (usage.GetSmallestBagSize() >= proto.ContainerSlots)
+        return ITEM_USAGE_NONE;
+    return ITEM_USAGE_EQUIP;
+}
 
 @@CLASSES@@
 @@GUARD@@
+@@HELPERS@@
 @@VALUE@@
 @@ACTION@@
 @@TRIGGER@@
@@ -583,6 +673,8 @@ struct Scenario
     std::deque<VendorItemData> stocks;
     std::deque<VendorItem> stock;
     std::deque<::Item> weapons;
+    std::deque<Bag> containers;
+    std::deque<::Item> fillers;
     std::deque<PlayerSpell> learned;
     std::unique_ptr<NaturalMaintenanceValue> value;
     std::unique_ptr<NewRpgNaturalMaintenanceAction> action;
@@ -599,6 +691,7 @@ struct Scenario
         bot.guid = {7};
         ai.bot = &bot;
         ai.context = &context;
+        context.owner = &bot;
         context.flags["can move around"].value = true;
         context.rpgTargets.scan = [this]() { return Nearby(world.creatures); };
         context.mailboxes.scan = [this]() { return Nearby(world.mailboxes); };
@@ -675,6 +768,41 @@ struct Scenario
         Trainer::Trainer& trainer = objectMgr.trainers[npc.entry];
         trainer.spells.push_back({spellId, cost, known, true});
         return trainer.spells.back();
+    }
+    ItemTemplate& BagTemplate(uint32 slots, uint32 price, uint32 subclass = ITEM_SUBCLASS_CONTAINER,
+                              uint32 itemClass = ITEM_CLASS_CONTAINER)
+    {
+        ItemTemplate& proto = Template(itemClass, subclass, price);
+        proto.ContainerSlots = slots;
+        return proto;
+    }
+    Bag& Container(ItemTemplate const& proto)
+    {
+        Bag& bag = containers.emplace_back();
+        bag.proto = proto;
+        bag.contents.resize(proto.ContainerSlots);
+        return bag;
+    }
+    Bag& Equip(uint8 slot, ItemTemplate const& proto)
+    {
+        Bag& bag = Container(proto);
+        bag.slot = slot;
+        bot.bags[slot] = &bag;
+        return bag;
+    }
+    // An unequipped bag in the backpack, or inside an equipped bag.
+    void Carry(ItemTemplate const& proto, Bag* inside = nullptr)
+    {
+        Bag& bag = Container(proto);
+        if (inside)
+            inside->contents[0] = &bag;
+        else
+            bot.pack[uint8(INVENTORY_SLOT_ITEM_START + bot.pack.size())] = &bag;
+    }
+    void FillBackpack()
+    {
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+            bot.pack[slot] = &fillers.emplace_back();
     }
     void Ranged(uint32 subclass)
     {
@@ -1134,6 +1262,132 @@ void CostTests()
     }
 }
 
+void BagTests()
+{
+    Scenario s;
+    s.bot.randomBot = true;
+    Creature& vendor = s.Npc(UNIT_NPC_FLAG_VENDOR, 10.0f);
+    ItemTemplate& herbs = s.BagTemplate(12, 50, ITEM_SUBCLASS_HERB_CONTAINER);
+    ItemTemplate& pouch = s.BagTemplate(6, 100);
+    ItemTemplate& satchel = s.BagTemplate(8, 500);
+    for (ItemTemplate const* proto : {&herbs, &pouch, &satchel})
+        s.Stock(vendor, *proto);
+    auto const buys = [&](ItemTemplate const& proto)
+    {
+        NaturalMaintenanceTask const task = s.Evaluate();
+        return s.Is(task, Type::BUY, vendor) && task.itemId == proto.ItemId &&
+               task.budgetType == uint32(NeedMoneyFor::gear);
+    };
+
+    // A random bot buys the largest general bag its own gear budget pays for.
+    assert(s.Evaluate().type == Type::NONE);
+    s.Budget(NeedMoneyFor::gear, 499);
+    assert(buys(pouch));
+    s.Budget(NeedMoneyFor::gear, 500);
+    assert(buys(satchel));
+    s.bot.money = 499;
+    assert(buys(pouch));
+    s.bot.money = 99;
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.money = 10000;
+    s.bot.discount = 0.8f;
+    s.Budget(NeedMoneyFor::gear, 400);
+    assert(buys(satchel));
+    s.bot.discount = 1.0f;
+    s.Budget(NeedMoneyFor::gear, 500);
+
+    // Characters players own keep their gear choices.
+    s.bot.randomBot = false;
+    s.context.reads.clear();
+    assert(s.Evaluate().type == Type::NONE && !s.context.reads.count("item upgrade"));
+    s.bot.randomBot = true;
+
+    // A bag must pass the upgrade check EquipAction applies, and limited stock must cover it.
+    s.bot.unusable.insert(satchel.ItemId);
+    assert(buys(pouch));
+    s.bot.unusable.clear();
+    VendorItem& limited = *vendor.vendor->m_items[2];
+    limited.maxcount = 1;
+    assert(buys(pouch));
+    limited.stock = 1;
+    assert(buys(satchel));
+    limited.maxcount = 0;
+    ItemTemplate& cheaper = s.BagTemplate(8, 450);
+    s.Stock(vendor, cheaper);
+    assert(buys(cheaper));
+
+    // Bags fill free slots, then replace the smallest general bag the upgrade check accepts.
+    s.Equip(INVENTORY_SLOT_BAG_START, pouch);
+    assert(buys(cheaper));
+    s.FillBackpack();
+    assert(buys(cheaper));
+    s.bot.pack.clear();
+    for (uint8 slot = INVENTORY_SLOT_BAG_START + 1; slot < INVENTORY_SLOT_BAG_END; ++slot)
+        s.Equip(slot, satchel);
+    assert(s.Evaluate().type == Type::NONE);
+    ItemTemplate& sack = s.BagTemplate(10, 2000);
+    s.Stock(vendor, sack);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Budget(NeedMoneyFor::gear, 2000);
+    assert(buys(sack));
+    // A bag stored inside the bag it replaces could not be equipped from there.
+    s.FillBackpack();
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.pack.erase(INVENTORY_SLOT_ITEM_END - 1);
+    assert(buys(sack));
+    s.bot.pack.clear();
+
+    // A quiver, ammo pouch or profession bag is never displaced by a general bag.
+    ItemTemplate& quiver = s.BagTemplate(6, 0, 2, ITEM_CLASS_QUIVER);
+    s.Equip(INVENTORY_SLOT_BAG_START, quiver);
+    assert(s.Evaluate().type == Type::NONE);
+    s.Equip(INVENTORY_SLOT_BAG_START, herbs);
+    assert(buys(sack));
+    s.Equip(INVENTORY_SLOT_BAG_START, pouch);
+
+    // A carried upgrade is equipped, or stays stuck, without buying another bag.
+    s.bot.bags.erase(INVENTORY_SLOT_BAG_START + 3);
+    s.Carry(satchel);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.pack.clear();
+    s.Carry(satchel, s.bot.bags[INVENTORY_SLOT_BAG_START]);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.bags[INVENTORY_SLOT_BAG_START]->contents[0] = nullptr;
+    s.Carry(herbs);
+    s.bot.unusable.insert(pouch.ItemId);
+    s.Carry(pouch);
+    assert(buys(sack));
+    s.bot.unusable.clear();
+    s.bot.pack.clear();
+    s.Equip(INVENTORY_SLOT_BAG_START + 3, satchel);
+
+    // Wanted supplies come first; the price is checked again at the vendor.
+    ItemTemplate& food = s.Template(ITEM_CLASS_CONSUMABLE, ITEM_SUBCLASS_FOOD, 50, 11);
+    s.Stock(vendor, food);
+    s.Budget(NeedMoneyFor::consumables, 100);
+    s.Count("food", 0);
+    NaturalMaintenanceTask const meal = s.Evaluate();
+    assert(s.Is(meal, Type::BUY, vendor) && meal.itemId == food.ItemId);
+    s.Count("food", 20);
+    s.bot.x = vendor.x;
+    assert(buys(sack));
+    s.Budget(NeedMoneyFor::gear, 1999);
+    assert(!s.Tick(0) && world.actions.empty());
+    s.Budget(NeedMoneyFor::gear, 2000);
+    assert(s.Evaluate().type == Type::NONE);
+    assert(buys(sack) && s.Tick(0));
+    assert(world.actions.back() == std::make_pair(std::string("buy"), "item:" + std::to_string(sack.ItemId)));
+
+    // Only general bags larger than the one they would replace reach the upgrade check.
+    for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
+        s.Equip(slot, sack);
+    s.context.reads.clear();
+    assert(s.Evaluate().type == Type::NONE && !s.context.reads.count("item upgrade"));
+    s.Equip(INVENTORY_SLOT_BAG_START, pouch);
+    s.context.reads.clear();
+    assert(s.Evaluate().type == Type::NONE && s.context.reads["item upgrade"] == 3);
+}
+
 int main()
 {
     GuardTests();
@@ -1144,14 +1398,17 @@ int main()
     AuctionTravelTests();
     StarvationTests();
     CostTests();
-    std::cout << "Natural maintenance: guards, priorities, budgets, auction visits, failed targets and scan costs passed\n";
+    BagTests();
+    std::cout << "Natural maintenance: guards, priorities, budgets, bags, auction visits, failed targets and scan costs "
+                 "passed\n";
 }
 '''
 
 
 def build(directory, parts, name):
     text = prelude
-    for key in ('types', 'classes', 'travel', 'guard', 'value', 'action', 'trigger', 'usage'):
+    for key in ('native', 'types', 'classes', 'travel', 'guard', 'helpers', 'smallest', 'value', 'action', 'trigger',
+                'usage'):
         text = text.replace('@@' + key.upper() + '@@', parts[key])
     (directory / (name + '.cpp')).write_text(text + tests)
     executable = directory / name
@@ -1189,7 +1446,8 @@ mutations = [
     ('rejected NPC chosen again', 'value', 'guid == rejected || ', '(rejected.IsEmpty() && guid.IsEmpty()) || '),
     ('NPC rejected for more than one search', 'value', 'botAI->rpgInfo.naturalMaintenanceRejected.Clear();', ''),
     ('vendor stock scanned without a wanted supply', 'value',
-     'if (!needsSupplies || !npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))', 'if (!npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))'),
+     'if ((!needsSupplies && !needsBag) || !npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))',
+     'if (!npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))'),
     ('usability checked before the supply match', 'value',
      'if (!proto || item->ExtendedCost)\n', 'if (!proto || item->ExtendedCost || bot->CanUseItem(proto) != EQUIP_ERR_OK)\n'),
     ('consumable type for every stock item', 'value',
@@ -1202,6 +1460,31 @@ mutations = [
      '    if ((AI_VALUE(bool, "can sell") && false) || EarnedAuction::IsEnabled(botAI))\n'),
     ('auctioneer search on every approach tick', 'action',
      '>= 2 * IN_MILLISECONDS', '+ 1 >= 1'),
+    ('bag for a character a player owns', 'value', 'sRandomPlayerbotMgr.IsRandomBot(bot) ?', 'true ?'),
+    ('bag above the gear budget', 'value', 'price <= gearBudget && ', ''),
+    ('bag without enough money', 'value', 'price <= gearBudget && bot->HasEnoughMoney(price) &&',
+     'price <= gearBudget &&'),
+    ('bag without the upgrade check', 'value',
+     ' &&\n                    AI_VALUE2(ItemUsage, "item upgrade", proto->ItemId) == ITEM_USAGE_EQUIP', ''),
+    ('limited bag stock ignored', 'value',
+     '!(item->maxcount && npc->GetVendorItemCurrentCount(item) < proto->BuyCount) &&\n                    ', ''),
+    ('largest bag not preferred', 'value', '(!bag || proto->ContainerSlots > bag->ContainerSlots ||', '(!bag ||'),
+    ('cheaper equal bag not preferred', 'value', 'price < bagPrice', 'price > bagPrice'),
+    ('special bag displaced', 'helpers', 'if (!IsGeneralBag(smallest->GetTemplate()))\n        return false;', ''),
+    ('replacement without a free backpack slot', 'helpers',
+     'if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))\n            return true;\n    return false;',
+     'if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))\n            return true;\n    return true;'),
+    ('carried bag upgrade ignored', 'value', '!CarriesBagUpgrade(botAI, replaceableBag)',
+     '!(CarriesBagUpgrade(botAI, replaceableBag) && false)'),
+    ('carried backpack bag ignored', 'helpers', 'slot < INVENTORY_SLOT_ITEM_END; ++slot)',
+     'slot < INVENTORY_SLOT_ITEM_START; ++slot)'),
+    ('bag inside a bag ignored', 'helpers', 'position < bag->GetBagSize()', 'position < bag->GetBagSize() && false'),
+    ('carried bag counted without the upgrade check', 'helpers',
+     (' &&\n               botAI->GetAiObjectContext()->GetValue<ItemUsage>("item upgrade", proto->ItemId)->Get() ==\n'
+      '                   ITEM_USAGE_EQUIP'), ''),
+    ('profession bag sent to the upgrade check', 'value', 'needsBag && IsGeneralBag(proto) && ', 'needsBag && '),
+    ('smaller bag sent to the upgrade check', 'value', 'proto->ContainerSlots > replaceableBag',
+     'proto->ContainerSlots + 1 > replaceableBag'),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temporary:

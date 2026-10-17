@@ -30,6 +30,7 @@
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
+        "patches/mod-playerbots-earned-bags.patch",
         "patches/mod-playerbots-era-talents.patch",
         "patches/mod-playerbots-earned-era-battlegrounds.patch",
         "patches/mod-playerbots-master-flight-learning.patch",
