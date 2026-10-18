@@ -71,7 +71,8 @@
       "url": "https://github.com/buildthehomelab/wow-mod-raid-clear.git",
       "revision": "fa299223a92a0806eb778a182e85a76f3f3feb62",
       "patches": [
-        "patches/mod-raid-clear-natural-progression.patch"
+        "patches/mod-raid-clear-natural-progression.patch",
+        "patches/mod-raid-clear-windows-identifiers.patch"
       ]
     },
     {

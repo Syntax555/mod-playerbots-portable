@@ -1,0 +1,48 @@
+diff --git a/src/Common/FixedSpots.h b/src/Common/FixedSpots.h
+index 8a19a36..418b9ca 100644
+--- a/src/Common/FixedSpots.h
++++ b/src/Common/FixedSpots.h
+@@ -22,11 +22,11 @@ class Unit;
+ 
+ namespace RaidClear::Spots
+ {
+-    // A tank holds within TANK_NEAR of its spot, a caster or healer within NEAR of its own place
++    // A tank holds within TANK_NEAR of its spot, a caster or healer within SPOT_NEAR of its own place
+     // round the spot (bots spread up to SCATTER round it). Within HOLD nothing but the raid
+     // mechanics walks it away.
+     constexpr float TANK_NEAR = 2.0f;
+-    constexpr float NEAR = 3.5f;
++    constexpr float SPOT_NEAR = 3.5f;
+     constexpr float SCATTER = 3.0f;
+     constexpr float HOLD = 8.0f;
+ 
+diff --git a/src/Raids/AhnQiraj/Aq40Spots.cpp b/src/Raids/AhnQiraj/Aq40Spots.cpp
+index e5623a8..e096823 100644
+--- a/src/Raids/AhnQiraj/Aq40Spots.cpp
++++ b/src/Raids/AhnQiraj/Aq40Spots.cpp
+@@ -377,7 +377,7 @@ namespace
+         return BugWant(bot, want);
+     }
+ 
+-    float SpotNear(SpotWant const& want) { return want.tank ? Spots::TANK_NEAR : Spots::NEAR; }
++    float SpotNear(SpotWant const& want) { return want.tank ? Spots::TANK_NEAR : Spots::SPOT_NEAR; }
+ 
+     // Skeram himself, landed on this off-tank's platform (it is standing on it) and not on a tank:
+     // the off-tank takes him before he Earth Shocks whoever he is on.
+diff --git a/src/Raids/MoltenCore/McRaidClear.cpp b/src/Raids/MoltenCore/McRaidClear.cpp
+index 026e0e5..d0b57bb 100644
+--- a/src/Raids/MoltenCore/McRaidClear.cpp
++++ b/src/Raids/MoltenCore/McRaidClear.cpp
+@@ -813,9 +813,9 @@ namespace
+         Unit* best = nullptr;
+         for (Unit* down : hounds.down)
+         {
+-            std::list<Creature*> near;
+-            down->GetCreaturesWithEntryInRange(near, CORE_HOUND_LINK_RANGE, NPC_CORE_HOUND);
+-            for (Creature* hound : near)
++            std::list<Creature*> nearbyHounds;
++            down->GetCreaturesWithEntryInRange(nearbyHounds, CORE_HOUND_LINK_RANGE, NPC_CORE_HOUND);
++            for (Creature* hound : nearbyHounds)
+             {
+                 if (hound == down || !hound->IsAlive() || !hound->IsInCombat() || hound->HasAura(SPELL_PLAY_DEAD) ||
+                     !down->IsWithinLOSInMap(hound) || !bot->IsValidAttackTarget(hound))
