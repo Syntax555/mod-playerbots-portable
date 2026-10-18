@@ -136,7 +136,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Era Events | Timed outdoor encounters at exact earned tiers 4, 6, 7 and 12; one real player required, no automatic victory payouts |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
-| Raid Clear | Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
+| Raid Clear | Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
 
 AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
 smaller parties receive the upstream scaling curve with reduced XP and money.
@@ -207,9 +207,9 @@ Bot pathfinding and encounter tactics depend on upstream AI. Disabling teleport
 recovery can leave bots stuck. Autonomous completion of every class quest,
 profession and raid is not guaranteed. Some upstream encounter actions retain
 special movement or combat shortcuts; the earned-play guards do not cover every
-AI action. For example, the specialized Onyxia
-whelp action recognizes entry `11262`, while restored Vanilla whelps use
-`301001`; generic combat does not establish full encounter support. Hunter bots
+AI action. Raid Clear's Onyxia tactics are implemented for the native and
+restored Vanilla encounters, but a full clear has not been verified in game;
+see [raid support](bot-dungeons.md#raids). Hunter bots
 do not tame pets, and warlock bots gain Soul Shards only from Drain Soul kills.
 
 Source fixtures, launcher checks and package verification cover the implemented
