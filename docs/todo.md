@@ -32,8 +32,8 @@ and ordinary player actions.
   (Drakefire Amulet, Blackhand's Command, Naxxramas) and respect instance
   lockouts.
 - [ ] Molten Core rune dousing with Aqual Quintessence earned by a bot.
-- [ ] Raid Clear coverage for Onyxia and Naxxramas as
-  upstream adds them; verify each raid before relying on it.
+- [ ] Raid Clear coverage for Naxxramas as upstream adds it; verify the raid
+  before relying on it.
 - [ ] Optional original raid difficulty: disable AutoBalance for 20- and
   40-player raids (`AutoBalance.Enable.20M`, `AutoBalance.Enable.40M`) once
   full bot raids are available, keeping party scaling for dungeons.
@@ -50,6 +50,13 @@ and ordinary player actions.
   multiple groups are travelling.
 - [ ] Verify player-led Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj raids
   with Raid Clear, including the Suppression Room without the raid cheat.
+- [ ] Verify a complete player-led Onyxia clear with Raid Clear and Playerbots:
+  each member's personal progression, Drakefire Amulet and portal refusal;
+  ground, air and landing phases; all Deep Breath directions, Fireball spacing,
+  head/tail positioning, Fear and threat recovery; restored Vanilla whelp
+  targeting, evading mobs, wipe and ordinary recovery. Check earned-era
+  EraTalents spells with normal resources, cooldowns, range and line of sight,
+  plus strategy recovery after an AI reset and the Onyxia enable switch.
 - [ ] Audit historical class quests beyond the restored priest families across
   Vanilla, TBC and Wrath, including teacher availability, objectives, rewards
   and paid training. Apply targeted fixes for confirmed discrepancies.

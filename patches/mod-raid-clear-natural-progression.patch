@@ -60,3 +60,36 @@ index be1d1c0..187b383 100644
          using namespace RaidClear::BlackwingLair;
          if (player->GetMapId() != MAP_ID || !RaidClear::GetConfig().IsRaidEnabled(MAP_ID) || !GET_PLAYERBOT_AI(player))
              return;
+diff --git a/src/Raids/OnyxiasLair/OnyRaidClear.cpp b/src/Raids/OnyxiasLair/OnyRaidClear.cpp
+index 99d8923..90c9e0e 100644
+--- a/src/Raids/OnyxiasLair/OnyRaidClear.cpp
++++ b/src/Raids/OnyxiasLair/OnyRaidClear.cpp
+@@ -724,8 +724,8 @@ namespace
+     }
+ 
+     // The nearest enemy in the list the bot can hurt and see (playerbots' Attack refuses a target
+-    // out of sight); with `whelpsOnly`, the nearest of the whelps playerbots' action knows (the
+-    // core's). Never Onyxia.
++    // out of sight); with `whelpsOnly`, the nearest whelp in either version of the fight.
++    // Never Onyxia.
+     Unit* NearestHittable(PlayerbotAI* botAI, Player* bot, GuidVector const& units, bool whelpsOnly)
+     {
+         Unit* best = nullptr;
+@@ -735,7 +735,7 @@ namespace
+             Unit* unit = botAI->GetUnit(guid);
+             if (!unit || !unit->IsAlive() || !unit->IsInWorld())
+                 continue;
+-            if (whelpsOnly ? unit->GetEntry() != NPC_ONYXIAN_WHELP
++            if (whelpsOnly ? !IsWhelp(unit)
+                            : (unit->GetEntry() == NPC_ONYXIA || unit->GetEntry() == NPC_ONYXIA_40))
+                 continue;
+             if (IsEvadingMob(unit) || !bot->IsValidAttackTarget(unit))
+@@ -789,7 +789,7 @@ bool RcOnyKillWhelpsAction::Execute(Event /*event*/)
+ {
+     // On a whelp that can be hurt: stay on it, as playerbots does.
+     Unit* current = AI_VALUE(Unit*, "current target");
+-    if (current && current->IsAlive() && current->GetEntry() == NPC_ONYXIAN_WHELP && !IsEvadingMob(current))
++    if (current && current->IsAlive() && IsWhelp(current) && !IsEvadingMob(current))
+         return false;
+ 
+     Unit* whelp = NearestHittable(botAI, bot, AI_VALUE(GuidVector, "possible targets"), true);

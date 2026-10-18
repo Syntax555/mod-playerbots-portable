@@ -107,7 +107,7 @@ yourself and the clear continues, or skip the objective with `dc skip`.
 
 ## Raids
 
-Raid Clear adds boss and trash mechanics for Molten Core, Blackwing Lair,
+Raid Clear adds boss and trash mechanics for Onyxia's Lair, Molten Core, Blackwing Lair,
 Zul'Gurub and both Ahn'Qiraj raids: kill order, main and off-tank roles, spacing
 and positioning against the bosses' abilities. They apply on these maps whether
 you lead the raid or a player-led clear walks it from boss to boss, alongside
@@ -122,6 +122,20 @@ Hunters must earn Tranquilizing Shot. Natural progression also keeps a bot's
 own crowd control in place when its formerly mind-controlled target returns
 to the raid; it does not cancel those auras artificially.
 AutoBalance scales raid difficulty to the number of players and bots present.
+
+Onyxia's Lair has a registered Raid Clear strategy for map 249 alongside
+Playerbots' `onyxia` strategy. The implementation covers Deep Breath movement
+from the server's spell positions, Fireball spacing, tank positioning and
+threat during the restored level-60 encounter. Its whelp action selects both
+native whelps (`11262`) and Individual Progression's Vanilla whelps (`301001`),
+retains a living, non-evading current whelp and skips evading targets.
+
+These are code and fixture checks; a complete Onyxia clear has not been
+verified in game. Each character still needs its own progression and native
+entry requirements, including the Drakefire Amulet where required. EraTalents
+keeps each bot's own historical spells and talents; ordinary attack and spell
+checks still apply. The remaining encounter tests are listed in the
+[gameplay validation checklist](todo.md#gameplay-validation).
 
 ## Travel and encounters
 
@@ -184,7 +198,11 @@ Raid Clear's tactics are set in `configs/modules/mod_raid_clear.conf`:
 | `RaidClear.Tanks.SeparateOnBosses` | `0` | Also separate tanked mobs during boss fights |
 | `RaidClear.DeathLog` | `1` | Log each raid death and its causes to `logs/Server.log` |
 | `RaidClear.MoltenCore.Enable`, `RaidClear.BlackwingLair.Enable`, `RaidClear.ZulGurub.Enable` | `1` | Tactics for each raid |
+| `RaidClear.OnyxiasLair.Enable` | `1` | Onyxia tactics for the native and restored level-60 encounters on map 249 |
 | `RaidClear.RuinsOfAhnQiraj.Enable`, `RaidClear.TempleOfAhnQiraj.Enable` | `1` | Ahn'Qiraj 20- and 40-player encounter tactics |
+
+`Playerbots.ApplyInstanceStrategies = 1` in `configs/modules/playerbots.conf`
+keeps Playerbots' own encounter strategies active alongside Raid Clear.
 
 The file's comments say Suppression Devices need the "raid" bot cheat or a
 rogue. Under natural progression bot cheats have no effect: only a bot that
