@@ -1,8 +1,8 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 1e28e9f..f21660a 100644
+index 14408de..a3741f2 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
-@@ -1656,6 +1656,13 @@ Playerbots.RandomBotJoinBG = 1
+@@ -1671,6 +1671,13 @@ Playerbots.AllowBattlegroundCommands = 0
  # Existing matches may finish. Disable when opening later-expansion PvP.
  Playerbots.VanillaBattlegroundsOnly = 0
  
@@ -322,7 +322,7 @@ index 0000000..fc6e281
 +
 +#endif
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 337518f..dbe0f9b 100644
+index c7dfe51..40092f9 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
 @@ -933,6 +933,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
@@ -488,7 +488,7 @@ index d673b7f..66843be 100644
      {
          this->playersLevel = sPlayerbotAIConfig.RandomBotStartingLevel;
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index bc0265d..23b77fd 100644
+index f5eebe0..b90fea3 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -86,6 +86,7 @@ bool PlayerbotAIConfig::Initialize()
@@ -500,10 +500,10 @@ index bc0265d..23b77fd 100644
      {
          LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 3775c5c..c7243bd 100644
+index 4e97ad8..af23b8f 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -112,6 +112,7 @@ public:
+@@ -114,6 +114,7 @@ public:
      std::atomic<std::shared_ptr<EarnedLevelBracketPolicy const>> earnedLevelBrackets{
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
@@ -512,7 +512,7 @@ index 3775c5c..c7243bd 100644
      bool EnableICCBuffs;
      bool AllowAccountBots, AllowGuildBots, AllowTrustedAccountBots;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index 5e529c6..b4d6274 100644
+index 0bbeb2a..29477f9 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -7,6 +7,8 @@
@@ -524,7 +524,7 @@ index 5e529c6..b4d6274 100644
  #include "Channel.h"
  #include "CheckMountStateAction.h"
  #include "Config.h"
-@@ -140,9 +142,53 @@ public:
+@@ -141,9 +143,53 @@ public:
          PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
          PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
          PLAYERHOOK_ON_GIVE_EXP,

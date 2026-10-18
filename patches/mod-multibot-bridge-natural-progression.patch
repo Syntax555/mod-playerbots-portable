@@ -1,5 +1,5 @@
 diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
-index 19f1e59..acf3361 100644
+index 5141b64..a674000 100644
 --- a/src/MultiBotBridge.cpp
 +++ b/src/MultiBotBridge.cpp
 @@ -14,6 +14,7 @@
@@ -10,25 +10,7 @@ index 19f1e59..acf3361 100644
  #include "ObjectAccessor.h"
  #include "ObjectGuid.h"
  #include "ObjectMgr.h"
-@@ -1341,7 +1342,7 @@ std::string GetPremadeSpecLink(uint8 classId, uint32 specIndex, uint32 botLevel)
-         seen.insert(level);
- 
-         std::ostringstream key;
--        key << "AiPlayerbot.PremadeSpecLink." << static_cast<uint32>(classId) << '.' << specIndex << '.' << level;
-+        key << "Playerbots.PremadeSpecLink." << static_cast<uint32>(classId) << '.' << specIndex << '.' << level;
- 
-         std::string const link = GetPremadeSpecConfigString(key.str());
-         if (!link.empty())
-@@ -1545,7 +1546,7 @@ std::vector<TalentSpecEntryData> BuildTalentSpecEntries(Player* bot)
-     for (uint32 specIndex = 0; specIndex <= 30; ++specIndex)
-     {
-         std::ostringstream nameKey;
--        nameKey << "AiPlayerbot.PremadeSpecName." << static_cast<uint32>(classId) << '.' << specIndex;
-+        nameKey << "Playerbots.PremadeSpecName." << static_cast<uint32>(classId) << '.' << specIndex;
- 
-         std::string const specName = GetPremadeSpecConfigString(nameKey.str());
-         if (specName.empty())
-@@ -3985,7 +3986,7 @@ PlayerbotAI* GetBotAI(Player* bot)
+@@ -4233,7 +4234,7 @@ PlayerbotAI* GetBotAI(Player* bot)
      return sPlayerbotsMgr.GetPlayerbotAI(bot);
  }
  
@@ -37,7 +19,7 @@ index 19f1e59..acf3361 100644
  {
      PlayerbotAI* const botAI = GetBotAI(bot);
      if (!botAI || !botAI->GetAiObjectContext())
-@@ -3999,6 +4000,9 @@ Creature* FindNearbyNpcWithFlag(Player* bot, uint32 npcFlag)
+@@ -4247,6 +4248,9 @@ Creature* FindNearbyNpcWithFlag(Player* bot, uint32 npcFlag)
          if (!unit || unit->IsHostileTo(bot) || !unit->HasNpcFlag(static_cast<NPCFlags>(npcFlag)))
              continue;
  
@@ -47,7 +29,7 @@ index 19f1e59..acf3361 100644
          if (Creature* const creature = unit->ToCreature())
              return creature;
      }
-@@ -4006,6 +4010,87 @@ Creature* FindNearbyNpcWithFlag(Player* bot, uint32 npcFlag)
+@@ -4254,6 +4258,87 @@ Creature* FindNearbyNpcWithFlag(Player* bot, uint32 npcFlag)
      return nullptr;
  }
  
@@ -135,7 +117,7 @@ index 19f1e59..acf3361 100644
  Creature* FindNearbyVendorSellingItem(Player* bot, uint32 itemId, uint32& vendorSlot, uint32& vendorExtendedCost, bool& sawVendor)
  {
      vendorSlot = 0;
-@@ -4655,7 +4740,8 @@ void SendTrainerPackets(Player* requester, ChatMsg replyType, std::string const&
+@@ -4901,7 +4986,8 @@ void SendTrainerPackets(Player* requester, ChatMsg replyType, std::string const&
      SendAddonPacket(requester, replyType, "TRAINER_END", headerPayload);
  }
  
@@ -145,7 +127,7 @@ index 19f1e59..acf3361 100644
  {
      if (!bot || !spellInfo)
      {
-@@ -4663,6 +4749,47 @@ bool LearnTrainerSpell(Player* bot, SpellInfo const* spellInfo, uint32 cost, std
+@@ -4909,6 +4995,47 @@ bool LearnTrainerSpell(Player* bot, SpellInfo const* spellInfo, uint32 cost, std
          return false;
      }
  
@@ -193,7 +175,7 @@ index 19f1e59..acf3361 100644
      if (!BotHasGoldCheat(bot))
      {
          if (GetBotTrainerFreeMoney(bot) < cost)
-@@ -4719,6 +4846,18 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
+@@ -4965,6 +5092,18 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
          return;
      }
  
@@ -212,7 +194,7 @@ index 19f1e59..acf3361 100644
      if (!expectedTrainerEntry)
      {
          SendTrainerLearnResult(requester, replyType, effectiveBotName, token, expectedTrainerEntry, spellIdValue, false, "NO_TRAINER", 0, 0);
-@@ -4735,6 +4874,8 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
+@@ -4981,6 +5120,8 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
      Creature* const trainerCreature = GetSelectedTrainer(requester, expectedTrainerEntry, trainerReason);
      if (!trainerCreature)
      {
@@ -221,30 +203,53 @@ index 19f1e59..acf3361 100644
          SendTrainerLearnResult(requester, replyType, effectiveBotName, token, expectedTrainerEntry, spellIdValue, false, trainerReason, 0, 0);
          return;
      }
-@@ -4758,15 +4899,20 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
- 
-         SpellInfo const* const spellInfo = sSpellMgr->GetSpellInfo(entry.spellId);
-         std::string learnReason;
--        if (LearnTrainerSpell(bot, spellInfo, entry.cost, learnReason))
-+        uint32 const moneyBefore = bot->GetMoney();
-+        if (LearnTrainerSpell(bot, trainerCreature, spellInfo, entry.cost, learnReason))
-         {
-             ++learnedCount;
--            spent += entry.cost;
-+            if (!sPlayerbotAIConfig.naturalProgression)
-+                spent += entry.cost;
-             reason = "OK";
-         }
-         else if (learnReason != "OK" && learnedCount == 0)
-             reason = learnReason;
- 
-+        if (sPlayerbotAIConfig.naturalProgression && moneyBefore > bot->GetMoney())
-+            spent += moneyBefore - bot->GetMoney();
+@@ -5008,15 +5149,20 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
+             {
+                 SpellInfo const* const spellInfo = sSpellMgr->GetSpellInfo(entry.spellId);
+                 std::string learnReason;
+-                if (LearnTrainerSpell(bot, spellInfo, entry.cost, learnReason))
++                uint32 const moneyBefore = bot->GetMoney();
++                if (LearnTrainerSpell(bot, trainerCreature, spellInfo, entry.cost, learnReason))
+                 {
+                     ++learnedCount;
+                     ++learnedThisPass;
+-                    spent += entry.cost;
++                    if (!sPlayerbotAIConfig.naturalProgression)
++                        spent += entry.cost;
+                     reason = "OK";
+                 }
+                 else if (learnReason != "OK" && learnedCount == 0)
+                     reason = learnReason;
 +
-         if (!learnAll)
++                if (sPlayerbotAIConfig.naturalProgression && moneyBefore > bot->GetMoney())
++                    spent += moneyBefore - bot->GetMoney();
+             }
+ 
+             if (learnedThisPass == 0)
+@@ -5033,15 +5179,20 @@ void RunTrainerLearnCommand(Player* requester, ChatMsg replyType, std::string co
+ 
+             SpellInfo const* const spellInfo = sSpellMgr->GetSpellInfo(entry.spellId);
+             std::string learnReason;
+-            if (LearnTrainerSpell(bot, spellInfo, entry.cost, learnReason))
++            uint32 const moneyBefore = bot->GetMoney();
++            if (LearnTrainerSpell(bot, trainerCreature, spellInfo, entry.cost, learnReason))
+             {
+                 ++learnedCount;
+-                spent += entry.cost;
++                if (!sPlayerbotAIConfig.naturalProgression)
++                    spent += entry.cost;
+                 reason = "OK";
+             }
+             else if (learnReason != "OK")
+                 reason = learnReason;
+ 
++            if (sPlayerbotAIConfig.naturalProgression && moneyBefore > bot->GetMoney())
++                spent += moneyBefore - bot->GetMoney();
++
              break;
+         }
      }
-@@ -5241,9 +5387,10 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
+@@ -5624,9 +5775,10 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
          return 0;
      }
  
@@ -257,7 +262,7 @@ index 19f1e59..acf3361 100644
          return 0;
      }
  
-@@ -5251,6 +5398,16 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
+@@ -5634,6 +5786,16 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
      while (Item* const item = FindBagItemByEntry(bot, itemId))
      {
          uint32 const stackCount = item->GetCount();
@@ -274,7 +279,7 @@ index 19f1e59..acf3361 100644
          ItemPosCountVec dest;
          InventoryResult const msg = bot->CanBankItem(NULL_BAG, NULL_SLOT, dest, item, false);
          if (msg != EQUIP_ERR_OK)
-@@ -5267,7 +5424,7 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
+@@ -5650,7 +5812,7 @@ uint32 MoveMatchingBagItemsToBank(Player* bot, uint32 itemId, uint32 requestedCo
              break;
      }
  
@@ -283,7 +288,7 @@ index 19f1e59..acf3361 100644
          reason = "ITEM_NOT_FOUND";
  
      return moved;
-@@ -5281,9 +5438,10 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
+@@ -5664,9 +5826,10 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
          return 0;
      }
  
@@ -296,7 +301,7 @@ index 19f1e59..acf3361 100644
          return 0;
      }
  
-@@ -5291,6 +5449,16 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
+@@ -5674,6 +5837,16 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
      while (Item* const item = FindBankItemByEntry(bot, itemId))
      {
          uint32 const stackCount = item->GetCount();
@@ -313,7 +318,7 @@ index 19f1e59..acf3361 100644
          ItemPosCountVec dest;
          InventoryResult const msg = bot->CanStoreItem(NULL_BAG, NULL_SLOT, dest, item, false);
          if (msg != EQUIP_ERR_OK)
-@@ -5307,7 +5475,7 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
+@@ -5690,7 +5863,7 @@ uint32 MoveMatchingBankItemsToBags(Player* bot, uint32 itemId, uint32 requestedC
              break;
      }
  
@@ -322,7 +327,7 @@ index 19f1e59..acf3361 100644
          reason = "ITEM_NOT_FOUND";
  
      return moved;
-@@ -6426,6 +6594,8 @@ void RunTalentApplyCommand(
+@@ -6809,6 +6982,8 @@ void RunTalentApplyCommand(
  
      if (!requester || !requester->GetSession())
          reason = "BAD_REQUEST";
@@ -331,7 +336,7 @@ index 19f1e59..acf3361 100644
      else if (!ConsumeTalentApplyRateLimit(requester))
          reason = "RATE_LIMIT";
      else if (!RegisterTalentApplyToken(requester, token))
-@@ -6609,6 +6779,8 @@ void RunTalentSpecApplyCommand(
+@@ -6992,6 +7167,8 @@ void RunTalentSpecApplyCommand(
  
      if (!requester || !requester->GetSession())
          reason = "BAD_REQUEST";
@@ -340,7 +345,16 @@ index 19f1e59..acf3361 100644
      else if (!ConsumeTalentSpecApplyRateLimit(requester))
          reason = "RATE_LIMIT";
      else if (!RegisterTalentSpecApplyToken(requester, token))
-@@ -7218,8 +7390,12 @@ void RunInventoryItemDepositExactCommand(
+@@ -7215,6 +7392,8 @@ void RunGlyphEquipCommand(
+ 
+     if (!requester || !requester->GetSession())
+         reason = "BAD_REQUEST";
++    else if (sPlayerbotAIConfig.naturalProgression)
++        reason = "NATURAL_PROGRESSION";
+     else if (!ConsumeGlyphEquipRateLimit(requester))
+         reason = "RATE_LIMIT";
+     else if (!RegisterGlyphEquipToken(requester, token))
+@@ -7927,8 +8106,12 @@ void RunInventoryItemDepositExactCommand(
                      reason = "SOURCE_STALE";
                  else if (action == "BANK_DEPOSIT")
                  {
@@ -355,7 +369,7 @@ index 19f1e59..acf3361 100644
                      else
                      {
                          ItemPosCountVec dest;
-@@ -8367,7 +8543,9 @@ void RunInventoryItemActionCommand(Player* requester, ChatMsg replyType, std::st
+@@ -9076,7 +9259,9 @@ void RunInventoryItemActionCommand(Player* requester, ChatMsg replyType, std::st
              reason = "BAD_ACTION";
      }
  
@@ -366,7 +380,58 @@ index 19f1e59..acf3361 100644
      if (ok)
          reason = "OK";
      else if (reason.empty())
-@@ -10286,6 +10464,8 @@ void RunSelfActionCommand(
+@@ -10505,6 +10690,12 @@ bool CreateManagedHunterPet(
+         return false;
+     }
+ 
++    if (sPlayerbotAIConfig.naturalProgression)
++    {
++        reason = "NATURAL_PROGRESSION";
++        return false;
++    }
++
+     CreatureTemplate const* const creature = sObjectMgr->GetCreatureTemplate(creatureEntry);
+     if (!creature)
+     {
+@@ -10928,6 +11119,13 @@ void RunHunterPetManageCommand(
+         return;
+     }
+ 
++    if (sPlayerbotAIConfig.naturalProgression &&
++        (action == "RENAME" || action == "CALL" || action == "DISMISS"))
++    {
++        SendHunterPetManageAck(requester, replyType, token, botName, action, 0, "", "NATURAL_PROGRESSION");
++        return;
++    }
++
+     uint32 resultEntry = 0;
+     std::string resultName;
+     bool const ok = ApplyHunterPetManage(bot, botAI, action, argument, resultEntry, resultName, reason);
+@@ -15228,7 +15426,9 @@ void ApplyPreparedAutogear(Player* requester, ChatMsg replyType,
+ 
+     Player* bot = nullptr;
+     uint32 qualityCap = 0, ilvlCap = 0, quality = 0, ilvl = 0;
+-    if (std::chrono::steady_clock::now() - plan.created > std::chrono::seconds(30))
++    if (sPlayerbotAIConfig.naturalProgression)
++        result.reason = "NATURAL_PROGRESSION";
++    else if (std::chrono::steady_clock::now() - plan.created > std::chrono::seconds(30))
+         result.reason = "PLAN_EXPIRED";
+     else if (!ResolveAutogearTarget(requester, plan.botName, bot, qualityCap, ilvlCap, result.reason))
+     {
+@@ -15924,6 +16124,12 @@ bool ApplyMaintenanceToBot(Player* bot, PlayerbotAI* botAI, std::string& reason)
+         return false;
+     }
+ 
++    if (sPlayerbotAIConfig.naturalProgression)
++    {
++        reason = "NATURAL_PROGRESSION";
++        return false;
++    }
++
+     if (!PLAYERBOT_CONFIG(MaintenanceCommand, maintenanceCommand))
+     {
+         reason = "DISABLED";
+@@ -16228,6 +16434,8 @@ void RunSelfActionCommand(
          reason = "NO_SESSION";
      else if (!IsSelfBot(requester))
          reason = "NOT_SELF_BOT";

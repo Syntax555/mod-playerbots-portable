@@ -1,8 +1,11 @@
 # fix: skip account lookups for empty progression filters
 
-Empty bot and exclusion regex options disable their filters, but `isBotAccount()`, `isExcludedAccount()` and `CanAccountCreateCharacter()` still look up account names and compile empty regexes. Skip each disabled filter and skip character-creation account lookup when both filters are empty. Configured matching and ordinary progression checks stay effective.
+At the recorded base revision, empty bot and exclusion regex options disable their filters, but `isBotAccount()`, `isExcludedAccount()` and `CanAccountCreateCharacter()` still look up account names and compile empty regexes. Skip each disabled filter and skip character-creation account lookup when both filters are empty. Configured matching and ordinary progression checks stay effective.
 
-This is a small alternative to the broader account cache proposal in #1308. That proposal currently still looks up accounts for empty filters; the empty-filter behavior can also be incorporated there. This patch adds no cache, overloads or account-rename behavior.
+This reference patch targets the pre-cache API. The pinned module includes
+[the merged account cache](https://github.com/ZhengPeiRu21/mod-individual-progression/pull/1308);
+[the runtime patch](../../patches/mod-individual-progression-empty-account-filters.patch)
+applies the empty-filter guards to its shared numeric account overloads.
 
 Validation: the three extracted proposed production methods pass a C++20 fixture with AddressSanitizer and UndefinedBehaviorSanitizer for null players, both empty filters (zero account queries), each configured filter, matching and nonmatching names, failed account lookup, and progression checks on character creation. The same fixture rejects the unmodified upstream methods. A full upstream server build has not been run.
 

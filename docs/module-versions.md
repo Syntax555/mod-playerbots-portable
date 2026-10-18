@@ -8,20 +8,20 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 
 | Component | Upstream repository | Locked revision | Role |
 | --- | --- | --- | --- |
-| AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `2a2211cd8f3d` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `ed54b4593963` | Natural progression, earned auctions and era-aware bots |
+| AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `8a4e76eac8c4` | Core server, historical spell/accounting hooks and earned-era PvP rules |
+| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `d750b4b3a50e` | Natural progression, earned auctions and era-aware bots |
 | AutoBalance | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) | `1d707cb61a09` | Instance scaling by actual party size |
-| Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `60336b349cce` | Earned content milestones and expansion access |
-| Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `da0bdfbc7240` | Autonomous earned-era parties and player-led clears without event shortcuts |
-| Raid Clear | [buildthehomelab/wow-mod-raid-clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | `a3c29f6aaaf4` | Boss and trash mechanics for Molten Core, Blackwing Lair and Zul'Gurub |
+| Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `acaa9b3c73f7` | Earned content milestones and expansion access |
+| Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `381554742ac0` | Autonomous earned-era parties and player-led clears without event shortcuts |
+| Raid Clear | [buildthehomelab/wow-mod-raid-clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | `fa299223a92a` | Boss and trash mechanics for Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj |
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `c3955915c76d` | Scoped party sharing of naturally dropped quest items |
 | World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Timed Vanilla events with individual earned-era and native recipient checks |
 | Era Events | [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) | `cf02786aceb5` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
 | LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `5d64585dd2ac` | Optional Dungeon Finder access by every participant's earned era |
-| MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `1da05982e478` | Server support for the MultiBot controls |
+| MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `8f703da2bbdb` | Server support for the MultiBot controls |
 | MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
 | Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
-| StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `6bb1882bd00d` | Native MPQ generation and verification |
+| StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
 | CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
 | CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records and 2.4.3 quest experience values |
 | CMaNGOS Classic core | [cmangos/mangos-classic](https://github.com/cmangos/mangos-classic) | `8ec338a1704e` | Historical spell mechanics and coefficients |
@@ -32,13 +32,13 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 
 The server ZIP bundles these Windows x64 runtime dependencies. The
 [release workflow](https://github.com/Syntax555/mod-playerbots-portable/blob/main/.github/workflows/release.yml)
-pins each download with its SHA-256 hash.
+pins the MySQL and OpenSSL archives with their SHA-256 hashes.
 
 | Runtime | Version | Location in the server ZIP |
 | --- | --- | --- |
-| MySQL Community Server | 8.0.40 | `mysql/` |
-| OpenSSL | 3.5.7, FireDaemon build | `libcrypto-3-x64.dll`, `libssl-3-x64.dll` and the `legacy.dll` provider at the root |
-| Boost | 1.84.0 | Linked statically into the servers |
+| MySQL Community Server | 8.0.46 | `mysql/` |
+| OpenSSL | 3.5.9, FireDaemon build | `libcrypto-3-x64.dll`, `libssl-3-x64.dll` and the `legacy.dll` provider at the root |
+| Boost | 1.92.0 | Linked statically into the servers |
 | Microsoft Visual C++ runtime | From the build's Visual Studio 2022 | DLLs at the root and in `mysql/bin/` |
 
 ## Server data download
@@ -57,10 +57,10 @@ manifest order. Preparation and packaging checks include patch hashes and
 verify addon files against the prepared source.
 
 The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
-(queued chat commands resolve their sender when they run) and `c583bc22`
-(addon messages do not command bots). `mod-playerbots-upstream-fixes.patch`
-only carries `c9398d16`: RPG quest-giver search skips despawned quest givers.
-The regression fixture checks all four fixes against the prepared sources.
+(queued chat commands resolve their sender when they run), `c583bc22`
+(addon messages do not command bots) and `c9398d16` (RPG quest-giver search
+skips despawned quest givers). The regression fixture checks all four fixes
+against the prepared sources.
 
 The natural-progression, earned-auctions, earned-bags and era-talents patches
 target this pin. Natural progression uses the upstream ammunition checks and
@@ -97,10 +97,11 @@ see the [configuration reference](configuration.md#supported-scope).
 Pins follow the core fork's `Playerbot` branch, Playerbots `master` and the
 `main` branch of MultiBot Chatless and MultiBot Bridge, not their GitHub
 default feature branch; other components follow their default branch. MultiBot
-Chatless and MultiBot Bridge move only together, and a newer pair needs a
-review of new bridge endpoints, such as pet taming, against natural progression.
+Chatless and MultiBot Bridge are checked as a compatible pair. New bridge
+endpoints, such as pet creation, glyph application and maintenance, must
+preserve natural progression.
 
-The Playerbots pin `ed54b459` reads `Playerbots.*` configuration names.
+The Playerbots pin `d750b4b3` reads `Playerbots.*` configuration names.
 Profiles and launcher settings use that prefix. Normal startup migrates legacy
 `AiPlayerbot.*` values and their managed baselines before merging profile
 updates; existing `Playerbots.*` values take precedence. See

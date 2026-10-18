@@ -437,8 +437,10 @@ stub = r'''
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <regex>
 #include <set>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -482,6 +484,7 @@ inline World* sWorld=&world;
 template<class... Args> void LogInfo(Args&&...) {}
 #define LOG_INFO(...) LogInfo(__VA_ARGS__)
 #define LOG_DEBUG(...) LogInfo(__VA_ARGS__)
+#define LOG_ERROR(...) LogInfo(__VA_ARGS__)
 struct ConfigMgr {
     std::map<std::string,std::string> values;
     template<class T> T GetOption(std::string const& name,T const& def,bool=true) const {
@@ -730,8 +733,12 @@ ip_functions = '\n'.join(function(ip_source, signature) for signature in (
     'bool IndividualProgression::IsStrictDefaultProgression(',
     'uint8 IndividualProgression_GetEarnedEra(',
     'bool IndividualProgression::hasPassedProgression(',
-    'bool IndividualProgression::isExcludedAccount(',
-    'bool IndividualProgression::isBotAccount(',
+    'void IndividualProgression::LoadAccountRegexes(',
+    'IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(',
+    'bool IndividualProgression::isExcludedAccount(Player*',
+    'bool IndividualProgression::isExcludedAccount(uint32',
+    'bool IndividualProgression::isBotAccount(Player*',
+    'bool IndividualProgression::isBotAccount(uint32',
     'bool IndividualProgression::isNormalAccount(',
     'void IndividualProgression::LoadCustomProgressionEntries(',
 ))

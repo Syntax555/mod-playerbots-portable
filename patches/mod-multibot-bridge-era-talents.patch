@@ -1,16 +1,16 @@
 diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
-index 41c43fe..2817e4a 100644
+index 077f85c..0622485 100644
 --- a/src/MultiBotBridge.cpp
 +++ b/src/MultiBotBridge.cpp
-@@ -29,6 +29,7 @@
- #include "RandomPlayerbotMgr.h"
- #include "ReputationMgr.h"
+@@ -34,6 +34,7 @@
+ #include "AttackAction.h"
  #include "AiObjectContext.h"
+ #include "AiFactory.h"
 +#include "EraTalentBridge.h"
  #include "Event.h"
  #include "EventProcessor.h"
  #include "Trigger.h"
-@@ -903,6 +904,16 @@ std::array<uint32, 3> BuildTalentTabPoints(Player* bot)
+@@ -1072,6 +1073,16 @@ std::array<uint32, 3> BuildTalentTabPoints(Player* bot)
      if (!bot)
          return tabs;
  

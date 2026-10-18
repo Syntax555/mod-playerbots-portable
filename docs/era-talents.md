@@ -135,7 +135,7 @@ Sources, the IP base client archive and StormLib are pinned in
 [the dependency manifest](../versions.lock.json). Preparation and packaging
 include ordered local patch hashes as part of build identity.
 
-From a source checkout on Linux with Git, CMake, a C/C++ toolchain,
+From a source checkout on Linux with Git, CMake 3.25 or newer, a C/C++ toolchain,
 Python 3/PyYAML, 7z, zlib and bzip2 development libraries:
 
 ```bash

@@ -32,7 +32,7 @@ and ordinary player actions.
   (Drakefire Amulet, Blackhand's Command, Naxxramas) and respect instance
   lockouts.
 - [ ] Molten Core rune dousing with Aqual Quintessence earned by a bot.
-- [ ] Raid Clear coverage for Onyxia, the Ahn'Qiraj raids and Naxxramas as
+- [ ] Raid Clear coverage for Onyxia and Naxxramas as
   upstream adds them; verify each raid before relying on it.
 - [ ] Optional original raid difficulty: disable AutoBalance for 20- and
   40-player raids (`AutoBalance.Enable.20M`, `AutoBalance.Enable.40M`) once
@@ -48,8 +48,8 @@ and ordinary player actions.
 - [ ] Verify long entrance and return paths in-game, including bends,
   interrupted movement and changed obstacles. Measure server tick time while
   multiple groups are travelling.
-- [ ] Verify player-led Molten Core, Blackwing Lair and Zul'Gurub raids with
-  Raid Clear, including the Suppression Room without the raid cheat.
+- [ ] Verify player-led Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj raids
+  with Raid Clear, including the Suppression Room without the raid cheat.
 - [ ] Audit historical class quests beyond the restored priest families across
   Vanilla, TBC and Wrath, including teacher availability, objectives, rewards
   and paid training. Apply targeted fixes for confirmed discrepancies.

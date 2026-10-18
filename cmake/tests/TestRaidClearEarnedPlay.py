@@ -25,6 +25,7 @@ SHORTCUTS = re.compile(r'\b(AddAura|SetGoState|TeleportTo|NearTeleportTo|AddItem
 GATE = re.compile(r'if \(sPlayerbotAIConfig\.naturalProgression\)\s*return\b')
 BWL = 'Raids/BlackwingLair/BwlRaidClear.cpp'
 ZG = 'Raids/ZulGurub/ZgRaidClear.cpp'
+CHARMED = 'Common/Charmed.cpp'
 DISCIPLINE = 'Common/RaidDiscipline.cpp'
 # Each reviewed shortcut and the function that must refuse it under natural progression.
 REVIEWED = {
@@ -32,7 +33,7 @@ REVIEWED = {
     (BWL, 'SetGoState'): 'bool RcBwlDisarmSuppressionAction::Execute(',
     (BWL, 'AddAura'): 'void OnPlayerResurrect(',
     (DISCIPLINE, 'learnSpell'): 'void TeachRaidSpells(Player* bot)',
-    (ZG, 'RemoveAurasDueToSpell'): 'bool RcZgControlCharmedAction::Execute(',
+    (CHARMED, 'RemoveAurasDueToSpell'): 'bool RcControlCharmedAction::Execute(',
 }
 # Each mutation adds an unreviewed shortcut or turns a refusal into a no-op.
 MUTATIONS = (
@@ -108,14 +109,14 @@ struct PlayerbotAI : PlayerbotAIBase {
  uint32 interruptRequests=0; void RequestSpellInterrupt(){++interruptRequests;}
  bool CanCastSpell(char const*,Player*)const{return canCast;} bool CastSpell(char const* name,Player* member){++casts;spell=name;target=member;return cast;}
 };
-bool CanPayFor(PlayerbotAI* ai,Player*,char const*){return ai->canPay;}
+namespace RaidClear { bool CanPayFor(PlayerbotAI* ai,Player*,char const*){return ai->canPay;} }
 bool claimed=false; uint32 claims=0,drops=0;
 bool ControlClaimedByOther(Player const*,Player const*){return claimed;}
 void ClaimControl(Player const*,Player const*){++claims;}
 void DropControlClaim(Player const*){++drops;}
 struct Event {};
-struct RcZgCharmedMemberTrigger { Player* bot; PlayerbotAI* botAI; bool IsActive(); };
-struct RcZgControlCharmedAction { Player* bot; PlayerbotAI* botAI; bool Execute(Event); };
+struct RcCharmedMemberTrigger { Player* bot; PlayerbotAI* botAI; bool IsActive(); };
+struct RcControlCharmedAction { Player* bot; PlayerbotAI* botAI; bool Execute(Event); };
 #include "production.inc"
 int main() {
  // A customized teaching option never grants the spell in natural mode.
@@ -127,7 +128,7 @@ int main() {
  AuraEffect own{118,10},foreign{118,99},stun{853,10};ally.effects[SPELL_AURA_MOD_CONFUSE]={&own,&foreign};ally.effects[SPELL_AURA_MOD_STUN]={&stun};
  foreignAlly.effects[SPELL_AURA_MOD_CONFUSE]={&foreign};dead.effects[SPELL_AURA_MOD_STUN]={&stun};dead.alive=false;elsewhere.effects[SPELL_AURA_MOD_STUN]={&stun};elsewhere.inMap=false;
  GroupReference otherMap{&elsewhere},corpse{&dead,&otherMap},otherCaster{&foreignAlly,&corpse},member{&ally,&otherCaster},self{&bot,&member};Group group{&self};bot.group=&group;
- RcZgCharmedMemberTrigger trigger{&bot,&ai};RcZgControlCharmedAction action{&bot,&ai};
+ RcCharmedMemberTrigger trigger{&bot,&ai};RcControlCharmedAction action{&bot,&ai};
  // Natural mode leaves even this bot's own hostile CC until it expires.
  sPlayerbotAIConfig.naturalProgression=true;assert(ControlsToLetGo(&bot).empty());assert(!trigger.IsActive());assert(!action.Execute({}));assert(ally.removed.empty()&&foreignAlly.removed.empty());
  // The upstream option still releases only this caster's CC outside natural mode.
@@ -144,7 +145,7 @@ int main() {
  // Every raid danger hook wakes the pinned AI scheduler after requesting the
  // ordinary spell interruption; it does not advance time or clear a spell/GCD.
  uint32 requests=ai.interruptRequests;
- for(auto wake:{WakeRaidBot0,WakeRaidBot1,WakeRaidBot2,WakeRaidBot3}) {
+ for(auto wake:{WakeRaidBot0,WakeRaidBot1,WakeRaidBot2,WakeRaidBot3,WakeRaidBot4,WakeRaidBot5,WakeRaidBot6}) {
   ai.SetNextCheckDelay(5000);assert(!ai.CanUpdateAI());wake(&ai);
   assert(ai.CanUpdateAI()&&ai.interruptRequests==++requests);
  }
@@ -170,23 +171,27 @@ def native_checks(sources):
     assert 'bot->InterruptSpell(currentSpell->GetCurrentContainer());' in update
     wakeups = []
     for index, relative in enumerate(('Raids/BlackwingLair/BwlPositions.cpp', 'Raids/MoltenCore/McRaidClear.cpp',
-                                      'Raids/OnyxiasLair/OnyRaidClear.cpp', ZG)):
+                                      'Raids/OnyxiasLair/OnyRaidClear.cpp', ZG,
+                                      'Raids/AhnQiraj/AqRaidClear.cpp', 'Raids/AhnQiraj/Aq40TwinEmperors.cpp',
+                                      'Raids/AhnQiraj/Aq40Skeram.cpp')):
         text = sources[relative]
-        calls = re.findall(r'botAI->RequestSpellInterrupt\(\);\s*botAI->ResetActionDuration\(\);', text)
+        calls = re.findall(r'(?:botAI|nearestCasting)->RequestSpellInterrupt\(\);\s*'
+                           r'(?:botAI|nearestCasting)->ResetActionDuration\(\);', text)
         assert len(calls) == 1, f'{relative} must wake the pinned AI scheduler after requesting interruption'
-        wakeups.append(f'void WakeRaidBot{index}(PlayerbotAI* botAI) {{ {calls[0]} }}')
-    zg = sources[ZG]
+        wake = calls[0].replace('nearestCasting->', 'botAI->')
+        wakeups.append(f'void WakeRaidBot{index}(PlayerbotAI* botAI) {{ {wake} }}')
+    charmed = sources[CHARMED]
     # Compile the changed functions and their real trigger, action and member
     # selection. Aura-effect ownership and removal match the native contract.
-    controls = zg[zg.index('    struct Control\n'):zg.index('    struct ControlClaim\n')]
+    controls = charmed[charmed.index('    struct Control\n'):charmed.index('    struct ControlClaim\n')]
     production = controls + '\n'.join(function(text, signature) for text, signature in (
         (base, 'void PlayerbotAIBase::SetNextCheckDelay('), (base, 'void PlayerbotAIBase::ResetActionDuration()'),
         (base, 'bool PlayerbotAIBase::CanUpdateAI()'),
         (sources[DISCIPLINE], 'void TeachRaidSpells(Player* bot)'),
-        (zg, 'int32 CharmLeftMs('), (zg, 'Player* MemberToControl('),
-        (zg, 'std::vector<std::pair<Player*, uint32>> ControlsToLetGo('),
-        (zg, 'bool ControlsCharmed('), (zg, 'bool RcZgCharmedMemberTrigger::IsActive()'),
-        (zg, 'bool RcZgControlCharmedAction::Execute('),
+        (charmed, 'int32 CharmLeftMs('), (charmed, 'Player* MemberToControl('),
+        (charmed, 'std::vector<std::pair<Player*, uint32>> ControlsToLetGo('),
+        (charmed, 'bool ControlsCharmed('), (charmed, 'bool RcCharmedMemberTrigger::IsActive()'),
+        (charmed, 'bool RcControlCharmedAction::Execute('),
     )) + '\n' + '\n'.join(wakeups)
     with tempfile.TemporaryDirectory(prefix='raid-clear-earned-') as directory:
         work = Path(directory)

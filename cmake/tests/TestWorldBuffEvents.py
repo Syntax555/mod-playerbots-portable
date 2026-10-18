@@ -190,6 +190,10 @@ amount_script = function(scripts[scripts.index('class spell_gen_disabled_above_6
                          '    void CalculateAmount(')
 target_script = function(scripts[scripts.index('class spell_gen_rallying_cry_of_the_dragonslayer'):],
                          '    void SelectTarget(')
+spell_script = (core / 'src/server/game/Spells/SpellScript.cpp').read_text()
+# A gameobject supplies no Unit caster, including when its trap has no owner.
+assert 'return m_spell->GetCaster()->ToUnit();' in function(spell_script, 'Unit* SpellScript::GetCaster()')
+assert 'return m_spell->GetCaster()->ToGameObject();' in function(spell_script, 'GameObject* SpellScript::GetGObjCaster()')
 area_defines = (core / 'src/server/game/Maps/AreaDefines.h').read_text()
 areas = '\n'.join('constexpr uint32 ' + match.group(0).replace(',', ';')
                   for name in ('AREA_ORGRIMMAR', 'AREA_STORMWIND_CITY',
@@ -223,7 +227,7 @@ enum SpellAttr2 { SPELL_ATTR2_ALLOW_DEAD_TARGET = 4 };
 constexpr int WORLDHOOK_ON_AFTER_CONFIG_LOAD = 1, WORLDHOOK_ON_STARTUP = 2, WORLDHOOK_ON_UPDATE = 3;
 AREAS
 PROGRESSION_ENUM
-struct Unit; struct Player; struct Aura;
+struct Unit; struct Player; struct Aura; struct Map;
 struct SpellDurationEntry { uint32 ID; int32 Duration[3]; };
 struct SpellInfo
 {
@@ -239,10 +243,15 @@ struct SpellInfo
 };
 struct WorldObject
 {
+    uint32 mapId = 0;
+    Map* map = nullptr;
     virtual ~WorldObject() = default;
     virtual Unit const* ToUnit() const { return nullptr; }
+    uint32 GetMapId() const { return mapId; }
+    Map* GetMap() const { assert(map); return map; }
     int32 CalcSpellDuration(SpellInfo const*) const;
 };
+struct GameObject : WorldObject {};
 struct Unit : WorldObject
 {
     uint32 level = 60;
@@ -270,19 +279,16 @@ struct Map
 struct Player : Unit
 {
     bool inWorld = true, gm = false;
-    uint32 area = AREA_STORMWIND_CITY, zone = AREA_STORMWIND_CITY, mapId = 0;
+    uint32 area = AREA_STORMWIND_CITY, zone = AREA_STORMWIND_CITY;
     int team = TEAM_ALLIANCE, reputation = REP_FRIENDLY;
     int durationModifier = 0, castCalls = 0, kind = 0, accountProgression = 18;
     uint32 money = 123456, xp = 999, inventory = 77, leaderProgression = 18;
     mutable uint32 questReads = 0;
     std::map<uint32, uint32> quests;
-    Map* map = nullptr;
     bool IsInWorld() const { return inWorld; }
     bool IsGameMaster() const { return gm; }
     uint32 GetAreaId() const { return area; }
     uint32 GetZoneId() const { return zone; }
-    uint32 GetMapId() const { return mapId; }
-    Map* GetMap() const { return map; }
     int GetTeamId() const { return team; }
     int GetReputationRank(uint32 faction) const { assert(faction == 76); return reputation; }
     uint32 GetQuestStatus(uint32 quest) const
@@ -326,8 +332,10 @@ public:
 class NativeTargetScript
 {
 public:
-    Player* caster;
-    Player* GetCaster() { return caster; }
+    Unit* caster = nullptr;
+    GameObject* gameObjectCaster = nullptr;
+    Unit* GetCaster() { return caster; }
+    GameObject* GetGObjCaster() { return gameObjectCaster; }
     TARGET_SCRIPT
 };
 struct Aura
@@ -498,6 +506,33 @@ void ExpectAura(Player const& player, uint32 spell, bool expected)
     assert(player.auras.contains(spell) == expected);
     assert(player.castCalls == 0);
     if (expected) assert(player.auras.at(spell)->applied == 1);
+}
+void NativeCasterTargets()
+{
+    for (uint32 mapId : {0U, MAP_KALIMDOR})
+    {
+        Scenario s;
+        Player& city = s.Add(mapId == MAP_KALIMDOR ? AREA_ORGRIMMAR : AREA_STORMWIND_CITY);
+        Player& outside = s.Add(17);
+        city.mapId = outside.mapId = mapId;
+        Unit npc; npc.mapId = mapId; npc.map = &s.map;
+        NativeTargetScript unitScript{&npc};
+        std::list<WorldObject*> targets{&outside};
+        unitScript.SelectTarget(targets);
+        assert(targets == std::list<WorldObject*>{&city});
+
+        GameObject ownerlessTrap; ownerlessTrap.mapId = mapId; ownerlessTrap.map = &s.map;
+        NativeTargetScript trapScript{nullptr, &ownerlessTrap};
+        assert(!trapScript.GetCaster() && trapScript.GetGObjCaster() == &ownerlessTrap);
+        targets = {&outside};
+        trapScript.SelectTarget(targets);
+        assert(targets == std::list<WorldObject*>{&city});
+
+        NativeTargetScript missingCaster;
+        targets = {&city};
+        missingCaster.SelectTarget(targets);
+        assert(targets.empty());
+    }
 }
 void SpillRegression()
 {
@@ -824,6 +859,7 @@ void OneAuraPerEligibleOnlinePlayer()
 int main(int argc, char**)
 {
     InitializeSpells();
+    NativeCasterTargets();
     SpillRegression();
     if (argc > 1) return 0;
     EarnedEraAndNativeGates(); RegionsEligibilityAndNativeAura(); StrictDefaultAndOwnMilestones(); RealmCeiling(); ZulGurubStage();

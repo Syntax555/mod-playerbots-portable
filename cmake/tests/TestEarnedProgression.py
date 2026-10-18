@@ -9,7 +9,14 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from FixtureSupport import SANITIZER_FLAGS, TIMEOUT, cxx, function, prepared_core
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    TIMEOUT,
+    cxx,
+    function,
+    prepared_core,
+    reject_mutants,
+)
 
 
 root = prepared_core(Path(__file__).resolve().parents[2]) / 'modules'
@@ -17,7 +24,22 @@ ip = root / 'mod-individual-progression/src'
 pb = root / 'mod-playerbots/src'
 
 account = function((ip/'IndividualProgressionPlayer.cpp').read_text(), '    bool CanAccountCreateCharacter(')
-progress = function((ip/'IndividualProgression.cpp').read_text(), 'uint8 IndividualProgression::GetAccountProgression(')
+production = (ip/'IndividualProgression.cpp').read_text()
+# Disabled filters are cached alongside the compiled regexes, under the same
+# mutex. Release the read lock before GetAccountMatch takes its own locks.
+reload_filters = function(production, 'void IndividualProgression::LoadAccountRegexes(')
+for method, flag in (('isExcludedAccount', '_excludedAccountsEnabled'), ('isBotAccount', '_botAccountsEnabled')):
+    assert reload_filters.index('std::unique_lock<std::shared_mutex>') < reload_filters.index(flag + ' =')
+    predicate = function(production, 'bool IndividualProgression::' + method + '(uint32')
+    assert predicate.index('std::shared_lock<std::shared_mutex>') < predicate.index('if (!' + flag + ')')
+    assert '}\n\n    return GetAccountMatch(accountId).' in predicate
+progress = '\n'.join(function(production, signature) for signature in (
+    'uint8 IndividualProgression::GetAccountProgression(',
+    'void IndividualProgression::LoadAccountRegexes(',
+    'IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(',
+    'bool IndividualProgression::isExcludedAccount(uint32',
+    'bool IndividualProgression::isBotAccount(uint32',
+))
 enum = function((ip/'IndividualProgression.h').read_text(), 'enum ProgressionState') + ';'
 factory_source = (pb/'Bot/Factory/RandomPlayerbotFactory.cpp').read_text()
 valid = function(factory_source, 'bool RandomPlayerbotFactory::IsValidRaceClassCombination(')
@@ -44,7 +66,9 @@ prelude = r'''
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <regex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -69,6 +93,8 @@ struct Database {
     }
 } CharacterDatabase;
 int nameQueries=0;
+template<class... Args> void LogError(Args const&...) {}
+#define LOG_ERROR(...) LogError(__VA_ARGS__)
 struct AccountMgr { static bool GetName(uint32 account, std::string& name) {
     ++nameQueries; name = "RNDBOT" + std::to_string(account); return true; } };
 struct Pet { void GivePetXP(uint32) {} };
@@ -86,6 +112,15 @@ struct IndividualProgression {
     bool enabled=true, disableDefaultProgression=false, strictEarnedProgression=false;
     uint8 tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13, BotAccountsMaxLevel=80;
     std::string botAccountsRegex, excludedAccountsRegex;
+    struct AccountMatch { bool excluded=false, bot=false; };
+    std::regex _excludedAccountsRegex, _botAccountsRegex;
+    bool _excludedAccountsEnabled=false, _botAccountsEnabled=false;
+    std::unordered_map<uint32,AccountMatch> _accountMatchCache;
+    std::shared_mutex _accountMatchLock;
+    void LoadAccountRegexes();
+    AccountMatch GetAccountMatch(uint32);
+    bool isExcludedAccount(uint32);
+    bool isBotAccount(uint32);
     static uint8 GetAccountProgression(uint32);
     bool isExcludedAccount(Player*) { return false; }
     bool isBotAccount(Player*) { return false; }
@@ -120,7 +155,6 @@ bool IsAlliance(uint8 race) { return race==1 || race==3 || race==4 || race==7 ||
 uint32 counter=0;
 uint32 urand(uint32 lower, uint32 upper) { return lower + counter++ % (upper-lower+1); }
 #define LOG_DEBUG(...) ((void)0)
-#define LOG_ERROR(...) ((void)0)
 enum class NameRaceAndGender {};
 struct WorldSession { uint32 account=1; bool loaded=false; uint32 GetAccountId() { return account; } };
 struct RandomPlayerbotFactory {
@@ -141,6 +175,7 @@ struct TalentEntry { uint32 Row, Col; };
 
 tests = r'''
 int main() {
+    progression.LoadAccountRegexes();
     CharacterDatabase.rewarded[2] = {66018}; // another account must not unlock account 1
     WorldSession session;
     RandomPlayerbotFactory factory;
@@ -210,6 +245,24 @@ int main() {
     config.naturalProgression=false;
     TreeReset0(&trained,true);
     assert(trained.resets==1); // feature-off behavior remains available upstream
+    // Production account filters share the upstream cache. Each empty filter
+    // refuses before a login query even when the other pattern is configured.
+    progression.botAccountsRegex="^RNDBOT.*";
+    progression.LoadAccountRegexes();
+    assert(!progression.isExcludedAccount(uint32{1}) && nameQueries==0);
+    assert(progression.isBotAccount(uint32{1}) && nameQueries==1);
+    assert(progression.isBotAccount(uint32{1}) && nameQueries==1);
+    progression.botAccountsRegex="";
+    progression.excludedAccountsRegex="^RNDBOT.*";
+    progression.LoadAccountRegexes();
+    assert(!progression.isBotAccount(uint32{1}) && nameQueries==1);
+    assert(progression.isExcludedAccount(uint32{1}) && nameQueries==2);
+    progression.excludedAccountsRegex="["; // invalid config never excludes an account
+    progression.LoadAccountRegexes();
+    assert(!progression.isExcludedAccount(uint32{1}) && nameQueries==3);
+    progression.strictEarnedProgression=true;
+    assert(!progression.isExcludedAccount(uint32{1}) && !progression.isBotAccount(uint32{1}));
+    assert(nameQueries==3);
     std::cout << "Earned progression: account isolation, all tiers, creation/login, transition, XP and talent checks passed\n";
 }
 '''
@@ -226,6 +279,15 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
     target = Path(temporary) / 'regression.cpp'
     executable = Path(temporary) / 'regression'
     target.write_text(source)
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
-                    *SANITIZER_FLAGS, str(target), '-o', str(executable)], check=True)
+    def build(tree, output):
+        return [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
+                *SANITIZER_FLAGS, str(tree / 'regression.cpp'), '-o', str(output)]
+
+    subprocess.run(build(Path(temporary), executable), check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
+    reject_mutants(Path(temporary), (
+        ('empty excluded-account filter queries login', 'regression.cpp',
+         'if (!_excludedAccountsEnabled)', 'if (false)'),
+        ('empty bot-account filter queries login', 'regression.cpp',
+         'if (!_botAccountsEnabled)', 'if (false)'),
+    ), build, 'Earned progression')

@@ -1,5 +1,18 @@
+diff --git a/src/Common/Charmed.cpp b/src/Common/Charmed.cpp
+index 296458b..ad36b49 100644
+--- a/src/Common/Charmed.cpp
++++ b/src/Common/Charmed.cpp
+@@ -178,6 +178,8 @@ namespace
+     std::vector<std::pair<Player*, uint32>> ControlsToLetGo(Player* bot)
+     {
+         std::vector<std::pair<Player*, uint32>> spells;
++        if (sPlayerbotAIConfig.naturalProgression)
++            return spells;
+         Group* group = bot->GetGroup();
+         if (!group)
+             return spells;
 diff --git a/src/Common/RaidDiscipline.cpp b/src/Common/RaidDiscipline.cpp
-index 408b99d..aa1ea82 100644
+index c68c44a..ba4fa25 100644
 --- a/src/Common/RaidDiscipline.cpp
 +++ b/src/Common/RaidDiscipline.cpp
 @@ -136,6 +136,8 @@ namespace RaidClear::Discipline
@@ -12,10 +25,10 @@ index 408b99d..aa1ea82 100644
              bot->GetLevel() < TRANQUILIZING_SHOT_LEVEL || bot->HasSpell(SPELL_TRANQUILIZING_SHOT))
              return;
 diff --git a/src/Raids/BlackwingLair/BwlRaidClear.cpp b/src/Raids/BlackwingLair/BwlRaidClear.cpp
-index 15617c3..b36c964 100644
+index be1d1c0..187b383 100644
 --- a/src/Raids/BlackwingLair/BwlRaidClear.cpp
 +++ b/src/Raids/BlackwingLair/BwlRaidClear.cpp
-@@ -240,8 +240,12 @@ namespace
+@@ -296,8 +296,12 @@ namespace
      }
  
      // Same rule as mod-playerbots' own disarm: rogues always, everyone else with the "raid" cheat.
@@ -28,7 +41,7 @@ index 15617c3..b36c964 100644
          return bot->IsClass(CLASS_ROGUE) || botAI->HasCheat(BotCheatMask::raid);
      }
  
-@@ -271,6 +275,8 @@ bool RcBwlSuppressionDeviceTrigger::IsActive()
+@@ -327,6 +331,8 @@ bool RcBwlSuppressionDeviceTrigger::IsActive()
  
  bool RcBwlDisarmSuppressionAction::Execute(Event /*event*/)
  {
@@ -37,7 +50,7 @@ index 15617c3..b36c964 100644
      std::list<GameObject*> armed;
      ArmedDevicesInReach(bot, armed);
  
-@@ -1248,6 +1254,9 @@ public:
+@@ -1027,6 +1033,9 @@ public:
      // Shadow Flame without it. Death strips it; this puts it back the moment the bot stands up.
      void OnPlayerResurrect(Player* player, float /*restorePercent*/, bool& /*applySickness*/) override
      {
@@ -47,16 +60,3 @@ index 15617c3..b36c964 100644
          using namespace RaidClear::BlackwingLair;
          if (player->GetMapId() != MAP_ID || !RaidClear::GetConfig().IsRaidEnabled(MAP_ID) || !GET_PLAYERBOT_AI(player))
              return;
-diff --git a/src/Raids/ZulGurub/ZgRaidClear.cpp b/src/Raids/ZulGurub/ZgRaidClear.cpp
-index eb517b3..f836745 100644
---- a/src/Raids/ZulGurub/ZgRaidClear.cpp
-+++ b/src/Raids/ZulGurub/ZgRaidClear.cpp
-@@ -1125,6 +1125,8 @@ namespace
-     std::vector<std::pair<Player*, uint32>> ControlsToLetGo(Player* bot)
-     {
-         std::vector<std::pair<Player*, uint32>> spells;
-+        if (sPlayerbotAIConfig.naturalProgression)
-+            return spells;
-         Group* group = bot->GetGroup();
-         if (!group)
-             return spells;

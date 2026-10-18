@@ -3,7 +3,7 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-    "revision": "2a2211cd8f3d157da432ec0175ddd4b8a191931f",
+    "revision": "8a4e76eac8c4ccebf547113afe7b51d6c3e91641",
     "patches": [
       "patches/azerothcore-era-shatter.patch",
       "patches/azerothcore-era-corruption.patch",
@@ -25,7 +25,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
-      "revision": "ed54b45939632ff386fbc038705c18b8584ce6d5",
+      "revision": "d750b4b3a50effdf22bedc8032f0e8e5f7cb8091",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
@@ -34,8 +34,7 @@
         "patches/mod-playerbots-earned-era-battlegrounds.patch",
         "patches/mod-playerbots-master-flight-learning.patch",
         "patches/mod-playerbots-quest-area-triggers.patch",
-        "patches/mod-playerbots-loot-roll-policy.patch",
-        "patches/mod-playerbots-upstream-fixes.patch"
+        "patches/mod-playerbots-loot-roll-policy.patch"
       ]
     },
     {
@@ -46,7 +45,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
-      "revision": "60336b349cce2bc209d154bb840f2370f1cc16f2",
+      "revision": "acaa9b3c73f7b756dcf0a7c388b438dcc68cdd17",
       "patches": [
         "patches/mod-individual-progression-empty-account-filters.patch",
         "patches/mod-individual-progression-earned-milestones.patch",
@@ -61,7 +60,7 @@
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-      "revision": "da0bdfbc724024929ffade3b0a2e83c2c0087f69",
+      "revision": "381554742ac04361fff5cab95a12e0564fb16382",
       "patches": [
         "patches/mod-dungeon-clear-earned-parties.patch",
         "patches/mod-dungeon-clear-build-warnings.patch"
@@ -70,7 +69,7 @@
     {
       "name": "mod-raid-clear",
       "url": "https://github.com/buildthehomelab/wow-mod-raid-clear.git",
-      "revision": "a3c29f6aaaf42ea09e12a3158fc3aec9b8959e70",
+      "revision": "fa299223a92a0806eb778a182e85a76f3f3feb62",
       "patches": [
         "patches/mod-raid-clear-natural-progression.patch"
       ]
@@ -107,7 +106,7 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
-      "revision": "1da05982e478cb00e0b6c87314afe7e0e9653ffb",
+      "revision": "8f703da2bbdbb4a6daf6b0aaa292387a89f4ccc4",
       "patches": [
         "patches/mod-multibot-bridge-natural-progression.patch",
         "patches/mod-multibot-bridge-era-talents.patch",
@@ -156,7 +155,7 @@
     "nativeSpellRestorations": "era-data/vanilla/priest.yaml",
     "stormLib": {
       "url": "https://github.com/ladislav-zezula/StormLib.git",
-      "revision": "6bb1882bd00ddbc3729cac5dac0fda81a61e5514"
+      "revision": "116135c27e8c0dcf8ea0a0c549a6d737ce10fc73"
     },
     "localizations": {
       "deDE": {
