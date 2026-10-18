@@ -1,5 +1,5 @@
 diff --git a/conf/mod_dungeon_clear.conf.dist b/conf/mod_dungeon_clear.conf.dist
-index a6615b8..aa8695f 100644
+index a6615b8..d49d116 100644
 --- a/conf/mod_dungeon_clear.conf.dist
 +++ b/conf/mod_dungeon_clear.conf.dist
 @@ -2047,3 +2047,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
@@ -16,8 +16,8 @@ index a6615b8..aa8695f 100644
 +
 +# Normal Vanilla, TBC and Wrath dungeons by Dungeon Finder id. Entrance and exit portals,
 +# level band and capital faction come from the world data. A dungeon whose
-+# required Dungeon Clear objectives need a scripted shortcut, a quest item or a
-+# key is skipped and logged. Bot levels follow the dungeon's recommended band,
++# required Dungeon Clear objectives need a scripted shortcut or unaudited item
++# acquisition or opening action is skipped and logged. Bot levels follow the dungeon's recommended band,
 +# extended upward by LevelSpread (0-10) within its entry range and its expansion's level cap (60/70/80).
 +DungeonClear.AutonomousParties.Dungeons = "4,12"
 +DungeonClear.AutonomousParties.LevelSpread = 3
@@ -112,18 +112,19 @@ index 4ebe94b..62e7601 100644
              return false;
          // No navmesh to land on: on a map the core runs without pathfinding
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-index 10b9e59..451aebe 100644
+index 10b9e59..084c3b8 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
   * and/or modify it under version 3 of the License, or (at your option), any later version.
   */
  
++#include "DcEarnedEvents.h"
 +#include "DcEarnedPlay.h"
  #include "DungeonClearActions.h"
  #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
  
-@@ -2085,7 +2086,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2085,7 +2087,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // its attackers + self-heal gossip + watchdog) the whole way to the
              // final boss. DriveEscortCreature returns false only once that boss
              // exists, so we fall through to Drive and the completion gate latches.
@@ -134,7 +135,7 @@ index 10b9e59..451aebe 100644
              {
                  if (DriveEscortCreature(step, prog))
                      return true;
-@@ -2096,7 +2099,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2096,7 +2100,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // tick and pin the leader on the lip (the prior attempts' failure).
              // DriveDropInHole returns false once landed, so we fall through to
              // Drive and RunStep's gate pulls the followers down + latches Done.
@@ -143,16 +144,17 @@ index 10b9e59..451aebe 100644
              {
                  if (DriveDropInHole(step))
                      return true;
-@@ -2106,7 +2109,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2106,7 +2110,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // approach every tick and the tank can't thread a house doorway to a
              // barrel inside (it stalls "close but not inside"). Returns false once in
              // cast range, so we fall through to Drive and RunStep fires the GO.
 -            else if (step.kind == EventStepKind::UseItemOnGO)
-+            else if (step.kind == EventStepKind::UseItemOnGO && !DcEarnedPlay::Active())
++            else if (step.kind == EventStepKind::UseItemOnGO && !DcEarnedPlay::Active() &&
++                     !DcEarnedEvents::IsDefiasCannonStep(step))
              {
                  // Recover between barrels. DriveUseItemOnGO owns the tick at
                  // DcRel::AtObjective (30) — above the NeedsRest triggers (26.5) —
-@@ -2142,7 +2145,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2142,7 +2147,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // step timeout. Recover between crates for the same reason the barrels
              // do: this rung sits above NeedsRest (26.5), the five crates are 330yd
              // apart end to end, and the party has the whole intro RP ahead of it.
@@ -161,7 +163,7 @@ index 10b9e59..451aebe 100644
              {
                  switch (EventRestDecision())
                  {
-@@ -2544,6 +2547,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
+@@ -2544,6 +2549,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
  
  bool DungeonClearBreakStuckCombatAction::Execute(Event /*event*/)
  {
@@ -294,8 +296,80 @@ index 97f5205..b97418d 100644
          return false;  // never auto-release; bot stays a corpse until rezzed
  
      return AutoReleaseSpiritAction::isUseful();
+diff --git a/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp b/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp
+index da0b0ea..5851768 100644
+--- a/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp
+@@ -6,55 +6,30 @@
+ #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+ #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonRosterBuilders.h"
+ 
+-// --- The Deadmines (map 36) — the DEFIAS CANNON, ANCHORED + PERSISTENT ---
+-// The way from the goblin foundry to the pirate ship is sealed by the Iron Clad
+-// Door (GO 16397, lock 202 — rogue-pick only, so a bot party can never click it
+-// open). The intended opening: loot the Defias Gunpowder chest (GO 17155) for
+-// the gunpowder, then use it on the Defias Cannon (GO 16398) — that casts spell
+-// 6250 at the cannon, whose SmartGameObjectAI fires it: the door swings to
+-// GO_STATE_ACTIVE_ALTERNATIVE ("closed door open by cannon fire"), two Defias
+-// Squallshapers are summoned, and the cannon instance data is set.
+-//
+-// Navigation is by the boss list: the cannon is added as an OBJECTIVE anchor
+-// (BossRosterRegistry, encounterIndex 3 — shared with Mr. Smite, the first ship
+-// boss; the objective-before-boss tie-break runs it first). It gates the way
+-// between Gilnid (bit 2, last foundry boss) and the whole ship (Mr. Smite bit 3,
+-// Cookie 4, Greenskin 5, VanCleef 6). Boss-nav drives the tank to the cannon
+-// exactly as to any boss; the event then fires it in place.
+-//
+-// The cannon's lock (83) is an ITEM lock requiring the Defias Gunpowder (item
+-// 5397) as the key, so spell 6250 only fires the cannon when cast FROM that
+-// item. A bot never loots the chest, so the FireDefiasCannon hook grants the
+-// gunpowder and uses it on the cannon (the item-use path supplies the cast-item
+-// the OPEN_LOCK needs). The gunpowder has a 2s "Opening" cast. See
+-// ObjectiveHookRegistry.
+-//
+-// PERSISTENT: firing the cannon summons two Squallshapers that immediately
+-// engage, so the event sees a >1s Drive gap on the combat engine right after the
+-// Custom step. A non-persistent event would rewind to step 0 across that gap and
+-// re-fire the cannon (summoning two more each time); persistence keeps the step
+-// progress so the cannon fires exactly once.
++// The cannon objective gates the ship after Gilnid. Its ordinary item-use
++// driver loots the gunpowder chest if needed, walks back and uses the carried
++// powder. Only the native door state completes the persistent event.
+ 
+ void RegisterDeadminesEvents(std::vector<DungeonEvent>& out)
+ {
+     constexpr uint32 DM_GO_IRON_CLAD_DOOR = 16397;
+     constexpr uint32 DM_DOOR_OPEN_STATE   = 2;  // GO_STATE_ACTIVE_ALTERNATIVE
+-    constexpr uint32 DM_FIRE_CANNON_HOOK  = 2;  // ObjectiveHookRegistry id
++    constexpr uint32 DM_GO_CANNON = 16398;
++    constexpr uint32 DM_ITEM_GUNPOWDER = 5397;
++    constexpr uint32 DM_SPELL_FIRE_CANNON = 6250;
+ 
+     out.push_back(
+         EventBuilder(36, 1, "Iron Clad Door (Defias Cannon)")
+             .Anchored(/*encounterIndex*/ 3)
+             .Persistent()
+-            // 1. Step up onto the cannon (the objective's arrive radius may
+-            //    leave the tank ~10yd off; the cannon GO is at this spot).
++            .StepsOwnMovement()
++            .CompleteWhenGOState(DM_GO_IRON_CLAD_DOOR, DM_DOOR_OPEN_STATE, 100.0f)
+             .MoveTo(-107.56f, -659.67f, 7.21f, /*radius*/ 5.0f)
+-            // 2. Fire it. The hook casts spell 6250 at the cannon GO -> its
+-            //    SmartAI opens the door + summons the Squallshapers.
+-            .Custom(DM_FIRE_CANNON_HOOK)
+-            // 3. Hold until the Iron Clad Door is confirmed open, then the clear
+-            //    advances through it to Mr. Smite and the rest of the ship.
++            .UseItemOnGO(DM_ITEM_GUNPOWDER, DM_SPELL_FIRE_CANNON, DM_GO_CANNON,
++                         -107.56f, -659.67f, 7.21f)
++            .Timeout(120000)
+             .WaitForGOState(DM_GO_IRON_CLAD_DOOR, DM_DOOR_OPEN_STATE)
+-            .Timeout(30000)
++            .Timeout(120000)
+             .Build());
+ }
+ 
 diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
-index 0348d68..6b23cc8 100644
+index 0348d68..f2d6a8b 100644
 --- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 @@ -3,6 +3,7 @@
@@ -306,7 +380,89 @@ index 0348d68..6b23cc8 100644
  #include "ObjectiveHookRegistry.h"
  
  #include <atomic>
-@@ -888,6 +889,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
+@@ -95,73 +96,6 @@ namespace
+         return ObjectiveArriveResult::Running;
+     }
+ 
+-    // --- Deadmines Defias Cannon: FireDefiasCannon (hook id 2) ------------
+-    // The way to the pirate ship is sealed by the Iron Clad Door (GO 16397,
+-    // lock 202 — rogue-pick only, so a bot party can never click it open). A
+-    // player loots the Defias Gunpowder chest, then USES the gunpowder on the
+-    // Defias Cannon (GO 16398): that casts spell 6250 at the cannon, whose
+-    // SmartGameObjectAI (SMART_EVENT_SPELLHIT on 6250) fires the cannon —
+-    // opening the door to GO_STATE_ACTIVE_ALTERNATIVE (the GOState enum's
+-    // "closed door open by cannon fire"), summoning two Defias Squallshapers,
+-    // and setting the cannon instance data.
+-    //
+-    // Spell 6250 is SPELL_EFFECT_OPEN_LOCK against the cannon, and the cannon's
+-    // lock (83) is an ITEM lock requiring the Defias Gunpowder (item 5397) as
+-    // the key — so the spell only HITS the cannon (and fires the SmartAI) when
+-    // it is cast FROM that item, supplying the cast-item the lock check needs.
+-    // A bare CastSpell(6250) with no cast item fails the lock and never hits.
+-    //
+-    // A bot never loots the chest, so grant it the gunpowder and use the item on
+-    // the cannon via the full item-use path. Used as the Deadmines event's
+-    // Custom step (DeadminesEvents). The gunpowder has a 2s "Opening" cast, so:
+-    //  - if the door is already open, the cannon has fired -> Done (idempotent;
+-    //    also covers a re-init after an earlier attempt left the door open, where
+-    //    a second fire would summon two more Squallshapers);
+-    //  - if the opening cast is already in flight, let it finish (don't re-cast
+-    //    and interrupt ourselves every tick);
+-    //  - otherwise grant + use the gunpowder. Returns Running; the event's
+-    //    door-state gate is what confirms the open and advances.
+-    constexpr uint32 DM_GO_CANNON         = 16398;
+-    constexpr uint32 DM_GO_IRON_CLAD_DOOR = 16397;
+-    constexpr uint32 DM_ITEM_GUNPOWDER    = 5397;  // casts OPEN_LOCK spell 6250
+-
+-    ObjectiveArriveResult FireDefiasCannon(Player* bot, AiObjectContext* /*context*/,
+-                                           DungeonBossInfo const& /*info*/)
+-    {
+-        // Door already open (state != READY) -> the cannon has fired.
+-        if (GameObject* door = bot->FindNearestGameObject(DM_GO_IRON_CLAD_DOOR, 100.0f))
+-            if (door->GetGoState() != GO_STATE_READY)
+-                return ObjectiveArriveResult::Done;
+-
+-        // The 2s gunpowder "Opening" cast is already running — let it complete.
+-        if (bot->IsNonMeleeSpellCast(false))
+-            return ObjectiveArriveResult::Running;
+-
+-        GameObject* cannon = bot->FindNearestGameObject(DM_GO_CANNON, 40.0f);
+-        if (!cannon)
+-            return ObjectiveArriveResult::Running;  // not in range yet
+-
+-        // Grant the gunpowder (bots never looted the chest) and use it on the
+-        // cannon: the item is the OPEN_LOCK key, so the spell hits and the
+-        // cannon's SmartAI fires.
+-        Item* gunpowder = bot->GetItemByEntry(DM_ITEM_GUNPOWDER);
+-        if (!gunpowder)
+-        {
+-            bot->AddItem(DM_ITEM_GUNPOWDER, 1);
+-            gunpowder = bot->GetItemByEntry(DM_ITEM_GUNPOWDER);
+-            if (!gunpowder)
+-                return ObjectiveArriveResult::Running;  // bags full this tick
+-        }
+-
+-        // Feral-form druids can't cast the item spell at all — shift back first
+-        // (same gate the barrel plants use). See DcFormGate.
+-        DcFormGate::DropBlockingForm(bot, gunpowder);
+-        SpellCastTargets targets;
+-        targets.SetGOTarget(cannon);
+-        bot->CastItemUseSpell(gunpowder, targets, 0, 0);
+-        return ObjectiveArriveResult::Running;  // door-state gate confirms it
+-    }
+-
+     // --- ZulFarrak: WakeZumrah (hook id 5) --------------------------------
+     // Witch Doctor Zum'rah (7271) spawns with creature_template faction 35
+     // (friendly to everyone) — he is NOT flag-gated, so nothing in the engage
+@@ -820,7 +754,6 @@ namespace
+             using Reg = ObjectiveHookRegistry;
+             Reg::HookTable t;
+             Reg::AddHook(t, 1, &EnsureRingStarted);      // BRD Ring of Law — start the arena event
+-            Reg::AddHook(t, 2, &FireDefiasCannon);       // Deadmines — fire the cannon, open the door
+             Reg::AddHook(t, 3, &GrantIncendiaryBombs);   // Old Hillsbrad — pack of bombs (unlocks Brazen)
+             Reg::AddHook(t, 4, &GrantCacheKeyAndLoot);   // The Mechanar — Cache of the Legion key + loot
+             Reg::AddHook(t, 5, &WakeZumrah);             // ZulFarrak — flip Zum'rah hostile (AT 962)
+@@ -888,6 +821,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
  {
      if (hookId == 0)
          return ObjectiveArriveResult::Done;
@@ -447,19 +603,20 @@ index 74b95dd..3e78cf8 100644
  
      bool Evaluate(Player* bot)
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-index 7355d38..898dadb 100644
+index 7355d38..03386ea 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-@@ -3,6 +3,8 @@
+@@ -3,6 +3,9 @@
   * and/or modify it under version 3 of the License, or (at your option), any later version.
   */
  
++#include "DcDefiasCannon.h"
 +#include "DcEarnedEvents.h"
 +#include "DcEarnedPlay.h"
  #include "DungeonEventExecutor.h"
  
  #include <algorithm>
-@@ -175,6 +177,10 @@ namespace
+@@ -175,6 +178,10 @@ namespace
      {
          if (bot->isMoving())
              return;
@@ -470,7 +627,7 @@ index 7355d38..898dadb 100644
          bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
                                            /*generatePath*/ true, false);
      }
-@@ -492,6 +498,10 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -492,6 +499,10 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  {
      if (!bot)
          return StepResult::Blocked;
@@ -481,7 +638,7 @@ index 7355d38..898dadb 100644
  
      switch (step.kind)
      {
-@@ -647,6 +657,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -647,6 +658,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
                            bot->GetName(), go->GetGUID().ToString(), go->GetName());
                  return StepResult::Running;
              }
@@ -507,7 +664,7 @@ index 7355d38..898dadb 100644
              // A GO script that gates on a carried key item refuses a click from an
              // empty bag without a word the headless harness can see (Karazhan's
              // Blackened Urn under mod-individual-progression). Grant it first.
-@@ -1116,6 +1145,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -1116,6 +1146,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
              if (step.itemId == 0)
                  return StepResult::Done;
              Item* item = bot->GetItemByEntry(step.itemId);
@@ -516,6 +673,16 @@ index 7355d38..898dadb 100644
              if (!item)
              {
                  bot->AddItem(step.itemId, 1);
+@@ -1137,6 +1169,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+ 
+         case EventStepKind::UseItemOnGO:
+         {
++            if (DcEarnedEvents::IsDefiasCannonStep(step))
++                return DcDefiasCannon::Run(bot);
++
+             // Plant a bomb on the barrel the step's (x,y,z) anchor sits on. The
+             // barrel's only interaction is SMART_EVENT_SPELLHIT of the bomb spell,
+             // and that spell (32744) is SPELL_EFFECT_OPEN_LOCK against the barrel's
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp b/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
 index 25266a7..8f06e51 100755
 --- a/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
@@ -569,12 +736,119 @@ index e8d6c35..718c6e9 100644
  
      // Once, the first tick the feature is on — the playerbots config is
      // certainly loaded by then, which it may not be at script registration.
+diff --git a/src/DcDefiasCannon.cpp b/src/DcDefiasCannon.cpp
+new file mode 100644
+index 0000000..71b007f
+--- /dev/null
++++ b/src/DcDefiasCannon.cpp
+@@ -0,0 +1,83 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#include "DcDefiasCannon.h"
++#include "DcEarnedEvents.h"
++#include "DcEarnedPlay.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcFormGate.h"
++#include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
++#include "GameObject.h"
++#include "MotionMaster.h"
++#include "Player.h"
++#include "Playerbots.h"
++#include "Spell.h"
++#include "UseItemAction.h"
++#include "WorldPacket.h"
++#include "WorldSession.h"
++
++namespace DcDefiasCannon
++{
++    StepResult Run(Player* bot)
++    {
++        if (!bot || bot->GetMapId() != 36 || !GET_PLAYERBOT_AI(bot))
++            return StepResult::Failed;
++
++        // Do not fire again on re-entry, after combat or after consumption.
++        GameObject* door = bot->FindNearestGameObject(16397, 100.0f);
++        if (door && door->isSpawned() && door->GetGoState() == GO_STATE_ACTIVE_ALTERNATIVE)
++            return StepResult::Done;
++
++        if (!bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() || bot->m_mover != bot ||
++            bot->IsNonMeleeSpellCast(false) || bot->GetLootGUID())
++            return StepResult::Running;
++
++        Item* powder = bot->GetItemByEntry(5397);
++        GameObject* target = bot->FindNearestGameObject(powder ? 16398 : 17155, 100.0f);
++        if (!target || !target->isSpawned())
++            return StepResult::Running;
++        if (sPlayerbotAIConfig.DisallowedGameObjects.contains(target->GetEntry()) ||
++            !DcEarnedEvents::CanOpen(bot, target))
++            return StepResult::Blocked;
++
++        if (bot->GetExactDist(target) > 3.0f || !target->IsWithinDistInMap(bot) ||
++            !DungeonEventExecutor::HasGameObjectLos(bot, target))
++        {
++            if (!bot->isMoving() && GET_PLAYERBOT_AI(bot)->CanMove() &&
++                DcEarnedPlay::ReachableLeg(bot, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()))
++                bot->GetMotionMaster()->MovePoint(0, target->GetPositionX(), target->GetPositionY(),
++                                                 target->GetPositionZ(), FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
++                                                 /*generatePath*/ true, false);
++            return StepResult::Running;
++        }
++
++        if (bot->isMoving())
++        {
++            bot->StopMoving();
++            return StepResult::Running;
++        }
++
++        if (powder)
++        {
++            DcFormGate::DropBlockingForm(bot, powder);
++            UseItemAction(GET_PLAYERBOT_AI(bot)).UseItemOnGameObject(powder, target->GetGUID());
++        }
++        else
++        {
++            // A chest needs its opening spell, not GameObject::Use. Ask the
++            // core for the player's own opening action and send the normal
++            // opcode: lock, spell, loot eligibility and bag checks stay native.
++            // StoreLootAction takes the powder as ITEM_CLASS_KEY, then releases
++            // the chest, including its native looted event and ambush.
++            SpellInfo const* opening = target->GetSpellForLock(bot);
++            if (!opening)
++                return StepResult::Blocked;
++            if (opening->CheckShapeshift(uint32(bot->GetShapeshiftForm())) != SPELL_CAST_OK)
++                bot->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
++            SpellCastTargets targets;
++            targets.SetGOTarget(target);
++            WorldPacket packet(CMSG_CAST_SPELL);
++            packet << uint8(1) << opening->Id << uint8(0);
++            targets.Write(packet);
++            bot->GetSession()->HandleCastSpellOpcode(packet);
++        }
++        return StepResult::Running;
++    }
++}
+diff --git a/src/DcDefiasCannon.h b/src/DcDefiasCannon.h
+new file mode 100644
+index 0000000..97ba1d1
+--- /dev/null
++++ b/src/DcDefiasCannon.h
+@@ -0,0 +1,12 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#ifndef DC_DEFIAS_CANNON_H
++#define DC_DEFIAS_CANNON_H
++#include "Define.h"
++class Player;
++enum class StepResult : uint8;
++
++namespace DcDefiasCannon
++{
++    StepResult Run(Player* bot);
++}
++#endif
 diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
 new file mode 100644
-index 0000000..b6d5eac
+index 0000000..70e8535
 --- /dev/null
 +++ b/src/DcEarnedEvents.cpp
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,151 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -620,10 +894,22 @@ index 0000000..b6d5eac
 +    {
 +        for (EventStep const& step : ev.steps)
 +        {
-+            if (!DcEarnedEvents::StepAllowed(step) || step.kind == EventStepKind::UseItem || step.itemId)
++            bool const cannon = DcEarnedEvents::IsDefiasCannonStep(step);
++            if (!DcEarnedEvents::StepAllowed(step) || (!cannon && (step.kind == EventStepKind::UseItem || step.itemId)))
 +            {
-+                reason = "event '" + ev.name + "' requires a scripted shortcut or a quest item";
++                reason = "event '" + ev.name + "' requires a scripted shortcut or unaudited item acquisition";
 +                return false;
++            }
++            if (cannon)
++            {
++                GameObjectTemplate const* chest = sObjectMgr->GetGameObjectTemplate(17155);
++                GameObjectTemplate const* target = sObjectMgr->GetGameObjectTemplate(16398);
++                if (!chest || !target || LockOpening(chest->GetLockId(), nullptr) != Opening::Click ||
++                    target->GetLockId() != 83)
++                {
++                    reason = "Defias Cannon requires its ordinary gunpowder chest and item lock";
++                    return false;
++                }
 +            }
 +            if (step.kind != EventStepKind::UseGameObject)
 +                continue;
@@ -640,12 +926,20 @@ index 0000000..b6d5eac
 +
 +namespace DcEarnedEvents
 +{
++    bool IsDefiasCannonStep(EventStep const& step)
++    {
++        return step.kind == EventStepKind::UseItemOnGO && step.goEntry == 16398 &&
++               step.itemId == 5397 && step.spellId == 6250 && step.hookId == 0;
++    }
++
 +    bool StepAllowed(EventStep const& step)
 +    {
 +        switch (step.kind)
 +        {
 +            case EventStepKind::MoveTo:
 +                return step.hookId == 0;
++            case EventStepKind::UseItemOnGO:
++                return IsDefiasCannonStep(step);
 +            case EventStepKind::UseGameObject:
 +            case EventStepKind::Gossip:
 +            case EventStepKind::WaitForSpawn:
@@ -708,10 +1002,10 @@ index 0000000..b6d5eac
 +}
 diff --git a/src/DcEarnedEvents.h b/src/DcEarnedEvents.h
 new file mode 100644
-index 0000000..e4d6ecb
+index 0000000..3856c0c
 --- /dev/null
 +++ b/src/DcEarnedEvents.h
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,33 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -734,6 +1028,8 @@ index 0000000..e4d6ecb
 +    // Step kinds an earned party may run. Runtime checks still apply: real
 +    // paths, owned items and the object's own lock.
 +    bool StepAllowed(EventStep const& step);
++    // Only this item-target pair has an audited ordinary acquisition path.
++    bool IsDefiasCannonStep(EventStep const& step);
 +    // The object can be opened by a click now: no lock, an open lock without a
 +    // profession, or a key item the bot carries. Lockpicking, spell locks and
 +    // conditional interaction stay with players.
