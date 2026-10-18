@@ -136,7 +136,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Era Events | Timed outdoor encounters at exact earned tiers 4, 6, 7 and 12; one real player required, no automatic victory payouts |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
-| Raid Clear | Molten Core, Blackwing Lair and Zul'Gurub mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
+| Raid Clear | Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
 
 AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
 smaller parties receive the upstream scaling curve with reduced XP and money.

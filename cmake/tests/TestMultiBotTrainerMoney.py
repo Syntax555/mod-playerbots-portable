@@ -42,6 +42,7 @@ fixture = r'''
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -343,6 +344,7 @@ struct ScriptManager
     Player const* expectedPlayer = nullptr;
     Creature const* expectedCreature = nullptr;
     std::map<uint32, uint32> baseQuotes;
+    std::map<uint32, std::deque<uint32>> baseQuoteSequences;
     bool allowLearn = true;
     bool blockState = false;
     uint32 costCalls = 0;
@@ -353,6 +355,12 @@ struct ScriptManager
         ++costCalls;
         if (auto found = baseQuotes.find(id); found != baseQuotes.end())
             cost = found->second;
+        auto& quotes = baseQuoteSequences[id];
+        if (!quotes.empty())
+        {
+            cost = quotes.front();
+            quotes.pop_front();
+        }
     }
     void OnPlayerGetTrainerSpellState(Player const*, uint32, uint32, Trainer::SpellState& state) const
     {
@@ -635,6 +643,34 @@ void LearnAllFreshWallet()
     assert(s.bot.moneyChanges == 2 && s.trainer.successes == 2);
 }
 
+void LearnAllPrerequisitePasses()
+{
+    Scenario s;
+    s.trainer._spells[0].MoneyCost = 10;
+    s.AddSpell(101, 10);
+    s.AddSpell(102, 10);
+    spellManager.preceding[100] = 101;
+    spellManager.preceding[101] = 102;
+    assert(s.List().size() == 1 && s.List()[0].spellId == 102);
+    s.Buy("ALL");
+    s.ExpectResult(true, "OK", 3, 27);
+    assert(s.bot.money == 124 && s.bot.HasSpell(100) && s.bot.HasSpell(101) && s.bot.HasSpell(102));
+    assert(s.bot.moneyChanges == 3 && s.trainer.successes == 3);
+}
+
+void ActualDebitsInBothPurchaseLoops()
+{
+    for (std::string const spell : {"100", "ALL"})
+    {
+        Scenario s;
+        // Listing quotes 76 copper; the native purchase recomputes 47 copper.
+        scriptManager.baseQuoteSequences[100] = {80, 50};
+        s.Buy(spell);
+        s.ExpectResult(true, "OK", 1, 47);
+        assert(s.bot.money == 104 && s.bot.HasSpell(100) && s.bot.moneyChanges == 1);
+    }
+}
+
 void GoldCheatModes()
 {
     for (bool natural : {false, true})
@@ -779,6 +815,8 @@ int main()
     WalletBoundaries();
     WalletChangesAfterListing();
     LearnAllFreshWallet();
+    LearnAllPrerequisitePasses();
+    ActualDebitsInBothPurchaseLoops();
     GoldCheatModes();
     NativeQuotes();
     SecurityAndInteractionGuards();
@@ -789,13 +827,40 @@ int main()
 
 with tempfile.TemporaryDirectory(prefix='multibot-trainer-money-') as directory:
     temporary = Path(directory)
-    source = temporary / 'trainer-money.cpp'
-    source.write_text(fixture + '\n' + production + '\n' + tests)
-    executable = temporary / 'trainer-money'
-    subprocess.run(
-        [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
-         *SANITIZER_FLAGS,
-         str(source), '-o', str(executable)], check=True)
-    subprocess.run([str(executable)], check=True, timeout=30,
-                   env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
-                        'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
+    mutations = [
+        ('production', production),
+        ('single-pass-learning', production.replace(
+            'uint32 const maxPasses = static_cast<uint32>(trainer->GetSpells().size());',
+            'uint32 const maxPasses = 1;')),
+    ]
+    actual_debit = ('if (sPlayerbotAIConfig.naturalProgression && moneyBefore > bot->GetMoney())\n'
+                    '{indent}spent += moneyBefore - bot->GetMoney();')
+    for label, indent in (('learn-all-nominal-spending', '                    '),
+                          ('single-spell-nominal-spending', '                ')):
+        old = actual_debit.format(indent=indent)
+        if production.count(old) != 1:
+            raise AssertionError(f'{label} mutation was not applied')
+        mutations.append((label, production.replace(old, old.replace('moneyBefore - bot->GetMoney()', 'entry.cost'))))
+    for name, body in mutations:
+        if name != 'production' and body == production:
+            raise AssertionError(f'{name} mutation was not applied')
+        source = temporary / f'{name}.cpp'
+        source.write_text(fixture + '\n' + body + '\n' + tests)
+        executable = temporary / name
+        subprocess.run(
+            [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
+             *SANITIZER_FLAGS,
+             str(source), '-o', str(executable)], check=True)
+        result = subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=30,
+                                env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
+                                     'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
+        if name == 'production':
+            if result.returncode:
+                raise AssertionError(result.stderr or result.stdout)
+            print(result.stdout.strip())
+        elif result.returncode == 0:
+            raise AssertionError(f'Trainer regression fixture did not reject {name}')
+        elif 'Assertion' not in result.stderr:
+            raise AssertionError(f'{name} failed outside a regression assertion: {result.stderr}')
+        else:
+            print(f'Trainer regression mutation rejected: {name}')

@@ -1,5 +1,5 @@
 diff --git a/src/Ai/Base/Actions/LfgActions.cpp b/src/Ai/Base/Actions/LfgActions.cpp
-index dedc79c..d30fcd9 100644
+index 0124dee..34c94fc 100644
 --- a/src/Ai/Base/Actions/LfgActions.cpp
 +++ b/src/Ai/Base/Actions/LfgActions.cpp
 @@ -6,6 +6,7 @@
@@ -10,7 +10,7 @@ index dedc79c..d30fcd9 100644
  #include "ItemVisitors.h"
  #include "LFGMgr.h"
  #include "Opcodes.h"
-@@ -36,7 +37,7 @@ uint32 LfgJoinAction::GetRoles()
+@@ -59,7 +60,7 @@ uint32 LfgJoinAction::GetRoles()
          case CLASS_DRUID:
              if (spec == 2)
                  return PLAYER_ROLE_HEALER;
@@ -57,10 +57,10 @@ index e632688..ac8c494 100644
          if (!spellInfo || spellInfo->IsPassive())
              continue;
 diff --git a/src/Ai/Class/Druid/DruidTriggers.cpp b/src/Ai/Class/Druid/DruidTriggers.cpp
-index da64cbf..13a5be4 100644
+index e3d8d8b..b9c90ae 100644
 --- a/src/Ai/Class/Druid/DruidTriggers.cpp
 +++ b/src/Ai/Class/Druid/DruidTriggers.cpp
-@@ -38,7 +38,7 @@ bool CatFormTrigger::IsActive() { return !botAI->HasAura("cat form", bot); }
+@@ -39,7 +39,7 @@ bool CatFormTrigger::IsActive() { return !botAI->HasAura("cat form", bot); }
  
  bool HealerShouldAttackAndNotBlanketingTrigger::IsActive()
  {
@@ -743,7 +743,7 @@ index f9718ae..a921f3e 100644
              if (tab == DEATH_KNIGHT_TAB_BLOOD)
                  nonCombatEngine->addStrategiesNoInit("tank assist", "pull", nullptr);
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
-index c32f69d..6728f73 100644
+index 4bb5dcf..d0d5044 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
 +++ b/src/Bot/Factory/PlayerbotFactory.cpp
 @@ -13,6 +13,7 @@

@@ -32,8 +32,9 @@ database, configuration and first-run setup.
   audited normal dungeons in their own era and walk to the entrance. See
   [routes and requirements](docs/bot-dungeons.md#autonomous-parties).
 - **Player-led raids:** Dungeon Clear, Playerbots and Raid Clear provide group
-  control and encounter tactics, including Molten Core, Blackwing Lair and
-  Zul'Gurub. Autonomous raid recruitment remains outside the supported scope.
+  control and encounter tactics, including Molten Core, Blackwing Lair,
+  Zul'Gurub and Ahn'Qiraj. Autonomous raid recruitment remains outside the
+  supported scope.
   See [raid support](docs/bot-dungeons.md#raids).
 - **Earned bot economy:** bots train, repair and buy supplies and bags with
   their own gold, and trade owned items through normal auctions and mailbox
@@ -209,7 +210,7 @@ include this distribution's local integration and defaults; see
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Earned-era access guards for the Dungeon Finder, which is disabled by default. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
-| [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | Boss and trash mechanics for bot raids in Molten Core, Blackwing Lair and Zul'Gurub. |
+| [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | Boss and trash mechanics for bot raids in Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj. |
 
 Bot commands are documented in the
 [Playerbots wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands).

@@ -1,5 +1,5 @@
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 69563cc..fcb35ba 100644
+index 8859f4e..1867955 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -8,6 +8,7 @@
@@ -10,7 +10,7 @@ index 69563cc..fcb35ba 100644
  #include "BudgetValues.h"
  #include "EarnedAuction.h"
  #include "EarnedAuctionTravel.h"
-@@ -23,6 +24,64 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
+@@ -32,6 +33,64 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
             !botAI->HasGameClientMaster() && botAI->GetAiObjectContext()->GetValue<bool>("can move around")->Get();
  }
  
@@ -75,7 +75,7 @@ index 69563cc..fcb35ba 100644
  NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
  {
      if (!CanRunNaturalMaintenance(botAI))
-@@ -104,8 +163,16 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -117,8 +176,16 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
          }
      }
  
@@ -93,7 +93,7 @@ index 69563cc..fcb35ba 100644
          return {};
  
      // An unreachable or failed NPC must not block the others while it stays nearest.
-@@ -144,19 +211,38 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -157,19 +224,38 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
              }
          }
  
@@ -133,7 +133,7 @@ index 69563cc..fcb35ba 100644
              // Match the wanted supply from template fields before the costlier usability check.
              std::string const type = (needsFood || needsDrink) && proto->Class == ITEM_CLASS_CONSUMABLE
                                           ? ItemUsageValue::GetConsumableType(proto, bot->GetMaxPower(POWER_MANA) > 0)
-@@ -189,6 +275,8 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -202,6 +288,8 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
              if (price <= budget && bot->HasEnoughMoney(price))
                  return {guid, NaturalMaintenanceType::BUY, proto->ItemId, uint32(budgetType)};
          }

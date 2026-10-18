@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 9c41849..1e28e9f 100644
+index 5fd449f..14408de 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -91,6 +91,13 @@ Playerbots.RandomBotAutologin = 1
@@ -282,7 +282,7 @@ index 0636393..7221642 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index 5f82e99..d752489 100644
+index d1f6fd3..9aa1f4a 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -10,6 +10,8 @@
@@ -391,10 +391,10 @@ index 5f82e99..d752489 100644
      }
      bot->SetSelection(oldSelection);
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.h b/src/Ai/World/Rpg/Action/NewRpgAction.h
-index 5b00a59..8dd9bff 100644
+index 363e510..69d4c00 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.h
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.h
-@@ -104,6 +104,9 @@ class NewRpgNaturalMaintenanceAction : public NewRpgBaseAction
+@@ -105,6 +105,9 @@ class NewRpgNaturalMaintenanceAction : public NewRpgBaseAction
  public:
      NewRpgNaturalMaintenanceAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg natural maintenance") {}
      bool Execute(Event event) override;
@@ -405,10 +405,10 @@ index 5b00a59..8dd9bff 100644
  
  class NewRpgDoQuestAction : public NewRpgBaseAction
 diff --git a/src/Ai/World/Rpg/NewRpgInfo.h b/src/Ai/World/Rpg/NewRpgInfo.h
-index fd36928..7c4824c 100644
+index 226298c..52cfe8b 100644
 --- a/src/Ai/World/Rpg/NewRpgInfo.h
 +++ b/src/Ai/World/Rpg/NewRpgInfo.h
-@@ -76,6 +76,19 @@ struct NewRpgInfo
+@@ -88,6 +88,19 @@ struct NewRpgInfo
  
      uint32 startT{0};  // start timestamp of the current status
  
@@ -1812,7 +1812,7 @@ index 0000000..19a711a
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 50b081f..bc0265d 100644
+index c66cb33..f5eebe0 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -82,6 +82,9 @@ bool PlayerbotAIConfig::Initialize()
@@ -1826,10 +1826,10 @@ index 50b081f..bc0265d 100644
      if (!Enabled)
      {
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index e3512e8..3775c5c 100644
+index 063808f..4e97ad8 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -107,6 +107,8 @@ public:
+@@ -109,6 +109,8 @@ public:
  
      bool Enabled;
      bool naturalProgression = false;
@@ -1839,7 +1839,7 @@ index e3512e8..3775c5c 100644
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index ad67162..5e529c6 100644
+index b6d409e..0bbeb2a 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -16,6 +16,7 @@
@@ -1847,10 +1847,10 @@ index ad67162..5e529c6 100644
  #include <mysqld_error.h>
  #include "AllMapScript.h"
 +#include "EarnedAuctionTravel.h"
+ #include "GatherNodeMgr.h"
  #include "GlobalScript.h"
  #include "GuildTaskMgr.h"
- #include "PlayerScript.h"
-@@ -501,6 +502,7 @@ class PlayerbotsWorldScript : public WorldScript
+@@ -502,6 +503,7 @@ class PlayerbotsWorldScript : public WorldScript
  public:
      PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
          WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED,
@@ -1858,7 +1858,7 @@ index ad67162..5e529c6 100644
          WORLDHOOK_ON_UPDATE,
          WORLDHOOK_ON_SHUTDOWN
      }) {}
-@@ -538,6 +540,8 @@ public:
+@@ -542,6 +544,8 @@ public:
          LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
      }
  

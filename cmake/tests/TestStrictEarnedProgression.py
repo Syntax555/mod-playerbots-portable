@@ -64,8 +64,12 @@ functions = '\n'.join(function(production, signature) for signature in (
     'void IndividualProgression::UpdateProgressionState(',
     'void IndividualProgression::checkIPProgression(',
     'void IndividualProgression::checkKillProgression(',
-    'bool IndividualProgression::isExcludedAccount(',
-    'bool IndividualProgression::isBotAccount(',
+    'void IndividualProgression::LoadAccountRegexes(',
+    'IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(',
+    'bool IndividualProgression::isExcludedAccount(Player*',
+    'bool IndividualProgression::isExcludedAccount(uint32',
+    'bool IndividualProgression::isBotAccount(Player*',
+    'bool IndividualProgression::isBotAccount(uint32',
     'bool IndividualProgression::isNormalAccount(',
     'void IndividualProgression::UpdateRNDbotSpells(',
 ))
@@ -102,7 +106,9 @@ prelude = r'''
 #include <cstdint>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <regex>
+#include <shared_mutex>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -198,6 +204,8 @@ struct AccountMgr { inline static int queries=0;
         ++queries; name="RNDBOT"+std::to_string(account); return true;
     }
 };
+template<class... Args> void LogError(Args const&...) {}
+#define LOG_ERROR(...) LogError(__VA_ARGS__)
 struct TalentEntry { uint32 Row=0; };
 int unguardedCalls=0;
 struct ChatHandler { Session* session=nullptr; int messages=0;
@@ -225,8 +233,17 @@ struct IndividualProgression {
     void UpdateProgressionState(Player*,ProgressionState) const;
     void checkIPProgression(Player*);
     void checkKillProgression(Player*,Creature*);
+    struct AccountMatch { bool excluded=false, bot=false; };
+    std::regex _excludedAccountsRegex, _botAccountsRegex;
+    bool _excludedAccountsEnabled=false, _botAccountsEnabled=false;
+    std::unordered_map<uint32,AccountMatch> _accountMatchCache;
+    std::shared_mutex _accountMatchLock;
+    void LoadAccountRegexes();
+    AccountMatch GetAccountMatch(uint32);
     bool isExcludedAccount(Player*);
+    bool isExcludedAccount(uint32);
     bool isBotAccount(Player*);
+    bool isBotAccount(uint32);
     bool isNormalAccount(Player*);
     bool hasPassedProgression(Player* player,ProgressionState stage) {
         return GetPlayerProgressionFromQuests(player)>=stage;
@@ -262,6 +279,7 @@ int main() {
         assert(BossStage(entry)==stage && BossCredit(stage)==(uint32{1}<<stage));
     }
     Script hook;
+    progression.LoadAccountRegexes();
     Player player;
     player.achievements.insert(HALION_KILL); // achievements never synthesize strict milestones
     progression.checkIPProgression(&player);
@@ -382,6 +400,7 @@ int main() {
     player.gm=true; TalentEntry wrathRow{10}; assert(hook.OnPlayerCanLearnTalent(&player,&wrathRow,0)); player.gm=false;
 
     assert(!progression.isExcludedAccount(&player) && !progression.isBotAccount(&player));
+    assert(!progression.isExcludedAccount(uint32{1}) && !progression.isBotAccount(uint32{1}));
     assert(AccountMgr::queries==0);
     player.cls=CLASS_WARLOCK; player.level=60;
     progression.UpdateRNDbotSpells(&player); assert(player.spellGrants==0);
@@ -433,6 +452,8 @@ mutations = (
     ('phase test', 'killed->IsInMap(rewardPosition) &&', 'killed->IsInMap(rewardPosition) && killed->InSamePhase(rewardPosition) &&'),
     ('same instance', 'killed->IsInMap(rewardPosition) &&', ''),
     ('presence distance', 'killed->GetExactDist(rewardPosition) <=', '0.f <='),
+    ('numeric account exemption', 'bool IndividualProgression::isBotAccount(uint32 accountId)\n{\n    if (enabled && strictEarnedProgression)\n        return false;\n', 'bool IndividualProgression::isBotAccount(uint32 accountId)\n{\n'),
+    ('numeric excluded-account exemption', 'bool IndividualProgression::isExcludedAccount(uint32 accountId)\n{\n    if (enabled && strictEarnedProgression)\n        return false;\n', 'bool IndividualProgression::isExcludedAccount(uint32 accountId)\n{\n'),
     ('talent earned era', 'uint8 const era = IndividualProgression_GetEarnedEra(player);', 'uint8 const era = 2;'),
 )
 with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:

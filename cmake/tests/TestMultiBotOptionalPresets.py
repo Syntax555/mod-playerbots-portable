@@ -83,6 +83,7 @@ public:
 };
 ConfigMgr configMgr;
 ConfigMgr* sConfigMgr = &configMgr;
+struct PlayerbotAIConfig { static void Instance() {} };
 struct Player
 {
     uint8 classId = 8;
@@ -150,6 +151,9 @@ production = '\n\n'.join([
     'template<class T>\n' + function(config, 'T ConfigMgr::GetOption('),
     function(bridge, 'std::string Trim('),
     function(bridge, 'std::string GetPremadeSpecConfigString('),
+    function(bridge, 'template <typename Config>\nconcept PlayerbotConfigRenamed') + ';',
+    bridge[bridge.index('char const* const kPlayerbotConfigPrefix ='):bridge.index(
+        ';', bridge.index('char const* const kPlayerbotConfigPrefix =')) + 1],
     function(bridge, 'std::string GetPremadeSpecLink('),
     function(bridge, 'std::vector<TalentSpecEntryData> BuildTalentSpecEntries('),
 ])

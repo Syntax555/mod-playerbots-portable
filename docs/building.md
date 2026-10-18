@@ -9,11 +9,10 @@ development or custom configurations.
 
 - Windows 10/11 x64.
 - Visual Studio 2022 with the Desktop development with C++ workload.
-- CMake 3.22 or newer, Go 1.26.6 or newer, Python 3.12 or newer, PowerShell 7 and Git.
-- Boost 1.84 or newer, MySQL Server 8.0 x64 and OpenSSL 3 x64.
+- CMake 3.25 or newer, Go 1.26.9 or newer, Python 3.12 or newer, PowerShell 7 and Git.
+- Boost 1.92 or newer, MySQL Server 8.0 x64 and OpenSSL 3 x64.
 
-The Windows resource compiler requires CMake 3.22 or newer with the Visual
-Studio generator. Use x64 dependencies throughout.
+Use the Visual Studio generator and x64 dependencies throughout.
 
 ## Build the server bundle
 
@@ -28,7 +27,7 @@ cmake -B build -S . `
   -DPACKAGE_VERSION="dev" `
   -DMYSQL_ROOT_DIR="C:/tools/mysql/current" `
   -DOPENSSL_ROOT_DIR="C:/tools/openssl/current/x64" `
-  -DBOOST_ROOT_DIR="C:/local/boost_1_84_0"
+  -DBOOST_ROOT_DIR="C:/local/boost_1_92_0"
 $env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
 $env:CL_MPCount = '2'
 cmake --build build --config Release --parallel 2
@@ -36,7 +35,7 @@ pwsh -File scripts/CopyWindowsRuntime.ps1 -DistDir dist
 pwsh -File scripts/CopyDependencyLicenses.ps1 -DistDir dist `
   -MySQLRootDir "C:/tools/mysql/current" `
   -OpenSSLRootDir "C:/tools/openssl/current/x64" `
-  -BoostRootDir "C:/local/boost_1_84_0"
+  -BoostRootDir "C:/local/boost_1_92_0"
 cmake --build build --config Release --target package_zip
 cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
 ```
@@ -125,7 +124,7 @@ custom build; the rolling download name alone does not identify its sources.
 
 The checks run on Linux and require Go, Python with PyYAML 6.0.3, GCC with
 AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1
-and Ruff 0.16.8. The gameplay fixtures execute selected native handlers with
+and Ruff 0.17.1. The gameplay fixtures execute selected native handlers with
 controlled adapters; a complete server build and live realm tests remain
 necessary for platform and encounter validation. These commands repeat the
 release workflow's launcher job:
@@ -135,7 +134,7 @@ go test ./...
 go vet ./...
 GOOS=windows GOARCH=amd64 go test -c -o /dev/null ./cmd/startup
 GOOS=windows GOARCH=amd64 go vet ./...
-go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
 staticcheck ./...
 GOOS=windows GOARCH=amd64 staticcheck ./...
 python3 cmake/tests/run_fixtures.py check

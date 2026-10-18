@@ -269,7 +269,7 @@ index 0000000..bee5872
 +    (23, 18525, 35321, 0, 0, 0),
 +    (23, 21655, 34200, 0, 0, 0));
 diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
-index 8cd094c..2b7481c 100644
+index b304ede..96e8a78 100644
 --- a/src/IndividualProgression.cpp
 +++ b/src/IndividualProgression.cpp
 @@ -3,8 +3,11 @@
@@ -417,27 +417,47 @@ index 8cd094c..2b7481c 100644
      if (location.empty())
          return;
  
-@@ -371,6 +471,9 @@ bool IndividualProgression::isAttuned(Player* player)
+@@ -419,6 +519,9 @@ IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(uint3
  
  bool IndividualProgression::isExcludedAccount(Player* player)
  {
 +    if (enabled && strictEarnedProgression)
 +        return false;
 +
-     // An empty account filter excludes nobody and needs no database lookup.
-     if (!player || sIndividualProgression->excludedAccountsRegex.empty())
+     if (!player)
          return false;
-@@ -384,6 +487,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
+ 
+@@ -427,6 +530,9 @@ bool IndividualProgression::isExcludedAccount(Player* player)
+ 
+ bool IndividualProgression::isExcludedAccount(uint32 accountId)
+ {
++    if (enabled && strictEarnedProgression)
++        return false;
++
+     {
+         std::shared_lock<std::shared_mutex> lock(_accountMatchLock);
+         // An empty account filter excludes nobody and needs no database lookup.
+@@ -439,6 +545,9 @@ bool IndividualProgression::isExcludedAccount(uint32 accountId)
  
  bool IndividualProgression::isBotAccount(Player* player)
  {
 +    if (enabled && strictEarnedProgression)
 +        return false;
 +
-     // An empty account filter excludes nobody and needs no database lookup.
-     if (!player || sIndividualProgression->botAccountsRegex.empty())
+     if (!player)
          return false;
-@@ -417,6 +523,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
+ 
+@@ -447,6 +556,9 @@ bool IndividualProgression::isBotAccount(Player* player)
+ 
+ bool IndividualProgression::isBotAccount(uint32 accountId)
+ {
++    if (enabled && strictEarnedProgression)
++        return false;
++
+     {
+         std::shared_lock<std::shared_mutex> lock(_accountMatchLock);
+         // An empty account filter excludes nobody and needs no database lookup.
+@@ -479,6 +591,9 @@ bool IndividualProgression::isPlayerInDungeonOrRaid(Player* player)
  
  void IndividualProgression::SyncBotsProgressionToLeader(Group* group)
  {
@@ -447,7 +467,7 @@ index 8cd094c..2b7481c 100644
      if (!group)
          return;
  
-@@ -756,6 +865,34 @@ void IndividualProgression::checkIPProgression(Player* killer)
+@@ -818,6 +933,34 @@ void IndividualProgression::checkIPProgression(Player* killer)
  
      uint8 currentState = GetPlayerProgressionFromQuests(killer);
  
@@ -482,7 +502,7 @@ index 8cd094c..2b7481c 100644
      static const std::vector<std::pair<uint16, ProgressionState>> achievementMap =
      {
          { HALION_KILL,        PROGRESSION_WOTLK_TIER_5   },
-@@ -825,6 +962,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
+@@ -887,6 +1030,28 @@ void IndividualProgression::checkKillProgression(Player* killer, Creature* kille
          return;
      */
  
@@ -511,7 +531,7 @@ index 8cd094c..2b7481c 100644
      static const std::unordered_map<uint32, ProgressionState> bossMap =
      {
          { RAGNAROS,     PROGRESSION_MOLTEN_CORE    },
-@@ -1045,6 +1204,8 @@ private:
+@@ -1107,6 +1272,8 @@ private:
      {
          sIndividualProgression->customProgressionMap.clear();
          sIndividualProgression->enabled = sConfigMgr->GetOption<bool>("IndividualProgression.Enable", true);
@@ -521,10 +541,10 @@ index 8cd094c..2b7481c 100644
          sIndividualProgression->vanillaHealingAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.VanillaHealingAdjustment", 1);
          sIndividualProgression->tbcPowerAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.TBCPowerAdjustment", 1);
 diff --git a/src/IndividualProgression.h b/src/IndividualProgression.h
-index e3c5c9a..d332073 100644
+index 3af9f84..e6b8293 100644
 --- a/src/IndividualProgression.h
 +++ b/src/IndividualProgression.h
-@@ -21,6 +21,9 @@
+@@ -23,6 +23,9 @@
  
  typedef std::unordered_map<uint32, uint32> questXpMapType;
  
@@ -534,7 +554,7 @@ index e3c5c9a..d332073 100644
  enum ProgressionBossIDs
  {
      RAGNAROS             = 11502,
-@@ -404,6 +407,11 @@ class IndividualProgression
+@@ -406,6 +409,11 @@ class IndividualProgression
  public:
      static IndividualProgression* instance();
  
@@ -546,7 +566,7 @@ index e3c5c9a..d332073 100644
      std::map<uint32, uint8> customProgressionMap;
      questXpMapType questXpMap;
      float vanillaPowerAdjustment, tbcPowerAdjustment, vanillaHealingAdjustment, tbcHealingAdjustment;
-@@ -416,6 +424,9 @@ public:
+@@ -418,6 +426,9 @@ public:
      uint8 GetPlayerProgressionFromQuests(Player* player) const;
  
      bool hasPassedProgression(Player* player, ProgressionState state) const;
@@ -557,7 +577,7 @@ index e3c5c9a..d332073 100644
      void UpdateProgressionState(Player* player, ProgressionState newState) const;
      static void ForceUpdateProgressionState(Player* player, ProgressionState newState);
 diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
-index 83ebcc7..be57806 100644
+index e3c5f17..05ff4c9 100644
 --- a/src/IndividualProgressionPlayer.cpp
 +++ b/src/IndividualProgressionPlayer.cpp
 @@ -86,6 +86,29 @@ public:
@@ -853,18 +873,7 @@ index 83ebcc7..be57806 100644
          if ((!sIndividualProgression->enabled) ||
              (charRace != RACE_DRAENEI && charRace != RACE_BLOODELF && charClass != CLASS_DEATH_KNIGHT) ||
              (!sIndividualProgression->tbcRacesProgressionLevel && !sIndividualProgression->deathKnightProgressionLevel))
-@@ -1336,7 +1404,9 @@ public:
-         }
- 
-         // Check if the account is a bot or excluded from progression
--        if (!sIndividualProgression->botAccountsRegex.empty() || !sIndividualProgression->excludedAccountsRegex.empty())
-+        if (!sIndividualProgression->strictEarnedProgression &&
-+            (!sIndividualProgression->botAccountsRegex.empty() ||
-+             !sIndividualProgression->excludedAccountsRegex.empty()))
-         {
-             std::string accountName;
-             if (AccountMgr::GetName(accountId, accountName) &&
-@@ -1509,6 +1579,11 @@ public:
+@@ -1501,6 +1569,11 @@ public:
  
  };
  

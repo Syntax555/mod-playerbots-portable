@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.25)
 project(PortableEraClientTools LANGUAGES C CXX)
 
 if(NOT STORM_SOURCE_DIR OR NOT ERA_SOURCE_DIR)

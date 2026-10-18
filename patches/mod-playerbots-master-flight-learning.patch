@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index f21660a..22a6202 100644
+index a3741f2..27557e5 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -697,6 +697,11 @@ Playerbots.AttunementQuests = 10279,10277,10282,10283,10284,10285,10296,10297,10
@@ -269,10 +269,10 @@ index 71f45ac..868ab41 100644
  
      switch (packet.GetOpcode())
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 23b77fd..640f27f 100644
+index b90fea3..9708365 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
-@@ -481,6 +481,8 @@ bool PlayerbotAIConfig::Initialize()
+@@ -483,6 +483,8 @@ bool PlayerbotAIConfig::Initialize()
      UseFlyMountAtMinLevel = sConfigMgr->GetOption<int32>("Playerbots.UseFlyMountAtMinLevel", 60);
      UseFastFlyMountAtMinLevel = sConfigMgr->GetOption<int32>("Playerbots.UseFastFlyMountAtMinLevel", 70);
  
@@ -282,10 +282,10 @@ index 23b77fd..640f27f 100644
      BotTaxiDelayMin = sConfigMgr->GetOption<uint32>("Playerbots.BotTaxiDelayMinMs", 350);
      BotTaxiDelayMax = sConfigMgr->GetOption<uint32>("Playerbots.BotTaxiDelayMaxMs", 5000);
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index c7243bd..d4bbcbd 100644
+index af23b8f..ab2bc3d 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -465,6 +465,8 @@ public:
+@@ -469,6 +469,8 @@ public:
      uint32 UseFlyMountAtMinLevel;
      uint32 UseFastFlyMountAtMinLevel;
  

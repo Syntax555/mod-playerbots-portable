@@ -61,7 +61,7 @@ jobs:
           go vet ./...
           GOOS=windows GOARCH=amd64 go test -c -o "$RUNNER_TEMP/startup.test.exe" ./cmd/startup
           GOOS=windows GOARCH=amd64 go vet ./...
-          GOBIN="$RUNNER_TEMP/bin" go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          GOBIN="$RUNNER_TEMP/bin" go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
           "$RUNNER_TEMP/bin/staticcheck" ./...
           GOOS=windows GOARCH=amd64 "$RUNNER_TEMP/bin/staticcheck" ./...
 
@@ -69,7 +69,7 @@ jobs:
         run: python3 cmake/tests/run_fixtures.py check
 
       - name: Lint packaging, release and fixture scripts
-        run: pipx run --spec ruff==0.16.8 ruff check cmake scripts
+        run: pipx run --spec ruff==0.17.1 ruff check cmake scripts
 
       - name: Test distribution assembly and ZIP validation
         shell: pwsh
@@ -194,10 +194,10 @@ jobs:
       UseStructuredOutput: 'false'
       # Bundled runtime dependencies. Change a version together with the
       # SHA-256 of its exact download.
-      MYSQL_VERSION: '8.0.40'
-      MYSQL_ZIP_SHA256: '7c3f1c09ba1b4a82df32a8d889533fceaf2692383e386a04ee708a12de66f129'
-      OPENSSL_VERSION: '3.5.7'
-      OPENSSL_ZIP_SHA256: '2591459a06a6df2d2e2b23b02a28d7c180b95c02fb4965099a708b7365a74014'
+      MYSQL_VERSION: '8.0.46'
+      MYSQL_ZIP_SHA256: '28e9eda019d88eff4478d811ea2110b83f02a3966be157fe91cc55def3ab0d4d'
+      OPENSSL_VERSION: '3.5.9'
+      OPENSSL_ZIP_SHA256: '76da391395be029b44794857b9ff380255e02a0960a98314cd3f6a6816d82696'
     defaults:
       run:
         shell: pwsh
@@ -226,7 +226,7 @@ jobs:
         uses: MarkusJx/install-boost@f9d34f6fe427b8f2ae424d7bf2a3ebccb0dae5a3 # v2.6.0
         id: install-boost
         with:
-          boost_version: 1.84.0
+          boost_version: 1.92.0
           toolset: msvc
           link: static
           platform_version: 2022
@@ -258,7 +258,7 @@ jobs:
           if (-not (Test-Path 'C:\tools\mysql\current\bin\mysqld.exe')) {
               $mysqlName = "mysql-$env:MYSQL_VERSION-winx64"
               $mysqlSeries = $env:MYSQL_VERSION -replace '^(\d+[.]\d+)[.].*$', '$1'
-              $mysqlZip = Save-VerifiedArchive 'MySQL' "https://cdn.mysql.com/archives/mysql-$mysqlSeries/$mysqlName.zip" $env:MYSQL_ZIP_SHA256
+              $mysqlZip = Save-VerifiedArchive 'MySQL' "https://cdn.mysql.com/Downloads/MySQL-$mysqlSeries/$mysqlName.zip" $env:MYSQL_ZIP_SHA256
               New-Item -ItemType Directory -Force 'C:\tools\mysql' | Out-Null
               Expand-Archive $mysqlZip 'C:\tools\mysql' -Force
               if (Test-Path 'C:\tools\mysql\current') { Remove-Item 'C:\tools\mysql\current' -Recurse -Force }

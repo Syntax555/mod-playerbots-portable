@@ -806,9 +806,9 @@ int main() {
     # The seed reads the configured spec mix: spec numbers 0-2 are each class's PvE trees in tab
     # order and the druid's spec 3 is the cat build, matching the authored era orders.
     assert 'uint32 RandomClassSpecProb[MAX_CLASSES][MAX_SPECNO];' in (playerbots / 'PlayerbotAIConfig.h').read_text()
-    spec_labels = {number: label for label, number in re.findall(
-        r'# ([^\n]+)\nPlayerbots\.RandomClassSpecProb\.(\d+\.\d+) =',
-        (playerbots.parent / 'conf/playerbots.conf.dist').read_text())}
+    spec_labels = dict(re.findall(
+        r'^Playerbots\.PremadeSpecName\.(\d+\.\d+) = ([^\n]+)$',
+        (playerbots.parent / 'conf/playerbots.conf.dist').read_text(), re.MULTILINE))
     for cls in (1, 2, 3, 4, 5, 7, 8, 9, 11):
         assert all(spec_labels[f'{cls}.{spec}'].endswith(' pve') for spec in range(3))
     assert spec_labels['11.3'] == 'cat pve'

@@ -46,7 +46,7 @@ jobs:
 
       - name: Download verified server and addon packages
         if: steps.build.outputs.run_id != ''
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: portable-zip
           path: output
@@ -55,7 +55,7 @@ jobs:
 
       - name: Download verified client package
         if: steps.build.outputs.run_id != ''
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: era-client-zip
           path: output

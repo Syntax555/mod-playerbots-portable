@@ -107,11 +107,11 @@ yourself and the clear continues, or skip the objective with `dc skip`.
 
 ## Raids
 
-Raid Clear adds boss and trash mechanics for Molten Core, Blackwing Lair and
-Zul'Gurub: kill order, main and off-tank roles, spacing and positioning against
-the bosses' abilities. They apply on these maps whether you lead the raid or a
-player-led clear walks it from boss to boss, alongside Playerbots' own raid
-strategies. Autonomous parties do not enter raids.
+Raid Clear adds boss and trash mechanics for Molten Core, Blackwing Lair,
+Zul'Gurub and both Ahn'Qiraj raids: kill order, main and off-tank roles, spacing
+and positioning against the bosses' abilities. They apply on these maps whether
+you lead the raid or a player-led clear walks it from boss to boss, alongside
+Playerbots' own raid strategies. Autonomous parties do not enter raids.
 
 Under natural progression only an equipped Onyxia Scale Cloak protects against
 Shadow Flame, and Suppression Devices are disarmed only by rogues casting
@@ -184,6 +184,7 @@ Raid Clear's tactics are set in `configs/modules/mod_raid_clear.conf`:
 | `RaidClear.Tanks.SeparateOnBosses` | `0` | Also separate tanked mobs during boss fights |
 | `RaidClear.DeathLog` | `1` | Log each raid death and its causes to `logs/Server.log` |
 | `RaidClear.MoltenCore.Enable`, `RaidClear.BlackwingLair.Enable`, `RaidClear.ZulGurub.Enable` | `1` | Tactics for each raid |
+| `RaidClear.RuinsOfAhnQiraj.Enable`, `RaidClear.TempleOfAhnQiraj.Enable` | `1` | Ahn'Qiraj 20- and 40-player encounter tactics |
 
 The file's comments say Suppression Devices need the "raid" bot cheat or a
 rogue. Under natural progression bot cheats have no effect: only a bot that

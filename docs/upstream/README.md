@@ -11,19 +11,14 @@ safely.
 | Formation velocity guard | Offered in [AzerothCore #28141](https://github.com/azerothcore/azerothcore-wotlk/issues/28141) | [Patch](formation-velocity.patch), [proposal](formation-velocity.md) |
 | Talent reset cost underflow | Offered in [AzerothCore #28142](https://github.com/azerothcore/azerothcore-wotlk/issues/28142) | [Patch](talent-reset-cost.patch), [proposal](talent-reset-cost.md) |
 | Empty random-battleground candidates | Offered in [AzerothCore #28143](https://github.com/azerothcore/azerothcore-wotlk/issues/28143) | [Patch](random-battleground.patch), [proposal](random-battleground.md) |
-| Empty Individual Progression account filters | Not yet submitted | [Patch](individual-progression-filters.patch), [proposal](individual-progression-filters.md) |
+| Empty Individual Progression account filters | Reference proposal for the pre-cache API; current local guards cover the merged cache API | [Patch](individual-progression-filters.patch), [proposal](individual-progression-filters.md) |
 
 The core issues include the complete minimal diff and validation results.
-Submitting the Individual Progression proposal needs an account that can open
-issues in that repository; the related account-cache change is
+The pinned Individual Progression revision includes the account-cache change
 [PR #1308](https://github.com/ZhengPeiRu21/mod-individual-progression/pull/1308).
-The prepared proposal can be submitted unchanged:
-
-```sh
-gh api --method POST repos/ZhengPeiRu21/mod-individual-progression/issues \
-  -f title='fix: skip account lookups for empty progression filters' \
-  -F body=@docs/upstream/individual-progression-filters.md
-```
+Its current empty-filter guards live in the numeric account overloads in
+[the runtime patch](../../patches/mod-individual-progression-empty-account-filters.patch).
+The review artifacts below retain their recorded base for reproducible checks.
 
 The Individual Progression proposal only includes account classification and
 character-creation filters. The local transition-quest changes, custom talent
