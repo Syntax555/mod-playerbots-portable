@@ -12,8 +12,7 @@ and ordinary player actions.
 - [ ] Earned replacements for the refused Dungeon Clear events so the remaining
   Vanilla dungeons can be enabled: Wailing Caverns (Serpentis and lower-cavern
   drops over real paths, the Disciple of Naralex escort without speed
-  overrides), the Deadmines (Defias Cannon with gunpowder the party carries),
-  Uldaman (the altars through the player interaction), Zul'Farrak (waking
+  overrides), Uldaman (the altars through the player interaction), Zul'Farrak (waking
   Witch Doctor Zum'rah as a player does) and Blackrock Depths (the Ring of Law
   through its arena trigger).
 - [ ] Expand the audited TBC and Wrath routes by providing ordinary player
@@ -45,6 +44,12 @@ and ordinary player actions.
   and normal recovery.
   Remove a failing dungeon from the default list until it is fixed. Confirm bot
   logout after the last real player session ends.
+- [ ] Verify the Deadmines cannon in-game: the tank walks to and loots the
+  gunpowder chest, handles its native ambushes, returns to the cannon and
+  consumes the powder through ordinary item use. Cover full bags, missing or
+  inaccessible powder, another character carrying it, interrupted casts,
+  druid forms, an already open door and resuming the same instance. Confirm
+  an autonomous party retains every member's personal entry and era checks.
 - [ ] Verify long entrance and return paths in-game, including bends,
   interrupted movement and changed obstacles. Measure server tick time while
   multiple groups are travelling.

@@ -51,7 +51,7 @@ using uint8=uint8_t;using uint32=uint32_t;using int32=int32_t;
 constexpr uint32 GO_FLAG_LOCKED={flags['GO_FLAG_LOCKED']},GO_FLAG_INTERACT_COND={flags['GO_FLAG_INTERACT_COND']},GO_FLAG_NOT_SELECTABLE={flags['GO_FLAG_NOT_SELECTABLE']};
 constexpr uint8 DUNGEON_DIFFICULTY_NORMAL=0;
 {trial_progress}
-struct EventStep{{EventStepKind kind{{EventStepKind::Wait}};uint32 goEntry=0,itemId=0,hookId=0;int32 instanceDataId=-1;uint32 instanceDataMin=0;}};
+struct EventStep{{EventStepKind kind{{EventStepKind::Wait}};uint32 goEntry=0,itemId=0,hookId=0,spellId=0;int32 instanceDataId=-1;uint32 instanceDataMin=0;}};
 enum class DcDifficultyGate:uint8{{Any,NormalOnly,HeroicOnly}};
 struct DcDiffKey{{bool isRaid=false;uint8 difficulty=0;bool IsHeroic()const{{return difficulty>0;}}}};
 inline bool DcGateMatches(DcDifficultyGate gate,DcDiffKey key){{return gate==DcDifficultyGate::Any||(gate==DcDifficultyGate::NormalOnly)!=key.IsHeroic();}}
@@ -116,6 +116,17 @@ int main(){
  events[{4,1}]=event("Urn",{step(EventStepKind::UseGameObject,10,4242)});assert(!audited(4));
  events[{4,1}]=event("Egg",{step(EventStepKind::UseItem,0,4242)});assert(!audited(4));
  for(EventStepKind kind:{EventStepKind::Jump,EventStepKind::DropInHole,EventStepKind::TeleportParty,EventStepKind::EscortCreature,EventStepKind::CastSpell,EventStepKind::UseItemOnGO,EventStepKind::UseItemAt}){events[{4,1}]=event("Shortcut",{step(kind)});assert(!audited(4));}
+ // Only the earned cannon's exact item-target spell has an acquisition driver.
+ EventStep cannon=step(EventStepKind::UseItemOnGO,16398,5397);cannon.spellId=6250;
+ assert(DcEarnedEvents::StepAllowed(cannon));
+ for(int field=0;field<4;++field){auto bad=cannon;if(field==0)bad.goEntry++;if(field==1)bad.itemId++;if(field==2)bad.spellId++;if(field==3)bad.hookId++;assert(!DcEarnedEvents::StepAllowed(bad));}
+ objectMgr.templates[17155]={1};objectMgr.templates[16398]={83};
+ roster[36]={{"Defias Cannon",0,1}};events[{36,1}]=event("Defias Cannon",{step(EventStepKind::MoveTo),cannon,step(EventStepKind::WaitForGameObjectState,16397)});
+ assert(audited(36));
+ objectMgr.templates.erase(17155);assert(!audited(36));objectMgr.templates[17155]={2};assert(!audited(36));
+ objectMgr.templates[17155]={1};objectMgr.templates.erase(16398);assert(!audited(36));
+ objectMgr.templates[16398]={0};assert(!audited(36));objectMgr.templates[16398]={83};assert(audited(36));
+ events[{36,1}].steps[1].spellId=1;assert(!audited(36));events[{36,1}].steps[1]=cannon;
  roster[5]={{"Ring of Law",7,0}};assert(!audited(5));
  roster[6]={{"Missing",0,9}};assert(!audited(6));
  conditional[7]={event("Room aggro",{step(EventStepKind::KillCreature)}),event("Drop",{step(EventStepKind::Jump)},false)};assert(audited(7));
@@ -217,7 +228,13 @@ def main():
             ('locked object clicked open', "return go->HasGameObjectFlag(GO_FLAG_LOCKED) ? opening == Opening::Key : opening != Opening::Closed;", 'return opening != Opening::Closed;'),
             ('lockpick counted as click', 'SkillByLockType(LockType(lock->Index[i])) == SKILL_NONE', 'true'),
             ('quest-conditional interaction', '(go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot))', 'false'),
-            ('granted quest item accepted', '|| step.kind == EventStepKind::UseItem || step.itemId', ''),
+            ('granted quest item accepted', '(!cannon && (step.kind == EventStepKind::UseItem || step.itemId))', 'false'),
+            ('arbitrary item target accepted', 'step.goEntry == 16398 &&', ''),
+            ('unearned cannon item accepted', 'step.itemId == 5397 &&', ''),
+            ('arbitrary cannon spell accepted', 'step.spellId == 6250 &&', ''),
+            ('cannon custom hook accepted', '&& step.hookId == 0', ''),
+            ('locked powder source accepted', 'LockOpening(chest->GetLockId(), nullptr) != Opening::Click', 'false'),
+            ('wrong cannon lock accepted', 'target->GetLockId() != 83', 'false'),
             ('legacy objective hook', 'else if (info.onArriveHook)', 'else if (false)'),
             ('roster event objectives ignored', 'BossRosterRegistry::Apply(\n                 mapId, normal, BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL))', 'BossSpawnIndex::Get(mapId, DUNGEON_DIFFICULTY_NORMAL)'),
             ('optional anchored controller skipped', 'if (essential(*ev) && DcGateMatches(ev->gate, normal)', 'if (ev->required && DcGateMatches(ev->gate, normal)'),

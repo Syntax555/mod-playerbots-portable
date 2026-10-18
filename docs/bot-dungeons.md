@@ -3,8 +3,8 @@
 Bots clear instances with Dungeon Clear, Raid Clear and Playerbots' own
 encounter tactics. Under natural progression they act only as ordinary players
 can: they walk real routes, open objects without a lock or with their own key,
-talk to NPCs, fight and loot. They never receive keys, quest items, teleports,
-resurrections or encounter shortcuts.
+talk to NPCs, fight and loot. They earn their own keys and items; teleports,
+free resurrections and encounter shortcuts are refused.
 
 ## Autonomous parties
 
@@ -37,7 +37,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | --- | --- | --- | --- |
 | Ragefire Chasm | 4 | 15–19 | Horde only |
 | Wailing Caverns | 1 | 17–23 | Not enabled: off-mesh drops and the Disciple escort |
-| The Deadmines | 6 | 17–23 | Not enabled: the Defias Cannon uses a scripted item |
+| The Deadmines | 6 | 17–23 | Enabled with the ordinary gunpowder and cannon actions |
 | Shadowfang Keep | 8 | 18–24 | Enabled |
 | Blackfathom Deeps | 10 | 21–27 | Enabled |
 | The Stockade | 12 | 22–28 | Alliance only |
@@ -58,8 +58,23 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 A dungeon is enabled when its required Dungeon Clear objectives and conditional
 controllers for pulling or movement use audited ordinary actions. Unsupported
 controllers cannot be treated as dispensable simply because upstream marks
-them optional. Events requiring scripted shortcuts, quest items or locked
-objects without a normal click prevent automatic recruitment for that map.
+them optional. Events requiring scripted shortcuts, unaudited item acquisition
+or locked objects without an audited ordinary interaction prevent automatic
+recruitment for that map.
+
+For the Deadmines, the tank opens the Defias Gunpowder chest with its native
+opening spell, takes the powder through Playerbots' normal loot handling and
+walks back to use the carried item on the Defias Cannon. The core checks the
+item, lock, cast and interaction range and consumes the powder. Only the Iron
+Clad Door's cannon-open state completes the objective. No quest is required
+for this chest in the pinned world data. Its native ambushes still occur.
+
+This item action alone is admitted by the event audit. Missing or unavailable
+powder, bags above Playerbots' 80% usage safeguard, custom loot restrictions, a
+blocked chest or missing navigation can still stall the run. Powder in another
+character's bags is not borrowed.
+A player carrying it can fire the cannon normally. Complete autonomous Deadmines
+runs, the chest detour and combat interruptions still need in-game validation.
 
 ### TBC and Wrath routes
 
