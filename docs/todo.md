@@ -14,8 +14,8 @@ and ordinary player actions.
   drops over real paths, the Disciple of Naralex escort without speed
   overrides), Uldaman (earned acquisition of the Staff of Prehistoria for
   Ironaya's keystone), Zul'Farrak (waking
-  Witch Doctor Zum'rah as a player does) and Blackrock Depths (the Ring of Law
-  through its arena trigger).
+  Witch Doctor Zum'rah as a player does) and Blackrock Depths (earned access
+  through the Shadowforge Lock with the group's own key).
 - [ ] Expand the audited TBC and Wrath routes by providing ordinary player
   actions for currently refused event controllers, escorts, vehicle sequences
   and locked objectives. Verify complete runs before advertising completion.
@@ -59,6 +59,15 @@ and ordinary player actions.
   door opening, with no direct awakening casts or premature objective credit.
   Check Ironaya's seal with the group's own Staff of Prehistoria; autonomous
   recruitment must remain refused until its acquisition has an audited path.
+- [ ] Verify complete Ring of Law and Blackrock Depths clears in-game: every
+  member physically enters the arena, the native trigger starts Grimstone,
+  both waves and the random boss are fought normally, and the objective waits
+  for Grimstone's final waypoint and native encounter credit. Cover interrupted
+  approaches, combat and looting while gathering, missing mesh, a trailing or
+  disconnected member, a human starting early, an already running event,
+  a wipe with ordinary resurrection and return travel, the two-minute reset
+  cooldown, stop/resume, a completed event and a fresh instance. Confirm the
+  separate Shadowforge key requirement still refuses autonomous recruitment.
 - [ ] Verify long entrance and return paths in-game, including bends,
   interrupted movement and changed obstacles. Measure server tick time while
   multiple groups are travelling.

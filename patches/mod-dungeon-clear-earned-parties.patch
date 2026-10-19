@@ -112,7 +112,7 @@ index 4ebe94b..62e7601 100644
              return false;
          // No navmesh to land on: on a map the core runs without pathfinding
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-index 10b9e59..084c3b8 100644
+index 10b9e59..2c66080 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 @@ -3,6 +3,8 @@
@@ -124,6 +124,17 @@ index 10b9e59..084c3b8 100644
  #include "DungeonClearActions.h"
  #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
  
+@@ -2012,8 +2014,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+             // and the same Yield/Hold pair, as the UseItemOnGO branch below.
+             //
+             // Only once ARRIVED: while still walking in, the move is the work.
+-            // Excluded when the garrison carries a WhileHolding hook (the Ring of
+-            // Law): there the hold's per-tick hook is the only thing that notices
++            // Excluded when the garrison carries a WhileHolding hook: there
++            // the hold's per-tick hook is the only thing that notices
+             // the encounter resetting behind the party, so it must not be yielded.
+             //
+             // The raid-muster step (DC_HOOK_RAID_MUSTER) is a camp too, with no
 @@ -2085,7 +2087,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // its attackers + self-heal gossip + watchdog) the whole way to the
              // final boss. DriveEscortCreature returns false only once that boss
@@ -176,18 +187,33 @@ index 10b9e59..084c3b8 100644
      // nothing fightable for the full StuckCombatTimeout — no holder that is both
      // reachable and actually coming for us. Force-clear it exactly as a GM
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
-index 6bc8a74..da1a838 100644
+index 6bc8a74..38fb71a 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
-@@ -4,6 +4,7 @@
+@@ -4,6 +4,8 @@
   */
  
  #include "DungeonClearActions.h"
 +#include "DcEarnedPlay.h"
++#include "DcRingOfLaw.h"
  
  #include <algorithm>
  #include <cmath>
-@@ -764,6 +765,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+@@ -341,6 +343,13 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+         lootYieldStart = 0;  // not looting -> reset the commit timer
+     }
+ 
++    if (DcRingOfLaw::Follow(bot, tank))
++    {
++        followedTank = tank->GetGUID();
++        DcFollowerLifecycle::MarkFollowing(bot->GetGUID());
++        return true;
++    }
++
+     // A transit is driving the column to a published cursor: every branch below
+     // positions against the TANK instead, and while the tank is snared behind its
+     // own cursor those two answers fight each other tick by tick. See
+@@ -764,6 +773,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
                      ++sameMap;
          followDist = std::max(followDist, DcFormation::RingRadius(sameMap, followDist));
      }
@@ -296,6 +322,146 @@ index 97f5205..b97418d 100644
          return false;  // never auto-release; bot stays a corpse until rezzed
  
      return AutoReleaseSpiritAction::isUseful();
+diff --git a/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h b/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
+index aad74c4..ce31589 100644
+--- a/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
++++ b/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
+@@ -732,17 +732,9 @@ public:
+     // alone still ends the step. Chain it right after the step it arms:
+     //   .MoveToHoldUntilInstanceData(x, y, z, r, dataId, min).WhileHolding(hook)
+     //
+-    // For a garrison whose gate can regress BEHIND THE PARTY'S BACK, where the
+-    // usual "start it with a Custom step, then hold for the finish" pair silently
+-    // stops being true. The Ring of Law is the case it exists for: npc_grimstone's
+-    // own 30s "no summon has a victim" watchdog SetData(FAIL)s the arena, which
+-    // despawns Grimstone and every wave and puts TYPE_RING_OF_LAW back to
+-    // NOT_STARTED. Nothing then restarts it — the Custom step that fired the
+-    // areatrigger latched Done minutes ago, and the test-run areatrigger relay is
+-    // EDGE-triggered on a volume the party is already standing in — so the hold
+-    // burns its whole timeout on an encounter that is no longer running. Re-running
+-    // the start hook from inside the hold closes that: it is a no-op while the
+-    // encounter is live and re-fires the real trigger once it isn't.
++    // A start step can already be complete when a later garrison's gate resets.
++    // Re-running its hook while holding lets the native encounter retry without
++    // latching completion during the reset or tracking a second restart state.
+     EventBuilder& WhileHolding(uint32 hookId);
+     EventBuilder& UseGO(uint32 goEntry, float searchRadius = 0.0f,
+                         float x = 0.0f, float y = 0.0f, float z = 0.0f);
+diff --git a/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp b/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp
+index 3ad71d6..2098cb0 100644
+--- a/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp
+@@ -9,81 +9,12 @@
+ 
+ #include <unordered_map>
+ 
+-// --- Blackrock Depths (map 230) — the RING OF LAW, ANCHORED + PERSISTENT ---
+-// A sealed arena gauntlet that gates the way between Houndmaster Grebmar and
+-// Pyromancer Loregrain. A party member steps onto the centre (area trigger
+-// 1526), the entrance gate slams shut, Grimstone (10096) summons two random
+-// trash waves then one random boss, and on the boss's death the forward gate
+-// opens. Nothing the party fights is in the spawn tables — the waves and boss
+-// are all SUMMONED and randomised — so the event is purely position/state based.
+-//
+-// Navigation is done by the boss list: the Ring of Law is added as an OBJECTIVE
+-// anchor at the arena centre (BossRosterRegistry, encounterIndex 3, between
+-// Grebmar at 2 and Loregrain at 4). Boss-nav drives the tank into the arena
+-// exactly as to any boss; the event then runs in place.
+-//
+-// The arena is COME-TO-YOU: every summon AttackStart()s a random player within
+-// 100yd, so the party never pulls — it holds the centre and the combat engine
+-// fights reactively as the waves and boss arrive. We therefore do NOT use
+-// ClearRadius (a "done when the band is empty" gate would false-complete during
+-// the ~12s Grimstone intro and the ~10s wave-2->boss gap, both of which leave
+-// the floor momentarily empty while the arena is still sealed). It would also
+-// risk driving an outward engage UP to the hostile spectator gallery (z ~ -35)
+-// or DOWN toward Grebmar's prison (z ~ -84), which flank the floor (z ~ -54).
+-//
+-// Instead the completion gate is the instance state reaching DONE
+-// (TYPE_RING_OF_LAW == DONE): it can't be missed across a combat tick-gap and
+-// can't fire during the empty-floor windows. The tank garrisons dead-centre,
+-// re-centring between fights (the MoveTo re-checks distance every tick), until
+-// the whole gauntlet is done — at which point the objective latches and the
+-// clear proceeds out the now-open north gate toward Loregrain.
+-//
+-// TYPE_RING_OF_LAW IS NOT MONOTONIC, unlike the phase counters the instance-data
+-// gate is usually pointed at. npc_grimstone runs its own watchdog (updateReset):
+-// once a wave or the boss is out and 30s pass with no summon holding a victim, it
+-// SetData(FAIL)s — which despawns Grimstone and every summon, puts the gates back
+-// as they were, and drops the state to NOT_STARTED. Nothing in the core restarts
+-// it, and nothing on our side used to either: the Custom step that fired the
+-// areatrigger had latched Done, and the test-run areatrigger relay is EDGE-
+-// triggered on a volume the party is standing in. The party then held an empty
+-// arena for the whole 600s timeout. That is what tr-20260808-150405-10 did.
+-// .WhileHolding re-runs the start hook from inside the garrison, so a reset is
+-// re-fired (the core's own 2-minute post-fail cooldown decides when it takes).
+-//
+-// PERSISTENT because a multi-combat arena event sees a >1s Drive gap after each
+-// wave/boss fight (the bot is on the combat engine); a non-persistent event
+-// would rewind to step 0 each time.
+-
++// Ring of Law uses the native spatial trigger and Grimstone encounter. The
++// persistent driver gathers the party before starting and waits for core DONE,
++// including after combat interruptions or the native post-wipe cooldown.
+ namespace
+ {
+-    // Instance-data accessor + state (mirrors instance_blackrock_depths.cpp's
+-    // TYPE_RING_OF_LAW / EncounterState; kept local so this TU needn't pull the
+-    // core BRD header). GetData(TYPE_RING_OF_LAW) returns the live state.
+-    constexpr uint32 BRD_TYPE_RING_OF_LAW = 1;  // DataTypes::TYPE_RING_OF_LAW
+-    constexpr uint32 BRD_RING_DONE = 3;          // EncounterState::DONE
+-
+-    // Arena centre = area trigger 1526 (x,y from AreaTrigger.dbc; z on the floor
+-    // where the waves/boss spawn, ~3.9yd below the 8yd trigger sphere's centre —
+-    // well inside it, so arriving here both crosses the trigger and lets the
+-    // EnsureRingStarted fallback fire it).
+-    constexpr float BRD_ARENA_X = 596.432f;
+-    constexpr float BRD_ARENA_Y = -188.498f;
+-    constexpr float BRD_ARENA_Z = -53.9f;
+-
+-    // Garrison tolerance, used for BOTH the walk-in and the hold so the two steps
+-    // agree on where "on the spot" is. Tight on purpose: this is a 4yd leash, not
+-    // a dead band. It was 10yd on the hold, which is wide enough that the tank
+-    // simply kept wherever the last wave ended — tr-20260808-150405-10 finished
+-    // the waves at (599.0, -197.2), 9.7yd out toward the mob gate, and never
+-    // re-centred because 9.7 < 10. The arena is come-to-you and its script picks
+-    // targets and spawns the spoils chest around the centre; standing off it is
+-    // drift, not positioning.
+-    constexpr float BRD_ARENA_RADIUS = 4.0f;
+-
+-    // EnsureRingStarted hook (ObjectiveHookRegistry id 1): fires the real area
+-    // trigger if arrival alone didn't start the encounter (all-bot party / no
+-    // human on the trigger).
+-    constexpr uint32 BRD_ENSURE_RING_STARTED_HOOK = 1;
++    constexpr uint32 BRD_RING_OF_LAW_HOOK = 1;
+ 
+     // --- Shadowforge Lock (event 2) ---------------------------------------
+     // The lever in the East Garrison, and the Giant Doors it drives. GOState
+@@ -116,22 +47,8 @@ void RegisterBlackrockDepthsEvents(std::vector<DungeonEvent>& out)
+         EventBuilder(230, 1, "Ring of Law")
+             .Anchored(/*encounterIndex*/ 3)
+             .Persistent()
+-            // 1. Settle on the trigger spot. Arrival crosses area trigger 1526
+-            //    (you, or a self-bot relayed from the master) -> IN_PROGRESS.
+-            .MoveTo(BRD_ARENA_X, BRD_ARENA_Y, BRD_ARENA_Z, BRD_ARENA_RADIUS)
+-            // 2. Make sure the encounter actually started; if not (autonomous /
+-            //    no human on the trigger) the hook fires the real trigger. Done
+-            //    once IN_PROGRESS.
+-            .Custom(BRD_ENSURE_RING_STARTED_HOOK)
+-            // 3. Hold dead-centre, re-centring between fights, until the whole
+-            //    gauntlet is DONE. Combat AI fights the waves + random boss as
+-            //    they arrive. Generous timeout: the boss fight can be long. The
+-            //    same hook runs from inside the hold so a Grimstone-side reset
+-            //    (see the header) restarts the arena instead of stalling it.
+-            .MoveToHoldUntilInstanceData(BRD_ARENA_X, BRD_ARENA_Y, BRD_ARENA_Z,
+-                                         BRD_ARENA_RADIUS, BRD_TYPE_RING_OF_LAW,
+-                                         /*minValue*/ BRD_RING_DONE)
+-            .WhileHolding(BRD_ENSURE_RING_STARTED_HOOK)
++            .StepsOwnMovement()
++            .Custom(BRD_RING_OF_LAW_HOOK)
+             .Timeout(600000)
+             .Build());
+ 
 diff --git a/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp b/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp
 index da0b0ea..5851768 100644
 --- a/src/Ai/Dungeon/DungeonClear/Data/Events/DeadminesEvents.cpp
@@ -459,21 +625,77 @@ index d99c492..3e053be 100644
  }
  
 diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
-index 0348d68..f2d6a8b 100644
+index 0348d68..9754dfa 100644
 --- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
   * and/or modify it under version 3 of the License, or (at your option), any later version.
   */
  
 +#include "DcEarnedPlay.h"
++#include "DcRingOfLaw.h"
  #include "ObjectiveHookRegistry.h"
  
  #include <atomic>
-@@ -95,73 +96,6 @@ namespace
-         return ObjectiveArriveResult::Running;
-     }
+@@ -40,126 +42,10 @@
  
+ namespace
+ {
+-    // --- Blackrock Depths Ring of Law: EnsureRingStarted (hook id 1) -------
+-    // The Ring of Law starts when a party member crosses area trigger 1526 at
+-    // the arena centre. Normally that's the human (or a self-bot relayed from
+-    // the master). But a bot never autonomously sends CMSG_AREATRIGGER, so an
+-    // all-bot party (or a human not on the trigger when the tank arrives) would
+-    // never start it. Used as the Ring of Law event's second step (a Custom
+-    // step), this fires the REAL trigger from the leader once it's standing on
+-    // the spot: the core validates the bot is within the trigger radius and runs
+-    // at_ring_of_law for real (which itself honours the 2-minute post-wipe
+-    // cooldown and no-ops if already started). Done once the encounter is at
+-    // least IN_PROGRESS; Running (and re-fires, harmlessly idempotent) until then.
+-    //
+-    // It is ALSO the arena's RESTART: the event's garrison step re-runs it every
+-    // tick while holding (.WhileHolding, see BlackrockDepthsEvents). The state is
+-    // not monotonic — npc_grimstone's 30s "no summon has a victim" watchdog
+-    // SetData(FAIL)s back to NOT_STARTED and despawns everything — and this is the
+-    // only thing that notices. The re-fire during the core's 2-minute post-fail
+-    // cooldown is a no-op it drops on the floor, which is what makes "just fire it
+-    // every tick" the right shape here: no cooldown bookkeeping of our own to keep
+-    // in step with the core's.
+-    constexpr uint32 BRD_TYPE_RING_OF_LAW = 1;  // DataTypes::TYPE_RING_OF_LAW
+-    constexpr uint32 BRD_RING_IN_PROGRESS = 1;  // EncounterState::IN_PROGRESS
+-    constexpr uint32 BRD_RING_OF_LAW_TRIGGER = 1526;
+-
+     ObjectiveArriveResult EnsureRingStarted(Player* bot, AiObjectContext* /*context*/,
+                                             DungeonBossInfo const& /*info*/)
+     {
+-        InstanceScript* inst = DcTargeting::GetInstanceScript(bot);
+-        if (!inst)
+-            return ObjectiveArriveResult::Running;  // not in the instance yet
+-
+-        // Already running (or DONE) — let the hold step take over.
+-        if (inst->GetData(BRD_TYPE_RING_OF_LAW) >= BRD_RING_IN_PROGRESS)
+-            return ObjectiveArriveResult::Done;
+-
+-        // Fire the real area trigger from the leader. Same supported path
+-        // ReachAreaTriggerAction uses for a non-teleport trigger; the core
+-        // range-checks and runs the at_ring_of_law script.
+-        WorldPacket p(CMSG_AREATRIGGER);
+-        p << uint32(BRD_RING_OF_LAW_TRIGGER);
+-        p.rpos(0);
+-        bot->GetSession()->HandleAreaTriggerOpcode(p);
+-
+-        // Log the fire that TOOK, not every fire: while the encounter refuses to
+-        // start (out of the trigger radius, or inside the core's post-fail
+-        // cooldown) this runs every tick, and one line per start is the whole
+-        // signal — a second one in a run means the arena reset and was restarted.
+-        if (inst->GetData(BRD_TYPE_RING_OF_LAW) >= BRD_RING_IN_PROGRESS)
+-            LOG_INFO("playerbots.dungeonclear",
+-                     "[DC:{}] Ring of Law started by forged areatrigger {} at ({:.1f},{:.1f},{:.1f})",
+-                     bot->GetName(), BRD_RING_OF_LAW_TRIGGER, bot->GetPositionX(),
+-                     bot->GetPositionY(), bot->GetPositionZ());
+-        return ObjectiveArriveResult::Running;
+-    }
+-
 -    // --- Deadmines Defias Cannon: FireDefiasCannon (hook id 2) ------------
 -    // The way to the pirate ship is sealed by the Iron Clad Door (GO 16397,
 -    // lock 202 — rogue-pick only, so a bot party can never click it open). A
@@ -539,12 +761,11 @@ index 0348d68..f2d6a8b 100644
 -        targets.SetGOTarget(cannon);
 -        bot->CastItemUseSpell(gunpowder, targets, 0, 0);
 -        return ObjectiveArriveResult::Running;  // door-state gate confirms it
--    }
--
++        return DcRingOfLaw::Run(bot);
+     }
+ 
      // --- ZulFarrak: WakeZumrah (hook id 5) --------------------------------
-     // Witch Doctor Zum'rah (7271) spawns with creature_template faction 35
-     // (friendly to everyone) — he is NOT flag-gated, so nothing in the engage
-@@ -820,7 +754,6 @@ namespace
+@@ -820,7 +706,6 @@ namespace
              using Reg = ObjectiveHookRegistry;
              Reg::HookTable t;
              Reg::AddHook(t, 1, &EnsureRingStarted);      // BRD Ring of Law — start the arena event
@@ -552,13 +773,13 @@ index 0348d68..f2d6a8b 100644
              Reg::AddHook(t, 3, &GrantIncendiaryBombs);   // Old Hillsbrad — pack of bombs (unlocks Brazen)
              Reg::AddHook(t, 4, &GrantCacheKeyAndLoot);   // The Mechanar — Cache of the Legion key + loot
              Reg::AddHook(t, 5, &WakeZumrah);             // ZulFarrak — flip Zum'rah hostile (AT 962)
-@@ -888,6 +821,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
+@@ -888,6 +773,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
  {
      if (hookId == 0)
          return ObjectiveArriveResult::Done;
 +    // Hooks script shortcuts (granted items, faction swaps, forced damage and
-+    // object states). Natural progression leaves such objectives to players.
-+    if (DcEarnedPlay::Active())
++    // object states). Only the audited spatial Ring of Law driver is admitted.
++    if (DcEarnedPlay::Active() && hookId != 1)
 +        return ObjectiveArriveResult::Blocked;
  
      auto const& hooks = Hooks();
@@ -946,10 +1167,10 @@ index 0000000..97ba1d1
 +#endif
 diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
 new file mode 100644
-index 0000000..70e8535
+index 0000000..bd7f431
 --- /dev/null
 +++ b/src/DcEarnedEvents.cpp
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,158 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -970,9 +1191,9 @@ index 0000000..70e8535
 +{
 +    enum class Opening { Closed, Click, Key };
 +
-+    // How a player opens a lock: a profession-free "open" lock is a plain
-+    // click, an item lock needs the key itself. Picking locks is a rogue spell
-+    // the event step does not cast, so it never counts here.
++    // The native lock check matches the opening spell's lock type before
++    // checking professions. Special opening/closing and blasting spells are
++    // not a plain click, even when SkillByLockType returns SKILL_NONE.
 +    Opening LockOpening(uint32 lockId, Player* bot)
 +    {
 +        if (!lockId)
@@ -985,7 +1206,7 @@ index 0000000..70e8535
 +        {
 +            if (lock->Type[i] == LOCK_KEY_ITEM && lock->Index[i] && bot && bot->HasItemCount(lock->Index[i], 1))
 +                return Opening::Key;
-+            if (lock->Type[i] == LOCK_KEY_SKILL && SkillByLockType(LockType(lock->Index[i])) == SKILL_NONE)
++            if (lock->Type[i] == LOCK_KEY_SKILL && lock->Index[i] == LOCKTYPE_OPEN)
 +                click = true;
 +        }
 +        return click ? Opening::Click : Opening::Closed;
@@ -995,6 +1216,11 @@ index 0000000..70e8535
 +    {
 +        for (EventStep const& step : ev.steps)
 +        {
++            if (step.kind == EventStepKind::Custom && (ev.mapId != 230 || ev.id != 1))
++            {
++                reason = "event '" + ev.name + "' has no audited controller";
++                return false;
++            }
 +            bool const cannon = DcEarnedEvents::IsDefiasCannonStep(step);
 +            if (!DcEarnedEvents::StepAllowed(step) || (!cannon && (step.kind == EventStepKind::UseItem || step.itemId)))
 +            {
@@ -1037,6 +1263,8 @@ index 0000000..70e8535
 +    {
 +        switch (step.kind)
 +        {
++            case EventStepKind::Custom:
++                return step.hookId == 1; // Ring of Law: native spatial trigger and core completion.
 +            case EventStepKind::MoveTo:
 +                return step.hookId == 0;
 +            case EventStepKind::UseItemOnGO:
@@ -1267,6 +1495,155 @@ index 0000000..f7d2776
 +    uint8 Expansion(Player* player);
 +    // Individual Progression's map entry gates, checked without side effects.
 +    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z);
++}
++#endif
+diff --git a/src/DcRingOfLaw.cpp b/src/DcRingOfLaw.cpp
+new file mode 100644
+index 0000000..836ba45
+--- /dev/null
++++ b/src/DcRingOfLaw.cpp
+@@ -0,0 +1,123 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#include "DcRingOfLaw.h"
++#include "DcEarnedPlay.h"
++#include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
++#include "Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcMovement.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
++#include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
++#include "AiObjectContext.h"
++#include "Group.h"
++#include "InstanceScript.h"
++#include "MotionMaster.h"
++#include "ObjectAccessor.h"
++#include "ObjectMgr.h"
++#include "Opcodes.h"
++#include "Player.h"
++#include "Playerbots.h"
++#include "WorldPacket.h"
++#include "WorldSession.h"
++
++namespace
++{
++    constexpr uint32 RingState = 1; // TYPE_RING_OF_LAW
++    constexpr uint32 RingTrigger = 1526;
++    constexpr float FloorZ = -53.9f;
++
++    bool Gather(Player* bot, AreaTrigger const* trigger)
++    {
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
++        if (!ai || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
++            bot->IsBeingTeleported() || bot->m_mover != bot ||
++            bot->IsNonMeleeSpellCast(false) || bot->GetLootGUID() ||
++            !DcMovement::DcMovementAllowed(ai))
++            return false;
++
++        if (bot->IsInAreaTriggerRadius(trigger))
++        {
++            DcMovement::StopBot(bot, DcMovement::Stop::Hold);
++            return true;
++        }
++        // The trigger centre is above the arena floor. Walk on the mesh;
++        // only the native volume test, never a movement order, proves arrival.
++        if (!bot->isMoving() && ai->CanMove() &&
++            DcEarnedPlay::ReachableLeg(bot, trigger->x, trigger->y, FloorZ))
++            bot->GetMotionMaster()->MovePoint(0, trigger->x, trigger->y, FloorZ,
++                                             FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
++                                             /*generatePath*/ true, false);
++        return false;
++    }
++}
++
++namespace DcRingOfLaw
++{
++    bool IsActive(Player* leader)
++    {
++        if (!leader || leader->GetMapId() != 230 || !leader->IsInWorld())
++            return false;
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(leader);
++        AiObjectContext* context = ai ? ai->GetAiObjectContext() : nullptr;
++        return context && DcRun::Of(context).enabled && !DcRun::Of(context).paused &&
++               DungeonEventExecutor::IsPersistentAnchoredEventActive(context) &&
++               context->GetValue<DungeonEventProgress&>(DcKey::EventProgress)->Get().eventId == 1;
++    }
++
++    ObjectiveArriveResult Run(Player* bot)
++    {
++        if (!bot || bot->GetMapId() != 230 || !bot->IsInWorld() ||
++            !GET_PLAYERBOT_AI(bot) || !bot->GetSession())
++            return ObjectiveArriveResult::Blocked;
++        // A queued objective can outlive dc off, which clears the pause flag.
++        AiObjectContext* context = GET_PLAYERBOT_AI(bot)->GetAiObjectContext();
++        if (!context || !DcRun::Of(context).enabled || DcRun::Of(context).paused)
++            return ObjectiveArriveResult::Running;
++        InstanceScript* instance = bot->GetInstanceScript();
++        AreaTrigger const* trigger = sObjectMgr->GetAreaTrigger(RingTrigger);
++        if (!instance || !trigger || trigger->map != 230)
++            return ObjectiveArriveResult::Blocked;
++
++        uint32 const state = instance->GetData(RingState);
++        // This is an EncounterState, not a monotonic phase counter. Grimstone
++        // alone finishes it, after the boss dies and his final waypoint runs.
++        if (state == DONE)
++            return ObjectiveArriveResult::Done;
++        if (state != NOT_STARTED && state != IN_PROGRESS)
++            return ObjectiveArriveResult::Running;
++        if (!Gather(bot, trigger) || state == IN_PROGRESS)
++            return ObjectiveArriveResult::Running;
++
++        // Closing the entrance on a trailing member would strand it. Followers
++        // gather through their own action; humans must walk in themselves.
++        if (Group* group = bot->GetGroup())
++            for (auto const& slot : group->GetMemberSlots())
++            {
++                Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid);
++                if (!member || !member->IsInWorld() || !member->IsAlive() ||
++                    !member->IsInMap(bot) || !member->InSamePhase(bot) ||
++                    member->IsInFlight() || member->IsBeingTeleported() ||
++                    !member->IsInAreaTriggerRadius(trigger))
++                    return ObjectiveArriveResult::Running;
++            }
++
++        // Reattempt after an interrupted run or native reset. The core owns
++        // its post-wipe cooldown, summons, gates, combat and encounter credit.
++        WorldPacket packet(CMSG_AREATRIGGER);
++        packet << uint32(RingTrigger);
++        bot->GetSession()->HandleAreaTriggerOpcode(packet);
++        return ObjectiveArriveResult::Running;
++    }
++
++    bool Follow(Player* member, Player* leader)
++    {
++        if (!member || !IsActive(leader) ||
++            !member->IsInWorld() || !member->IsInMap(leader) || !member->InSamePhase(leader))
++            return false;
++        InstanceScript* instance = leader->GetInstanceScript();
++        AreaTrigger const* trigger = sObjectMgr->GetAreaTrigger(RingTrigger);
++        if (!instance || instance->GetData(RingState) != NOT_STARTED || !trigger || trigger->map != 230)
++            return false;
++
++        Gather(member, trigger);
++        return true; // The ordinary formation must not pull us out of the volume.
++    }
++}
+diff --git a/src/DcRingOfLaw.h b/src/DcRingOfLaw.h
+new file mode 100644
+index 0000000..dd89dde
+--- /dev/null
++++ b/src/DcRingOfLaw.h
+@@ -0,0 +1,14 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#ifndef DC_RING_OF_LAW_H
++#define DC_RING_OF_LAW_H
++
++class Player;
++enum class ObjectiveArriveResult;
++
++namespace DcRingOfLaw
++{
++    bool IsActive(Player* leader);
++    ObjectiveArriveResult Run(Player* bot);
++    bool Follow(Player* member, Player* leader);
 +}
 +#endif
 diff --git a/src/DcUldamanAltars.cpp b/src/DcUldamanAltars.cpp

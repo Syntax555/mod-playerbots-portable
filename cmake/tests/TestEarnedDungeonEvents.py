@@ -87,6 +87,8 @@ int main(){
  std::set<EventStepKind> allowed{EventStepKind::MoveTo,EventStepKind::UseGameObject,EventStepKind::Gossip,EventStepKind::WaitForSpawn,EventStepKind::WaitForGameObjectState,EventStepKind::KillCreature,EventStepKind::ClearRadius,EventStepKind::Wait,EventStepKind::UseItem};
  for(EventStepKind kind:ALL_KINDS)assert(DcEarnedEvents::StepAllowed(step(kind))==allowed.count(kind));
  assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::MoveTo,0,0,7)));
+ assert(DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,1)));
+ for(uint32 hook:{0u,2u,5u,40u})assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,hook)));
  // Locks: a click opens no lock or a profession-free open lock; keys open item locks.
  sLockStore.rows={{1,lock(1,{{LOCK_KEY_SKILL,LOCKTYPE_OPEN}})},{2,lock(2,{{LOCK_KEY_ITEM,5000}})},{3,lock(3,{{LOCK_KEY_SKILL,LOCKTYPE_PICKLOCK}})},{4,lock(4,{{LOCK_KEY_SPELL,1234}})},{5,lock(5,{{LOCK_KEY_ITEM,5000},{LOCK_KEY_SKILL,LOCKTYPE_PICKLOCK}})}};
  Player bot;GameObject go;
@@ -128,6 +130,10 @@ int main(){
  objectMgr.templates[16398]={0};assert(!audited(36));objectMgr.templates[16398]={83};assert(audited(36));
  events[{36,1}].steps[1].spellId=1;assert(!audited(36));events[{36,1}].steps[1]=cannon;
  roster[5]={{"Ring of Law",7,0}};assert(!audited(5));
+ roster[230]={{"Ring of Law",0,1}};events[{230,1}]=event("Ring of Law",{step(EventStepKind::Custom,0,0,1)});
+ events[{230,1}].mapId=230;events[{230,1}].id=1;assert(audited(230));
+ events[{230,1}].mapId=229;assert(!audited(230));events[{230,1}].mapId=230;
+ events[{230,1}].id=2;assert(!audited(230));events[{230,1}].id=1;
  roster[6]={{"Missing",0,9}};assert(!audited(6));
  conditional[7]={event("Room aggro",{step(EventStepKind::KillCreature)}),event("Drop",{step(EventStepKind::Jump)},false)};assert(audited(7));
  conditional[7].push_back(event("Wake",{step(EventStepKind::Custom)}));assert(!audited(7));
@@ -225,8 +231,12 @@ def main():
         mutations = [
             ('off-mesh jump step', 'case EventStepKind::MoveTo:\n                return step.hookId == 0;', 'case EventStepKind::Jump:\n            case EventStepKind::MoveTo:\n                return step.hookId == 0;'),
             ('custom hook on a walk', 'return step.hookId == 0;', 'return true;'),
+            ('arbitrary custom shortcut', 'return step.hookId == 1;', 'return true;'),
+            ('earned Ring hook denied', 'return step.hookId == 1;', 'return false;'),
+            ('Ring controller on another map', 'ev.mapId != 230 || ', ''),
+            ('Ring controller on another event', ' || ev.id != 1', ''),
             ('locked object clicked open', "return go->HasGameObjectFlag(GO_FLAG_LOCKED) ? opening == Opening::Key : opening != Opening::Closed;", 'return opening != Opening::Closed;'),
-            ('lockpick counted as click', 'SkillByLockType(LockType(lock->Index[i])) == SKILL_NONE', 'true'),
+            ('lockpick counted as click', 'lock->Index[i] == LOCKTYPE_OPEN', 'true'),
             ('quest-conditional interaction', '(go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot))', 'false'),
             ('granted quest item accepted', '(!cannon && (step.kind == EventStepKind::UseItem || step.itemId))', 'false'),
             ('arbitrary item target accepted', 'step.goEntry == 16398 &&', ''),

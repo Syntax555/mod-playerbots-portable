@@ -49,7 +49,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Zul'Farrak | 24 | 43–49 | Not enabled: Witch Doctor Zum'rah is woken by a script |
 | Maraudon: Purple, Orange, Pristine Waters | 272, 26, 273 | 41–47, 43–49, 45–51 | Enabled |
 | Sunken Temple | 28 | 47–53 | Enabled |
-| Blackrock Depths: Prison, Upper City | 30, 276 | 49–55, 53–59 | Not enabled: the Ring of Law is a scripted event |
+| Blackrock Depths: Prison, Upper City | 30, 276 | 49–55, 53–59 | Not enabled: the Shadowforge Lock requires a key |
 | Lower Blackrock Spire | 32 | 57–60 | Enabled |
 | Dire Maul: East, West, North | 34, 36, 38 | 55–60, 58–60, 60 | Enabled |
 | Scholomance | 2 | 60 | Enabled |
@@ -91,6 +91,22 @@ remains refused because acquiring the Staff of Prehistoria for Ironaya's
 keystone has no audited acquisition driver. A player-led group must bring its
 own staff and open the seal through the normal interaction.
 
+In player-led Blackrock Depths clears, the Ring of Law objective gathers the
+group inside the arena's actual trigger volume. Bots walk there over checked
+mesh paths; human members enter themselves. The tank submits the ordinary
+area-trigger action only after everyone arrives. The core starts Grimstone,
+spawns the waves and boss, controls the gates and awards encounter credit.
+The objective waits for the core's exact completed state, including Grimstone's
+final walk after the boss dies. An empty arena between waves is not completion.
+
+An already running event continues through normal combat. After a native reset,
+the group gathers again and the core enforces its two-minute post-wipe cooldown.
+A cancelled or paused bot clear does not submit a queued arena start.
+Missing paths, dead or absent members can stall a new start. Fixtures cover the
+spatial trigger, group guards, retries and completion checks; complete Ring of
+Law and Blackrock Depths runs still need in-game validation. Autonomous parties
+remain refused because the separate Shadowforge Lock objective requires a key.
+
 ### TBC and Wrath routes
 
 The default configuration also lists all 16 normal TBC and 16 normal Wrath
@@ -100,13 +116,16 @@ object locks and navigation can further restrict them.
 
 | Era | Candidate routes | Refused event routes |
 | --- | --- | --- |
-| TBC | Hellfire Ramparts, Blood Furnace, Steamvault, Mana-Tombs, Auchenai Crypts, Sethekk Halls, Shadow Labyrinth, Botanica, Magisters' Terrace | Shattered Halls, Slave Pens, Underbog, Escape from Durnholde, Black Morass, Mechanar, Arcatraz |
+| TBC | Hellfire Ramparts, Blood Furnace, Mana-Tombs, Auchenai Crypts, Sethekk Halls, Shadow Labyrinth, Botanica, Magisters' Terrace | Shattered Halls, Slave Pens, Underbog, Steamvault, Escape from Durnholde, Black Morass, Mechanar, Arcatraz |
 | Wrath | Utgarde Keep, Ahn'kahet, Nexus, Forge of Souls | Utgarde Pinnacle, Azjol-Nerub, Oculus, Halls of Lightning, Halls of Stone, Culling of Stratholme, Drak'Tharon Keep, Gundrak, Violet Hold, Trial of the Champion, Pit of Saron, Halls of Reflection |
 
 Refused routes require event, escort, vehicle, item or movement handling that
 the earned integration cannot perform through ordinary actions. For example,
 Trial of the Champion needs its arena controller, and Drak'Tharon Keep needs
 an unaudited Novos controller. They remain available to player-led groups.
+Steamvault's required access-panel objective needs an opening lock type that
+the ordinary event click does not implement. Special opening, closing or
+blasting spells do not count as a plain unlocked interaction in the event audit.
 
 Entry rules still apply to candidate routes. Individual Progression admits
 Magisters' Terrace from tier 12 and The Forge of Souls from tier 16; the core
