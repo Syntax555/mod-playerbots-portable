@@ -45,7 +45,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Gnomeregan | 14 | 25–31 | Enabled |
 | Scarlet Monastery: Graveyard, Library, Armory, Cathedral | 18, 165, 163, 164 | 29–35, 32–38, 34–40, 37–43 | Enabled |
 | Razorfen Downs | 20 | 34–40 | Enabled |
-| Uldaman | 22 | 37–43 | Not enabled: the altars are scripted spell casts |
+| Uldaman | 22 | 37–43 | Not enabled: Ironaya's keystone requires the Staff of Prehistoria |
 | Zul'Farrak | 24 | 43–49 | Not enabled: Witch Doctor Zum'rah is woken by a script |
 | Maraudon: Purple, Orange, Pristine Waters | 272, 26, 273 | 41–47, 43–49, 45–51 | Enabled |
 | Sunken Temple | 28 | 47–53 | Enabled |
@@ -75,6 +75,21 @@ blocked chest or missing navigation can still stall the run. Powder in another
 character's bags is not borrowed.
 A player carrying it can fire the cannon normally. Complete autonomous Deadmines
 runs, the chest detour and combat interruptions still need in-game validation.
+
+In player-led Uldaman clears, bots walk to and use the Altar of the Keepers and
+the Altar of Archaedas through Playerbots' ordinary object action. The pinned
+core requires one participant to channel for five seconds; it checks the ritual
+owner's group and removes interrupted channels. Bots wait for the native fight
+to finish, avoid another ritual while keepers are awake or Archaedas is active,
+and retry through ordinary use after an interruption or encounter reset. Missing
+objects, blocked paths or the core's refusal of a missing ritual owner or an
+unrelated group can stall the objective.
+
+Automated fixtures cover the ritual, interaction guards and retries; complete
+Uldaman runs and recovery still need in-game validation. Autonomous recruitment
+remains refused because acquiring the Staff of Prehistoria for Ironaya's
+keystone has no audited acquisition driver. A player-led group must bring its
+own staff and open the seal through the normal interaction.
 
 ### TBC and Wrath routes
 

@@ -12,7 +12,8 @@ and ordinary player actions.
 - [ ] Earned replacements for the refused Dungeon Clear events so the remaining
   Vanilla dungeons can be enabled: Wailing Caverns (Serpentis and lower-cavern
   drops over real paths, the Disciple of Naralex escort without speed
-  overrides), Uldaman (the altars through the player interaction), Zul'Farrak (waking
+  overrides), Uldaman (earned acquisition of the Staff of Prehistoria for
+  Ironaya's keystone), Zul'Farrak (waking
   Witch Doctor Zum'rah as a player does) and Blackrock Depths (the Ring of Law
   through its arena trigger).
 - [ ] Expand the audited TBC and Wrath routes by providing ordinary player
@@ -50,6 +51,14 @@ and ordinary player actions.
   inaccessible powder, another character carrying it, interrupted casts,
   druid forms, an already open door and resuming the same instance. Confirm
   an autonomous party retains every member's personal entry and era checks.
+- [ ] Verify both Uldaman altars in-game: physical approach and line of sight,
+  the native five-second channel, interruptions and retries, an already active
+  keeper chain or Archaedas fight, reset after a wipe and walking back from the
+  entrance, resuming the same instance, a completed encounter, ritual-owner
+  group changes or logout, and a fresh instance. Confirm normal combat and
+  door opening, with no direct awakening casts or premature objective credit.
+  Check Ironaya's seal with the group's own Staff of Prehistoria; autonomous
+  recruitment must remain refused until its acquisition has an audited path.
 - [ ] Verify long entrance and return paths in-game, including bends,
   interrupted movement and changed obstacles. Measure server tick time while
   multiple groups are travelling.
