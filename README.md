@@ -207,7 +207,7 @@ include this distribution's local integration and defaults; see
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
 | [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Timed Vanilla world buffs for eligible Vanilla-progress characters. |
 | [Era Events](https://github.com/buildthehomelab/wow-mod-era-events) | Outdoor AQ, Scourge, Legion and zombie encounters at each character's exact earned tier, with ordinary kill loot. |
-| [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Earned-era access guards for the Dungeon Finder, which is disabled by default. |
+| [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Always included earned-era access guards for the [optional Dungeon Finder](docs/bot-dungeons.md#optional-dungeon-finder), which is disabled by default. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
 | [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | Boss and trash mechanics for bot raids in Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj. |

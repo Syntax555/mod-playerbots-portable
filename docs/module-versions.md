@@ -17,7 +17,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `c3955915c76d` | Scoped party sharing of naturally dropped quest items |
 | World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Timed Vanilla events with individual earned-era and native recipient checks |
 | Era Events | [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) | `cf02786aceb5` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
-| LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `5d64585dd2ac` | Optional Dungeon Finder access by every participant's earned era |
+| LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `5d64585dd2ac` | Always included access guards for optional Dungeon Finder use |
 | MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `8f703da2bbdb` | Server support for the MultiBot controls |
 | MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
 | Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
@@ -55,6 +55,15 @@ CMake fetches the locked core, module and addon commits into `.module-cache/`,
 prepares a separate core copy and module/addon exports, then applies patches in
 manifest order. Preparation and packaging checks include patch hashes and
 verify addon files against the prepared source.
+
+LFG Progression follows the same preparation, build and packaging path as every
+other module; there is no separate build option. A variant without it would
+still require maintaining its pin, patch and tests for supported Finder use,
+plus module-selection and upgrade handling. Existing installations may have
+enabled the Finder, and updates preserve their personal `.conf` files. Omitting
+the module would leave those queues without their earned-era guards. Keeping
+one package preserves those checks with less maintenance; see
+[Finder configuration](bot-dungeons.md#optional-dungeon-finder).
 
 The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
 (queued chat commands resolve their sender when they run), `c583bc22`
