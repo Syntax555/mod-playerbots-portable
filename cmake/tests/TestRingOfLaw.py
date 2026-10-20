@@ -88,7 +88,7 @@ def native_sources(core, source):
     assert follower.index('DcRingOfLaw::Follow(bot, tank)') < follower.index('float const dist =')
     hook = (source / 'Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp').read_text()
     assert 'return DcRingOfLaw::Run(bot);' in function(hook, 'ObjectiveArriveResult EnsureRingStarted(')
-    assert 'if (DcEarnedPlay::Active() && hookId != 1)\n        return ObjectiveArriveResult::Blocked;' in function(hook, 'ObjectiveArriveResult ObjectiveHookRegistry::Run(')
+    assert 'if (DcEarnedPlay::Active() && hookId != 1 && hookId != 5)\n        return ObjectiveArriveResult::Blocked;' in function(hook, 'ObjectiveArriveResult ObjectiveHookRegistry::Run(')
     objective = (source / 'Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp').read_text()
     assert 'DcPullPlanner::MaintainScoutCamp(botAI, context);' in function(objective, 'bool DcObjectiveArriveAction::Execute(')
     pull_mode = (source / 'Ai/Dungeon/DungeonClear/Value/DungeonClearPullModeCurrentValue.cpp').read_text()
@@ -417,7 +417,8 @@ int main(){
     objectMgr.templates={{161460,{680}},{170570,{680}},{184126,{43}}};
     EventStep step;step.kind=EventStepKind::Custom;step.hookId=1;
     assert(DcEarnedEvents::StepAllowed(step));
-    for(uint32 hook:{0u,2u,5u,40u}){step.hookId=hook;assert(!DcEarnedEvents::StepAllowed(step));}
+    step.hookId=5;assert(DcEarnedEvents::StepAllowed(step));
+    for(uint32 hook:{0u,2u,40u}){step.hookId=hook;assert(!DcEarnedEvents::StepAllowed(step));}
     step.hookId=1;DungeonEvent ring;ring.mapId=230;ring.id=1;ring.name="Ring of Law";ring.steps={step};
     events[{230,1}]=ring;roster[230]={{"Ring of Law",0,1}};
     std::string reason;assert(DcEarnedEvents::MapAudited(230,reason)&&reason.empty());
@@ -460,10 +461,10 @@ int main(){
         subprocess.run(build(work, exe), check=True)
         subprocess.run([str(exe)], check=True, timeout=TIMEOUT)
         mutations = [
-            ('arbitrary custom shortcut', 'DcEarnedEvents.cpp', 'return step.hookId == 1;', 'return true;'),
-            ('Ring driver denied', 'DcEarnedEvents.cpp', 'return step.hookId == 1;', 'return false;'),
-            ('wrong map custom controller', 'DcEarnedEvents.cpp', 'ev.mapId != 230 || ', ''),
-            ('wrong event custom controller', 'DcEarnedEvents.cpp', ' || ev.id != 1', ''),
+            ('arbitrary custom shortcut', 'DcEarnedEvents.cpp', 'return step.hookId == 1 || step.hookId == 5;', 'return true;'),
+            ('Ring driver denied', 'DcEarnedEvents.cpp', 'return step.hookId == 1 || step.hookId == 5;', 'return false;'),
+            ('wrong map custom controller', 'DcEarnedEvents.cpp', 'ev.mapId == 230 && ', ''),
+            ('wrong event custom controller', 'DcEarnedEvents.cpp', 'ev.id == 1 && ', ''),
             ('Shadowforge lock bypass', 'DcEarnedEvents.cpp', 'LockOpening(go->GetLockId(), nullptr) != Opening::Click', 'false'),
             ('special lock types counted as clicks', 'DcEarnedEvents.cpp', 'lock->Index[i] == LOCKTYPE_OPEN',
              'SkillByLockType(LockType(lock->Index[i])) == SKILL_NONE'),

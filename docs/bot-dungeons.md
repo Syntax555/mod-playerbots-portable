@@ -46,7 +46,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Scarlet Monastery: Graveyard, Library, Armory, Cathedral | 18, 165, 163, 164 | 29–35, 32–38, 34–40, 37–43 | Enabled |
 | Razorfen Downs | 20 | 34–40 | Enabled |
 | Uldaman | 22 | 37–43 | Not enabled: Ironaya's keystone requires the Staff of Prehistoria |
-| Zul'Farrak | 24 | 43–49 | Not enabled: Witch Doctor Zum'rah is woken by a script |
+| Zul'Farrak | 24 | 43–49 | Not enabled: the Troll Cage requires the Executioner's Key |
 | Maraudon: Purple, Orange, Pristine Waters | 272, 26, 273 | 41–47, 43–49, 45–51 | Enabled |
 | Sunken Temple | 28 | 47–53 | Enabled |
 | Blackrock Depths: Prison, Upper City | 30, 276 | 49–55, 53–59 | Not enabled: the Shadowforge Lock requires a key |
@@ -117,6 +117,21 @@ Uldaman runs and recovery still need in-game validation. Autonomous recruitment
 remains refused because acquiring the Staff of Prehistoria for Ironaya's
 keystone has no audited acquisition driver. A player-led group must bring its
 own staff and open the seal through the normal interaction.
+
+In player-led Zul'Farrak clears, the tank walks into Witch Doctor Zum'rah's
+actual wake-up area and submits the ordinary area-trigger action. The core's
+SmartAI activates the encounter; no quest or item is required for this trigger
+in the pinned data. An already hostile boss continues through normal combat,
+and a native reset allows another ordinary activation. Paused or cancelled
+clears do not start the encounter. Missing navigation, an unavailable boss or
+a refused native trigger can stall the clear.
+
+Fixtures cover physical arrival, interaction guards and retries. Complete
+Zul'Farrak runs and recovery still need in-game validation. Autonomous
+recruitment remains refused: the Troll Cage requires the Executioner's Key,
+and the separate Gahz'rilla gong needs audited handling of its special lock.
+A player-led group must meet those objects' own requirements through normal
+interactions; Zum'rah's activation does not open them.
 
 In player-led Blackrock Depths clears, the Ring of Law objective gathers the
 group inside the arena's actual trigger volume. Bots walk there over checked
