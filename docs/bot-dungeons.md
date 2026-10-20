@@ -36,7 +36,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Dungeon | Finder id | Bot levels | Autonomous parties |
 | --- | --- | --- | --- |
 | Ragefire Chasm | 4 | 15–19 | Horde only |
-| Wailing Caverns | 1 | 17–23 | Not enabled: off-mesh drops and the Disciple escort |
+| Wailing Caverns | 1 | 17–23 | Enabled with checked ramp paths and the native Disciple escort |
 | The Deadmines | 6 | 17–23 | Enabled with the ordinary gunpowder and cannon actions |
 | Shadowfang Keep | 8 | 18–24 | Enabled |
 | Blackfathom Deeps | 10 | 21–27 | Enabled |
@@ -61,6 +61,33 @@ controllers cannot be treated as dispensable simply because upstream marks
 them optional. Events requiring scripted shortcuts, unaudited item acquisition
 or locked objects without an audited ordinary interaction prevent automatic
 recruitment for that map.
+
+For Wailing Caverns, the party backtracks to the ramp by Anacondra's platform
+and walks the native patrol route to Serpentis and back from Verdan. Each leg
+requires a complete navigation-mesh path to the intended floor, with every
+spline segment checked. Bots follow the same checkpoints, and each leg waits
+for every member to arrive; humans walk there themselves. Missing mesh, partial
+routes and unsafe gaps stop the objective; bots do not cross the drops by
+jumping or relocation.
+
+After the four Fanglords are defeated, the party gathers at the Disciple of
+Naralex and starts his normal gossip escort. The native SmartAI controls its
+pace, ambushes, cleansing channel, ritual waves, Mutanus and Naralex's awakening.
+Bots follow over checked paths and protect the Disciple through ordinary combat.
+Completion requires Mutanus's kill credit and the native post-dialogue departure
+marker; a spawned boss or missing NPC is not success. An unsafe follower path
+pauses the clear. Missing, dead or reset NPCs block or require an ordinary retry,
+and the escort has a finite fifteen-minute attempt budget. The tank's escort
+action takes priority over starting food or drink, so long fights can exhaust
+its resources.
+
+Fixtures cover the native data contracts, routes, prerequisites and interruption
+guards. Complete Wailing Caverns runs still need in-game validation, especially
+the joins to the ramp, group spacing, combat and recovery between waves. A long
+pause can miss the short departure-marker window before the NPCs despawn; the
+objective then remains blocked instead of inferring completion. Automatic
+recruitment still depends on the installed world-data audit, ordinary entry
+checks and usable navigation data.
 
 For the Deadmines, the tank opens the Defias Gunpowder chest with its native
 opening spell, takes the powder through Playerbots' normal loot handling and

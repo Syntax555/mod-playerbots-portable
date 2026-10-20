@@ -10,10 +10,8 @@ and ordinary player actions.
 ## Dungeon integration
 
 - [ ] Earned replacements for the refused Dungeon Clear events so the remaining
-  Vanilla dungeons can be enabled: Wailing Caverns (Serpentis and lower-cavern
-  drops over real paths, the Disciple of Naralex escort without speed
-  overrides), Uldaman (earned acquisition of the Staff of Prehistoria for
-  Ironaya's keystone), Zul'Farrak (waking
+  Vanilla dungeons can be enabled: Uldaman (earned acquisition of the Staff of
+  Prehistoria for Ironaya's keystone), Zul'Farrak (waking
   Witch Doctor Zum'rah as a player does) and Blackrock Depths (earned access
   through the Shadowforge Lock with the group's own key).
 - [ ] Expand the audited TBC and Wrath routes by providing ordinary player
@@ -45,6 +43,16 @@ and ordinary player actions.
   and normal recovery.
   Remove a failing dungeon from the default list until it is fixed. Confirm bot
   logout after the last real player session ends.
+- [ ] Verify complete Wailing Caverns clears in-game: backtrack from Skum to
+  Anacondra's platform, climb the native patrol ramp to Serpentis and return
+  from Verdan over the ramp to the Disciple. Check every member's actual path,
+  bends, correct floor and water movement; missing mesh or an unsafe follower
+  route must stop the attempt. Cover all four Fanglord prerequisites, ordinary
+  gossip, the native escort pace, ambushes, cleansing channel, ritual waves,
+  Mutanus and Naralex's final dialogue. Check combat, loot, casting, food/drink
+  and group spacing between waves, a dead or absent Disciple, native range reset,
+  wipe and normal return travel, stop/pause/resume, the fifteen-minute budget,
+  a fresh instance and a missed departure marker after the native despawn.
 - [ ] Verify the Deadmines cannon in-game: the tank walks to and loots the
   gunpowder chest, handles its native ambushes, returns to the cannon and
   consumes the powder through ordinary item use. Cover full bags, missing or

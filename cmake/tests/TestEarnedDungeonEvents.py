@@ -36,6 +36,9 @@ def stubs(core, dc):
                                re.search(name + r'\s*=\s*(\d+)', trial).group(1) + ';'
                                for name in ('DATA_INSTANCE_PROGRESS', 'PROGRESS_CHAMPIONS_DEAD',
                                             'PROGRESS_ARGENT_CHALLENGE_DIED', 'PROGRESS_FINISHED'))
+    for name, default in (('creatureEntry', 0), ('escortDoneEntry', 0), ('gossipOption', -1),
+                          ('escortDoneBit', -1), ('instanceDataId', -1)):
+        assert re.search(rf'\b{name}\{{{default}\}};', registry)
     # Real lock and step vocabularies: a new upstream step kind is refused until audited.
     return '''#pragma once
 #include <cstdint>
@@ -51,7 +54,7 @@ using uint8=uint8_t;using uint32=uint32_t;using int32=int32_t;
 constexpr uint32 GO_FLAG_LOCKED={flags['GO_FLAG_LOCKED']},GO_FLAG_INTERACT_COND={flags['GO_FLAG_INTERACT_COND']},GO_FLAG_NOT_SELECTABLE={flags['GO_FLAG_NOT_SELECTABLE']};
 constexpr uint8 DUNGEON_DIFFICULTY_NORMAL=0;
 {trial_progress}
-struct EventStep{{EventStepKind kind{{EventStepKind::Wait}};uint32 goEntry=0,itemId=0,hookId=0,spellId=0;int32 instanceDataId=-1;uint32 instanceDataMin=0;}};
+struct EventStep{{EventStepKind kind{{EventStepKind::Wait}};uint32 goEntry=0,itemId=0,hookId=0,spellId=0,creatureEntry=0,escortDoneEntry=0;int32 instanceDataId=-1,gossipOption=-1,escortDoneBit=-1;uint32 instanceDataMin=0;}};
 enum class DcDifficultyGate:uint8{{Any,NormalOnly,HeroicOnly}};
 struct DcDiffKey{{bool isRaid=false;uint8 difficulty=0;bool IsHeroic()const{{return difficulty>0;}}}};
 inline bool DcGateMatches(DcDifficultyGate gate,DcDiffKey key){{return gate==DcDifficultyGate::Any||(gate==DcDifficultyGate::NormalOnly)!=key.IsHeroic();}}
@@ -118,6 +121,13 @@ int main(){
  events[{4,1}]=event("Urn",{step(EventStepKind::UseGameObject,10,4242)});assert(!audited(4));
  events[{4,1}]=event("Egg",{step(EventStepKind::UseItem,0,4242)});assert(!audited(4));
  for(EventStepKind kind:{EventStepKind::Jump,EventStepKind::DropInHole,EventStepKind::TeleportParty,EventStepKind::EscortCreature,EventStepKind::CastSpell,EventStepKind::UseItemOnGO,EventStepKind::UseItemAt}){events[{4,1}]=event("Shortcut",{step(kind)});assert(!audited(4));}
+ // Only the exact native WC escort is admitted, on its own map and event.
+ EventStep naralex=step(EventStepKind::EscortCreature);naralex.creatureEntry=3678;naralex.gossipOption=0;naralex.escortDoneEntry=3654;naralex.escortDoneBit=7;
+ assert(DcEarnedEvents::StepAllowed(naralex));
+ for(int field=0;field<7;++field){auto bad=naralex;if(field==0)bad.creatureEntry++;if(field==1)bad.gossipOption++;if(field==2)bad.escortDoneEntry++;if(field==3)bad.escortDoneBit++;if(field==4)bad.hookId++;if(field==5)bad.instanceDataId=0;if(field==6)bad.kind=EventStepKind::Jump;assert(!DcEarnedEvents::StepAllowed(bad));}
+ roster[43]={{"Naralex",0,2}};events[{43,2}]=event("Naralex",{naralex});events[{43,2}].mapId=43;events[{43,2}].id=2;assert(audited(43));
+ events[{43,2}].mapId=1;assert(!audited(43));events[{43,2}].mapId=43;
+ events[{43,2}].id=1;assert(!audited(43));events[{43,2}].id=2;
  // Only the earned cannon's exact item-target spell has an acquisition driver.
  EventStep cannon=step(EventStepKind::UseItemOnGO,16398,5397);cannon.spellId=6250;
  assert(DcEarnedEvents::StepAllowed(cannon));
@@ -239,6 +249,14 @@ def main():
             ('lockpick counted as click', 'lock->Index[i] == LOCKTYPE_OPEN', 'true'),
             ('quest-conditional interaction', '(go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot))', 'false'),
             ('granted quest item accepted', '(!cannon && (step.kind == EventStepKind::UseItem || step.itemId))', 'false'),
+            ('escort on another map', 'ev.mapId != 43 || ', ''),
+            ('escort on another event', ' || ev.id != 2', ''),
+            ('wrong escort creature', 'step.creatureEntry == 3678 &&', ''),
+            ('wrong escort gossip', 'step.gossipOption == 0 &&', ''),
+            ('wrong escort final boss', 'step.escortDoneEntry == 3654 &&', ''),
+            ('wrong escort kill credit', 'step.escortDoneBit == 7 &&', ''),
+            ('escort hook bypass', 'step.hookId == 0 && step.instanceDataId < 0', 'step.instanceDataId < 0'),
+            ('escort data bypass', '&& step.instanceDataId < 0', ''),
             ('arbitrary item target accepted', 'step.goEntry == 16398 &&', ''),
             ('unearned cannon item accepted', 'step.itemId == 5397 &&', ''),
             ('arbitrary cannon spell accepted', 'step.spellId == 6250 &&', ''),

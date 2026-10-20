@@ -414,6 +414,8 @@ def authored_sources(source):
     authored.append('}')
     executor = (source / 'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp').read_text()
     executor_header = (source / 'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h').read_text()
+    audit = (source / 'DcEarnedEvents.cpp').read_text()
+    authored.append('namespace DcEarnedEvents {' + function(audit, 'bool IsNaralexStep(') + '}')
     authored += [function(executor_header, 'enum class EventDriveOutcome') + ';',
                  function(executor_header, 'struct DungeonEventProgress') + ';',
                  re.search(r'constexpr uint32 DC_EVENT_NO_PROGRESS_FACTOR\s*=\s*\d+;', executor).group(),
