@@ -204,6 +204,11 @@ and positioning against the bosses' abilities. They apply on these maps whether
 you lead the raid or a player-led clear walks it from boss to boss, alongside
 Playerbots' own raid strategies. Autonomous parties do not enter raids.
 
+The [raid composition building block](raid-composition.md) provides tested
+role quotas, subgroups and ordinary recruitment with each bot's own access
+checks. No scheduler or route invokes it; raid travel, attunement acquisition
+and complete autonomous encounters remain integration work.
+
 Under natural progression only an equipped Onyxia Scale Cloak protects against
 Shadow Flame, and Suppression Devices are disarmed only by rogues casting
 Disarm Trap. Raid entry keeps native attunements and Individual Progression

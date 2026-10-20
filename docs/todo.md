@@ -23,10 +23,13 @@ and ordinary player actions.
 
 ## Raid integration
 
-- [ ] Autonomous raid recruitment and travel: 10-, 20- and 40-player groups
-  with tank and healer quotas, recruited nearby and walking to the entrance.
-  Optimal Bot Raid's role quotas are a reference; its teleports, level
-  relaxation and factory refresh are not compatible with earned play.
+- [x] [Raid composition component](raid-composition.md): 10-, 20-, 25- and
+  40-member profiles with hard tank/healer quotas, learned abilities, native
+  subgroups and ordinary recruitment with personal access and lockout checks.
+- [ ] Connect that component to autonomous raid scheduling and real entrance
+  and return travel, including ordinary difficulty selection and the pinned
+  Vanilla Naxxramas entrance interaction. Do not schedule unsupported routes or
+  encounters; the composition API alone starts no raid run.
 - [ ] Bots earn raid attunements and keys through their own quest progress
   (Drakefire Amulet, Blackhand's Command, Naxxramas) and respect instance
   lockouts.
