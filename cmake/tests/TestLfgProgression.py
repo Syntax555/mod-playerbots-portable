@@ -11,7 +11,7 @@ from FixtureSupport import (
     cxx,
     function,
     prepared_core,
-    run_fixture,
+    reject_mutants,
     source_argument,
 )
 
@@ -162,16 +162,22 @@ def main():
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')
         subprocess.run([compiler,'-std=c++20','-O1','-Wall','-Wextra','-Wno-unused-variable','-I',str(work),'-I',str(source),str(work/'fixture.cpp'),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True,timeout=TIMEOUT)
-        # The original high-level shortcut must fail this same production fixture.
         original=(source/'LfgProgression.cpp').read_text()
-        mutation=original.replace('return LfgProgression::PlayerExpansion(g_settings, level, IpTier(player));','return LfgProgression::ExpansionForLevel(g_settings, level);')
-        if mutation==original:
-            raise SystemExit('High-level shortcut mutation was not applied')
-        (work/'LfgProgression.cpp').write_text(mutation)
-        subprocess.run([compiler,'-std=c++20','-O1','-I',str(work),'-I',str(source),str(work/'fixture.cpp'),'-o',str(exe)],check=True)
-        if run_fixture([str(exe)],'Legacy level shortcut mutant').returncode==0:
-            raise SystemExit('Production fixture did not reject the legacy level shortcut')
-        print('LFG production mutation: level-based era bypass rejected')
+        (work/'LfgProgression.cpp').write_text(original)
+        mutations = [
+            ('legacy level shortcut', 'LfgProgression.cpp',
+             'return LfgProgression::PlayerExpansion(g_settings, level, IpTier(player));',
+             'return LfgProgression::ExpansionForLevel(g_settings, level);'),
+            ('native lock bypass', 'LfgProgression.cpp',
+             'if (lockData)\n            return;', 'if (false)\n            return;'),
+            ('invited bot era bypass', 'LfgProgression.cpp',
+             'if (!member || member == player)',
+             'if (!member || member == player || IsRandomBot(member))'),
+        ]
+        reject_mutants(work, mutations, lambda directory, executable: [
+            compiler, '-std=c++20', '-O1', '-I', str(directory), '-I', str(source),
+            str(directory/'fixture.cpp'), '-o', str(executable),
+        ], 'LFG production')
 
 if __name__=='__main__':
     main()

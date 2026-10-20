@@ -320,11 +320,24 @@ custom population settings.
 
 ## Optional Dungeon Finder
 
-LFG Progression checks each participant's own earned expansion and retains
-native quest, item, achievement and class access requirements. It does not form
-autonomous parties, navigate or run encounters. Automatic Dungeon Finder joining
-remains disabled through `Playerbots.RandomBotJoinLfg = 0`, keeping automatic
-groups on the physical travel path.
+The Dungeon Finder is disabled by default with `DungeonFinder.OptionsMask = 0`
+in `configs/worldserver.conf`. Automatic bot queues are also disabled through
+`Playerbots.RandomBotJoinLfg = 0` in `configs/modules/playerbots.conf`, keeping
+autonomous parties on the physical travel path.
+
+LFG Progression is always included and enabled by default. If you enable the
+Finder, keep `LfgProgression.Enable = 1` in
+`configs/modules/mod_lfg_progression.conf`. It checks every participant's own
+earned expansion, including bots, and retains native quest, item, achievement,
+class and instance restrictions. Random dungeon selection uses the lowest
+earned expansion in the group; each join refreshes every member's access checks.
+The module does not form autonomous parties, navigate or run encounters.
+
+Keep `IndividualProgression.DisableRDF = 0` in
+`configs/modules/individualProgression.conf`: setting it to `1` forces specific
+dungeon queues (mask `4`) rather than disabling the Finder. Updates preserve
+deliberately enabled Finder queues and personal LFG settings, including on
+installations without a saved profile baseline.
 
 Source revisions and integration patches are recorded in
 [build provenance](module-versions.md). See [configuration](configuration.md)
