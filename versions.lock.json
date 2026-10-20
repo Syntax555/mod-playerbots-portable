@@ -63,7 +63,8 @@
       "revision": "381554742ac04361fff5cab95a12e0564fb16382",
       "patches": [
         "patches/mod-dungeon-clear-earned-parties.patch",
-        "patches/mod-dungeon-clear-build-warnings.patch"
+        "patches/mod-dungeon-clear-build-warnings.patch",
+        "patches/mod-dungeon-clear-earned-raid-composition.patch"
       ]
     },
     {

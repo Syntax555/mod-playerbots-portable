@@ -33,8 +33,8 @@ database, configuration and first-run setup.
   [routes and requirements](docs/bot-dungeons.md#autonomous-parties).
 - **Player-led raids:** Dungeon Clear, Playerbots and Raid Clear provide group
   control and encounter tactics, including Onyxia's Lair, Molten Core, Blackwing Lair,
-  Zul'Gurub and Ahn'Qiraj. Autonomous raid recruitment remains outside the
-  supported scope.
+  Zul'Gurub and Ahn'Qiraj. A [raid composition component](docs/raid-composition.md)
+  supplies role quotas and subgroups; autonomous raid runs remain unavailable.
   See [raid support](docs/bot-dungeons.md#raids).
 - **Earned bot economy:** bots train, repair and buy supplies and bags with
   their own gold, and trade owned items through normal auctions and mailbox

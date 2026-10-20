@@ -532,7 +532,7 @@ def main():
         for name in headers:
             path=work/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('#include "NativeStubs.h"\n')
         path=work/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h';shutil.copyfile(source/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h',path)
-        for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedPlay.h','DcEarnedEvents.h','DcEarnedProgression.h','DcEarnedProgression.cpp'):
+        for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedRecruitment.h','DcEarnedPlay.h','DcEarnedEvents.h','DcEarnedProgression.h','DcEarnedProgression.cpp'):
             shutil.copyfile(source/name,work/name)
         methods=function((source/'Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp').read_text(),'void DcLeaderSignal::SetLeaderDazeImmunity(')+'\n'+function((source/'Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp').read_text(),'bool DungeonClearBetterLootRollAction::isUseful(')
         follow=function((source/'Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp').read_text(),'bool DungeonClearFollowTankAction::Execute(')

@@ -29,7 +29,7 @@ GAMEPLAY = (
     "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestEraEvents", "TestLfgProgression",
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
-    "TestRaidClearWindowsBuild",
+    "TestRaidClearWindowsBuild", "TestEarnedRaidComposition", "TestEarnedRaidGroups",
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestMultiBotRoleStrategies", "TestFormationMovement",
