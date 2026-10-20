@@ -91,7 +91,8 @@ int main(){
  for(EventStepKind kind:ALL_KINDS)assert(DcEarnedEvents::StepAllowed(step(kind))==allowed.count(kind));
  assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::MoveTo,0,0,7)));
  assert(DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,1)));
- for(uint32 hook:{0u,2u,5u,40u})assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,hook)));
+ assert(DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,5)));
+ for(uint32 hook:{0u,2u,40u})assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,hook)));
  // Locks: a click opens no lock or a profession-free open lock; keys open item locks.
  sLockStore.rows={{1,lock(1,{{LOCK_KEY_SKILL,LOCKTYPE_OPEN}})},{2,lock(2,{{LOCK_KEY_ITEM,5000}})},{3,lock(3,{{LOCK_KEY_SKILL,LOCKTYPE_PICKLOCK}})},{4,lock(4,{{LOCK_KEY_SPELL,1234}})},{5,lock(5,{{LOCK_KEY_ITEM,5000},{LOCK_KEY_SKILL,LOCKTYPE_PICKLOCK}})}};
  Player bot;GameObject go;
@@ -144,6 +145,17 @@ int main(){
  events[{230,1}].mapId=230;events[{230,1}].id=1;assert(audited(230));
  events[{230,1}].mapId=229;assert(!audited(230));events[{230,1}].mapId=230;
  events[{230,1}].id=2;assert(!audited(230));events[{230,1}].id=1;
+ events[{230,1}].steps[0].hookId=5;assert(!audited(230));events[{230,1}].steps[0].hookId=1;
+ // Zum'rah admits only his spatial controller, not arbitrary hooks or locks.
+ conditional[209]={event("Wake Witch Doctor Zum'rah",{step(EventStepKind::Custom,0,0,5)})};
+ auto& wake=conditional[209][0];wake.mapId=209;wake.id=3;assert(audited(209));
+ wake.mapId=208;assert(!audited(209));wake.mapId=209;
+ wake.id=2;assert(!audited(209));wake.id=3;
+ wake.steps[0].hookId=1;assert(!audited(209));wake.steps[0].hookId=5;
+ objectMgr.templates[141073]={420};objectMgr.templates[141832]={99};
+ roster[209]={{"Temple Summit",0,1}};events[{209,1}]=event("Troll Cage",{step(EventStepKind::UseGameObject,141073)});
+ assert(!audited(209));events[{209,1}].steps[0].goEntry=141832;assert(!audited(209));
+ roster[209].clear();assert(audited(209));
  roster[6]={{"Missing",0,9}};assert(!audited(6));
  conditional[7]={event("Room aggro",{step(EventStepKind::KillCreature)}),event("Drop",{step(EventStepKind::Jump)},false)};assert(audited(7));
  conditional[7].push_back(event("Wake",{step(EventStepKind::Custom)}));assert(!audited(7));
@@ -241,10 +253,15 @@ def main():
         mutations = [
             ('off-mesh jump step', 'case EventStepKind::MoveTo:\n                return step.hookId == 0;', 'case EventStepKind::Jump:\n            case EventStepKind::MoveTo:\n                return step.hookId == 0;'),
             ('custom hook on a walk', 'return step.hookId == 0;', 'return true;'),
-            ('arbitrary custom shortcut', 'return step.hookId == 1;', 'return true;'),
-            ('earned Ring hook denied', 'return step.hookId == 1;', 'return false;'),
-            ('Ring controller on another map', 'ev.mapId != 230 || ', ''),
-            ('Ring controller on another event', ' || ev.id != 1', ''),
+            ('arbitrary custom shortcut', 'return step.hookId == 1 || step.hookId == 5;', 'return true;'),
+            ('earned Ring hook denied', 'return step.hookId == 1 || step.hookId == 5;', 'return step.hookId == 5;'),
+            ('earned Zumrah hook denied', 'return step.hookId == 1 || step.hookId == 5;', 'return step.hookId == 1;'),
+            ('Ring controller on another map', 'ev.mapId == 230 && ', ''),
+            ('Ring controller on another event', 'ev.id == 1 && ', ''),
+            ('Zumrah hook on Ring event', 'ev.id == 1 && step.hookId == 1', 'ev.id == 1'),
+            ('Zumrah controller on another map', 'ev.mapId == 209 && ', ''),
+            ('Zumrah controller on another event', 'ev.id == 3 && ', ''),
+            ('Ring hook on Zumrah event', 'ev.id == 3 && step.hookId == 5', 'ev.id == 3'),
             ('locked object clicked open', "return go->HasGameObjectFlag(GO_FLAG_LOCKED) ? opening == Opening::Key : opening != Opening::Closed;", 'return opening != Opening::Closed;'),
             ('lockpick counted as click', 'lock->Index[i] == LOCKTYPE_OPEN', 'true'),
             ('quest-conditional interaction', '(go->HasGameObjectFlag(GO_FLAG_INTERACT_COND) && !go->ActivateToQuest(bot))', 'false'),

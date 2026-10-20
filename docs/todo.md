@@ -11,9 +11,10 @@ and ordinary player actions.
 
 - [ ] Earned replacements for the refused Dungeon Clear events so the remaining
   Vanilla dungeons can be enabled: Uldaman (earned acquisition of the Staff of
-  Prehistoria for Ironaya's keystone), Zul'Farrak (waking
-  Witch Doctor Zum'rah as a player does) and Blackrock Depths (earned access
-  through the Shadowforge Lock with the group's own key).
+  Prehistoria for Ironaya's keystone), Zul'Farrak (audited acquisition and use of
+  the Executioner's Key for the Troll Cage, and ordinary handling of the
+  Gahz'rilla gong's special lock) and Blackrock Depths (earned access through
+  the Shadowforge Lock with the group's own key).
 - [ ] Expand the audited TBC and Wrath routes by providing ordinary player
   actions for currently refused event controllers, escorts, vehicle sequences
   and locked objectives. Verify complete runs before advertising completion.
@@ -67,6 +68,16 @@ and ordinary player actions.
   door opening, with no direct awakening casts or premature objective credit.
   Check Ironaya's seal with the group's own Staff of Prehistoria; autonomous
   recruitment must remain refused until its acquisition has an audited path.
+- [ ] Verify complete player-led Zul'Farrak clears in-game: the tank walks into
+  Zum'rah's native trigger volume, the core activates him and the party fights
+  normally. Cover interrupted approaches, combat, casting and looting, missing
+  mesh, an unavailable boss, a different phase or instance, a human starting
+  first, an already hostile or dead boss, a native reset after a wipe, ordinary
+  resurrection and return travel, stop/pause/resume and a fresh instance. A
+  refused trigger must not produce artificial activation or kill credit.
+  Confirm the Troll Cage still needs an earned Executioner's Key and the
+  Gahz'rilla gong keeps its own normal opening requirements; autonomous
+  recruitment must remain refused until those interactions are audited.
 - [ ] Verify complete Ring of Law and Blackrock Depths clears in-game: every
   member physically enters the arena, the native trigger starts Grimstone,
   both waves and the random boss are fought normally, and the objective waits

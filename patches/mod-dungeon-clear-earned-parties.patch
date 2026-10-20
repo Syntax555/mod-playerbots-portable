@@ -934,8 +934,104 @@ index d9658fa..ad62b1b 100644
 +    };
 +    t.push_back(std::move(p));
  }
+diff --git a/src/Ai/Dungeon/DungeonClear/Data/Events/ZulFarrakEvents.cpp b/src/Ai/Dungeon/DungeonClear/Data/Events/ZulFarrakEvents.cpp
+index c636456..b601819 100644
+--- a/src/Ai/Dungeon/DungeonClear/Data/Events/ZulFarrakEvents.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Data/Events/ZulFarrakEvents.cpp
+@@ -119,40 +119,13 @@ namespace
+     // bridges the summon delay without escalating to a stall.
+     constexpr uint32 ZF_GAHZRILLA_SPAWN_TIMEOUT = 60000;  // 1 min
+ 
+-    // --- Witch Doctor Zum'rah — the area-trigger wake-up ------------------
+-    // Zum'rah (7271) is a normal roster boss (order key 3), but he spawns FRIENDLY:
+-    // creature_template faction 35, no NOT_SELECTABLE / IMMUNE_TO_PC flag. He turns
+-    // hostile only when a party member crosses area trigger 962 (3yd off his spawn),
+-    // whose SmartAI row sets his faction to 37. That row runs off CMSG_AREATRIGGER,
+-    // which bots never send for a non-teleport trigger — so with a human in the party
+-    // he flips as a side effect of the human walking in, and in an all-bot party
+-    // (every `dc test` run) he never does. The engage gate is attackability-blind
+-    // (GetLiveBoss only asks IsAlive), so the tank walks up to a friendly Zum'rah and
+-    // the run deadlocks on him forever with no stall message.
+-    //
+-    // A conditional event fixes it entirely module-side: hook 5 (WakeZumrah) sets the
+-    // faction the trigger's SmartAI row would have set. An earlier attempt forged the
+-    // CMSG_AREATRIGGER packet instead, to run the genuine script — it did not work in
+-    // a live all-bot run, so the packet path (and the MoveTo onto the trigger centre
+-    // that existed only to satisfy the core's range check) is gone. See
+-    // ObjectiveHookRegistry for the full reasoning.
+-    //
+-    // Travel to him is NOT this event's job — he is a roster boss, so boss-nav
+-    // delivers the tank; the scan range below both gates the event on the party
+-    // having arrived and doubles as this conditional's proximity check (it has no
+-    // arrival step, so it is listed in the integrity test's near-gated whitelist).
+-    //
+-    // REPEATABLE, like the Razorfen Downs gong: a wipe runs his "On Reset - Restore
+-    // faction" row, putting him back to 35, and a one-shot latch would leave the
+-    // second attempt deadlocked exactly as before. The condition ends the loop by
+-    // itself the moment he is hostile (or dead), so the repeat is self-limiting.
++    // Zum'rah's native area trigger starts the fight. The conditional owns
++    // the approach while he is nearby and asleep; a reset makes it due again.
+     constexpr uint32 ZF_ZUMRAH = 7271;
+-    // Comfortably beyond boss engage range so the event fires as soon as boss-nav
+-    // parks the tank at him, before the engage loop settles into its deadlock —
+-    // but near enough that it can never fire from across the dungeon.
++    constexpr uint32 ZF_ZUMRAH_SPAWN = 81524;
+     constexpr float ZF_ZUMRAH_SCAN = 60.0f;
+-    constexpr uint32 ZF_ZUMRAH_FACTION_FRIENDLY = 35;  // creature_template default
+-    constexpr uint32 ZF_HOOK_WAKE_ZUMRAH = 5;  // ObjectiveHookRegistry id
++    constexpr uint32 ZF_ZUMRAH_FACTION_FRIENDLY = 35;
++    constexpr uint32 ZF_HOOK_WAKE_ZUMRAH = 5;
+ 
+     bool ZfZumrahAsleep(Player* bot, AiObjectContext* context);
+ }
+@@ -217,37 +190,26 @@ void RegisterZulFarrakEvents(std::vector<DungeonEvent>& out)
+                       .KillCreatureEngage(ZF_GAHZRILLA, /*count*/ 1, /*searchRadius*/ 100.0f)
+                       .Build());
+ 
+-    // Wake Zum'rah: flip him hostile once the party reaches him, so he fights an
+-    // all-bot party the same way he fights a human who walked in. Folded under
+-    // Zum'rah in the panel — it is his pull, not a step of its own.
++    // Let the native trigger wake him before ordinary boss combat takes over.
+     out.push_back(EventBuilder(209, 3, "Wake Witch Doctor Zum'rah")
+                       .Conditional(&ZfZumrahAsleep)
+                       .Repeatable()
+                       .PanelBeforeBoss(ZF_ZUMRAH)
+-                      .Custom(ZF_HOOK_WAKE_ZUMRAH)
++                      .OwnsThePull()
++                      .StepsOwnMovement()
++                      .Custom(ZF_HOOK_WAKE_ZUMRAH).Timeout(120000)
+                       .Build());
+ }
+ 
+-// --- the wake-up gate (event 3, repeatable) ------------------------------
+-// DUE while Zum'rah is alive, within scan range, and still carrying his spawn
+-// faction. Reads false the instant the flip lands (the boss flow takes him from
+-// there) and once he is dead or out of range, so the repeat can never spin: the
+-// only state that keeps it true is the exact deadlock it fixes.
+-//
+-// Tests faction 35 DIRECTLY rather than asking IsValidAttackTarget. The first
+-// version used the latter and the live run never woke him — with no log we could
+-// not tell whether the predicate or the packet was at fault, so this reads the
+-// one value the whole bug is about, which is also the value the hook writes.
+ namespace
+ {
+     bool ZfZumrahAsleep(Player* bot, AiObjectContext* /*context*/)
+     {
+-        Creature* zumrah = bot->FindNearestCreature(ZF_ZUMRAH, ZF_ZUMRAH_SCAN);
+-        if (!zumrah || !zumrah->IsAlive())
++        if (!bot || bot->GetMapId() != 209 || !bot->IsInWorld())
+             return false;
+-
+-        // Still on his spawn faction => nobody has tripped area trigger 962.
+-        return zumrah->GetFaction() == ZF_ZUMRAH_FACTION_FRIENDLY;
++        Creature* zumrah = bot->FindNearestCreature(ZF_ZUMRAH, ZF_ZUMRAH_SCAN, true);
++        return zumrah && zumrah->GetSpawnId() == ZF_ZUMRAH_SPAWN &&
++               zumrah->GetFaction() == ZF_ZUMRAH_FACTION_FRIENDLY;
+     }
+ }
+ 
 diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
-index 0348d68..9754dfa 100644
+index 0348d68..ea2dfe2 100644
 --- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 @@ -3,6 +3,8 @@
@@ -947,7 +1043,15 @@ index 0348d68..9754dfa 100644
  #include "ObjectiveHookRegistry.h"
  
  #include <atomic>
-@@ -40,126 +42,10 @@
+@@ -18,6 +20,7 @@
+ #include "Log.h"
+ #include "MotionMaster.h"
+ #include "ObjectAccessor.h"
++#include "ObjectMgr.h"
+ #include "Opcodes.h"
+ #include "ServerFacade.h"
+ #include "Player.h"
+@@ -40,190 +43,62 @@
  
  namespace
  {
@@ -1004,8 +1108,9 @@ index 0348d68..9754dfa 100644
 -                     bot->GetName(), BRD_RING_OF_LAW_TRIGGER, bot->GetPositionX(),
 -                     bot->GetPositionY(), bot->GetPositionZ());
 -        return ObjectiveArriveResult::Running;
--    }
--
++        return DcRingOfLaw::Run(bot);
+     }
+ 
 -    // --- Deadmines Defias Cannon: FireDefiasCannon (hook id 2) ------------
 -    // The way to the pirate ship is sealed by the Iron Clad Door (GO 16397,
 -    // lock 202 — rogue-pick only, so a bot party can never click it open). A
@@ -1071,25 +1176,134 @@ index 0348d68..9754dfa 100644
 -        targets.SetGOTarget(cannon);
 -        bot->CastItemUseSpell(gunpowder, targets, 0, 0);
 -        return ObjectiveArriveResult::Running;  // door-state gate confirms it
-+        return DcRingOfLaw::Run(bot);
+-    }
+-
+-    // --- ZulFarrak: WakeZumrah (hook id 5) --------------------------------
+-    // Witch Doctor Zum'rah (7271) spawns with creature_template faction 35
+-    // (friendly to everyone) — he is NOT flag-gated, so nothing in the engage
+-    // path reads him as un-engageable. The ONLY thing that turns him hostile is
+-    // area trigger 962 (map 209, centre 1909.27/1015.11/11.5155, radius 10 —
+-    // roughly 3yd off his spawn), whose SmartAI row sets his spawn's faction to
+-    // 37:
+-    //   smart_scripts (962, source_type 2, event 46 ON_TRIGGER) -> SET_FACTION 37
+-    //
+-    // That row is reachable only from CMSG_AREATRIGGER, which a bot never sends
+-    // on its own: mod-playerbots either mirrors the human master's own crossing
+-    // (PlayerbotAI's "area trigger" master handler) or fires autonomously but
+-    // ONLY for teleport triggers (WithinAreaTrigger / ReachAreaTriggerAction both
+-    // bail on !GetAreaTriggerTeleport). AT 962 has no areatrigger_teleport row,
+-    // so an all-bot party — every `dc test` run — walks up to a permanently
+-    // friendly Zum'rah. The engage gate then loops forever against a live but
+-    // unattackable boss and the run deadlocks there.
+-    //
+-    // The first attempt at this forged CMSG_AREATRIGGER from the leader (the way
+-    // EnsureRingStarted starts the Ring of Law) so the genuine SmartAI row would
+-    // run. It did NOT work in a live all-bot run — the tank parked on the trigger
+-    // and Zum'rah stayed friendly — and no log survived to say which stage failed
+-    // (condition, core range check, or SmartAI target resolution). Rather than
+-    // spend build cycles bisecting a path with three opaque failure modes, set
+-    // the faction the SmartAI row would have set. The row's ONLY action is
+-    // SET_FACTION 37 on this spawn, so the end state is identical; what we give
+-    // up is going through the script.
+-    //
+-    // Faction 37 (not "hostile" generically) is exactly what the row applies. His
+-    // own "On Reset - Restore faction" row puts him back to 35 after a wipe, and
+-    // the repeatable event re-fires — so the reset path still works. Setting the
+-    // faction is enough on its own: once hostile his normal aggro takes over and
+-    // he pulls the party, no engage nudge required.
+-    //
+-    // Logged at INFO because this is the one place a ZF deadlock gets fixed
+-    // silently; under the test harness a bot-side failure is otherwise invisible
+-    // (see the TellError lesson in the test-plan notes).
++    // The native SmartTrigger targets this spawn in the player's own instance.
+     constexpr uint32 ZF_ZUMRAH = 7271;
+-    constexpr uint32 ZF_ZUMRAH_FACTION_FRIENDLY = 35;  // creature_template default
+-    constexpr uint32 ZF_ZUMRAH_FACTION_HOSTILE  = 37;  // what AT 962's row sets
+-    // Wide enough to still find him from the trigger spot if he has wandered;
+-    // the party is standing on top of him by the time this step runs.
++    constexpr uint32 ZF_ZUMRAH_SPAWN = 81524;
++    constexpr uint32 ZF_ZUMRAH_TRIGGER = 962;
++    constexpr uint32 ZF_ZUMRAH_FACTION_FRIENDLY = 35;
+     constexpr float ZF_ZUMRAH_SCAN = 60.0f;
+ 
+-    ObjectiveArriveResult WakeZumrah(Player* bot, AiObjectContext* /*context*/,
++    ObjectiveArriveResult WakeZumrah(Player* bot, AiObjectContext* context,
+                                      DungeonBossInfo const& /*info*/)
+     {
+-        Creature* zumrah = bot->FindNearestCreature(ZF_ZUMRAH, ZF_ZUMRAH_SCAN);
+-        if (!zumrah || !zumrah->IsAlive())
+-            return ObjectiveArriveResult::Done;  // gone/dead — nothing to wake
++        if (!bot || bot->GetMapId() != 209 || !bot->IsInWorld() ||
++            !GET_PLAYERBOT_AI(bot) || !bot->GetSession() || IsSelfBot(bot))
++            return ObjectiveArriveResult::Blocked;
++        if (!context || !DcRun::Of(context).enabled || DcRun::Of(context).paused)
++            return ObjectiveArriveResult::Running;
+ 
+-        // Already flipped (this fired, or a human crossed the trigger).
+-        if (zumrah->GetFaction() != ZF_ZUMRAH_FACTION_FRIENDLY)
++        Creature* zumrah = bot->FindNearestCreature(ZF_ZUMRAH, ZF_ZUMRAH_SCAN, true);
++        if (!zumrah || zumrah->GetSpawnId() != ZF_ZUMRAH_SPAWN)
++            return ObjectiveArriveResult::Running;
++        if (zumrah->IsHostileTo(bot))
+             return ObjectiveArriveResult::Done;
++        if (zumrah->GetFaction() != ZF_ZUMRAH_FACTION_FRIENDLY)
++            return ObjectiveArriveResult::Blocked;
++
++        AreaTrigger const* trigger = sObjectMgr->GetAreaTrigger(ZF_ZUMRAH_TRIGGER);
++        if (!trigger || trigger->map != 209)
++            return ObjectiveArriveResult::Blocked;
++        if (!bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
++            bot->IsBeingTeleported() || bot->m_mover != bot ||
++            bot->IsNonMeleeSpellCast(false) || bot->GetLootGUID())
++            return ObjectiveArriveResult::Running;
+ 
+-        zumrah->SetFaction(ZF_ZUMRAH_FACTION_HOSTILE);
+-        LOG_INFO("playerbots.dungeonclear",
+-                 "DungeonClear: ZulFarrak — set Zum'rah ({}) faction {} -> {} for {} "
+-                 "(area trigger 962 never fires for an all-bot party)",
+-                 ZF_ZUMRAH, ZF_ZUMRAH_FACTION_FRIENDLY, ZF_ZUMRAH_FACTION_HOSTILE,
+-                 bot->GetName());
+-        return ObjectiveArriveResult::Done;
++        if (!bot->IsInAreaTriggerRadius(trigger))
++        {
++            PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
++            if (!bot->isMoving() && ai->CanMove() &&
++                DcEarnedPlay::ReachableLeg(bot, trigger->x, trigger->y, trigger->z))
++                bot->GetMotionMaster()->MovePoint(0, trigger->x, trigger->y, trigger->z,
++                                                 FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
++                                                 /*generatePath*/ true, false);
++            return ObjectiveArriveResult::Running;
++        }
++
++        DcMovement::StopBot(bot, DcMovement::Stop::Hold);
++        // Same non-teleport path as ReachAreaTriggerAction. The core checks
++        // arrival and owns SmartAI, conditions and faction changes, also on retry.
++        WorldPacket packet(CMSG_AREATRIGGER);
++        packet << uint32(ZF_ZUMRAH_TRIGGER);
++        bot->GetSession()->HandleAreaTriggerOpcode(packet);
++        return ObjectiveArriveResult::Running;
      }
  
-     // --- ZulFarrak: WakeZumrah (hook id 5) --------------------------------
-@@ -820,7 +706,6 @@ namespace
+     // --- The Arcatraz: DriveMellicharWaves (hook id 6) --------------------
+@@ -820,10 +695,9 @@ namespace
              using Reg = ObjectiveHookRegistry;
              Reg::HookTable t;
              Reg::AddHook(t, 1, &EnsureRingStarted);      // BRD Ring of Law — start the arena event
 -            Reg::AddHook(t, 2, &FireDefiasCannon);       // Deadmines — fire the cannon, open the door
              Reg::AddHook(t, 3, &GrantIncendiaryBombs);   // Old Hillsbrad — pack of bombs (unlocks Brazen)
              Reg::AddHook(t, 4, &GrantCacheKeyAndLoot);   // The Mechanar — Cache of the Legion key + loot
-             Reg::AddHook(t, 5, &WakeZumrah);             // ZulFarrak — flip Zum'rah hostile (AT 962)
-@@ -888,6 +773,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
+-            Reg::AddHook(t, 5, &WakeZumrah);             // ZulFarrak — flip Zum'rah hostile (AT 962)
++            Reg::AddHook(t, 5, &WakeZumrah);             // ZulFarrak — walk into Zum'rah's area trigger
+             Reg::AddHook(t, 6, &DriveMellicharWaves);    // Arcatraz — poke Mellichar, hold through the waves
+             Reg::AddHook(t, 7, &DriveAnzuSummon);        // Sethekk Halls — force-summon Anzu (send-event 14797)
+             Reg::AddHook(t, 9, &StartNethekurseIntro);   // Shattered Halls — fire Nethekurse's client-only intro
+@@ -888,6 +762,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
  {
      if (hookId == 0)
          return ObjectiveArriveResult::Done;
 +    // Hooks script shortcuts (granted items, faction swaps, forced damage and
-+    // object states). Only the audited spatial Ring of Law driver is admitted.
-+    if (DcEarnedPlay::Active() && hookId != 1)
++    // object states). Only the audited spatial encounter drivers are admitted.
++    if (DcEarnedPlay::Active() && hookId != 1 && hookId != 5)
 +        return ObjectiveArriveResult::Blocked;
  
      auto const& hooks = Hooks();
@@ -1513,10 +1727,10 @@ index 0000000..97ba1d1
 +#endif
 diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
 new file mode 100644
-index 0000000..1491736
+index 0000000..dc49a26
 --- /dev/null
 +++ b/src/DcEarnedEvents.cpp
-@@ -0,0 +1,172 @@
+@@ -0,0 +1,174 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -1562,7 +1776,9 @@ index 0000000..1491736
 +    {
 +        for (EventStep const& step : ev.steps)
 +        {
-+            if (step.kind == EventStepKind::Custom && (ev.mapId != 230 || ev.id != 1))
++            bool const ring = ev.mapId == 230 && ev.id == 1 && step.hookId == 1;
++            bool const zumrah = ev.mapId == 209 && ev.id == 3 && step.hookId == 5;
++            if (step.kind == EventStepKind::Custom && !ring && !zumrah)
 +            {
 +                reason = "event '" + ev.name + "' has no audited controller";
 +                return false;
@@ -1622,7 +1838,7 @@ index 0000000..1491736
 +        switch (step.kind)
 +        {
 +            case EventStepKind::Custom:
-+                return step.hookId == 1; // Ring of Law: native spatial trigger and core completion.
++                return step.hookId == 1 || step.hookId == 5; // Audited native spatial triggers.
 +            case EventStepKind::MoveTo:
 +                return step.hookId == 0;
 +            case EventStepKind::UseItemOnGO:

@@ -466,7 +466,7 @@ def native_contracts(core, source):
     gated={
       'Util/DcDungeonAccess.cpp': ('std::string GrantEntry(', 'if (!bot || DcEarnedPlay::Active())\n            return {};'),
       'Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp': ('StepResult DungeonEventExecutor::RunStep(', 'if (DcEarnedPlay::Active() && !DcEarnedEvents::StepAllowed(step))\n        return StepResult::Failed;'),
-      'Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp': ('ObjectiveArriveResult ObjectiveHookRegistry::Run(', 'if (DcEarnedPlay::Active() && hookId != 1)\n        return ObjectiveArriveResult::Blocked;'),
+      'Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp': ('ObjectiveArriveResult ObjectiveHookRegistry::Run(', 'if (DcEarnedPlay::Active() && hookId != 1 && hookId != 5)\n        return ObjectiveArriveResult::Blocked;'),
       'Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp': ('bool RegroupAtEntrance(', 'if (DcEarnedPlay::Active())\n            return false;'),
       'Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp': ('bool TryFarFromPolyRecovery(', 'if (DcEarnedPlay::Active())\n            return false;'),
       'Ai/Dungeon/DungeonClear/Util/DcSocialQuarantine.cpp': ('void Update(', 'if (DcEarnedPlay::Active())\n            return;'),
