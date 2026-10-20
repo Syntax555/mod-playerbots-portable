@@ -112,7 +112,7 @@ index 4ebe94b..62e7601 100644
              return false;
          // No navmesh to land on: on a map the core runs without pathfinding
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-index 10b9e59..2c66080 100644
+index 10b9e59..1670bda 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 @@ -3,6 +3,8 @@
@@ -135,18 +135,19 @@ index 10b9e59..2c66080 100644
              // the encounter resetting behind the party, so it must not be yielded.
              //
              // The raid-muster step (DC_HOOK_RAID_MUSTER) is a camp too, with no
-@@ -2085,7 +2087,9 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2085,7 +2087,10 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // its attackers + self-heal gossip + watchdog) the whole way to the
              // final boss. DriveEscortCreature returns false only once that boss
              // exists, so we fall through to Drive and the completion gate latches.
 -            else if (step.kind == EventStepKind::EscortCreature)
-+            // Natural progression never drives these shortcut steps: RunStep
-+            // fails them, which skips an optional event and stalls a required one.
-+            else if (step.kind == EventStepKind::EscortCreature && !DcEarnedPlay::Active())
++            // Naralex uses the ordinary RunStep driver. Other legacy escorts
++            // remain refused under natural progression.
++            else if (step.kind == EventStepKind::EscortCreature && !DcEarnedPlay::Active() &&
++                     !DcEarnedEvents::IsNaralexStep(step))
              {
                  if (DriveEscortCreature(step, prog))
                      return true;
-@@ -2096,7 +2100,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2096,7 +2101,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // tick and pin the leader on the lip (the prior attempts' failure).
              // DriveDropInHole returns false once landed, so we fall through to
              // Drive and RunStep's gate pulls the followers down + latches Done.
@@ -155,7 +156,7 @@ index 10b9e59..2c66080 100644
              {
                  if (DriveDropInHole(step))
                      return true;
-@@ -2106,7 +2110,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2106,7 +2111,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // approach every tick and the tank can't thread a house doorway to a
              // barrel inside (it stalls "close but not inside"). Returns false once in
              // cast range, so we fall through to Drive and RunStep fires the GO.
@@ -165,7 +166,7 @@ index 10b9e59..2c66080 100644
              {
                  // Recover between barrels. DriveUseItemOnGO owns the tick at
                  // DcRel::AtObjective (30) — above the NeedsRest triggers (26.5) —
-@@ -2142,7 +2147,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2142,7 +2148,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // step timeout. Recover between crates for the same reason the barrels
              // do: this rung sits above NeedsRest (26.5), the five crates are 330yd
              // apart end to end, and the party has the whole intro RP ahead of it.
@@ -174,7 +175,7 @@ index 10b9e59..2c66080 100644
              {
                  switch (EventRestDecision())
                  {
-@@ -2544,6 +2549,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
+@@ -2544,6 +2550,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
  
  bool DungeonClearBreakStuckCombatAction::Execute(Event /*event*/)
  {
@@ -187,23 +188,26 @@ index 10b9e59..2c66080 100644
      // nothing fightable for the full StuckCombatTimeout — no holder that is both
      // reachable and actually coming for us. Force-clear it exactly as a GM
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
-index 6bc8a74..38fb71a 100644
+index 6bc8a74..0cacc23 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
-@@ -4,6 +4,8 @@
+@@ -4,6 +4,10 @@
   */
  
  #include "DungeonClearActions.h"
 +#include "DcEarnedPlay.h"
 +#include "DcRingOfLaw.h"
++#include "DcNaralexEscort.h"
++#include "DcWailingCaverns.h"
  
  #include <algorithm>
  #include <cmath>
-@@ -341,6 +343,13 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+@@ -341,6 +345,14 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
          lootYieldStart = 0;  // not looting -> reset the commit timer
      }
  
-+    if (DcRingOfLaw::Follow(bot, tank))
++    if (DcWailingCaverns::FollowRoute(bot, tank) ||
++        DcNaralexEscort::Follow(bot, tank) || DcRingOfLaw::Follow(bot, tank))
 +    {
 +        followedTank = tank->GetGUID();
 +        DcFollowerLifecycle::MarkFollowing(bot->GetGUID());
@@ -213,7 +217,7 @@ index 6bc8a74..38fb71a 100644
      // A transit is driving the column to a published cursor: every branch below
      // positions against the TANK instead, and while the tank is snared behind its
      // own cursor those two answers fight each other tick by tick. See
-@@ -764,6 +773,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+@@ -764,6 +776,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
                      ++sameMap;
          followDist = std::max(followDist, DcFormation::RingRadius(sameMap, followDist));
      }
@@ -323,10 +327,37 @@ index 97f5205..b97418d 100644
  
      return AutoReleaseSpiritAction::isUseful();
 diff --git a/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h b/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
-index aad74c4..ce31589 100644
+index aad74c4..aca32c9 100644
 --- a/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
 +++ b/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
-@@ -732,17 +732,9 @@ public:
+@@ -70,20 +70,12 @@ enum class EventStepKind : uint8
+     UseItem,                 // leader uses itemId (milestone 2+)
+     Wait,                    // dwell `durationMs` then continue
+     Custom,                  // escape hatch -> ObjectiveHookRegistry hookId
+-    EscortCreature,          // PROTECT a moving NPC (Wailing Caverns' Disciple of
+-                             // Naralex) the whole way to its destination: start its
+-                             // scripted escort via gossip, then each tick FOLLOW it
+-                             // and actively ENGAGE whatever attacks it (mod-playerbots
+-                             // gives a bot no threat event when only a non-party
+-                             // escortee is hit, so aggro propagation alone never puts
+-                             // the tank into the fight). Done only when the final
+-                             // boss (`escortDoneEntry` / `escortDoneBit`) exists —
+-                             // never on "reached the end". DRIVEN by the action
+-                             // (DcObjectiveArriveAction::DriveEscortCreature, which
+-                             // owns the follow + threat-engage + self-heal gossip +
+-                             // watchdog); RunStep here is the pure completion gate.
+-                             // Anchored+Persistent only (the escort spans several
+-                             // combat gaps that would rewind a non-persistent event).
++    EscortCreature,          // start an NPC's escort through gossip, follow and protect.
++                             // The audited Naralex driver owns normal movement and
++                             // waits for the native awakening/departure marker.
++                             // Other escorts use DriveEscortCreature's legacy action
++                             // and final-boss/data completion gates; those shortcuts
++                             // remain unavailable under natural progression.
+     DropInHole,              // DROP the party down a narrow vertical hole into the
+                              // water below (Wailing Caverns' return-fall off Verdan's
+                              // shelf to reach the Disciple). A ground move clamps to
+@@ -732,17 +724,9 @@ public:
      // alone still ends the step. Chain it right after the step it arms:
      //   .MoveToHoldUntilInstanceData(x, y, z, r, dataId, min).WhileHolding(hook)
      //
@@ -624,6 +655,285 @@ index d99c492..3e053be 100644
                        .Build());
  }
  
+diff --git a/src/Ai/Dungeon/DungeonClear/Data/Events/WailingCavernsEvents.cpp b/src/Ai/Dungeon/DungeonClear/Data/Events/WailingCavernsEvents.cpp
+index d9658fa..ad62b1b 100644
+--- a/src/Ai/Dungeon/DungeonClear/Data/Events/WailingCavernsEvents.cpp
++++ b/src/Ai/Dungeon/DungeonClear/Data/Events/WailingCavernsEvents.cpp
+@@ -6,230 +6,68 @@
+ #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+ #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonRosterBuilders.h"
+ 
+-// --- Wailing Caverns (map 43) — the DROP to LORD SERPENTIS, ANCHORED + PERSISTENT ---
+-// Lord Serpentis (3673) sits on an upper-ground navmesh component that the party
+-// reaches only by running to a ledge and DROPPING DOWN onto it. Recast bakes no
+-// off-mesh connection across that vertical gap (the island dumper shows the
+-// Serpentis shelf as a disconnected component), so stock boss-nav declares him
+-// unreachable and the clear stalls at the lip.
+-//
+-// Navigation is by the boss list: an OBJECTIVE anchor is added at the LIP
+-// (BossRosterRegistry, encounterIndex 5 — shared with Serpentis; the
+-// objective-before-boss tie-break runs it first). Boss-nav drives the tank to
+-// the lip exactly as to any boss — the lip is on the approach-side mesh, so it
+-// IS reachable — and the event then jumps the one off-mesh leg. Once landed the
+-// bot is on Serpentis's island and stock nav walks it the rest of the way; the
+-// objective latches and the clear advances to Serpentis (bit 5) and Verdan
+-// (bit 6).
+-//
+-// Coords are from in-game observation (a GM stood at the jump): the lip is the
+-// edge the player leaps from, the landing a few yards onto the lower shelf
+-// (~5.6yd drop, ~9.4yd across — a clean run-speed MoveJump).
+-//
+-// PERSISTENT because the drop is ONE-WAY: the bot cannot path back up across the
+-// gap. A non-persistent anchored event REWINDS to step 0 after any >1s Drive gap
+-// (e.g. the bot lands among trash and the combat engine takes over for a few
+-// seconds); that rewind would re-run MoveTo(lip) and walk the bot BACK toward
+-// the now-unreachable lip. Persistence keeps the step progress across the gap so
+-// the jump fires exactly once and never regresses. The Jump step is itself
+-// idempotent (Done once within radius of the landing), a second guard against
+-// re-firing.
+-
+ void RegisterWailingCavernsEvents(std::vector<DungeonEvent>& out)
+ {
+-    // The ledge the party leaps FROM (approach-side mesh, where the objective
+-    // anchor sits) and the shelf it lands ON (Serpentis's island).
+-    constexpr float WC_LIP_X  = -290.65567f;
+-    constexpr float WC_LIP_Y  = -3.8297224f;
+-    constexpr float WC_LIP_Z  = -58.30473f;
+-    constexpr float WC_LAND_X = -285.45773f;
+-    constexpr float WC_LAND_Y = 4.021016f;
+-    constexpr float WC_LAND_Z = -63.919395f;
+-
++    // Native patrol 381170 joins Anacondra's platform to the upper caverns.
++    // Backtrack over that ramp instead of crossing either disconnected drop.
++    // Every leg must have a complete mesh path, including its original floor;
++    // the patrol data alone cannot prove connectivity in the installed mmaps.
+     out.push_back(
+-        EventBuilder(43, 1, "Drop to Lord Serpentis")
+-            .Anchored(/*encounterIndex*/ 5)
++        EventBuilder(43, 1, "Walk to Lord Serpentis")
++            .Anchored(5)
+             .Persistent()
+-            // 1. Settle exactly on the lip (the objective's arrive radius may
+-            //    leave the tank a few yards off — too far off and the leap
+-            //    misses the shelf).
+-            .MoveTo(WC_LIP_X, WC_LIP_Y, WC_LIP_Z, /*radius*/ 3.0f)
+-            // 2. Leap the off-mesh gap onto Serpentis's shelf. Done once landed;
+-            //    stock boss-nav then carries the bot to Serpentis.
+-            .Jump(WC_LAND_X, WC_LAND_Y, WC_LAND_Z, /*radius*/ 5.0f)
++            .StepsOwnMovement()
++            .MoveTo(-206.648f, 58.6654f, -49.4123f, 2.0f).Timeout(120000)
++            .MoveTo(-187.331f, 56.9268f, -49.9537f, 2.0f).Timeout(120000)
++            .MoveTo(-169.269f, 54.0309f, -40.636f, 2.0f).Timeout(120000)
++            .MoveTo(-147.96f, 31.9855f, -29.7619f, 2.0f).Timeout(120000)
++            .MoveTo(-120.163f, -24.624f, -28.5832f, 2.0f).Timeout(120000)
+             .Build());
+ 
+-    // --- The finale: ESCORT the DISCIPLE OF NARALEX, ANCHORED + PERSISTENT ---
+-    // After the four Fanglords are dead the dungeon's last objective is a scripted
+-    // ESCORT: talk to the Disciple of Naralex (3678) to start him, then protect him
+-    // along a 25-waypoint path (three ambushes + a banish ritual) to the ritual
+-    // chamber, where he summons MUTANUS THE DEVOURER (3654) — the final boss.
+-    //
+-    // mod-playerbots will NOT put a bot into combat when only a non-party escortee
+-    // is attacked (no bot receives a threat event), so aggro propagation alone lets
+-    // the Disciple die while the party just keeps following. The EscortCreature step
+-    // exists exactly to bridge that: it actively engages whatever hits him, which
+-    // pulls the rest of the party in via the leader-fight assist seam.
+-    //
+-    // ANCHORED + PERSISTENT, never Conditional+Repeatable: the escort spans four+
+-    // separate fights (3 ambushes + the final-chamber waves + Mutanus), and the
+-    // executor REWINDS a non-persistent event to step 0 after any >1s driving-engine
+-    // gap — which every wave's combat is. Persistence keeps stepIndex across the
+-    // gaps; the sticky at-objective trigger (stepIndex >= 1) lets the tank roam the
+-    // whole route from the anchor. Step 0 is a short MoveTo to the Disciple so
+-    // stepIndex reaches 1 (the persistence sticky); step 1 is the escort proper
+-    // (its self-heal re-runs the start gossip itself, so a dead Disciple recovers
+-    // even though a Persistent event won't auto-rewind to a step-0 Gossip).
+-    //
+-    // Completion is gated STRICTLY on Mutanus existing (grid scan) / his encounter
+-    // bit (7) — never on "reached the end" — to avoid the DM-West/RFD premature-
+-    // completion class of bug. Once it latches, the roster's Mutanus BOSS anchor
+-    // takes over and the normal kill-bit completes the dungeon.
+-    constexpr float WC_DISCIPLE_X = -134.97f;
+-    constexpr float WC_DISCIPLE_Y = 125.40f;
+-    constexpr float WC_DISCIPLE_Z = -78.09f;
+-
+-    // --- The RETURN-FALL: drop off Verdan's shelf to the lower caverns --------
+-    // After Verdan the dungeon's last objective (the Disciple escort) sits back
+-    // DOWN in the lower caverns, reachable only by dropping through a narrow
+-    // vertical hole behind Verdan into the water below. Boss-nav can't path the
+-    // one-way vertical gap (the shelf and the deep water floor are disjoint mesh
+-    // tiers), so — exactly like the Serpentis drop — an OBJECTIVE anchor at the
+-    // LIP (reachable approach-side mesh) drives the tank there, then this event
+-    // drops it the one off-mesh leg.
+-    //
+-    // The navmesh (probed offline with tools/probe_navmesh.py) shows the lip
+-    // column is FOUR stacked tiers: shelf -27.5 / a mid-shaft LEDGE -58 / the deep
+-    // water floor -105.8 / -111.5. That ledge is the trap that beat the earlier
+-    // attempts: a plain MoveFall straight off the lip catches it, and a ballistic
+-    // Jump clips the narrow shaft wall. DropInHole instead glides the leader ~7yd
+-    // in +X to (-49.5, 47.6) — the one spot whose column is open STRAIGHT to the
+-    // -105.8 floor — then MoveFall()s PURE-VERTICAL into the water (no horizontal
+-    // travel => no wall clip; clears the -58 ledge). A polygon-adjacency BFS over
+-    // the merged mesh confirms the deep floor is ONE connected component with the
+-    // Disciple's poly, so stock nav routes the party to him after landing.
+-    //
+-    // Followers can't reproduce the off-mesh nudge, so for the whole drop they HOLD
+-    // at the ledge top (DcLeaderSignal::IsLeaderDroppingInHole — a MoveFollow to the
+-    // far-below tank can't path the shaft and would clip them straight down through
+-    // its wall) and TELEPORT to the landing once the tank has finished falling (the
+-    // sanctioned one-way-drop fix, shared with the Serpentis Jump).
+-    //
+-    // PERSISTENT + ANCHORED, same one-way reasoning as the Serpentis drop: the bot
+-    // can't path back UP across the gap, so the step progress must survive any >1s
+-    // combat gap (the party may land among lower-caverns fauna) rather than
+-    // rewinding to MoveTo(lip) and walking back toward the now-unreachable lip.
+-    constexpr float WC_DROP_LIP_X  = -55.89f;
+-    constexpr float WC_DROP_LIP_Y  =  44.32f;
+-    constexpr float WC_DROP_LIP_Z  = -29.01f;
+-    // Over the OPEN shaft mouth (a short +X nudge from the lip), held at shelf Z;
+-    // its column is clear straight down to the deep floor (no shelf / no -58 ledge).
+-    constexpr float WC_DROP_OVER_X = -49.5f;
+-    constexpr float WC_DROP_OVER_Y =  47.6f;
+-    constexpr float WC_DROP_OVER_Z = -29.0f;
+-    // The deep water floor directly below the over-hole point (probe centroid;
+-    // BFS-confirmed connected to the Disciple).
+-    constexpr float WC_DROP_LAND_X = -49.5f;
+-    constexpr float WC_DROP_LAND_Y =  47.6f;
+-    constexpr float WC_DROP_LAND_Z = -105.83f;
+-
+     out.push_back(
+-        EventBuilder(43, 3, "Drop down to the lower caverns")
+-            .Anchored(/*orderIndex*/ 7)
++        EventBuilder(43, 3, "Walk back to the lower caverns")
++            .Anchored(7)
+             .Persistent()
+-            // Step 0: settle on the lip (the objective arrive radius may leave the
+-            //         tank a few yards off; the drop needs it at the shaft edge so
+-            //         stepIndex also reaches 1, the persistence sticky).
+-            .MoveTo(WC_DROP_LIP_X, WC_DROP_LIP_Y, WC_DROP_LIP_Z, /*radius*/ 4.0f)
+-            // Step 1: glide over the open shaft mouth, MoveFall into the water, then
+-            //         teleport the held followers down. Done once the fall finishes.
+-            .DropInHole(WC_DROP_OVER_X, WC_DROP_OVER_Y, WC_DROP_OVER_Z,
+-                        WC_DROP_LAND_X, WC_DROP_LAND_Y, WC_DROP_LAND_Z)
++            .StepsOwnMovement()
++            .MoveTo(-147.96f, 31.9855f, -29.7619f, 2.0f).Timeout(120000)
++            .MoveTo(-169.269f, 54.0309f, -40.636f, 2.0f).Timeout(120000)
++            .MoveTo(-187.331f, 56.9268f, -49.9537f, 2.0f).Timeout(120000)
++            .MoveTo(-206.648f, 58.6654f, -49.4123f, 2.0f).Timeout(120000)
++            .MoveTo(-134.97f, 125.40f, -78.09f, 2.0f).Timeout(120000)
+             .Build());
+ 
++    // The native SmartAI owns the walk, ambushes, banish channel, ritual,
++    // Mutanus and Naralex's awakening. A finite budget also covers a dead,
++    // missing or reset escort; no phase is advanced by the clear driver.
+     out.push_back(
+         EventBuilder(43, 2, "Escort the Disciple of Naralex")
+-            .Anchored(/*encounterIndex*/ 7)
++            .Anchored(7)
+             .Persistent()
+-            // Step 0: close to the Disciple so the persistent stepIndex reaches 1
+-            //         (the escort step's own start branch walks the last yards to
+-            //         gossip range, so this just needs to get near him).
+-            .MoveTo(WC_DISCIPLE_X, WC_DISCIPLE_Y, WC_DISCIPLE_Z, /*radius*/ 5.0f)
+-            // Step 1: start (gossip menu 201 option 0), follow + protect, and
+-            //         complete on Mutanus (3654, encounter bit 7).
+-            .EscortCreature(/*escortee*/ 3678, /*startGossipOption*/ 0,
+-                            /*doneEntry*/ 3654, /*doneBit*/ 7)
++            .StepsOwnMovement()
++            .MoveTo(-134.97f, 125.40f, -78.09f, 2.0f).Timeout(120000)
++            .EscortCreature(3678, 0, 3654, 7).Timeout(900000)
+             .Build());
+ }
+ 
+-// --- roster patch (relocated from BossRosterRegistry) --------------------
+ void RegisterWailingCavernsRoster(std::vector<BossRosterPatch>& t)
+ {
+     using namespace DcRoster;
+ 
+-    // --- Wailing Caverns (map 43) — Serpentis drop + Mutanus escort ---
+-    // Two roster additions, both backed by WailingCavernsEvents.cpp:
+-    //
+-    // (1) Lord Serpentis (3673, encounterIndex 5) sits on an upper-ground
+-    // navmesh island the party reaches only by running to a ledge and
+-    // DROPPING onto it; Recast bakes no off-mesh link across the gap, so
+-    // stock boss-nav calls him unreachable. Add an OBJECTIVE anchor at the
+-    // LIP (approach-side mesh -> reachable) sharing Serpentis's bit 5; the
+-    // objective-before-boss tie-break drives the tank there first, the
+-    // event (eventId 1) jumps the gap, then the clear advances to
+-    // Serpentis (now on the same island). No gateEntry: the event owns
+-    // completion via the Jump landing.
+-    //
+-    // (2) The finale is a scripted ESCORT of the Disciple of Naralex (3678)
+-    // to the ritual chamber, where he summons MUTANUS THE DEVOURER (3654) —
+-    // the dungeon's final boss. Mutanus is a TempSummon (spawnId 0), so
+-    // BossSpawnIndex never emits him; add him as a BOSS at his summon spot
+-    // with his real DungeonEncounter bit 7 (instance_encounters credit 3654,
+-    // the 8th WC encounter after Anacondra/Cobrahn/Kresh/Pythas/Skum 0-4,
+-    // Serpentis 5, Verdan 6), so his kill flips bit 7 and completes the run.
+-    // The Disciple/escort OBJECTIVE (eventId 2) sits at the same key 7 and,
+-    // by the objective-before-boss tie-break, is reached FIRST: the party
+-    // escorts the Disciple, he summons Mutanus, the escort completion gate
+-    // latches, and the picker hands over the same-key Mutanus boss next.
+-    //
+-    // (3) The RETURN-FALL: after Verdan the escort objective is back DOWN
+-    // in the lower caverns, reachable only by dropping through a narrow
+-    // vertical hole behind Verdan into the water. An OBJECTIVE anchor at the
+-    // LIP (eventId 3, ordering key 7) drives the tank there; its DropInHole
+-    // event glides the leader over the open shaft mouth and MoveFall()s it
+-    // pure-vertical into the water (the lip column stacks shelf/-58 ledge/
+-    // -105.8 floor — a blind drop catches the ledge; see WailingCavernsEvents
+-    // and tools/probe_navmesh.py). Ordering key 7 with objective-before-boss
+-    // and insertion-before-escort places it Verdan(6) -> hole-drop -> escort
+-    // -> Mutanus; it latches by entry on event completion (objectives carry
+-    // no kill-bit, so sharing key 7 with Mutanus is harmless).
+-    {
+-        BossRosterPatch p;
+-        p.mapId = 43;
+-
+-        // Mutanus: built (not MakeBoss) so we can stamp his own real
+-        // encounterIndex 7 (he inherits from no removed entry).
+-        DungeonBossInfo mutanus =
+-            MakeBoss(3654, 43, "Mutanus the Devourer",
+-                     151.27f, 252.26f, -102.82f, /*completionFrom*/ 0);
+-        mutanus.encounterIndex = 7;
+-
+-        p.add = {
+-            MakeObjective(OBJ(1), /*encounterIndex*/ 5, 43, "Drop to Lord Serpentis",
+-                          -290.65567f, -3.8297224f, -58.30473f, /*arriveRadius*/ 6.0f,
+-                          /*gateEntry*/ 0, /*hook*/ 0, /*eventId*/ 1),
+-            // Return-fall off Verdan's shelf (key 7, BEFORE the escort by
+-            // insertion order; see the (3) note above). Backed by event 3.
+-            MakeObjective(OBJ(3), /*encounterIndex*/ 7, 43,
+-                          "Drop down to the lower caverns",
+-                          -55.89f, 44.32f, -29.01f, /*arriveRadius*/ 6.0f,
+-                          /*gateEntry*/ 0, /*hook*/ 0, /*eventId*/ 3),
+-            MakeObjective(OBJ(2), /*encounterIndex*/ 7, 43,
+-                          "Escort the Disciple of Naralex",
+-                          -134.97f, 125.40f, -78.09f, /*arriveRadius*/ 18.0f,
+-                          /*gateEntry*/ 0, /*hook*/ 0, /*eventId*/ 2),
+-            mutanus,
+-        };
+-        t.push_back(std::move(p));
+-    }
++    BossRosterPatch p;
++    p.mapId = 43;
++    DungeonBossInfo mutanus = MakeBoss(3654, 43, "Mutanus the Devourer",
++                                       151.27f, 252.26f, -102.82f, 0);
++    mutanus.encounterIndex = 7;
++    // Stable objective ordering keeps the return walk before the escort, and
++    // the escort before Mutanus's boss anchor. Only native kill credit sets bit 7.
++    p.add = {
++        MakeObjective(OBJ(1), 5, 43, "Walk to Lord Serpentis",
++                      -206.648f, 58.6654f, -49.4123f, 6.0f, 0, 0, 1),
++        MakeObjective(OBJ(3), 7, 43, "Walk back to the lower caverns",
++                      -81.8554f, 32.2565f, -30.9939f, 6.0f, 0, 0, 3),
++        MakeObjective(OBJ(2), 7, 43, "Escort the Disciple of Naralex",
++                      -134.97f, 125.40f, -78.09f, 18.0f, 0, 0, 2),
++        mutanus,
++    };
++    t.push_back(std::move(p));
+ }
 diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 index 0348d68..9754dfa 100644
 --- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
@@ -914,10 +1224,10 @@ index 74b95dd..3e78cf8 100644
  
      bool Evaluate(Player* bot)
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-index 7355d38..55c73d0 100644
+index 7355d38..5ce5b60 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-@@ -3,6 +3,10 @@
+@@ -3,6 +3,12 @@
   * and/or modify it under version 3 of the License, or (at your option), any later version.
   */
  
@@ -925,10 +1235,12 @@ index 7355d38..55c73d0 100644
 +#include "DcEarnedEvents.h"
 +#include "DcEarnedPlay.h"
 +#include "DcUldamanAltars.h"
++#include "DcNaralexEscort.h"
++#include "DcWailingCaverns.h"
  #include "DungeonEventExecutor.h"
  
  #include <algorithm>
-@@ -175,6 +179,10 @@ namespace
+@@ -175,6 +181,10 @@ namespace
      {
          if (bot->isMoving())
              return;
@@ -939,7 +1251,7 @@ index 7355d38..55c73d0 100644
          bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
                                            /*generatePath*/ true, false);
      }
-@@ -492,6 +500,10 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -492,11 +502,18 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  {
      if (!bot)
          return StepResult::Blocked;
@@ -950,7 +1262,15 @@ index 7355d38..55c73d0 100644
  
      switch (step.kind)
      {
-@@ -617,6 +629,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+         case EventStepKind::MoveTo:
+         {
++            if (bot->GetMapId() == 43)
++                return DcWailingCaverns::RunLeg(bot, context, step);
++
+             // Boss-state gate, evaluated BEFORE the walk: an encounter that has
+             // finished or reset needs nothing from the garrison spot, and walking
+             // back to it first would only delay the retry.
+@@ -617,6 +634,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  
          case EventStepKind::UseGameObject:
          {
@@ -960,7 +1280,7 @@ index 7355d38..55c73d0 100644
              float const search = step.radius > 0.0f ? step.radius : DC_EVENT_GO_SEARCH;
              GameObject* go = bot->FindNearestGameObject(step.goEntry, search);
              if (!go)
-@@ -647,6 +662,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -647,6 +667,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
                            bot->GetName(), go->GetGUID().ToString(), go->GetName());
                  return StepResult::Running;
              }
@@ -986,7 +1306,17 @@ index 7355d38..55c73d0 100644
              // A GO script that gates on a carried key item refuses a click from an
              // empty bag without a word the headless harness can see (Karazhan's
              // Blackened Urn under mod-individual-progression). Grant it first.
-@@ -1116,6 +1150,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -881,6 +920,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+ 
+         case EventStepKind::EscortCreature:
+         {
++            if (bot->GetMapId() == 43 && DcEarnedEvents::IsNaralexStep(step))
++                return DcNaralexEscort::Run(bot, context);
++
+             // PURE COMPLETION GATE only. The follow + threat-engage + self-heal
+             // gossip + watchdog are all driven by the ACTION
+             // (DcObjectiveArriveAction::DriveEscortCreature), which owns the tick
+@@ -1116,6 +1158,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
              if (step.itemId == 0)
                  return StepResult::Done;
              Item* item = bot->GetItemByEntry(step.itemId);
@@ -995,7 +1325,7 @@ index 7355d38..55c73d0 100644
              if (!item)
              {
                  bot->AddItem(step.itemId, 1);
-@@ -1137,6 +1173,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -1137,6 +1181,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  
          case EventStepKind::UseItemOnGO:
          {
@@ -1005,6 +1335,22 @@ index 7355d38..55c73d0 100644
              // Plant a bomb on the barrel the step's (x,y,z) anchor sits on. The
              // barrel's only interaction is SMART_EVENT_SPELLHIT of the bomb spell,
              // and that spell (32744) is SPELL_EFFECT_OPEN_LOCK against the barrel's
+@@ -1355,11 +1402,10 @@ EventDriveOutcome DungeonEventExecutor::Advance(DungeonEvent const& ev, DungeonE
+     EventStep const& step = ev.steps[prog.stepIndex];
+     uint32 const timeout = step.timeoutMs ? step.timeoutMs : defaultTimeoutMs;
+ 
+-    // The EscortCreature step has NO flat timeout: a 30s default would mis-fire
+-    // during the Disciple's 32.5s banish channel and the long ritual hold. Its
+-    // own dead-air watchdog (DriveEscortCreature) owns liveness instead, so the
+-    // step is never escalated to Failed here regardless of elapsed time.
+-    bool const watchdogOwned = step.kind == EventStepKind::EscortCreature;
++    // Legacy escorts have their action's watchdog. The ordinary Naralex
++    // driver uses its authored finite budget, including all native event phases.
++    bool const watchdogOwned = step.kind == EventStepKind::EscortCreature &&
++                               !DcEarnedEvents::IsNaralexStep(step);
+ 
+     // Forward-progress backstop, checked BEFORE the result dispatch because the
+     // wedge it catches never reports Running: a stale-gap rewind loop re-runs an
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp b/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
 index 25266a7..8f06e51 100755
 --- a/src/Ai/Dungeon/DungeonClear/Util/StridedPathfinder.cpp
@@ -1167,10 +1513,10 @@ index 0000000..97ba1d1
 +#endif
 diff --git a/src/DcEarnedEvents.cpp b/src/DcEarnedEvents.cpp
 new file mode 100644
-index 0000000..bd7f431
+index 0000000..1491736
 --- /dev/null
 +++ b/src/DcEarnedEvents.cpp
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,172 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -1221,6 +1567,11 @@ index 0000000..bd7f431
 +                reason = "event '" + ev.name + "' has no audited controller";
 +                return false;
 +            }
++            if (step.kind == EventStepKind::EscortCreature && (ev.mapId != 43 || ev.id != 2))
++            {
++                reason = "event '" + ev.name + "' has no audited escort";
++                return false;
++            }
 +            bool const cannon = DcEarnedEvents::IsDefiasCannonStep(step);
 +            if (!DcEarnedEvents::StepAllowed(step) || (!cannon && (step.kind == EventStepKind::UseItem || step.itemId)))
 +            {
@@ -1259,6 +1610,13 @@ index 0000000..bd7f431
 +               step.itemId == 5397 && step.spellId == 6250 && step.hookId == 0;
 +    }
 +
++    bool IsNaralexStep(EventStep const& step)
++    {
++        return step.kind == EventStepKind::EscortCreature && step.creatureEntry == 3678 &&
++               step.gossipOption == 0 && step.escortDoneEntry == 3654 && step.escortDoneBit == 7 &&
++               step.hookId == 0 && step.instanceDataId < 0;
++    }
++
 +    bool StepAllowed(EventStep const& step)
 +    {
 +        switch (step.kind)
@@ -1269,6 +1627,8 @@ index 0000000..bd7f431
 +                return step.hookId == 0;
 +            case EventStepKind::UseItemOnGO:
 +                return IsDefiasCannonStep(step);
++            case EventStepKind::EscortCreature:
++                return IsNaralexStep(step);
 +            case EventStepKind::UseGameObject:
 +            case EventStepKind::Gossip:
 +            case EventStepKind::WaitForSpawn:
@@ -1331,10 +1691,10 @@ index 0000000..bd7f431
 +}
 diff --git a/src/DcEarnedEvents.h b/src/DcEarnedEvents.h
 new file mode 100644
-index 0000000..3856c0c
+index 0000000..001d4e3
 --- /dev/null
 +++ b/src/DcEarnedEvents.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,35 @@
 +/*
 + * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license,
 + * version 3 or (at your option) any later version.
@@ -1359,6 +1719,8 @@ index 0000000..3856c0c
 +    bool StepAllowed(EventStep const& step);
 +    // Only this item-target pair has an audited ordinary acquisition path.
 +    bool IsDefiasCannonStep(EventStep const& step);
++    // Only the native Wailing Caverns escort has an audited ordinary driver.
++    bool IsNaralexStep(EventStep const& step);
 +    // The object can be opened by a click now: no lock, an open lock without a
 +    // profession, or a key item the bot carries. Lockpicking, spell locks and
 +    // conditional interaction stay with players.
@@ -1495,6 +1857,209 @@ index 0000000..f7d2776
 +    uint8 Expansion(Player* player);
 +    // Individual Progression's map entry gates, checked without side effects.
 +    bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z);
++}
++#endif
+diff --git a/src/DcNaralexEscort.cpp b/src/DcNaralexEscort.cpp
+new file mode 100644
+index 0000000..eb934a4
+--- /dev/null
++++ b/src/DcNaralexEscort.cpp
+@@ -0,0 +1,177 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#include "DcNaralexEscort.h"
++#include "DcEarnedPlay.h"
++#include "DcWailingCaverns.h"
++#include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcMovement.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcTargeting.h"
++#include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
++#include "AiObjectContext.h"
++#include "AttackAction.h"
++#include "Creature.h"
++#include "Event.h"
++#include "Group.h"
++#include "InstanceScript.h"
++#include "ObjectAccessor.h"
++#include "Player.h"
++#include "Playerbots.h"
++#include "SmartAI.h"
++
++namespace
++{
++    constexpr uint32 DiscipleEntry = 3678;
++    constexpr uint32 MutanusBit = 1u << 7;
++
++    bool Active(AiObjectContext* context)
++    {
++        return context && DcRun::Of(context).enabled && !DcRun::Of(context).paused &&
++               DungeonEventExecutor::IsPersistentAnchoredEventActive(context) &&
++               context->GetValue<DungeonEventProgress&>(DcKey::EventProgress)->Get().eventId == 2;
++    }
++
++    Creature* Disciple(Player* bot)
++    {
++        Creature* disciple = bot->FindNearestCreature(DiscipleEntry, 250.0f, true);
++        return disciple && disciple->IsInWorld() && disciple->IsAlive() &&
++               disciple->IsInMap(bot) && disciple->InSamePhase(bot) ? disciple : nullptr;
++    }
++
++    bool Interrupted(Player* bot)
++    {
++        return !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() || bot->IsBeingTeleported() ||
++               bot->m_mover != bot || bot->GetVehicle() || bot->GetTransport() ||
++               bot->IsNonMeleeSpellCast(false) || bot->GetLootGUID();
++    }
++
++    StepResult Approach(Player* bot, AiObjectContext* context, Creature* disciple, float radius)
++    {
++        return DcWailingCaverns::Walk(bot, context, disciple->GetPositionX(),
++                                      disciple->GetPositionY(), disciple->GetPositionZ(), radius);
++    }
++}
++
++namespace DcNaralexEscort
++{
++    StepResult Run(Player* bot, AiObjectContext* context)
++    {
++        if (!bot || bot->GetMapId() != 43 || !bot->IsInWorld() || !GET_PLAYERBOT_AI(bot))
++            return StepResult::Failed;
++        // Queued actions must not start gossip or movement after pause/off/skip.
++        if (!Active(context))
++            return StepResult::Running;
++
++        InstanceScript* instance = bot->GetInstanceScript();
++        if (!instance)
++            return StepResult::Blocked;
++        for (uint32 type = 0; type < 4; ++type)
++            if (instance->GetData(type) != DONE)
++                return StepResult::Blocked;
++
++        Creature* disciple = Disciple(bot);
++        SmartAI* escortAI = disciple ? dynamic_cast<SmartAI*>(disciple->AI()) : nullptr;
++        if (!escortAI)
++            return StepResult::Blocked;
++        // Mutanus spawning or dying does not finish Naralex's awakening. His
++        // native action list sends this marker after its final dialogue and
++        // starts the departure path. Never infer success from a missing NPC.
++        if ((instance->GetCompletedEncounterMask() & MutanusBit) &&
++            escortAI->GetData(2) == 2 && escortAI->GetScript()->GetPathId() == 3679)
++            return StepResult::Done;
++
++        if (Interrupted(bot))
++            return StepResult::Running;
++
++        if (!escortAI->IsEscorted())
++        {
++            if (disciple->GetFaction() != 35 || disciple->isMoving() || !bot->GetSession())
++                return StepResult::Blocked;
++            StepResult const approach = Approach(bot, context, disciple, 4.0f);
++            if (approach != StepResult::Done)
++                return approach;
++            if (!bot->IsWithinLOSInMap(disciple))
++                return StepResult::Blocked;
++
++            // Starting with an absent or trailing member risks the native
++            // escort's range reset. Followers gather through their own action.
++            if (Group* group = bot->GetGroup())
++                for (auto const& slot : group->GetMemberSlots())
++                {
++                    Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid);
++                    if (!member || !member->IsInWorld() || !member->IsInMap(bot) ||
++                        !member->InSamePhase(bot) || Interrupted(member) ||
++                        member->GetExactDist(disciple) > 15.0f || !member->IsWithinLOSInMap(disciple))
++                        return StepResult::Running;
++                }
++
++            DungeonEventExecutor::SelectGossip(bot, disciple, 0);
++            // A sent packet is no receipt: the core may refuse the menu option.
++            return escortAI->IsEscorted() && disciple->GetFaction() == 250 &&
++                   escortAI->GetScript()->GetPathId() == DiscipleEntry
++                       ? StepResult::Running : StepResult::Blocked;
++        }
++
++        if (escortAI->GetScript()->GetPathId() != DiscipleEntry || disciple->GetFaction() != 250)
++            return StepResult::Blocked;
++
++        Unit* threat = nullptr;
++        for (Unit* attacker : disciple->getAttackers())
++            if (attacker && attacker->IsInWorld() && attacker->IsAlive() &&
++                attacker->IsInMap(bot) && attacker->InSamePhase(bot) && bot->IsValidAttackTarget(attacker) &&
++                (!attacker->ToCreature() || !attacker->ToCreature()->IsInEvadeMode()))
++            {
++                threat = attacker;
++                break;
++            }
++        if (!threat)
++            threat = DcTargeting::NearestHostileNearPoint(bot, context,
++                disciple->GetPositionX(), disciple->GetPositionY(), disciple->GetPositionZ(), 18.0f, 10.0f);
++        if (threat)
++        {
++            if (!threat->IsInWorld() || !threat->IsAlive() || !threat->IsInMap(bot) ||
++                !threat->InSamePhase(bot) || !bot->IsValidAttackTarget(threat) ||
++                (threat->ToCreature() && threat->ToCreature()->IsInEvadeMode()))
++                return StepResult::Blocked;
++            StepResult const approach = DcWailingCaverns::Walk(bot, context, threat->GetPositionX(),
++                threat->GetPositionY(), threat->GetPositionZ(), 3.0f);
++            if (approach == StepResult::Done)
++            {
++                if (!bot->IsWithinLOSInMap(threat))
++                    return StepResult::Blocked;
++                context->GetValue<Unit*>(DcKey::Stock::CurrentTarget)->Set(threat);
++                MeleeAction(GET_PLAYERBOT_AI(bot)).Execute(Event());
++                return StepResult::Running;
++            }
++            return approach;
++        }
++
++        StepResult const follow = Approach(bot, context, disciple, 6.0f);
++        return follow == StepResult::Done ? StepResult::Running : follow;
++    }
++
++    bool Follow(Player* member, Player* leader)
++    {
++        if (!member || !leader || leader->GetMapId() != 43 ||
++            !member->IsInWorld() || !member->IsInMap(leader) || !member->InSamePhase(leader))
++            return false;
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(leader);
++        AiObjectContext* context = ai ? ai->GetAiObjectContext() : nullptr;
++        if (!Active(context))
++            return false;
++
++        Creature* disciple = Disciple(member);
++        SmartAI* escortAI = disciple ? dynamic_cast<SmartAI*>(disciple->AI()) : nullptr;
++        if (!escortAI || escortAI->GetData(2) == 2)
++            return true;
++        StepResult const result = Approach(member, context, disciple, 8.0f);
++        if (result == StepResult::Failed || result == StepResult::Blocked)
++        {
++            DcRun::Of(context).paused = true;
++            DcRun::Of(context).pauseReason = "No real navigation-mesh route for a Naralex escort party member.";
++            context->GetValue<std::string&>(DcKey::StallReason)->Get() = DcRun::Of(context).pauseReason;
++            DcMovement::StopBot(member, DcMovement::Stop::Hold);
++            DcMovement::StopBot(leader, DcMovement::Stop::Hold);
++        }
++        return true;
++    }
++}
+diff --git a/src/DcNaralexEscort.h b/src/DcNaralexEscort.h
+new file mode 100644
+index 0000000..6b95153
+--- /dev/null
++++ b/src/DcNaralexEscort.h
+@@ -0,0 +1,14 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#ifndef DC_NARALEX_ESCORT_H
++#define DC_NARALEX_ESCORT_H
++#include "Define.h"
++class Player;
++class AiObjectContext;
++enum class StepResult : uint8;
++
++namespace DcNaralexEscort
++{
++    StepResult Run(Player* bot, AiObjectContext* context);
++    bool Follow(Player* member, Player* leader);
 +}
 +#endif
 diff --git a/src/DcRingOfLaw.cpp b/src/DcRingOfLaw.cpp
@@ -1758,6 +2323,155 @@ index 0000000..2796944
 +namespace DcUldamanAltars
 +{
 +    StepResult Run(Player* bot, uint32 altarEntry);
++}
++#endif
+diff --git a/src/DcWailingCaverns.cpp b/src/DcWailingCaverns.cpp
+new file mode 100644
+index 0000000..32e9cf1
+--- /dev/null
++++ b/src/DcWailingCaverns.cpp
+@@ -0,0 +1,120 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#include "DcWailingCaverns.h"
++#include "DcEarnedPlay.h"
++#include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
++#include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcMovement.h"
++#include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
++#include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
++#include "AiObjectContext.h"
++#include "Group.h"
++#include "ObjectAccessor.h"
++#include "PathGenerator.h"
++#include "Player.h"
++#include "Playerbots.h"
++#include <cmath>
++
++namespace DcWailingCaverns
++{
++    StepResult Walk(Player* bot, AiObjectContext* context, float x, float y, float z, float radius)
++    {
++        if (!bot || !context || bot->GetMapId() != 43 || !GET_PLAYERBOT_AI(bot))
++            return StepResult::Failed;
++        if (!DcRun::Of(context).enabled || DcRun::Of(context).paused)
++            return StepResult::Running;
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
++        if (!bot->IsInWorld() || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() ||
++            bot->IsBeingTeleported() || bot->m_mover != bot || bot->GetVehicle() || bot->GetTransport() ||
++            bot->IsNonMeleeSpellCast(false) || bot->GetLootGUID() || !ai->CanMove() ||
++            !DcMovement::DcMovementAllowed(ai))
++            return StepResult::Running;
++
++        auto const failed = [&]()
++        {
++            context->GetValue<std::string&>(DcKey::StallReason)->Get() =
++                "Wailing Caverns route is unsafe or unreachable; no movement shortcut is permitted.";
++            return StepResult::Failed;
++        };
++        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
++            !std::isfinite(radius) || radius <= 0.0f)
++            return failed();
++        if (bot->GetExactDist(x, y, z) <= radius)
++        {
++            DcMovement::StopBot(bot, DcMovement::Stop::Hold);
++            return StepResult::Done;
++        }
++        if (bot->isMoving())
++            return StepResult::Running;
++
++        PathGenerator path(bot);
++        if (!path.CalculatePath(x, y, z, false) || !DcEarnedPlay::UsesRealPath(path) ||
++            !(path.GetPathType() & PATHFIND_NORMAL) ||
++            (path.GetPathType() & (PATHFIND_INCOMPLETE | PATHFIND_SHORT)) ||
++            (path.GetPath().back() - G3D::Vector3(x, y, z)).magnitude() > 1.0f)
++            return failed();
++
++        Movement::PointsArray points = path.GetPath();
++        // Native normalization can shift the starting height. Validate the
++        // first actual movement segment from the bot's current position too.
++        points.front() = G3D::Vector3(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
++        if (!DcEarnedPlay::RealSpline(bot, points))
++            return failed();
++        DcMovement::SplinePath(ai, points);
++        return StepResult::Running;
++    }
++
++    StepResult RunLeg(Player* bot, AiObjectContext* context, EventStep const& step)
++    {
++        StepResult const result = Walk(bot, context, step.x, step.y, step.z, step.radius);
++        if (result != StepResult::Done)
++            return result;
++        // These steps own movement, so the ordinary advance action's party
++        // gates are inactive. Every member must physically finish this leg.
++        if (Group* group = bot->GetGroup())
++            for (auto const& slot : group->GetMemberSlots())
++            {
++                Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid);
++                if (!member || !member->IsInWorld() || !member->IsAlive() ||
++                    !member->IsInMap(bot) || !member->InSamePhase(bot) ||
++                    member->IsInCombat() || member->IsInFlight() || member->IsBeingTeleported() ||
++                    member->m_mover != member || member->GetVehicle() || member->GetTransport() ||
++                    member->IsNonMeleeSpellCast(false) || member->GetLootGUID() ||
++                    member->GetExactDist(step.x, step.y, step.z) > step.radius)
++                    return StepResult::Running;
++            }
++        return StepResult::Done;
++    }
++
++    bool FollowRoute(Player* member, Player* leader)
++    {
++        if (!member || !leader || leader->GetMapId() != 43 || !member->IsInWorld() ||
++            !member->IsInMap(leader) || !member->InSamePhase(leader))
++            return false;
++        PlayerbotAI* ai = GET_PLAYERBOT_AI(leader);
++        AiObjectContext* context = ai ? ai->GetAiObjectContext() : nullptr;
++        if (!context || !DcRun::Of(context).enabled || DcRun::Of(context).paused ||
++            !DungeonEventExecutor::IsPersistentAnchoredEventActive(context))
++            return false;
++        auto const& progress = context->GetValue<DungeonEventProgress&>(DcKey::EventProgress)->Get();
++        if (progress.eventId != 1 && progress.eventId != 2 && progress.eventId != 3)
++            return false;
++        DungeonEvent const* event = DungeonEventRegistry::Find(43, progress.eventId);
++        if (!event || progress.stepIndex >= event->steps.size())
++            return false;
++        EventStep const& step = event->steps[progress.stepIndex];
++        if (step.kind != EventStepKind::MoveTo)
++            return false;
++
++        StepResult const result = Walk(member, context, step.x, step.y, step.z, step.radius);
++        if (result == StepResult::Failed || result == StepResult::Blocked)
++        {
++            DcRun::Of(context).paused = true;
++            DcRun::Of(context).pauseReason = "No real navigation-mesh route for a Wailing Caverns party member.";
++            context->GetValue<std::string&>(DcKey::StallReason)->Get() = DcRun::Of(context).pauseReason;
++            DcMovement::StopBot(member, DcMovement::Stop::Hold);
++            DcMovement::StopBot(leader, DcMovement::Stop::Hold);
++        }
++        return true;
++    }
++
++}
+diff --git a/src/DcWailingCaverns.h b/src/DcWailingCaverns.h
+new file mode 100644
+index 0000000..b2c26c6
+--- /dev/null
++++ b/src/DcWailingCaverns.h
+@@ -0,0 +1,17 @@
++/* GNU Affero General Public License v3.0 or later; see LICENSE. */
++#ifndef DC_WAILING_CAVERNS_H
++#define DC_WAILING_CAVERNS_H
++#include "Define.h"
++
++class Player;
++class AiObjectContext;
++struct EventStep;
++enum class StepResult : uint8;
++
++namespace DcWailingCaverns
++{
++    StepResult RunLeg(Player* bot, AiObjectContext* context, EventStep const& step);
++    bool FollowRoute(Player* member, Player* leader);
++    StepResult Walk(Player* bot, AiObjectContext* context, float x, float y, float z, float radius);
 +}
 +#endif
 diff --git a/src/DungeonClearCommand.cpp b/src/DungeonClearCommand.cpp
