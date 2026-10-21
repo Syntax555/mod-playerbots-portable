@@ -98,6 +98,84 @@ The server updater does not install client addons or modify a WoW client. Each
 player installs the matching client packages manually; see
 [client installation](era-talents.md#install-the-matching-client-files).
 
+## Server data and the client cache
+
+With the core default `ClientCacheVersion = 0`, worldserver reads
+`acore_world.version.cache_id` after applying SQL migrations and sends that
+version when a client session connects. A changed version refreshes the client's
+cache of server query responses, such as quest, item, creature and gameobject
+templates. Sending the same version again does not request another refresh.
+
+The bundled migration `2026_10_21_00_portable_client_cache.sql` sets the database
+cache version to `20261021` for the distribution's quest and item data. The native
+SQL updater records its filename and hash in `acore_world.updates`; unchanged
+files are skipped on subsequent starts. A higher administrator-managed database
+version is preserved. Login, ordinary restart and configuration reload do not
+increment the version.
+
+World SQL updates require the world bit (`4`) in `Updates.EnableDatabases`;
+the core default is `7`. Keep `SourceDirectory` pointing at the bundled `src/`
+tree unless you maintain your own SQL tree. The launcher's `--skip-sql` skips
+only database/user creation, not the core's migrations.
+
+An explicit nonzero `ClientCacheVersion` in your active `worldserver.conf`
+overrides the database value and is preserved. Administrators maintaining this
+override or a higher database cache version must choose a fresh version when
+their cached data changes. After changing `version.cache_id` manually, restart
+worldserver: `.reload config` reuses the database value read at startup.
+
+This mechanism does not install client DBC/MPQ data, spell descriptions, talent
+trees, models or addon code. Changes to those assets require the matching client
+packages, installed separately with WoW closed. A change confined to cached server
+query responses needs only the cache version. Keep `WTF/`, addon SavedVariables,
+active server configurations and databases; deleting them is not part of a cache
+update.
+
+### Reproduce a data update and an unchanged restart
+
+Use a stopped test copy of an existing realm, with its configurations and
+databases backed up. Keep `ClientCacheVersion = 0` for the database-driven check.
+
+1. Start the old copy with `startup.exe --no-update` and record these world
+   database queries, then stop the realm with Ctrl+C:
+
+   ```sql
+   SELECT cache_id FROM version;
+   SELECT ID, RewardDisplaySpell, RewardSpell FROM quest_template WHERE ID = 5634;
+   SELECT name, hash, state FROM updates
+     WHERE name = '2026_10_21_00_portable_client_cache.sql';
+   ```
+
+   For the unmodified pinned world database, the cache ID is `17`. The cache
+   migration is absent before installation. Quest 5634's stock reward pair is
+   `13908, 19338`; an already migrated realm can have `948081, 948090` already.
+2. Install the matching server release in the test copy using the normal
+   [update steps](#manual-installation), preserving its data and configuration.
+   Start normally. The SQL log applies the cache migration once, the queries
+   show cache ID `20261021` and one migration row with a nonempty hash, and the
+   startup log reports `Client cache version set to: 20261021`. The historical
+   quest migration changes the stock reward pair to `948081, 948090`; its guards
+   preserve custom reward values. Reconnect WoW to receive the version.
+3. Run `.reload config` as a GM (or `reload config` in the server console),
+   then stop and start the same installed release with `--no-update`. Repeat
+   the queries. The ID, migration hash and reward values stay the same; the
+   cache migration is not applied again. Reconnecting receives the same ID.
+
+The source fixture reproduces the migration and unchanged restart with the real
+core SQL updater and cache functions, using isolated data:
+
+```bash
+cmake -P cmake/PrepareModules.cmake
+python3 cmake/tests/TestClientCacheVersion.py
+```
+
+For future changes to client-cached server data, ship a new world SQL migration
+with a fresh, stable `version.cache_id` alongside the data change. Retain previous
+migrations so established realms receive the new one. The SQL updater's hash
+tracking alone does not update the cache version. Changes confined to AI,
+loot, spawns or rates do not require a client cache bump; changes to client files
+still require their corresponding client package.
+
 ## Offline startup and failed updates
 
 To skip the remote server-update check for one launch, run from the server folder:
