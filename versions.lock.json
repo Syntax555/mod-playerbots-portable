@@ -54,7 +54,8 @@
         "patches/mod-individual-progression-frostmane-hold.patch",
         "patches/mod-individual-progression-historical-class-quests.patch",
         "patches/mod-individual-progression-creature-era-modifiers.patch",
-        "patches/mod-individual-progression-era-experience.patch"
+        "patches/mod-individual-progression-era-experience.patch",
+        "patches/mod-individual-progression-client-cache.patch"
       ]
     },
     {

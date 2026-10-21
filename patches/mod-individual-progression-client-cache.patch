@@ -1,0 +1,10 @@
+diff --git a/data/sql/world/updates/2026_10_21_00_portable_client_cache.sql b/data/sql/world/updates/2026_10_21_00_portable_client_cache.sql
+new file mode 100644
+index 0000000..67b1554
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_21_00_portable_client_cache.sql
+@@ -0,0 +1,4 @@
++-- Quest rewards/objectives and item templates supplied by the portable world SQL
++-- differ from the stock ACDB client cache. Keep a stable ID between data updates.
++-- Preserve a higher administrator-managed version; ClientCacheVersion = 0 uses this row.
++UPDATE `version` SET `cache_id` = 20261021 WHERE `cache_id` < 20261021 OR `cache_id` IS NULL;
