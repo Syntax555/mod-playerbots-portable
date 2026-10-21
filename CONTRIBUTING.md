@@ -10,6 +10,10 @@ Attach relevant excerpts from `logs/` with account passwords removed; copy the
 folder before restarting the realm, because every server start overwrites its
 logs.
 
+For quest availability or historical class-quest reports, follow the
+[quest diagnostics](docs/quest-diagnostics.md) and include the affected character's
+complete status and condition output.
+
 ## Changing the server
 
 [AGENTS.md](AGENTS.md) sets the product rules and the checks every change must
