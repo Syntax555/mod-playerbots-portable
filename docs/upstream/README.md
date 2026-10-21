@@ -8,10 +8,10 @@ safely.
 
 | Fix | Upstream status | Review artifacts |
 | --- | --- | --- |
-| Formation velocity guard | Offered in [AzerothCore #28141](https://github.com/azerothcore/azerothcore-wotlk/issues/28141) | [Patch](formation-velocity.patch), [proposal](formation-velocity.md) |
-| Talent reset cost underflow | Offered in [AzerothCore #28142](https://github.com/azerothcore/azerothcore-wotlk/issues/28142) | [Patch](talent-reset-cost.patch), [proposal](talent-reset-cost.md) |
-| Empty random-battleground candidates | Offered in [AzerothCore #28143](https://github.com/azerothcore/azerothcore-wotlk/issues/28143) | [Patch](random-battleground.patch), [proposal](random-battleground.md) |
-| Empty Individual Progression account filters | Reference proposal for the pre-cache API; current local guards cover the merged cache API | [Patch](individual-progression-filters.patch), [proposal](individual-progression-filters.md) |
+| Formation velocity guard | [#28141](https://github.com/azerothcore/azerothcore-wotlk/issues/28141) is open; absent from both checked core branches | [Patch](formation-velocity.patch), [proposal](formation-velocity.md) |
+| Talent reset cost underflow | [#28142](https://github.com/azerothcore/azerothcore-wotlk/issues/28142) is open; absent from both checked core branches | [Patch](talent-reset-cost.patch), [proposal](talent-reset-cost.md) |
+| Empty random-battleground candidates | [#28143](https://github.com/azerothcore/azerothcore-wotlk/issues/28143) is open; absent from both checked core branches | [Patch](random-battleground.patch), [proposal](random-battleground.md) |
+| Empty Individual Progression account filters | Absent from the checked `master`; the merged account cache still queries disabled filters | [Patch](individual-progression-filters.patch), [proposal](individual-progression-filters.md) |
 
 The core issues include the complete minimal diff and validation results.
 The pinned Individual Progression revision includes the account-cache change
@@ -23,6 +23,37 @@ The review artifacts below retain their recorded base for reproducible checks.
 The Individual Progression proposal only includes account classification and
 character-creation filters. The local transition-quest changes, custom talent
 reset hooks and earned-era arena selection rules are outside these proposals.
+
+## Integration status
+
+The source comparison uses AzerothCore `master`
+[`aa921a00a2789f7594a99f535ef30f90780f8cda`](https://github.com/azerothcore/azerothcore-wotlk/commit/aa921a00a2789f7594a99f535ef30f90780f8cda)
+and the required Playerbots core `Playerbot` branch
+[`8a4e76eac8c4ccebf547113afe7b51d6c3e91641`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/8a4e76eac8c4ccebf547113afe7b51d6c3e91641).
+The latter is already the locked core revision. Open issues alone do not
+establish that a fix is available in either branch.
+
+| Production method in both checked cores | Missing behavior | Retained local change |
+| --- | --- | --- |
+| `FormationMovementGenerator::LaunchMovement` | Falls back only for `velocity == 0.0f`, although the spline validator rejects velocities at or below `0.01f` | [Formation guard](../../patches/azerothcore-formation-minimum-velocity.patch) |
+| `Player::resetTalentsCost` | Converts negative elapsed months to unsigned and subtracts the decay before clamping | Cost guard in [respec accounting](../../patches/azerothcore-era-respec-accounting.patch) |
+| `BattlegroundMgr::GetRandomBG` | Dereferences the weighted selection without checking `ids.empty()` | Empty-selection guard in [earned-era arena matching](../../patches/azerothcore-earned-era-arena-matching.patch) |
+
+Individual Progression `master`
+[`4933d455d2f611eed50c74c68c78832df4ed37a3`](https://github.com/ZhengPeiRu21/mod-individual-progression/commit/4933d455d2f611eed50c74c68c78832df4ed37a3)
+is [one commit ahead of the locked revision](https://github.com/ZhengPeiRu21/mod-individual-progression/compare/acaa9b3c73f7b756dcf0a7c388b438dcc68cdd17...4933d455d2f611eed50c74c68c78832df4ed37a3).
+That commit changes only Scarab Gong gossip. Both numeric account predicates
+still call `GetAccountMatch` unconditionally, and character creation shares
+those predicates. The cache therefore still performs an initial account-name
+query when both filters are empty. The local guards remain necessary for each
+disabled filter, including after a configuration reload.
+
+None of these four fixes has a replacement in the checked sources. The locked
+revisions and runtime patch chain remain intact. A future removal requires a
+compatible fix in the relevant branch, API and profile-key checks, regeneration
+of affected patches through `scripts/patchwork.py`, and the native regression
+and mutation checks. In particular, a generic fix does not replace the custom
+talent-reset hooks, personal earned-era admission or rated-arena team filters.
 
 ## Reproduce validation
 

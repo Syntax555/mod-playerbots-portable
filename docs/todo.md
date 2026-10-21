@@ -121,8 +121,10 @@ and ordinary player actions.
 - [ ] Submit the prepared Individual Progression filter fix upstream when
   repository permissions allow; see the
   [upstream proposals](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/upstream/README.md).
-- [ ] Track the generic core proposals, then pin accepted fixes and remove
-  their corresponding local hunks.
+- [ ] Track the generic core proposals and Individual Progression empty-filter
+  guards; the [checked upstream sources](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/upstream/README.md#integration-status)
+  still need all four local fixes. Pin compatible accepted fixes before removing
+  only their corresponding local hunks.
 
 ## Core and module patches
 
