@@ -156,6 +156,10 @@ tier 13 need the matching client pack, installed with WoW fully closed. Check it
 with `/run print(GetSpellInfo(932999))`; see
 [client installation](docs/era-talents.md#install-the-matching-client-files).
 
+**A historical quest is missing or unavailable.** Inspect the affected character
+with the core's `.quest status`; see [quest diagnostics](docs/quest-diagnostics.md)
+for permissions, prerequisite checks and Individual Progression limits.
+
 **An addon blocked an action.** See
 [blocked interactions and Lua errors](docs/addons.md#blocked-interactions-and-lua-errors).
 
@@ -232,6 +236,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [World buffs](docs/world-buffs.md) | Vanilla event timers, recipient conditions and native TBC events. |
 | [Era world events](docs/world-events.md) | Outdoor encounters, earned tiers, timers and configuration. |
 | **Server administration** | |
+| [Quest diagnostics](docs/quest-diagnostics.md) | Read-only quest status, acceptance reasons and progression checks. |
 | [Running and updating](docs/updating.md) | Updates, data location, launcher options, backups and recovery. |
 | [Configuration](docs/configuration.md) | Default settings, module behavior and supported scope. |
 | [Server adaptations](docs/adaptations.md) | Distribution-specific gameplay, client and launcher behavior. |

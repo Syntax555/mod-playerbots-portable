@@ -72,6 +72,10 @@ Questie and guide addons maintain their own quest databases. Their markers can
 omit restored quests even when the server offers them. The NPC quest list and
 server-side eligibility determine availability; see [client addons](addons.md).
 
+For a missing quest, inspect the affected character with `.quest status` before
+reporting it. The [quest diagnosis guide](quest-diagnostics.md) covers class/race
+gates, alternative quests, personal progression conditions and spell-reward limits.
+
 ## Source and scope
 
 Quest relations, ranks and mechanics use pinned CMaNGOS Classic and TBC sources.

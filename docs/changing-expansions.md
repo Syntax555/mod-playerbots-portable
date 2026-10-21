@@ -57,6 +57,9 @@ remains available; playing accounts should use ordinary player privileges.
 An already-rewarded transition quest becomes usable once the preceding chain is
 complete and the realm ceiling permits advancement. It is not rewarded twice.
 
+Use `.quest status` and `.ip get` to inspect a blocked transition without awarding
+progress; see [quest diagnostics](quest-diagnostics.md) for examples and limits.
+
 ## Experience by era
 
 The earned tier selects each character's experience rules: Vanilla before tier
