@@ -153,6 +153,9 @@ jobs:
       - name: Test MultiBot options initialization
         run: python3 cmake/tests/TestMultiBotOptions.py
 
+      - name: Test Questie Playerbots native comms integration
+        run: python3 cmake/tests/TestQuestiePlayerbots.py
+
       - name: Build merged IP and historical talent client ZIP
         run: cmake "-DPACKAGE_VERSION=$PACKAGE_VERSION" -P cmake/PackageEraClient.cmake
 

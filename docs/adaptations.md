@@ -100,6 +100,12 @@ trees and ranks belong to the inspected bot, and Wrath retains Blizzard's view.
 Historical inspection is read-only. Optional quest, gear and guide addons are linked in
 [client addons](addons.md) and installed from their upstream projects.
 
+The [Questie Playerbots integration](questie-playerbots.md) sends authorized
+group bots' native quest counters through the MultiBot Bridge. Questie uses
+its existing group tooltips and optional party map objectives. A small pinned
+addon patch handles special objectives, WATCH renewal and stale-data cleanup;
+the local source export is installed separately from the released client ZIPs.
+
 ## Validation and supported scope
 
 The release workflow checks patched native gameplay handlers, launcher

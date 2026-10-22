@@ -457,6 +457,86 @@ class ClientAddonPatchTests(unittest.TestCase):
                 self.successful(fixture.prepare())
                 self.assertEqual(output.read_bytes(), value)
 
+    def source_addon(self, fixture):
+        cache = fixture.root / ".module-cache/client-addon-Questie-335"
+        revision = commit(cache, {"Questie-335.toc": b"## Interface: 30300\nMain.lua\n",
+                                  "Main.lua": MAIN})
+        addon = {"name": "Questie-335", "url": "https://github.com/example/Questie.git",
+                 "revision": revision, "interface": 30300, "toc": "Questie-335.toc",
+                 "patches": []}
+        fixture.lock["sourceAddons"] = [addon]
+        fixture.write_lock()
+        return addon, fixture.root / ".module-cache/prepared-source-addons/Questie-335"
+
+    def test_source_addons_prepare_patches_without_entering_release_packages(self):
+        fixture = self.fixture()
+        addon, prepared = self.source_addon(fixture)
+        patch = fixture.root / "patches/questie.patch"
+        patch.parent.mkdir()
+        patch.write_bytes(text_patch("Main.lua", "upstream", "first"))
+        second = patch.with_name("questie-second.patch")
+        second.write_bytes(text_patch("Main.lua", "first", "local"))
+        addon["patches"] = ["patches/questie.patch", "patches/questie-second.patch"]
+        fixture.write_lock()
+
+        self.successful(fixture.prepare())
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        self.assertEqual((prepared / "SOURCE_REVISION.txt").read_text(), addon["revision"] + "\n")
+        self.assertFalse((prepared / "LICENSE").exists())
+        self.assertFalse((fixture.root / ".module-cache/prepared-addons/Questie-335").exists())
+        self.successful(fixture.package())
+        self.assertEqual(sorted(path.name for path in (fixture.root / "output").glob("*.zip")),
+                         ["MultiBot-Chatless-fixture.zip"])
+        (prepared / "Main.lua").write_bytes(b"mutable checkout damage\n")
+        self.successful(fixture.prepare())
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+
+        # Omitting the production patch application must break the same expectation.
+        script = fixture.root / "cmake/PrepareModules.cmake"
+        source = script.read_text()
+        gate = 'portable_apply_patches("${_source_stage}" ${_source_patches})'
+        self.assertEqual(source.count(gate), 1)
+        script.write_text(source.replace(gate, "# omitted patch application"))
+        self.successful(fixture.prepare())
+        self.assertNotEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        script.write_text(source)
+
+    def test_source_addons_reject_unsafe_inputs_and_preserve_local_directories(self):
+        fixture = self.fixture()
+        addon, prepared = self.source_addon(fixture)
+        original = dict(addon)
+        for key, value in (("name", "../Questie"), ("toc", "../Questie.toc"),
+                           ("interface", 12340), ("revision", "HEAD"),
+                           ("patches", ["../outside.patch"])):
+            with self.subTest(field=key):
+                addon.update(original)
+                addon[key] = value
+                fixture.write_lock()
+                self.assertNotEqual(fixture.prepare().returncode, 0)
+        addon.update(original)
+        fixture.write_lock()
+        prepared.mkdir(parents=True)
+        (prepared / "keep.txt").write_text("local checkout")
+        self.assertNotEqual(fixture.prepare().returncode, 0)
+        self.assertEqual((prepared / "keep.txt").read_text(), "local checkout")
+
+    def test_patchwork_regenerates_source_addon_patch(self):
+        fixture = self.fixture()
+        addon, prepared = self.source_addon(fixture)
+        addon["patches"] = ["patches/questie.patch"]
+        fixture.write_lock()
+        git(fixture.root, "init", "--quiet")
+        script = ROOT / "scripts/patchwork.py"
+        opened = run([sys.executable, str(script), "open", "patches/questie.patch"], cwd=fixture.root)
+        self.successful(opened)
+        work = Path(opened.stdout.strip().splitlines()[-1])
+        (work / "Main.lua").write_bytes(MAIN.replace(b"upstream", b"local"))
+        (fixture.root / "patches").mkdir()
+        self.successful(run([sys.executable, str(script), "save", str(work)], cwd=fixture.root))
+        self.assertIn('+local money = "local"', (fixture.root / "patches/questie.patch").read_text())
+        self.successful(fixture.prepare())
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+
 
 if __name__ == "__main__":
     unittest.main()

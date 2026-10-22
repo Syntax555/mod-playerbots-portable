@@ -38,7 +38,7 @@ requires in-game testing.
 
 | Addon | Source and installation | Progression limits |
 | --- | --- | --- |
-| Questie-335 | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335). Install as `Interface/AddOns/Questie-335/Questie-335.toc`; do not rename the TOC. Bundled libraries and German localization are included. | Its quest data follows standard AzerothCore. Individual Progression and custom quest rules can change availability beyond its static database. |
+| Questie-335 | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335). Install as `Interface/AddOns/Questie-335/Questie-335.toc`; do not rename the TOC. For server-controlled group bots, install the [prepared integration](questie-playerbots.md#build-and-install). | The MultiBot Bridge supplies actual bot progress to existing group tooltips. Static quest locations and availability can differ under Individual Progression or custom quest rules. |
 | GearScore2 | [cozawariat/gearscore2](https://github.com/cozawariat/gearscore2), the 3.3.5a project with interface `30300`. Install as `Interface/AddOns/GearScore2/GearScore2.toc`; open settings with `/gs2`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
 | DungeonClear | [jrad7/mod-dungeon-clear-addon](https://github.com/jrad7/mod-dungeon-clear-addon), the 3.3.5a companion interface. Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. | Controls and displays server-side runs. Party formation, travel and earned access remain server rules. Spectate is disabled in the default profile; `.dc on` in chat can expose refusal messages omitted by the UI. |
 | Zygor Guides Viewer Remaster | [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK). Install only its `ZygorGuidesViewerRM/` addon folder. | Guide routes and the bundled Wrath Talent Advisor do not follow each character's EraTalents trees or content gates. Prefer Questie for quest information during historical progression unless the guide's talent compatibility has been verified. |
@@ -54,7 +54,8 @@ hides advisor features but does not remove all these hooks. Disable the whole
 `ZygorGuidesViewerRM` addon and reload when isolating talent or protected-action
 conflicts; the checkbox alone does not provide a clean comparison.
 
-Optional addons remain upstream downloads. Their code, guides, images and
+Optional addons remain upstream downloads; the Questie integration also has a
+pinned, patched local source export. Their code, guides, images and
 libraries have separate licensing terms; a public repository or viewer license
 does not automatically authorize repackaging every included file. Addon-only
 updates do not require compiling server modules.

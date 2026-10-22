@@ -230,6 +230,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [EraTalents](docs/era-talents.md) | Client installation, training, talents and compatibility. |
 | [Class quests](docs/class-quests.md) | Historical priest quest rewards, race gates and paid training. |
 | [Client addons](docs/addons.md) | MultiBot, curated upstream addons and Lua diagnostics. |
+| [Questie bot progress](docs/questie-playerbots.md) | Server-controlled group bot quest counters, installation and validation. |
 | [Bot dungeons and raids](docs/bot-dungeons.md) | Autonomous parties, player-led clears, raid tactics and travel. |
 | [Bot brackets and PvP](docs/earned-bot-brackets.md) | Resident levels, battleground eligibility and match rules. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |

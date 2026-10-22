@@ -40,7 +40,7 @@ def repository():
 def lock_entry(root, patch):
     lock = json.loads((root / 'versions.lock.json').read_text())
     entries = [('core', lock['core'])] + [('module', module) for module in lock['modules']] + \
-              [('addon', addon) for addon in lock.get('clientAddons', [])]
+              [('addon', addon) for addon in lock.get('clientAddons', []) + lock.get('sourceAddons', [])]
     for kind, entry in entries:
         if patch in entry.get('patches', []):
             return kind, entry

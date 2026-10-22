@@ -114,7 +114,8 @@
         "patches/mod-multibot-bridge-natural-progression.patch",
         "patches/mod-multibot-bridge-era-talents.patch",
         "patches/mod-multibot-bridge-trainer-money.patch",
-        "patches/mod-multibot-bridge-optional-presets.patch"
+        "patches/mod-multibot-bridge-optional-presets.patch",
+        "patches/mod-multibot-bridge-quest-progress.patch"
       ]
     },
     {
@@ -206,5 +207,17 @@
     "licenses": [
       "licenses/GPL-2.0.txt"
     ]
-  }
+  },
+  "sourceAddons": [
+    {
+      "name": "Questie-335",
+      "url": "https://github.com/Aldori15/Questie.git",
+      "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87",
+      "interface": 30300,
+      "toc": "Questie-335.toc",
+      "patches": [
+        "patches/questie-playerbots-progress.patch"
+      ]
+    }
+  ]
 }
