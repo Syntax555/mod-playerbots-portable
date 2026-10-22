@@ -1,0 +1,568 @@
+diff --git a/Modules/Network/QuestieCommsData.lua b/Modules/Network/QuestieCommsData.lua
+index 79d910f..3bfccba 100755
+--- a/Modules/Network/QuestieCommsData.lua
++++ b/Modules/Network/QuestieCommsData.lua
+@@ -80,6 +80,7 @@ end
+ ---@param playerName string
+ ---@param objectives table @Contains objectives o[index].text
+ function QuestieComms.data:RegisterTooltip(questId, playerName, objectives)
++    local quest = QuestieDB.GetQuest(questId)
+     if(not playerRegisteredTooltips[playerName]) then
+         playerRegisteredTooltips[playerName] = {}
+     end
+@@ -110,6 +111,26 @@ function QuestieComms.data:RegisterTooltip(questId, playerName, objectives)
+                 -- Show non-item objectives when hovering their direct objective entity.
+                 QuestieComms.data:AddTooltip(playerName, questId, lookupKey, objectiveIndex, objective);
+             end
++
++            local objectiveData = quest and quest.ObjectiveData and quest.ObjectiveData[objectiveIndex]
++            local matchesKillCredit = false
++            if objectiveData and objectiveData.Type == "killcredit" and (objective.type == "m" or objective.type == "k") then
++                matchesKillCredit = objectiveData.RootId == objective.id
++                for _, id in pairs(objectiveData.IdList or {}) do
++                    matchesKillCredit = matchesKillCredit or id == objective.id
++                end
++            end
++            if matchesKillCredit then
++                -- A credit entry can be an invisible server target. Tooltips belong
++                -- to each creature that awards it, with the same objective counter.
++                for _, id in pairs(objectiveData.IdList or {}) do
++                    local sourceObjective = {}
++                    for key, value in pairs(objective) do sourceObjective[key] = value end
++                    sourceObjective.id = id
++                    sourceObjective.type = "m"
++                    QuestieComms.data:AddTooltip(playerName, questId, "m_" .. id, objectiveIndex, sourceObjective)
++                end
++            end
+         end
+     end
+ end
+diff --git a/Modules/Network/QuestiePartyObjectives.lua b/Modules/Network/QuestiePartyObjectives.lua
+index d4c56d2..c159ea8 100644
+--- a/Modules/Network/QuestiePartyObjectives.lua
++++ b/Modules/Network/QuestiePartyObjectives.lua
+@@ -260,13 +260,13 @@ local function _DrawQuest(questId, generation)
+         local objType, objId
+         if objData then
+             objType = objData.Type
+-            objId = objData.Id
++            objId = objData.Id or objData.RootId
+         else
+             objType = typeCharToFull[remoteObjective.type]
+             objId = remoteObjective.id
+         end
+ 
+-        if objType and objId then
++        if objType and (objId or objType == "event") then
+             local cachedSpawnList = spawnListCache[questId] and spawnListCache[questId][objectiveIndex]
+             -- When the objective's live API type (first char, from comms) differs from the
+             -- database's compiled type (kill-credit, events, invisible "bunny" NPCs), the id/type
+@@ -285,6 +285,7 @@ local function _DrawQuest(questId, generation)
+                 Description = description,
+                 FullDescription = (not useApiObjectiveText) and _GetFullDescription(objType, description) or nil,
+                 Icon = objData and objData.Icon,
++                Coordinates = objData and objData.Coordinates,
+                 Completed = false,
+                 spawnList = cachedSpawnList or {},
+                 AlreadySpawned = {},
+diff --git a/Modules/Network/QuestiePlayerbots.lua b/Modules/Network/QuestiePlayerbots.lua
+index 2c57d4e..d794c5b 100644
+--- a/Modules/Network/QuestiePlayerbots.lua
++++ b/Modules/Network/QuestiePlayerbots.lua
+@@ -13,19 +13,28 @@ local PROTOCOL_VERSION = "1"
+ local eventFrame
+ local helloTimeoutAt
+ local rosterSyncAt
++local nextHelloAt = 0
++local nextRosterCheckAt = 0
+ 
+ local bridgeReady = false
+ local helloPending = false
++local unsupportedWarned = false
+ 
+ local bridgeCapabilities = {}
+ local progressSnapshots = {}
+ local pendingRequests = {}
+ local trackedBots = {}
+ local appliedQuestStates = {}
++local requestsByBot = {}
++local retryAfter = {}
+ 
+ local requestSequence = 0
+ local ROSTER_SYNC_DELAY = 0.5
+ local HELLO_TIMEOUT = 3.0
++local REQUEST_TIMEOUT = 10
++local WATCH_REFRESH_INTERVAL = 60
++local MAX_QUESTS = 75
++local MAX_OBJECTIVES = 32
+ 
+ local function Print(message)
+     DEFAULT_CHAT_FRAME:AddMessage("|cFF4DDBFF[Questie Playerbots]|r " .. tostring(message))
+@@ -101,6 +110,7 @@ local function ProbeBridge()
+ 
+     helloPending = true
+     helloTimeoutAt = GetTime() + HELLO_TIMEOUT
++    nextHelloAt = GetTime() + 30
+     bridgeReady = false
+     bridgeCapabilities = {}
+ 
+@@ -112,7 +122,7 @@ end
+ 
+ local function NextToken()
+     requestSequence = requestSequence + 1
+-    return "qpb" .. tostring(requestSequence)
++    return "qpb" .. tostring(math.floor(GetTime() * 1000)) .. "x" .. tostring(requestSequence)
+ end
+ 
+ local function NormalizeName(name)
+@@ -124,17 +134,34 @@ local function NormalizeName(name)
+ end
+ 
+ local function RequestBotQuestProgress(botName)
+-    local token = NextToken()
++    if retryAfter[botName] and GetTime() < retryAfter[botName] then
++        return
++    end
++
++    local token = requestsByBot[botName]
++    local request = token and pendingRequests[token]
++    if request and GetTime() < request.refreshAt then
++        return
++    end
++
++    token = token or NextToken()
+     local payload = "QUEST_PROGRESS~" .. botName .. "~" .. token
+ 
+     if bridgeCapabilities.QUEST_PROGRESS_PUSH_V1 then
+         payload = payload .. "~WATCH"
+     end
+ 
+-    pendingRequests[token] = true
++    requestsByBot[botName] = token
++    pendingRequests[token] = {
++        botName = botName,
++        watch = bridgeCapabilities.QUEST_PROGRESS_PUSH_V1,
++        expiresAt = GetTime() + REQUEST_TIMEOUT,
++        refreshAt = GetTime() + WATCH_REFRESH_INTERVAL,
++    }
+ 
+     if not Send("GET", payload) then
+         pendingRequests[token] = nil
++        requestsByBot[botName] = nil
+     end
+ end
+ 
+@@ -147,7 +174,7 @@ local function RequestGroupQuests()
+         for i = 1, GetNumRaidMembers() do
+             local name = UnitName("raid" .. i)
+ 
+-            if name and name ~= UnitName("player") then
++            if name and name ~= UnitName("player") and UnitIsConnected("raid" .. i) then
+                 RequestBotQuestProgress(name)
+             end
+         end
+@@ -155,7 +182,7 @@ local function RequestGroupQuests()
+         for i = 1, GetNumPartyMembers() do
+             local name = UnitName("party" .. i)
+ 
+-            if name then
++            if name and UnitIsConnected("party" .. i) then
+                 RequestBotQuestProgress(name)
+             end
+         end
+@@ -168,7 +195,7 @@ local function GetCurrentGroupMembers()
+     if GetNumRaidMembers and GetNumRaidMembers() > 0 then
+         for i = 1, GetNumRaidMembers() do
+             local name = NormalizeName(UnitName("raid" .. i))
+-            if name then
++            if name and UnitIsConnected("raid" .. i) then
+                 members[name] = true
+             end
+         end
+@@ -181,7 +208,7 @@ local function GetCurrentGroupMembers()
+         if GetNumPartyMembers then
+             for i = 1, GetNumPartyMembers() do
+                 local name = NormalizeName(UnitName("party" .. i))
+-                if name then
++                if name and UnitIsConnected("party" .. i) then
+                     members[name] = true
+                 end
+             end
+@@ -192,10 +219,21 @@ local function GetCurrentGroupMembers()
+ end
+ 
+ local function RemoveTrackedBot(botName)
++    local token = requestsByBot[botName]
++    if token then
++        local request = pendingRequests[token]
++        if request and request.watch then
++            Send("GET", "QUEST_PROGRESS~" .. botName .. "~" .. token .. "~UNWATCH")
++        end
++        pendingRequests[token] = nil
++        progressSnapshots[token] = nil
++        requestsByBot[botName] = nil
++    end
+     local affectedQuests = {}
+ 
+-    for questId, players in pairs(QuestieComms.remoteQuestLogs) do
+-        if players[botName] then
++    for questId, state in pairs(appliedQuestStates[botName] or {}) do
++        local players = QuestieComms.remoteQuestLogs[questId]
++        if players and players[botName] == state.objectives then
+             affectedQuests[#affectedQuests + 1] = questId
+         end
+     end
+@@ -217,6 +255,7 @@ local function RemoveTrackedBot(botName)
+ 
+     trackedBots[botName] = nil
+     appliedQuestStates[botName] = nil
++    retryAfter[botName] = nil
+ end
+ 
+ local function SyncGroupRoster()
+@@ -228,8 +267,14 @@ local function SyncGroupRoster()
+ 
+     local members = GetCurrentGroupMembers()
+     local departedBots = {}
++    for botName in pairs(retryAfter) do
++        if not members[botName] then retryAfter[botName] = nil end
++    end
+ 
+-    for botName in pairs(trackedBots) do
++    local knownBots = {}
++    for botName in pairs(requestsByBot) do knownBots[botName] = true end
++    for botName in pairs(trackedBots) do knownBots[botName] = true end
++    for botName in pairs(knownBots) do
+         if not members[botName] then
+             departedBots[#departedBots + 1] = botName
+         end
+@@ -250,6 +295,11 @@ local objectiveTypeMap = {
+     m = "monster",
+     o = "object",
+     i = "item",
++    e = "event",
++    r = "reputation",
++    s = "spell",
++    p = "player",
++    g = "money",
+ }
+ 
+ local function FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
+@@ -259,14 +309,16 @@ local function FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
+     end
+ 
+     local fullType = objectiveTypeMap[rawObjective.type]
+-    if not fullType then
+-        return nil
+-    end
+-
+     for objectiveIndex, objective in ipairs(quest.ObjectiveData) do
+-        if not usedIndices[objectiveIndex]
+-            and objective.Type == fullType
+-            and objective.Id == rawObjective.id then
++        local matches = objective.Type == fullType and (objective.Id or 0) == rawObjective.id
++        if objective.Type == "killcredit" and rawObjective.type == "m" then
++            matches = objective.RootId == rawObjective.id
++            for _, id in pairs(objective.IdList or {}) do
++                matches = matches or id == rawObjective.id
++            end
++        end
++
++        if not usedIndices[objectiveIndex] and matches then
+ 
+             usedIndices[objectiveIndex] = true
+             return objectiveIndex
+@@ -286,17 +338,16 @@ local function BuildQuestieQuestPacket(questId, questState)
+     local usedIndices = {}
+ 
+     for _, rawObjective in ipairs(questState.objectives) do
+-        local objectiveIndex = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
+-
+-        if objectiveIndex then
+-            questPacket.objectives[objectiveIndex] = {
+-                id = rawObjective.id ~= 0 and rawObjective.id or nil,
+-                typ = rawObjective.type,
+-                fin = rawObjective.current >= rawObjective.required,
+-                ful = rawObjective.current,
+-                req = rawObjective.required,
+-            }
+-        end
++        -- Native database and special objectives use positive indices. Keep unknown
++        -- counters in a separate namespace so special map pins cannot inherit them.
++        local objectiveIndex = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices) or -rawObjective.index
++        questPacket.objectives[objectiveIndex] = {
++            id = rawObjective.id ~= 0 and rawObjective.id or nil,
++            typ = rawObjective.type,
++            fin = rawObjective.finished,
++            ful = rawObjective.current,
++            req = rawObjective.required,
++        }
+     end
+ 
+     return questPacket
+@@ -309,30 +360,63 @@ local function BuildQuestStateSignature(questState)
+ 
+     for _, objective in ipairs(questState.objectives) do
+         parts[#parts + 1] = table.concat({
++            tostring(objective.index),
+             tostring(objective.type or ""),
+             tostring(objective.id or 0),
+             tostring(objective.current or 0),
+             tostring(objective.required or 0),
++            tostring(objective.finished),
+         }, ":")
+     end
+ 
+     return table.concat(parts, "|")
+ end
+ 
++local function IsUnsigned(value, maximum)
++    return value and value >= 0 and value <= (maximum or 4294967295) and value % 1 == 0
++end
++
++local function IsProgressValue(value, objectiveType)
++    -- Reputation standings can be negative; copper and counters must stay exact
++    -- in the client's double-precision Lua number representation.
++    return value and value % 1 == 0 and value <= 9007199254740991
++        and value >= (objectiveType == "r" and -2147483648 or 0)
++end
++
++local function GetProgressRequest(botName, token)
++    local request = token and pendingRequests[token]
++    if bridgeReady and request and request.botName == botName and requestsByBot[botName] == token
++        and (not request.expiresAt or GetTime() < request.expiresAt) and GetCurrentGroupMembers()[botName] then
++        return request
++    end
++end
++
+ local function ApplyProgressSnapshot(snapshot)
+     local botName = snapshot.botName
+     local seenQuests = {}
+     local previousStates = appliedQuestStates[botName] or {}
+     local nextStates = {}
+ 
++    for questId in pairs(snapshot.quests) do
++        local players = QuestieComms.remoteQuestLogs[questId]
++        local previous = previousStates[questId]
++        if players and players[botName] and (not previous or players[botName] ~= previous.objectives) then
++            -- A real client's native comms took ownership while a WATCH reply was
++            -- in flight. Stop observing before an old snapshot can replace it.
++            RemoveTrackedBot(botName)
++            retryAfter[botName] = GetTime() + WATCH_REFRESH_INTERVAL
++            return false
++        end
++    end
++
+     for questId, questState in pairs(snapshot.quests) do
+         seenQuests[questId] = true
+ 
+         local signature = BuildQuestStateSignature(questState)
+-        nextStates[questId] = signature
+-
+         local players = QuestieComms.remoteQuestLogs[questId]
+-        local alreadyApplied = previousStates[questId] == signature and players and players[botName]
++        local previousState = previousStates[questId]
++        local alreadyApplied = previousState and previousState.signature == signature
++            and players and players[botName] == previousState.objectives
+ 
+         if not alreadyApplied then
+             -- Remove the previous tooltip registration before replacing
+@@ -342,12 +426,18 @@ local function ApplyProgressSnapshot(snapshot)
+             local questPacket = BuildQuestieQuestPacket(questId, questState)
+             QuestieComms:InsertQuestDataPacket(questPacket, botName)
+         end
++
++        nextStates[questId] = {
++            signature = signature,
++            objectives = QuestieComms.remoteQuestLogs[questId] and QuestieComms.remoteQuestLogs[questId][botName],
++        }
+     end
+ 
+     -- A snapshot is authoritative. If the bot previously had a quest
+     -- but it isn't in this snapshot anymore, remove it.
+-    for questId, players in pairs(QuestieComms.remoteQuestLogs) do
+-        if players[botName] and not seenQuests[questId] then
++    for questId, state in pairs(previousStates) do
++        local players = QuestieComms.remoteQuestLogs[questId]
++        if not seenQuests[questId] and players and players[botName] == state.objectives then
+             players[botName] = nil
+             QuestieComms.data:RemoveQuestFromPlayer(questId, botName)
+             QuestiePartyObjectives:ScheduleUpdate(questId)
+@@ -355,10 +445,15 @@ local function ApplyProgressSnapshot(snapshot)
+     end
+ 
+     appliedQuestStates[botName] = nextStates
++    return true
+ end
+ 
+ local function HandleBridgeMessage(message, sender)
+     -- The bridge sends responses as the player's own addon message sender.
++    if type(message) ~= "string" or #message > 255 then
++        return
++    end
++
+     local playerName = UnitName("player")
+     local senderName = sender and sender:gsub("%-.*$", "")
+ 
+@@ -410,7 +505,10 @@ local function HandleBridgeMessage(message, sender)
+ 
+         if not bridgeCapabilities.QUEST_PROGRESS_V1 then
+             bridgeReady = false
+-            Print("|cFFFFAA00Bridge does not support QUEST_PROGRESS_V1.|r")
++            if not unsupportedWarned then
++                unsupportedWarned = true
++                Print("|cFFFFAA00Bridge does not support QUEST_PROGRESS_V1.|r")
++            end
+             return
+         end
+ 
+@@ -424,9 +522,16 @@ local function HandleBridgeMessage(message, sender)
+         local botName = UrlDecode(fields[2])
+         local token = fields[3]
+ 
++        if not GetProgressRequest(botName, token) then
++            return
++        end
++
+         progressSnapshots[token] = {
+             botName = botName,
++            guid = fields[4],
+             quests = {},
++            questCount = 0,
++            expiresAt = GetTime() + REQUEST_TIMEOUT,
+         }
+ 
+         return
+@@ -440,11 +545,16 @@ local function HandleBridgeMessage(message, sender)
+ 
+         local snapshot = progressSnapshots[token]
+ 
+-        if snapshot and snapshot.botName == botName and questId then
++        if snapshot and GetProgressRequest(botName, token) and snapshot.botName == botName
++            and IsUnsigned(questId) and questId > 0 and (status == "I" or status == "C" or status == "F")
++            and not snapshot.quests[questId] and snapshot.questCount < MAX_QUESTS then
++            snapshot.questCount = snapshot.questCount + 1
+             snapshot.quests[questId] = {
+                 status = status,
+                 objectives = {},
+             }
++        elseif snapshot then
++            progressSnapshots[token] = nil
+         end
+ 
+         return
+@@ -455,20 +565,35 @@ local function HandleBridgeMessage(message, sender)
+         local token = fields[3]
+         local questId = tonumber(fields[4])
+         local objectiveType = fields[5]
++        local objectiveIndex = tonumber(fields[6])
+         local objectiveId = tonumber(fields[7])
+         local current = tonumber(fields[8])
+         local required = tonumber(fields[9])
+ 
+         local snapshot = progressSnapshots[token]
+-        local questState = snapshot and snapshot.botName == botName and snapshot.quests[questId]
+-
+-        if questState then
++        local questState = snapshot and snapshot.botName == botName and questId and snapshot.quests[questId]
++
++        if questState and GetProgressRequest(botName, token)
++            and objectiveTypeMap[objectiveType] and IsUnsigned(objectiveIndex, MAX_OBJECTIVES) and objectiveIndex > 0
++            and IsUnsigned(objectiveId) and IsProgressValue(current, objectiveType) and IsProgressValue(required, objectiveType)
++            and #questState.objectives < MAX_OBJECTIVES
++            and (not fields[10] or fields[10] == "0" or fields[10] == "1") then
++            for _, objective in ipairs(questState.objectives) do
++                if objective.index == objectiveIndex then
++                    progressSnapshots[token] = nil
++                    return
++                end
++            end
+             questState.objectives[#questState.objectives + 1] = {
+                 type = objectiveType,
++                index = objectiveIndex,
+                 id = objectiveId,
+                 current = current,
+                 required = required,
++                finished = fields[10] == "1" or (not fields[10] and required > 0 and current >= required),
+             }
++        elseif snapshot then
++            progressSnapshots[token] = nil
+         end
+ 
+         return
+@@ -480,13 +605,21 @@ local function HandleBridgeMessage(message, sender)
+ 
+         local snapshot = progressSnapshots[token]
+ 
+-        if snapshot and snapshot.botName == botName then
+-            ApplyProgressSnapshot(snapshot)
++        local request = GetProgressRequest(botName, token)
++        if snapshot and request and snapshot.botName == botName and GetTime() < snapshot.expiresAt then
++            if not ApplyProgressSnapshot(snapshot) then
++                return
++            end
+             progressSnapshots[token] = nil
+-            trackedBots[botName] = true
++            trackedBots[botName] = snapshot.guid or true
++            request.expiresAt = nil
++            if not request.watch then
++                requestsByBot[botName] = nil
++                pendingRequests[token] = nil
++                retryAfter[botName] = GetTime() + WATCH_REFRESH_INTERVAL
++            end
+         end
+ 
+-        pendingRequests[token] = nil
+         return
+     end
+ 
+@@ -495,7 +628,11 @@ local function HandleBridgeMessage(message, sender)
+         local token = fields[4]
+         local reason = UrlDecode(fields[5])
+ 
+-        if token and pendingRequests[token] then
++        if token and pendingRequests[token] and requestType == "QUEST_PROGRESS" then
++            local botName = pendingRequests[token].botName
++            RemoveTrackedBot(botName)
++            retryAfter[botName] = GetTime() + WATCH_REFRESH_INTERVAL
++        elseif token and pendingRequests[token] then
+             pendingRequests[token] = nil
+             Print("|cFFFF4444Bridge error for " .. tostring(requestType) .. ":|r " .. tostring(reason))
+         end
+@@ -529,6 +666,8 @@ function QuestiePlayerbots:Initialize()
+         if event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
+             if bridgeReady then
+                 ScheduleRosterSync()
++            elseif not helloPending then
++                ProbeBridge()
+             end
+         end
+     end)
+@@ -544,6 +683,27 @@ function QuestiePlayerbots:Initialize()
+         if rosterSyncAt and now >= rosterSyncAt then
+             SyncGroupRoster()
+         end
++
++        if now >= nextRosterCheckAt then
++            nextRosterCheckAt = now + 2
++            if bridgeReady then
++                SyncGroupRoster()
++            elseif not helloPending and now >= nextHelloAt then
++                ProbeBridge()
++            end
++
++            for token, snapshot in pairs(progressSnapshots) do
++                if now >= snapshot.expiresAt then
++                    progressSnapshots[token] = nil
++                end
++            end
++            for token, request in pairs(pendingRequests) do
++                if request.expiresAt and now >= request.expiresAt then
++                    RemoveTrackedBot(request.botName)
++                    retryAfter[request.botName] = now + 2
++                end
++            end
++        end
+     end)
+ 
+     -- Probe automatically once Questie initializes

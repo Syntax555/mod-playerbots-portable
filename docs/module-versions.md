@@ -20,6 +20,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `5d64585dd2ac` | Always included access guards for optional Dungeon Finder use |
 | MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `8f703da2bbdb` | Server support for the MultiBot controls |
 | MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
+| Questie-335 (source only) | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335) | `d695e9048e6d` | Locally prepared bot quest progress integration; excluded from release client ZIPs |
 | Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
 | CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
@@ -89,6 +90,13 @@ The MultiBot Chatless addon ZIP contains the prepared addon at
 `SOURCE_MANIFEST.json` records the upstream revision and local patch hashes.
 See [client integration](adaptations.md#client-integration) and
 [client addons](addons.md) for its behavior.
+
+The `sourceAddons` manifest section pins Questie separately from packaged
+client addons. Preparation applies its ordered patch into
+`.module-cache/prepared-source-addons/Questie-335`; install that local export
+using the [Questie integration guide](questie-playerbots.md). The MultiBot
+Bridge reads the bots' native quest state and supplies the existing Questie
+communication path. No additional quest bridge module is required.
 
 Dependencies keep their own license terms and per-file notices; see
 [third-party notices](../THIRD_PARTY_NOTICES.md) and each package's `licenses/`

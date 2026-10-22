@@ -132,7 +132,8 @@ def link_problems(root):
 
 def version_problems(provenance, lock, workflow, client_data):
     """Locked revisions, bundled runtimes and the server data release the provenance guide must state."""
-    revisions = [lock['core']['revision']] + [entry['revision'] for entry in lock['modules'] + lock['clientAddons']]
+    revisions = [lock['core']['revision']] + [entry['revision'] for entry in
+                lock['modules'] + lock['clientAddons'] + lock.get('sourceAddons', [])]
     revisions += [lock['clientPatch']['stormLib']['revision']]
     revisions += [source['revision'] for source in lock['clientPatch'].get('localizations', {}).values()]
     revisions += [source['revision'] for source in lock['historicalClassData']['sources']]
@@ -198,16 +199,18 @@ def self_check():
             found = link_problems(root)
             assert len(found) == 1 and problem in found[0], (link, found)
     lock = {'core': {'revision': 'a' * 40}, 'modules': [{'revision': 'b' * 40}], 'clientAddons': [],
+            'sourceAddons': [{'revision': 'f' * 40}],
             'clientPatch': {'stormLib': {'revision': 'c' * 40}, 'localizations': {'deDE': {'revision': 'd' * 40}}},
             'historicalClassData': {'sources': [{'revision': 'e' * 40}]}}
     workflow = "MYSQL_VERSION: '8.0.1'\nOPENSSL_VERSION: '3.1.2'\nboost_version: 1.80.0\n"
     client_data = ('const defaultClientDataURL = '
                    '"https://github.com/wowgaming/client-data/releases/download/v9.0/Data.zip"')
-    provenance = ''.join(f'`{letter * 12}` ' for letter in 'abcde') + (
+    provenance = ''.join(f'`{letter * 12}` ' for letter in 'abcdef') + (
         '\n| MySQL Community Server | 8.0.1 |\n| OpenSSL | 3.1.2, build |\n| Boost | 1.80.0 |\n'
         '[release](https://github.com/wowgaming/client-data/releases/tag/v9.0)\n')
     assert version_problems(provenance, lock, workflow, client_data) == []
-    for old, new in (('`dddddddddddd`', '`ddddddddddd0`'), ('| 8.0.1 |', '| 8.0.10 |'),
+    for old, new in (('`dddddddddddd`', '`ddddddddddd0`'), ('`ffffffffffff`', '`fffffffffff0`'),
+                     ('| 8.0.1 |', '| 8.0.10 |'),
                      ('| 1.80.0 |', '| 1.79.0 |'), ('tag/v9.0', 'tag/v8.0')):
         assert old in provenance, old
         assert len(version_problems(provenance.replace(old, new), lock, workflow, client_data)) == 1, new
