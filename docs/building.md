@@ -123,10 +123,10 @@ custom build; the rolling download name alone does not identify its sources.
 ## Integration checks
 
 The checks run on Linux and require Go, Python with PyYAML 6.0.3, GCC with
-AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1
-and Ruff 0.17.1. The gameplay fixtures execute selected native handlers with
-controlled adapters; a complete server build and live realm tests remain
-necessary for platform and encounter validation. These commands repeat the
+AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1,
+Ruff 0.17.1 and actionlint 1.7.11. The gameplay fixtures execute selected native
+handlers with controlled adapters; a complete server build and live realm tests
+remain necessary for platform and encounter validation. These commands repeat the
 release workflow's launcher, packaging and native gameplay checks:
 
 ```bash
@@ -137,6 +137,8 @@ GOOS=windows GOARCH=amd64 go vet ./...
 go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
 staticcheck ./...
 GOOS=windows GOARCH=amd64 staticcheck ./...
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+actionlint
 python3 cmake/tests/run_fixtures.py check
 ruff check cmake scripts
 pwsh cmake/tests/TestPortableZip.ps1
@@ -174,15 +176,20 @@ and progression adaptations, builds the Windows server and client packages, and
 verifies the assembled archives.
 [Actions](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml)
 records the checks and source commit for each build. It runs for pushes to
-`main` and `codex/**` branches, pull requests and manual runs; commits that
-change only documentation do not start it, so packaged guides and release-note
-links follow with the next build of `main` or a manual run.
+`main`, pull requests and manual runs. Feature branches are checked through
+their pull requests, so one update starts one automatic build. Use a manual run
+for a branch without a pull request. Commits that change only documentation do
+not start a build, so packaged guides and release-note links follow with the
+next build of `main` or a manual run.
 
 Fast launcher, lint and packaging checks run first. The Windows server build,
 historical client build and four native gameplay jobs then run in parallel.
 Native tests no longer consume the launcher's time budget or delay compilation.
 All checks, builds and archive verifications must succeed before the publication
 workflow can select that run; a failing gameplay job still blocks a release.
+Both workflow files are checked by the pinned actionlint version before builds
+start. Checkouts do not persist Git credentials; the publisher sets `GH_TOKEN`
+explicitly for the steps that call the GitHub API.
 
 The [publication workflow](../.github/workflows/publish-latest.yml) runs
 [publish_latest.py](../scripts/publish_latest.py) after a successful push or
@@ -196,16 +203,18 @@ eligible successful Actions runs.
 Builds of `main` run one at a time: a running build always finishes, and a newer
 push replaces any waiting build so the newest commit builds next. Each
 publication selects the most recently created eligible successful `main` build
-with available server and client artifacts, so re-running an older build cannot
-replace a newer build waiting for publication. The selected build is published
-when its commit is still part of `main` and is not older than the current Latest.
+with matching workflow files and available server and client artifacts, so
+re-running an older build cannot replace a newer build waiting for publication.
+The selected build is published when its commit is still part of `main` and is
+not older than the current Latest.
 
 Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP,
 recording each file's size and SHA-256 hash. Latest contains three ZIPs, this
 update manifest and `SHA256SUMS.txt`, which covers all four payloads. GitHub
 refuses the Actions token tag and release changes at commits whose workflow
-files differ from `main`, so a build whose workflow files no longer match `main`
-is skipped and the newer build publishes. Publication publishes and verifies the
+files differ from `main`, so selection skips those builds before downloading
+their artifacts; publication checks this again before making changes. The newer
+matching build publishes. Publication publishes and verifies the
 replacement under its staging tag while the previous release still serves tag
 `latest`, then moves `latest` to the build commit, deletes the previous release
 and moves the replacement to `latest`; it creates no additional version tags. If
