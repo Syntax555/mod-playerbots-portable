@@ -32,9 +32,9 @@ concurrency:
 
 jobs:
   launcher:
-    name: Check launcher before server build
+    name: Check launcher and packaging
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     outputs:
       package_version: ${{ steps.version.outputs.value }}
     steps:
@@ -91,6 +91,22 @@ jobs:
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
 
+  # Run the full native regression alongside the builds. Every shard must pass
+  # before this workflow can succeed and Publish Latest can select its artifacts.
+  gameplay:
+    name: Check native gameplay (${{ matrix.shard }})
+    needs: launcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
       - name: Install native gameplay test dependencies
         run: |
           sudo apt-get update
@@ -101,10 +117,11 @@ jobs:
           lua5.1 -e 'assert(_VERSION == "Lua 5.1")'
           echo "$RUNNER_TEMP/gameplay-python/bin" >> "$GITHUB_PATH"
 
+      - name: Prepare pinned sources
+        run: cmake -P cmake/PrepareModules.cmake
+
       - name: Check gameplay rules against pinned sources
-        run: |
-          cmake -P cmake/PrepareModules.cmake
-          python3 cmake/tests/run_fixtures.py gameplay
+        run: python3 cmake/tests/run_fixtures.py gameplay --shard-index ${{ matrix.shard }} --shard-count 4
 
   era_client:
     name: Build and verify historical client patch
