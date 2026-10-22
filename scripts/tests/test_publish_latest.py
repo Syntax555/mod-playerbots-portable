@@ -311,8 +311,37 @@ class BuildSelectionTests(unittest.TestCase):
         self.client.builds.pop(0)
         self.assertEqual({"run_id": 10, "sha": SHA}, publisher.select_build(self.client))
 
+    def test_workflow_mismatch_is_skipped_before_artifacts_and_matching_build_is_selected(self):
+        self.client.main_values = [MERGE_SHA]
+        self.client.parents[MERGE_SHA] = [NEWER_SHA, SIDE_SHA]
+        self.client.workflows[NEWER_SHA] = "previous"
+        self.assertEqual({"run_id": 10, "sha": SHA}, publisher.select_build(self.client))
+        self.assertNotIn(("build_artifacts", 20), self.client.calls)
+        self.assertIn(("build_artifacts", 10), self.client.calls)
+        self.assertEqual([], self.client.writes)
+
+    def test_only_mismatching_workflows_leave_no_build_selected_or_artifacts_read(self):
+        self.client.builds.pop(0)
+        self.client.workflows[SHA] = "previous"
+        self.assertIsNone(publisher.select_build(self.client))
+        self.assertFalse(any(call[0] == "build_artifacts" for call in self.client.calls))
+        self.assertEqual([], self.client.writes)
+
+    def test_main_head_selection_needs_no_workflow_listing(self):
+        self.assertEqual({"run_id": 20, "sha": NEWER_SHA}, publisher.select_build(self.client))
+        self.assertFalse(any(call[0] == "workflow_files" for call in self.client.calls))
+
+    def test_failed_workflow_lookup_does_not_select_or_read_artifacts(self):
+        self.client.builds.pop(0)
+        with patch.object(self.client, "workflow_files", side_effect=publisher.APIError(403, "Forbidden")), \
+                self.assertRaises(publisher.APIError):
+            publisher.select_build(self.client)
+        self.assertFalse(any(call[0] == "build_artifacts" for call in self.client.calls))
+        self.assertEqual([], self.client.writes)
+
     def test_force_push_excludes_builds_removed_from_main_history(self):
         self.client.main_values = [FORCED_SHA]
+        self.client.workflows[FORCED_SHA] = self.client.workflows[OLDER_SHA]
         self.client.builds.append(self.build(5, OLDER_SHA))
         self.client.artifacts[5] = self.artifacts()
         self.assertEqual({"run_id": 5, "sha": OLDER_SHA}, publisher.select_build(self.client))

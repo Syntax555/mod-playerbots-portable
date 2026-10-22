@@ -68,6 +68,8 @@ which accepts the fields `{repository_url}`, `{source_url}`, `{commit_url}` and
 past versions.
 
 Verified builds from `main` update the single **Latest** release. Pull requests
-and pushes to `codex/**` branches produce build artifacts without publishing.
+and manual runs on other branches produce build artifacts without publishing.
+Feature branches are checked automatically through their pull requests; use
+`workflow_dispatch` for a standalone branch build.
 Keep stable asset names and retain the previous download until the replacement
 packages have passed verification.

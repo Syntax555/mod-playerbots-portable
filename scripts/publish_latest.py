@@ -484,6 +484,8 @@ def select_build(client: GitHubClient) -> dict[str, Any] | None:
                 or type(run.get("id")) is not int or run["id"] <= 0
                 or sha is None or not contains(client, sha, main)):
             continue
+        if not workflows_match_main(client, sha, main):
+            continue
         artifacts = [artifact for artifact in client.build_artifacts(run["id"])
                      if artifact.get("name") in BUILD_ARTIFACTS]
         if (len(artifacts) == len(BUILD_ARTIFACTS)

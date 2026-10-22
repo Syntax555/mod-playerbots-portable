@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'codex/**'
     paths-ignore:
       - 'README.md'
       - 'AGENTS.md'
@@ -51,10 +50,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
+      - name: Lint GitHub Actions workflows
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+          "$RUNNER_TEMP/bin/actionlint"
+
       - name: Test portable launcher logic and Windows compilation
         run: |
           go test ./...
@@ -106,6 +111,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Install native gameplay test dependencies
         run: |
@@ -134,6 +140,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Read the locked client locale source
         run: |
@@ -227,6 +234,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v7
