@@ -127,7 +127,7 @@ AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1
 and Ruff 0.17.1. The gameplay fixtures execute selected native handlers with
 controlled adapters; a complete server build and live realm tests remain
 necessary for platform and encounter validation. These commands repeat the
-release workflow's launcher job:
+release workflow's launcher, packaging and native gameplay checks:
 
 ```bash
 go test ./...
@@ -156,6 +156,12 @@ packaged-client fixtures run in the client job, as the release workflow names
 them. Fixtures refuse to run under `python -O`, which would skip their assert
 checks.
 
+The native suite runs in four disjoint CI jobs, with per-fixture timings.
+`gameplay` without options still runs the complete suite locally. To repeat one
+CI job, use `python3 cmake/tests/run_fixtures.py gameplay --shard-index 0
+--shard-count 4`, replacing `0` with the job's zero-based index. The wiring check
+also verifies that the workflow matrix covers every shard exactly once.
+
 The release workflow also verifies historical spell mechanics in the generated
 MPQ, client locales, dependency notices, package inventories and update
 recovery. Historical class source revisions are recorded separately from the
@@ -171,6 +177,12 @@ records the checks and source commit for each build. It runs for pushes to
 `main` and `codex/**` branches, pull requests and manual runs; commits that
 change only documentation do not start it, so packaged guides and release-note
 links follow with the next build of `main` or a manual run.
+
+Fast launcher, lint and packaging checks run first. The Windows server build,
+historical client build and four native gameplay jobs then run in parallel.
+Native tests no longer consume the launcher's time budget or delay compilation.
+All checks, builds and archive verifications must succeed before the publication
+workflow can select that run; a failing gameplay job still blocks a release.
 
 The [publication workflow](../.github/workflows/publish-latest.yml) runs
 [publish_latest.py](../scripts/publish_latest.py) after a successful push or
