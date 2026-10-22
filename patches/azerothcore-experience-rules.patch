@@ -1,0 +1,28 @@
+diff --git a/src/server/game/Entities/Player/KillRewarder.cpp b/src/server/game/Entities/Player/KillRewarder.cpp
+index c840379..c1bcdfc 100644
+--- a/src/server/game/Entities/Player/KillRewarder.cpp
++++ b/src/server/game/Entities/Player/KillRewarder.cpp
+@@ -257,7 +257,7 @@ void KillRewarder::_RewardGroup()
+             if (!_isBattleGround)
+             {
+                 // 3.1.2. Alter group rate if group is in raid (not for battlegrounds).
+-                const bool isRaid = !_isPvP && sMapStore.LookupEntry(_killer->GetMapId())->IsRaid() && _group->isRaidGroup();
++                const bool isRaid = !_isPvP && _group->isRaidGroup();
+                 _groupRate = Acore::XP::xp_in_group_rate(_count, isRaid);
+             }
+ 
+diff --git a/src/server/game/Entities/Player/PlayerUpdates.cpp b/src/server/game/Entities/Player/PlayerUpdates.cpp
+index 0f6e266..13d49e3 100644
+--- a/src/server/game/Entities/Player/PlayerUpdates.cpp
++++ b/src/server/game/Entities/Player/PlayerUpdates.cpp
+@@ -251,8 +251,9 @@ void Player::Update(uint32 p_time)
+                 _restTime = currTime;
+ 
+                 float bubble = 0.125f * sWorld->getRate(RATE_REST_INGAME);
++                // The client doubles the stored bonus, as it does for offline rest.
+                 float extraPerSec =
+-                    ((float) GetUInt32Value(PLAYER_NEXT_LEVEL_XP) / 72000.0f) *
++                    ((float) GetUInt32Value(PLAYER_NEXT_LEVEL_XP) / 144000.0f) *
+                     bubble;
+ 
+                 // speed collect rest bonus (section/in hour)

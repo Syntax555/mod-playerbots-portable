@@ -78,7 +78,10 @@ The earned tier selects each character's experience rules: Vanilla before tier
 | Recruit-a-Friend | Unavailable | Unavailable | Unavailable |
 
 Apart from bonus effects, kill XP, exploration XP, party sharing and rested XP
-below the cap follow the same rules in every era. An era quest value is reduced
+below the cap follow the same rules in every era. Raid groups receive no party
+XP bonus, including outside raid maps. Online rest in an inn or city accrues at
+the same base rate as offline rest there; the respective `Rate.Rest.*` settings
+still apply. An era quest value is reduced
 by the character's levels above the quest's level in that era, since patch
 2.3.0 lowered many quest levels. TBC-era characters receive the 1.12 value where the TBC DB has
 no usable 2.4.3 value: quests that withhold their money at the maximum level
