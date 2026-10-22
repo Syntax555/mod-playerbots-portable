@@ -70,11 +70,13 @@ and schedules. Events require the default Individual Progression chain.
 | Client cache | A world SQL migration assigns a stable `version.cache_id` for bundled quest and item data. The core uses it with `ClientCacheVersion = 0`; unchanged restarts retain it. Explicit overrides and higher database versions are preserved. See [cache updates and verification](updating.md#server-data-and-the-client-cache). |
 | EraTalents spell groups | A targeted SQL update removes invalid rank or incompatible aura entries from the custom spell groups. Native rank and aura stacking checks remain in force. |
 | Era experience | Quest values, battleground objective XP, XP bonus effects, and rest and quest money at the era cap follow each character's earned era; 2.4.3 quest values and 1.12 quest levels come from the pinned TBC and Classic DBs. See [experience by era](changing-expansions.md#experience-by-era). |
+| Shared experience rules | Raid groups receive no party XP bonus on any map. Online rest in inns and cities uses the same base accrual rate as offline rest there, with the respective configured multipliers. |
 | Formation movement | Formation velocity falls back to the creature's native walking speed when the computed movement velocity is effectively zero. Ordinary movement calculations remain in use. |
 
 Source: [era creature modifiers](../patches/mod-individual-progression-creature-era-modifiers.patch),
 [era experience](../patches/mod-individual-progression-era-experience.patch) with its
 [Recruit-a-Friend grant limit](../patches/azerothcore-recruit-a-friend-grant-limit.patch),
+[shared experience rules](../patches/azerothcore-experience-rules.patch),
 [quest availability](../patches/mod-individual-progression-frostmane-hold.patch),
 [spell-group contracts](../patches/mod-era-talents-spell-groups.patch) and
 [formation movement](../patches/azerothcore-formation-minimum-velocity.patch).

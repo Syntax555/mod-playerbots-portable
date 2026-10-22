@@ -144,8 +144,9 @@ and ordinary player actions.
   bosses ×4 versus ×5); gray level 47 at level 60 for group splits, which needs
   a core patch.
 - [ ] Heirloom item stats and Experience Eliminator availability before Wrath.
-- [ ] Core experience deviations shared by every era: raid groups outside raid
-  maps receive the party bonus, and online rest accrues faster in rest areas.
+- [x] [Core experience rules](changing-expansions.md#experience-by-era) shared
+  by every era: raid groups receive no party XP bonus outside raid maps, and
+  online rest accrues at the ordinary inn rate.
 - [ ] Thrallmar's and Honor Hold's Favor raise kill XP twice in the core: once
   through their aura effect in `KillRewarder` and once in `Player::GiveXP`. Era
   experience removes the duplicate for TBC-era characters only.

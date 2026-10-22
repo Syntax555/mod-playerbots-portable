@@ -18,7 +18,8 @@
       "patches/azerothcore-recruit-a-friend-grant-limit.patch",
       "patches/azerothcore-windows-resource-includes.patch",
       "patches/azerothcore-formation-minimum-velocity.patch",
-      "patches/azerothcore-build-warnings.patch"
+      "patches/azerothcore-build-warnings.patch",
+      "patches/azerothcore-experience-rules.patch"
     ]
   },
   "modules": [
