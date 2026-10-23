@@ -52,6 +52,12 @@ pass.
   left/right clicks, quantities, expensive and currency-item confirmations,
   bot switches and inventory closure. Confirm the bot's own gold and bag
   changes, native vendor refusals and no owner purchase on bridge failure.
+- [ ] Verify MultiBot altbot talent learning on a live 3.3.5a client for Vanilla
+  and TBC bots: the talent button opens the inspect talent tab, each click buys
+  one rank with the bot's own points, refused prerequisites leave the ranks
+  unchanged and repeated clicks spend one point at a time. Confirm that other
+  characters, out-of-range bots and bots that leave your group or control stay
+  read-only.
 - [ ] Validate the [Questie Playerbots integration](questie-playerbots.md) on a
   live 3.3.5a client using the release installer and matching server ZIP:
   shared quests, simultaneous bot progress, kill-credit and
