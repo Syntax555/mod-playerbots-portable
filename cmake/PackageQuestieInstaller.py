@@ -97,7 +97,8 @@ def git(directory: Path, *arguments: str, ceiling: Path | None = None) -> bytes:
     environment = os.environ.copy()
     if ceiling is not None:
         environment["GIT_CEILING_DIRECTORIES"] = str(ceiling)
-    result = subprocess.run(["git", "-C", str(directory), *arguments], capture_output=True,
+    # Reconstruct archive bytes without inheriting the host's checkout conversion.
+    result = subprocess.run(["git", "-c", "core.autocrlf=false", "-C", str(directory), *arguments], capture_output=True,
                             env=environment, check=False)
     if result.returncode:
         raise ValueError("Cannot reconstruct pinned Questie changes: "
