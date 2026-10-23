@@ -218,7 +218,7 @@ writes. It refuses a lower level ceiling after an expansion has opened; revertin
 requires matching database/config backups. Do not edit `configs/realm-phase.txt`
 alone. Core `Expansion = 2` is needed for restored Vanilla Naxxramas.
 
-Historical progression remains on a Wrath core and client. AutoBalance scales
-smaller instance parties; it does not add encounter tactics. General prices,
-world data, professions, pets and every combat formula are not independently
-historical for each character. See the [configuration reference](configuration.md).
+Historical progression remains on a Wrath core and client. Dungeon and raid
+difficulty does not scale to party size. General prices, world data, professions,
+pets and every combat formula are not independently historical for each
+character. See the [configuration reference](configuration.md).

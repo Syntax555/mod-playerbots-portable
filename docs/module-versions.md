@@ -10,7 +10,6 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `8a4e76eac8c4` | Core server, historical spell/accounting hooks and earned-era PvP rules |
 | Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `d750b4b3a50e` | Natural progression, earned auctions and era-aware bots |
-| AutoBalance | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) | `1d707cb61a09` | Instance scaling by actual party size |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `acaa9b3c73f7` | Earned content milestones and expansion access |
 | Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `381554742ac0` | Autonomous earned-era parties and player-led clears without event shortcuts |
 | Raid Clear | [buildthehomelab/wow-mod-raid-clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | `fa299223a92a` | Boss and trash mechanics for Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj |

@@ -144,6 +144,7 @@ type profileUpdate struct {
 	mode     os.FileMode
 	backup   string // empty for launcher state, which rollback restores from memory
 	create   bool
+	remove   bool
 }
 
 // backupTimestamp names the backups written by one configuration change.
@@ -189,7 +190,13 @@ func applyProfileUpdates(updates []profileUpdate) ([]string, error) {
 		backups = append(backups, update.backup)
 	}
 	for i, update := range updates {
-		if err := writeConfigAtomically(update.path, update.updated, update.mode); err != nil {
+		var err error
+		if update.remove {
+			err = os.Remove(update.path)
+		} else {
+			err = writeConfigAtomically(update.path, update.updated, update.mode)
+		}
+		if err != nil {
 			var rollbackErrors []string
 			for _, previous := range updates[:i] {
 				if previous.create {

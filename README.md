@@ -47,8 +47,7 @@ database, configuration and first-run setup.
   configuration templates. Required server data is downloaded on first start.
 - **Companions and world activity:** SelfBot and controlled bot companions,
   earned-era battleground queues, timed [era world events](docs/world-events.md),
-  Vanilla world buffs and AutoBalance instance scaling complement individual
-  progression.
+  and Vanilla world buffs complement individual progression.
 
 ## Quick start
 
@@ -207,7 +206,6 @@ include this distribution's local integration and defaults; see
 | [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Bot companions, natural progression and earned auction trading. |
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Character-specific content milestones and expansion unlocks. |
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | Earned-era talents and selected class spell variants for players and bots. |
-| [AutoBalance](https://github.com/azerothcore/mod-autobalance) | Instance scaling for the players and bots present. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
 | [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Timed Vanilla world buffs for eligible Vanilla-progress characters. |
 | [Era Events](https://github.com/buildthehomelab/wow-mod-era-events) | Outdoor AQ, Scourge, Legion and zombie encounters at each character's exact earned tier, with ordinary kill loot. |

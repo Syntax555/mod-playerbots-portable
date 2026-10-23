@@ -49,8 +49,8 @@ installs or recovers server updates; use a writable server folder such as
 - Accounts, characters, inventories, money and existing databases.
 - Active configurations, database credentials, configured paths and realm phase.
 - Downloaded DBC/maps/vmaps/mmaps, logs and additional user files.
-- Configurations and database tables of modules a release no longer bundles;
-  the servers ignore them.
+- Settings and database tables of modules a release no longer bundles. Retired
+  configurations may be archived as `.backup.*` files instead of remaining active.
 
 Bundled server binaries, libraries, templates, SQL and release notices follow
 the release. Keep regular database and configuration backups, including before
