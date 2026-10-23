@@ -63,6 +63,9 @@ jobs:
           GOBIN="$RUNNER_TEMP/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
           "$RUNNER_TEMP/bin/actionlint"
 
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l cmd)" || { gofmt -d cmd; exit 1; }
+
       - name: Test portable launcher logic and Windows compilation
         run: |
           go test ./...

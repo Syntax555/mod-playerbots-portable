@@ -132,6 +132,7 @@ remain necessary for platform and encounter validation. These commands repeat th
 checks workflow's launcher, packaging and native gameplay checks:
 
 ```bash
+gofmt -l cmd
 go test ./...
 go vet ./...
 GOOS=windows GOARCH=amd64 go test -c -o /dev/null ./cmd/startup
