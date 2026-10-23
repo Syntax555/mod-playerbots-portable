@@ -193,11 +193,22 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startu
 				}
 
 				content := string(data)
-				content = strings.Replace(content, `DataDir = "."`, fmt.Sprintf(`DataDir = "%s"`, dataDirForConf), 1)
-				content = strings.Replace(content, `LogsDir = ""`, `LogsDir = "logs"`, 1)
-				content = strings.Replace(content, `SourceDirectory = ""`, fmt.Sprintf(`SourceDirectory = "%s"`, srcDirForConf), 1)
-				content = strings.Replace(content, `MySQLExecutable = ""`, fmt.Sprintf(`MySQLExecutable = "%s"`, mysqlExeForConf), 1)
-				content = strings.Replace(content, `BindIP = "0.0.0.0"`, `BindIP = "127.0.0.1"`, 1)
+				var settings []string
+				for _, setting := range []struct{ key, baseline, value string }{
+					{"DataDir", `"."`, dataDirForConf},
+					{"LogsDir", `""`, "logs"},
+					{"SourceDirectory", `""`, srcDirForConf},
+					{"MySQLExecutable", `""`, mysqlExeForConf},
+					{"BindIP", `"0.0.0.0"`, "127.0.0.1"},
+				} {
+					if value, exists := configValue(content, setting.key); exists && value == setting.baseline {
+						settings = append(settings, setting.key+` = "`+setting.value+`"`)
+					}
+				}
+				content, err = mergeConfigProfile(content, strings.Join(settings, "\n"))
+				if err != nil {
+					return err
+				}
 
 				content, err = applyConfigProfileForPhase(info.Name(), content, phase)
 				if err != nil {
