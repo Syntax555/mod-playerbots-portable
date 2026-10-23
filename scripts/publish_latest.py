@@ -33,6 +33,7 @@ from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 import uuid
 import zipfile
+import zlib
 
 
 ZIP_CONTENTS = {
@@ -430,14 +431,17 @@ def prepare_assets(directory: Path, expected_revision: str | None = None) -> lis
                         raise PublishError(f"{name} is missing {entry_name}") from None
                     if entry.is_dir() or entry.file_size == 0 or entry.flag_bits & 1:
                         raise PublishError(f"{name} has an invalid required file: {entry_name}")
+                # The server's manifest reads every entry below; client packages need the same CRC check.
+                if name != SERVER_PACKAGE_NAME and archive.testzip() is not None:
+                    raise PublishError(f"Artifact failed file integrity verification: {name}")
                 if name == QUESTIE_INSTALLER_NAME:
                     verify_questie_installer(archive, entries)
-        except (zipfile.BadZipFile, OSError):
+        except (zipfile.BadZipFile, OSError, zlib.error):
             raise PublishError(f"Artifact is not a readable ZIP: {name}") from None
         assets.append(Asset(path, name, size, digest(path)))
     try:
         manifest = update_manifest(next(asset for asset in assets if asset.name == SERVER_PACKAGE_NAME), expected_revision)
-    except (zipfile.BadZipFile, OSError):
+    except (zipfile.BadZipFile, OSError, zlib.error):
         raise PublishError("The server package failed file integrity verification") from None
     manifest_path = directory / UPDATE_MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
