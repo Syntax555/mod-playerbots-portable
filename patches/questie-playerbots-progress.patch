@@ -66,7 +66,7 @@ index d4c56d2..c159ea8 100644
                  spawnList = cachedSpawnList or {},
                  AlreadySpawned = {},
 diff --git a/Modules/Network/QuestiePlayerbots.lua b/Modules/Network/QuestiePlayerbots.lua
-index 2c57d4e..d794c5b 100644
+index 2c57d4e..5b86628 100644
 --- a/Modules/Network/QuestiePlayerbots.lua
 +++ b/Modules/Network/QuestiePlayerbots.lua
 @@ -13,19 +13,28 @@ local PROTOCOL_VERSION = "1"
@@ -272,10 +272,11 @@ index 2c57d4e..d794c5b 100644
  
              usedIndices[objectiveIndex] = true
              return objectiveIndex
-@@ -286,17 +338,16 @@ local function BuildQuestieQuestPacket(questId, questState)
+@@ -285,18 +337,18 @@ local function BuildQuestieQuestPacket(questId, questState)
+ 
      local usedIndices = {}
  
-     for _, rawObjective in ipairs(questState.objectives) do
+-    for _, rawObjective in ipairs(questState.objectives) do
 -        local objectiveIndex = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
 -
 -        if objectiveIndex then
@@ -287,9 +288,11 @@ index 2c57d4e..d794c5b 100644
 -                req = rawObjective.required,
 -            }
 -        end
++    for position, rawObjective in ipairs(questState.objectives) do
 +        -- Native database and special objectives use positive indices. Keep unknown
 +        -- counters in a separate namespace so special map pins cannot inherit them.
-+        local objectiveIndex = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices) or -rawObjective.index
++        -- Bridges may number objectives per type, so the snapshot position keys them.
++        local objectiveIndex = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices) or -position
 +        questPacket.objectives[objectiveIndex] = {
 +            id = rawObjective.id ~= 0 and rawObjective.id or nil,
 +            typ = rawObjective.type,
@@ -300,7 +303,7 @@ index 2c57d4e..d794c5b 100644
      end
  
      return questPacket
-@@ -309,30 +360,63 @@ local function BuildQuestStateSignature(questState)
+@@ -309,30 +361,67 @@ local function BuildQuestStateSignature(questState)
  
      for _, objective in ipairs(questState.objectives) do
          parts[#parts + 1] = table.concat({
@@ -328,8 +331,12 @@ index 2c57d4e..d794c5b 100644
 +end
 +
 +local function GetProgressRequest(botName, token)
-+    local request = token and pendingRequests[token]
-+    if bridgeReady and request and request.botName == botName and requestsByBot[botName] == token
++    local current = requestsByBot[botName]
++    local request = current and pendingRequests[current]
++    -- Tokens issued by NextToken expire once replaced. A bridge may push WATCH
++    -- updates under its own tokens; those are valid only for a current WATCH.
++    local owned = token == current or (request and request.watch and token and token:sub(1, 3) ~= "qpb")
++    if bridgeReady and request and owned
 +        and (not request.expiresAt or GetTime() < request.expiresAt) and GetCurrentGroupMembers()[botName] then
 +        return request
 +    end
@@ -367,7 +374,7 @@ index 2c57d4e..d794c5b 100644
  
          if not alreadyApplied then
              -- Remove the previous tooltip registration before replacing
-@@ -342,12 +426,18 @@ local function ApplyProgressSnapshot(snapshot)
+@@ -342,12 +431,18 @@ local function ApplyProgressSnapshot(snapshot)
              local questPacket = BuildQuestieQuestPacket(questId, questState)
              QuestieComms:InsertQuestDataPacket(questPacket, botName)
          end
@@ -388,7 +395,7 @@ index 2c57d4e..d794c5b 100644
              players[botName] = nil
              QuestieComms.data:RemoveQuestFromPlayer(questId, botName)
              QuestiePartyObjectives:ScheduleUpdate(questId)
-@@ -355,10 +445,15 @@ local function ApplyProgressSnapshot(snapshot)
+@@ -355,10 +450,15 @@ local function ApplyProgressSnapshot(snapshot)
      end
  
      appliedQuestStates[botName] = nextStates
@@ -404,7 +411,7 @@ index 2c57d4e..d794c5b 100644
      local playerName = UnitName("player")
      local senderName = sender and sender:gsub("%-.*$", "")
  
-@@ -410,7 +505,10 @@ local function HandleBridgeMessage(message, sender)
+@@ -410,7 +510,10 @@ local function HandleBridgeMessage(message, sender)
  
          if not bridgeCapabilities.QUEST_PROGRESS_V1 then
              bridgeReady = false
@@ -416,7 +423,7 @@ index 2c57d4e..d794c5b 100644
              return
          end
  
-@@ -424,9 +522,16 @@ local function HandleBridgeMessage(message, sender)
+@@ -424,9 +527,16 @@ local function HandleBridgeMessage(message, sender)
          local botName = UrlDecode(fields[2])
          local token = fields[3]
  
@@ -433,7 +440,7 @@ index 2c57d4e..d794c5b 100644
          }
  
          return
-@@ -440,11 +545,16 @@ local function HandleBridgeMessage(message, sender)
+@@ -440,11 +550,16 @@ local function HandleBridgeMessage(message, sender)
  
          local snapshot = progressSnapshots[token]
  
@@ -451,7 +458,7 @@ index 2c57d4e..d794c5b 100644
          end
  
          return
-@@ -455,20 +565,35 @@ local function HandleBridgeMessage(message, sender)
+@@ -455,20 +570,35 @@ local function HandleBridgeMessage(message, sender)
          local token = fields[3]
          local questId = tonumber(fields[4])
          local objectiveType = fields[5]
@@ -472,7 +479,7 @@ index 2c57d4e..d794c5b 100644
 +            and #questState.objectives < MAX_OBJECTIVES
 +            and (not fields[10] or fields[10] == "0" or fields[10] == "1") then
 +            for _, objective in ipairs(questState.objectives) do
-+                if objective.index == objectiveIndex then
++                if objective.index == objectiveIndex and objective.type == objectiveType then
 +                    progressSnapshots[token] = nil
 +                    return
 +                end
@@ -490,13 +497,21 @@ index 2c57d4e..d794c5b 100644
          end
  
          return
-@@ -480,13 +605,21 @@ local function HandleBridgeMessage(message, sender)
+@@ -480,13 +610,29 @@ local function HandleBridgeMessage(message, sender)
  
          local snapshot = progressSnapshots[token]
  
 -        if snapshot and snapshot.botName == botName then
 -            ApplyProgressSnapshot(snapshot)
 +        local request = GetProgressRequest(botName, token)
++        if request and fields[4] == "NO_BOT" then
++            -- Bridges without an error reply report unobservable members this way.
++            -- No WATCH was registered, so back off like a bridge error.
++            request.watch = nil
++            RemoveTrackedBot(botName)
++            retryAfter[botName] = GetTime() + WATCH_REFRESH_INTERVAL
++            return
++        end
 +        if snapshot and request and snapshot.botName == botName and GetTime() < snapshot.expiresAt then
 +            if not ApplyProgressSnapshot(snapshot) then
 +                return
@@ -516,7 +531,7 @@ index 2c57d4e..d794c5b 100644
          return
      end
  
-@@ -495,7 +628,11 @@ local function HandleBridgeMessage(message, sender)
+@@ -495,7 +641,11 @@ local function HandleBridgeMessage(message, sender)
          local token = fields[4]
          local reason = UrlDecode(fields[5])
  
@@ -529,7 +544,7 @@ index 2c57d4e..d794c5b 100644
              pendingRequests[token] = nil
              Print("|cFFFF4444Bridge error for " .. tostring(requestType) .. ":|r " .. tostring(reason))
          end
-@@ -529,6 +666,8 @@ function QuestiePlayerbots:Initialize()
+@@ -529,6 +679,8 @@ function QuestiePlayerbots:Initialize()
          if event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
              if bridgeReady then
                  ScheduleRosterSync()
@@ -538,7 +553,7 @@ index 2c57d4e..d794c5b 100644
              end
          end
      end)
-@@ -544,6 +683,27 @@ function QuestiePlayerbots:Initialize()
+@@ -544,6 +696,27 @@ function QuestiePlayerbots:Initialize()
          if rosterSyncAt and now >= rosterSyncAt then
              SyncGroupRoster()
          end

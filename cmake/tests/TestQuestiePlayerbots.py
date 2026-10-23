@@ -54,8 +54,13 @@ class QuestiePlayerbotsTests(unittest.TestCase):
 
     def test_regressions_are_detected(self):
         mutations = (
-            (FILES[0], "request.botName == botName and requestsByBot[botName] == token",
-             "true", "request token ownership"),
+            (FILES[0], "token == current or", "true or", "request token ownership"),
+            (FILES[0], 'token:sub(1, 3) ~= "qpb"', "true", "stale issued token"),
+            (FILES[0], "request.watch and token and", "token and", "push token requires WATCH"),
+            (FILES[0], "and objective.type == objectiveType", "", "per-type objective indices"),
+            (FILES[0], "or -position", "or -rawObjective.index", "per-type unknown counters"),
+            (FILES[0], 'fields[4] == "NO_BOT"', "false", "NO_BOT backoff"),
+            (FILES[0], "request.watch = nil", "", "NO_BOT without UNWATCH"),
             (FILES[0], "players[botName] == state.objectives", "players[botName] ~= nil", "native human ownership"),
             (FILES[0], "snapshot.expiresAt", "(GetTime() + 100000)", "snapshot expiry"),
             (FILES[0], "request.refreshAt", "(request.refreshAt + 999999)", "WATCH renewal"),
@@ -68,7 +73,7 @@ class QuestiePlayerbotsTests(unittest.TestCase):
             (FILES[2], ' and (objective.type == "m" or objective.type == "k")', "", "native alias type validation"),
             (FILES[2], "matchesKillCredit = objectiveData.RootId == objective.id", "matchesKillCredit = true",
              "native alias target validation"),
-            (FILES[0], "or -rawObjective.index", "or (64 + rawObjective.index)", "special pin counter isolation"),
+            (FILES[0], "or -position", "or (64 + position)", "special pin counter isolation"),
             (FILES[0], "if players and players[botName] and (not previous or players[botName] ~= previous.objectives) then",
              "if false then", "in-flight native takeover"),
             (FILES[3], "objData.Id or objData.RootId", "objData.Id", "kill-credit party map"),

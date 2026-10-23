@@ -126,8 +126,8 @@ assert(not entry("Tankbot") and entry("Healbot") and entry("Human"), "quest turn
 assert(comms.data:GetTooltip("m_101")[100].Tankbot == nil)
 
 -- Reject spoofed, unsolicited, mismatched, oversized and malformed snapshots atomically.
-progress("Tankbot","unsolicited",9)
-assert(not entry("Tankbot"))
+progress("Tankbot","qpb0x0",9)
+assert(not entry("Tankbot"), "stale issued token was accepted")
 progress("Tankbot",heal,9)
 assert(not entry("Tankbot"), "another bot's valid WATCH token was accepted")
 receive("QUEST_PROGRESS_BEGIN~Tankbot~"..tank,"Human")
@@ -190,6 +190,20 @@ begin("Tankbot",tank); quest("Tankbot",tank,200)
 objective("Tankbot",tank,200,"m",1,902,2,2,1); finish("Tankbot",tank)
 assert(entry("Tankbot",200,3).finished, "kill-credit alias did not map")
 
+-- Other bridges push WATCH updates under their own tokens and number objectives per type.
+progress("Tankbot","qpp7x1",6)
+assert(entry("Tankbot").fulfilled == 6, "bridge push token was rejected")
+begin("Tankbot","qpp7x2"); quest("Tankbot","qpp7x2",200)
+objective("Tankbot","qpp7x2",200,"m",1,101,4,10)
+objective("Tankbot","qpp7x2",200,"i",1,500,2,5)
+objective("Tankbot","qpp7x2",200,"m",2,99999,1,3)
+objective("Tankbot","qpp7x2",200,"i",2,88888,1,4)
+finish("Tankbot","qpp7x2")
+assert(entry("Tankbot",200,1).fulfilled == 2 and entry("Tankbot",200,2).fulfilled == 4,
+    "per-type objective indices were rejected")
+assert(entry("Tankbot",200,-3).id == 99999 and entry("Tankbot",200,-4).id == 88888,
+    "per-type unknown counters collided")
+
 -- Partial snapshots expire without replacing the last complete state.
 begin("Healbot",heal); quest("Healbot",heal,100)
 objective("Healbot",heal,100,"m",1,101,7,10)
@@ -251,6 +265,8 @@ advance(31)
 assert(#sent > beforeRetry and sent[#sent].message == "HELLO~1")
 hello(false)
 local snapshotOnly = token("Healbot")
+progress("Healbot","qpp1x1",9)
+assert(not entry("Healbot"), "push token was accepted without WATCH")
 progress("Healbot",snapshotOnly,4)
 assert(entry("Healbot").fulfilled == 4)
 roster = {"Human"}
@@ -274,6 +290,14 @@ objective("Tankbot",mapToken,400,"m",2,900,1,2,0)
 objective("Tankbot",mapToken,400,"e",3,0,0,1,0)
 finish("Tankbot",mapToken)
 assert(entry("Tankbot",400,-1).fulfilled == 50)
+
+-- Bridges without error replies end requests for unobservable members with NO_BOT.
+local beforeNoBot = #sent
+receive("QUEST_PROGRESS_END~Human~"..token("Human").."~NO_BOT")
+advance(13); advance(2)
+for i=beforeNoBot+1,#sent do
+    assert(not sent[i].message:find("~Human~", 1, true), "NO_BOT member was polled again")
+end
 
 local mapPins, renderErrors = {}, {}
 Questie.Debug = function() end
