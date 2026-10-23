@@ -3,6 +3,19 @@
 These rules apply to every change, by people and by coding agents. Read the
 files you change and the code that calls them before editing.
 
+## Agent skills
+
+The shared skills in `.agents/skills/` apply to every repo chat and delegated
+agent. For coding tasks, read `.agents/skills/ponytail/SKILL.md` and use its
+`full` mode unless the user chooses another mode.
+
+Select relevant Matt Pocock skills from the same directory autonomously and
+read their `SKILL.md` before applying them. Preserve their invocation policy:
+skills marked `disable-model-invocation: true` require the user to name them.
+User instructions and the repository rules take precedence over skill advice.
+Sources, licenses and update instructions are in
+[the shared skill guide](.agents/skills/README.md).
+
 ## Product rules
 
 - The server is an earned-progression realm. Under natural progression a bot
