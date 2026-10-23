@@ -181,6 +181,26 @@ func TestApplyProfileUpdatesRollback(t *testing.T) {
 	}
 }
 
+func TestApplyProfileUpdatesRollsBackRetiredConfigs(t *testing.T) {
+	root := t.TempDir()
+	config := writeFixture(t, filepath.Join(root, "retired.conf"), "custom settings\r\n")
+	blocked := filepath.Join(root, "blocked.conf")
+	if err := os.Mkdir(blocked, 0755); err != nil {
+		t.Fatal(err)
+	}
+	updates := []profileUpdate{
+		{path: config, original: []byte("custom settings\r\n"), mode: 0644, backup: config + ".backup.test", remove: true},
+		{path: blocked, updated: []byte("blocked"), mode: 0644},
+	}
+	backups, err := applyProfileUpdates(updates)
+	if err == nil || len(backups) != 1 || readFixture(t, backups[0]) != "custom settings\r\n" {
+		t.Fatalf("unexpected rollback result: %v, %v", backups, err)
+	}
+	if readFixture(t, config) != "custom settings\r\n" {
+		t.Fatal("failed migration did not restore retired config")
+	}
+}
+
 func TestApplyProfileUpdatesRestoresStateWithoutBackup(t *testing.T) {
 	directory := t.TempDir()
 	state := filepath.Join(directory, ".portable-profiles.json")

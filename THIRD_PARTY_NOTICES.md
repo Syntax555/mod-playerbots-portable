@@ -29,7 +29,6 @@ applicable.
 | --- | --- | --- |
 | [AzerothCore Playerbots core](https://github.com/mod-playerbots/azerothcore-wotlk) | GPL version 2 license text; source includes GPL-2.0-or-later and AGPL-3.0-or-later files. | `licenses/azerothcore-wotlk.txt`, `licenses/azerothcore-wotlk/AUTHORS`, `licenses/AGPL-3.0.txt` |
 | [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | GPL version 2 license text and GPL-2.0-or-later source notices. | `licenses/mod-playerbots/LICENSE`, `licenses/mod-playerbots/AUTHORS.md` |
-| [AutoBalance](https://github.com/azerothcore/mod-autobalance) | GPL-2.0-or-later source notice. | `licenses/mod-autobalance/NOTICE.txt`, `licenses/GPL-2.0.txt` |
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | MIT root license; source also includes GPL and AGPL notices. | Server: `licenses/mod-individual-progression/LICENSE`, `licenses/GPL-2.0.txt`, `licenses/AGPL-3.0.txt`. Combined client pack, for its base `patch-V` archive: `licenses/mod-individual-progression.txt`. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | AGPL-3.0-or-later upstream license declaration. | `licenses/mod-dungeon-clear/LICENSE`, `licenses/AGPL-3.0.txt` |
 | [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | MIT upstream license text. | `licenses/mod-raid-clear/LICENSE` |

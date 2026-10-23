@@ -217,7 +217,8 @@ do not douse them.
 Hunters must earn Tranquilizing Shot. Natural progression also keeps a bot's
 own crowd control in place when its formerly mind-controlled target returns
 to the raid; it does not cancel those auras artificially.
-AutoBalance scales raid difficulty to the number of players and bots present.
+Raid difficulty does not scale to the number of players or bots present;
+smaller raids face the same creature stats and encounter requirements.
 
 Onyxia's Lair has a registered Raid Clear strategy for map 249 alongside
 Playerbots' `onyxia` strategy. The implementation covers Deep Breath movement
@@ -341,4 +342,4 @@ installations without a saved profile baseline.
 
 Source revisions and integration patches are recorded in
 [build provenance](module-versions.md). See [configuration](configuration.md)
-for population, scaling and other module defaults.
+for population and module defaults.

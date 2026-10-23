@@ -196,7 +196,7 @@ func TestPrepareConfigurationUpdatesMovedLegacyRealmInOnePass(t *testing.T) {
 	}
 	writeFixture(t, world, legacyWorld)
 	// A module config from a release before its managed defaults existed.
-	writeFixture(t, filepath.Join(root, "configs", "modules", "AutoBalance.conf"), "Custom.Module = 7\n")
+	writeFixture(t, filepath.Join(root, "configs", "modules", "mod_era_events.conf"), "Custom.Module = 7\n")
 	relocated := filepath.Join(container, "relocated server")
 	if err := os.Rename(root, relocated); err != nil {
 		t.Fatal(err)
@@ -222,11 +222,11 @@ func TestPrepareConfigurationUpdatesMovedLegacyRealmInOnePass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected, err := mergeManagedProfile("Custom.Module = 7\n", "", profiles["AutoBalance.conf"])
+	expected, err := mergeManagedProfile("Custom.Module = 7\n", "", profiles["mod_era_events.conf"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	module := filepath.Join(relocated, "configs", "modules", "AutoBalance.conf")
+	module := filepath.Join(relocated, "configs", "modules", "mod_era_events.conf")
 	if actual := readFixture(t, module); actual != expected || !strings.Contains(actual, "Custom.Module = 7\n") {
 		t.Errorf("managed module defaults were not migrated: %q", actual)
 	}

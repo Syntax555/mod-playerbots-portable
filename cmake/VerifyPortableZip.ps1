@@ -60,6 +60,12 @@ try {
     }
 
     $lock = Get-Content (Join-Path $RepositoryRoot 'versions.lock.json') -Raw | ConvertFrom-Json
+    $moduleNames = @($lock.modules | ForEach-Object { $_.name })
+    foreach ($name in $entries.Keys) {
+        if ($name -match '^licenses/(mod-[a-z0-9-]+)(/|[.])' -and $Matches[1] -notin $moduleNames) {
+            throw "Unexpected module license in portable ZIP: $name"
+        }
+    }
     $required = @(
         'startup.exe', 'authserver.exe', 'worldserver.exe',
         'mysql/bin/mysqld.exe', 'mysql/bin/mysql.exe', 'mysql/bin/mysqladmin.exe',
@@ -70,7 +76,7 @@ try {
         'mysql/bin/vcruntime140.dll', 'mysql/bin/vcruntime140_1.dll', 'mysql/bin/msvcp140.dll',
         'licenses/boost/LICENSE_1_0.txt',
         'configs/authserver.conf.dist', 'configs/worldserver.conf.dist',
-        'configs/modules/playerbots.conf.dist', 'configs/modules/AutoBalance.conf.dist',
+        'configs/modules/playerbots.conf.dist',
         'configs/modules/individualProgression.conf.dist',
         'configs/modules/mod_dungeon_clear.conf.dist',
         'configs/modules/mod-quest-loot-party.conf.dist',

@@ -169,6 +169,86 @@ func TestAutomaticProfilesLeaveRetiredModuleConfigs(t *testing.T) {
 	}
 }
 
+func TestAutoBalanceRemovalPreservesSettingsAndDoesNotRecreateConfigs(t *testing.T) {
+	for _, separate := range []bool{false, true} {
+		for _, tracked := range []bool{false, true} {
+			name := "portable"
+			if separate {
+				name = "separate work directory"
+			}
+			if tracked {
+				name += " with baseline"
+			}
+			t.Run(name, func(t *testing.T) {
+				base := t.TempDir()
+				relocationConfigFixtures(t, base)
+				root := base
+				if separate {
+					root = t.TempDir()
+				}
+				original := "[worldserver]\r\nAutoBalance.Enable.Global = 1\r\nAutoBalance.StatModifier.Health = 0.7\r\n# custom settings\r\n"
+				template := "[worldserver]\nAutoBalance.Enable.Global = 1\n"
+				writeFixture(t, filepath.Join(base, "configs/modules/AutoBalance.conf.dist"), template)
+				config := writeFixture(t, filepath.Join(root, "configs/modules/AutoBalance.conf"), original)
+				characters := writeFixture(t, filepath.Join(root, "mysql/data/characters.ibd"), "existing characters")
+				if tracked {
+					state, err := json.Marshal(managedProfileState{Schema: 1, Profiles: map[string]string{"AutoBalance.conf": template}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState), string(state))
+				}
+				for attempt := 0; attempt < 2; attempt++ {
+					opts := defaultTestOptions()
+					if _, err := prepareConfiguration(base, root, filepath.Join(base, "mysql/bin/mysql.exe"), &opts); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := os.Stat(config); !os.IsNotExist(err) {
+						t.Fatalf("retired config remains active or was recreated: %v", err)
+					}
+					backups, err := filepath.Glob(config + ".backup.*")
+					if err != nil || len(backups) != 1 || readFixture(t, backups[0]) != original {
+						t.Fatalf("custom settings were not preserved exactly once: %v, %v", backups, err)
+					}
+					if !separate {
+						path := config + ".dist"
+						if _, err := os.Stat(path); !os.IsNotExist(err) {
+							t.Fatalf("retired template remains: %v", err)
+						}
+						backups, err := filepath.Glob(path + ".backup.*")
+						if err != nil || len(backups) != 1 || readFixture(t, backups[0]) != template {
+							t.Fatalf("template backup was not preserved exactly once: %v, %v", backups, err)
+						}
+					}
+					state, _, err := readManagedProfileState(root)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, exists := state.Profiles["AutoBalance.conf"]; exists {
+						t.Fatal("retired module remains in the managed baseline")
+					}
+					if readFixture(t, characters) != "existing characters" {
+						t.Fatal("character data changed")
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestAutoBalanceRemovalClearsAnOtherwiseEmptyBaseline(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, filepath.Join(root, "configs/"+automaticProfileState),
+		`{"schema":1,"profiles":{"AutoBalance.conf":"AutoBalance.Enable.Global = 1\n"}}`)
+	if _, err := migrateConfigProfiles(root); err != nil {
+		t.Fatal(err)
+	}
+	state, _, err := readManagedProfileState(root)
+	if err != nil || len(state.Profiles) != 0 {
+		t.Fatalf("retired baseline was retained: %+v, %v", state, err)
+	}
+}
+
 func TestAutomaticProfilesPlayerPresenceKeepsCustomSettings(t *testing.T) {
 	for _, test := range []struct {
 		name          string

@@ -127,7 +127,6 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 
 | Component | Default policy |
 | --- | --- |
-| AutoBalance | Scale smaller instance parties; count actual non-GM occupants, including bots |
 | Individual Progression | Earned maps, items, quests, attunements and era access |
 | Era Talents | Historical Vanilla/TBC trees; native Wrath after earned access |
 | MultiBot Chatless and Bridge | Bot-control UI with natural-progression restrictions |
@@ -138,11 +137,10 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
 | Raid Clear | Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
 
-AutoBalance keeps creature levels unchanged. Full parties retain normal stats;
-smaller parties receive the upstream scaling curve with reduced XP and money.
-Bonus tokens and party-count difficulty offsets are disabled. Outdoor elites
-and world bosses retain ordinary world difficulty. Scaling cannot supply missing
-mechanic tactics or guarantee that every class can solo an encounter.
+Dungeon and raid difficulty does not scale to the number of players or bots
+present. Smaller groups face the same creature stats and encounter requirements
+as full groups. Bring suitable roles, earned equipment and enough participants
+for the encounter.
 
 Playerbots includes selected dungeon and raid tactics across Vanilla, TBC and
 Wrath. Bots can accompany a player through real instances without a dungeon

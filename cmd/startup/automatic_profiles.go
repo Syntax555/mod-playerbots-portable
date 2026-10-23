@@ -14,6 +14,12 @@ import (
 
 const automaticProfileState = ".portable-profiles.json"
 
+// Old templates can survive a manual update. Never recreate their active
+// configuration after the module has been removed from the distribution.
+func retiredModuleConfig(name string) bool {
+	return strings.EqualFold(name, "AutoBalance.conf") || strings.EqualFold(name, "AutoBalance.conf.dist")
+}
+
 type managedProfileState struct {
 	Schema   int               `json:"schema"`
 	Profiles map[string]string `json:"profiles"`
@@ -167,6 +173,21 @@ func migrateConfigProfiles(root string) ([]string, error) {
 	sort.Strings(names)
 	timestamp := backupTimestamp()
 	var updates []profileUpdate
+	for _, name := range []string{"AutoBalance.conf", "AutoBalance.conf.dist"} {
+		path := filepath.Join(root, "configs", "modules", name)
+		original, mode, exists, err := readConfigForUpdate(root, path)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			updates = append(updates, profileUpdate{path: path, original: original, mode: mode,
+				backup: path + ".backup." + timestamp, remove: true})
+		}
+	}
+	retiredBaseline := false
+	for name := range previous.Profiles {
+		retiredBaseline = retiredBaseline || retiredModuleConfig(name)
+	}
 	next := managedProfileState{Schema: 1, Profiles: make(map[string]string)}
 	for _, name := range names {
 		path := filepath.Join(root, "configs", "modules", name)
@@ -190,7 +211,7 @@ func migrateConfigProfiles(root string) ([]string, error) {
 				mode: mode, backup: path + ".backup." + timestamp})
 		}
 	}
-	if len(next.Profiles) == 0 {
+	if len(next.Profiles) == 0 && len(updates) == 0 && !retiredBaseline {
 		return nil, nil
 	}
 	nextState, err := json.MarshalIndent(next, "", "  ")

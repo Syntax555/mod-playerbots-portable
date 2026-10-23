@@ -181,6 +181,9 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startu
 				relPath = info.Name()
 			}
 			relTargetName := strings.TrimSuffix(relPath, ".dist")
+			if strings.EqualFold(filepath.Dir(relPath), "modules") && retiredModuleConfig(info.Name()) {
+				return nil
+			}
 			targetConfPath := filepath.Join(configDstDir, relTargetName)
 
 			if !fileExists(targetConfPath) {

@@ -115,7 +115,7 @@ try {
         Write-FixtureText (Join-Path $source $name)
     }
     [void][System.IO.Directory]::CreateDirectory((Join-Path $source 'licenses'))
-    $profiles = @('playerbots', 'worldserver', 'individualProgression', 'AutoBalance',
+    $profiles = @('playerbots', 'worldserver', 'individualProgression',
         'mod_dungeon_clear', 'mod-quest-loot-party', 'MultiBotBridge')
     foreach ($profile in $profiles) {
         Write-FixtureText (Join-Path $source "cmd/startup/profiles/$profile.conf") "$profile = fixture`n"
@@ -152,17 +152,18 @@ try {
     Write-FixtureFile (Join-Path $addon '.hidden.bin') ([byte[]]@(1, 2, 3))
     Write-FixtureFile (Join-Path $addon 'empty.txt') ([byte[]]@())
 
-    # Reusing an existing distribution must remove obsolete SQL, including removed
-    # modules, without deleting non-SQL module data, live databases or user configs.
+    # Reusing an existing distribution must remove obsolete source exports,
+    # without deleting non-SQL module data, live databases or user configs.
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons/OldAddon/OldAddon.lua',
-        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream/README.md',
+        'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'licenses/mod-removed/NOTICE.txt',
+        'licenses/mod-removed.txt', 'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream/README.md',
         'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
         Write-FixtureText (Join-Path $dist $name) 'obsolete export'
     }
     $preserved = @('mysql/data/user.db', 'mysql/my.cnf', 'configs/worldserver.conf',
-        'configs/modules/mod_fixture.conf', 'src/modules/mod-removed/keep.txt')
+        'configs/modules/mod_fixture.conf', 'src/modules/mod-removed/keep.txt', 'licenses/openssl/LICENSE.txt')
     foreach ($name in $preserved) { Write-FixtureText (Join-Path $dist $name) "preserve $name" }
     $oldCoreSql = Join-Path $dist 'src/data/sql/updates/db_world/current.sql'
     $oldModuleSql = Join-Path $dist 'src/modules/mod-fixture/data/sql/db_world/current.sql'
@@ -177,7 +178,8 @@ try {
     foreach ($name in @('src/data/sql/updates/db_world/obsolete.sql',
         'src/modules/mod-fixture/data/sql/db_world/obsolete.sql',
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons', 'defaults',
-        'licenses/MultiBot', 'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream',
+        'licenses/MultiBot', 'licenses/mod-removed', 'licenses/mod-removed.txt',
+        'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream',
         'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
         Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Assembly retained $name"
     }
@@ -308,6 +310,9 @@ try {
     Test-NegativeZip 'release identity belongs to another commit' 'Invalid or mismatched portable release identity' -Replacements @{ 'portable-release.json' = [System.Text.Encoding]::UTF8.GetBytes($wrongIdentity) }
     Test-NegativeZip 'missing one core database while another remains' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')
     Test-NegativeZip 'missing module migration' 'missing module migration' -Omit @('src/modules/mod-fixture/data/sql/db_world/current.sql')
+    foreach ($obsolete in @('licenses/mod-removed/NOTICE.txt', 'licenses/mod-removed.txt')) {
+        Test-NegativeZip "obsolete module license $obsolete" 'Unexpected module license' -ExtraEntries @(@{ Name = $obsolete; Bytes = [byte[]]@(1) })
+    }
     foreach ($name in @('docs/world-buffs.md', 'configs/modules/mod_world_buff_bots.conf.dist',
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt')) {
         Test-NegativeZip "missing world-buff dependency $name" 'Portable ZIP is missing' -Omit @($name)

@@ -36,9 +36,6 @@ and ordinary player actions.
 - [ ] Molten Core rune dousing with Aqual Quintessence earned by a bot.
 - [ ] Raid Clear coverage for Naxxramas as upstream adds it; verify the raid
   before relying on it.
-- [ ] Optional original raid difficulty: disable AutoBalance for 20- and
-  40-player raids (`AutoBalance.Enable.20M`, `AutoBalance.Enable.40M`) once
-  full bot raids are available, keeping party scaling for dungeons.
 
 ## Gameplay validation
 

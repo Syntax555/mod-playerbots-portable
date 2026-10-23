@@ -39,11 +39,6 @@
       ]
     },
     {
-      "name": "mod-autobalance",
-      "url": "https://github.com/azerothcore/mod-autobalance.git",
-      "revision": "1d707cb61a0962ab01e4123681e2d3b66cc558a2"
-    },
-    {
       "name": "mod-individual-progression",
       "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
       "revision": "acaa9b3c73f7b756dcf0a7c388b438dcc68cdd17",
