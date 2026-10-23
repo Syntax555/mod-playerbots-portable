@@ -1,6 +1,7 @@
 """Patch regeneration must preserve the saved chain when validation fails."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -50,9 +51,23 @@ class PatchworkTests(unittest.TestCase):
         self.git(self.source, "add", "-A")
         self.git(self.source, "commit", "-qm", "fixture")
 
-    def run_patchwork(self, *args):
+    def run_patchwork(self, *args, env=None):
         return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)],
-                              cwd=self.root, text=True, capture_output=True, check=False)
+                              cwd=self.root, text=True, capture_output=True, check=False, env=env)
+
+    def test_save_keeps_patch_bytes_independent_of_host_locale_and_diff_settings(self):
+        config = self.root / "host.gitconfig"
+        config.write_text("[diff]\n\tnoprefix = true\n\tmnemonicPrefix = true\n[color]\n\tdiff = always\n")
+        # An ASCII locale stands in for Windows code pages that cannot round-trip UTF-8 patches.
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=str(config), LC_ALL="C", PYTHONUTF8="0", PYTHONCOERCECLOCALE="0")
+        (self.tree / "text.txt").write_text("Änderung über Grenzen\n", encoding="utf-8")
+        result = self.run_patchwork("save", self.tree, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        saved = self.patch.read_bytes()
+        self.assertIn("+Änderung über Grenzen\n".encode(), saved)
+        self.assertIn(b"--- a/file.txt\n+++ b/file.txt\n", saved)
+        self.assertIn(b"--- /dev/null\n+++ b/text.txt\n", saved)
+        self.assertNotIn(b"\x1b", saved)
 
     def test_failed_downstream_validation_preserves_saved_patch(self):
         original = self.patch.read_bytes()
