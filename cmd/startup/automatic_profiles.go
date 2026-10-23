@@ -42,9 +42,15 @@ func mergeManagedProfile(content, previous, current string) (string, error) {
 	for _, setting := range oldSettings {
 		old[setting.key] = setting.value
 	}
+	active := make(map[string]string)
+	for key, value := range configAssignments(content) {
+		if _, exists := active[key]; !exists {
+			active[key] = value
+		}
+	}
 	var updates []string
 	for _, setting := range newSettings {
-		value, exists := configValue(content, setting.key)
+		value, exists := active[setting.key]
 		baseline, managed := old[setting.key]
 		if !exists || (managed && value == baseline) {
 			updates = append(updates, setting.key+" = "+setting.value)

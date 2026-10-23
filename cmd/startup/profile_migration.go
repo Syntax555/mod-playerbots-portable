@@ -50,9 +50,14 @@ func migratePlayerbotsKeys(content string) string {
 // Existing credentials, hosts and databases in its template are preserved.
 func applyRuntimePorts(filename, content string, opts startupOptions) (string, error) {
 	var settings []string
+	seen := make(map[string]bool)
 	for key, value := range configAssignments(content) {
 		switch key {
 		case "LoginDatabaseInfo", "WorldDatabaseInfo", "CharacterDatabaseInfo", "PlayerbotsDatabaseInfo":
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
 			if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
 				return "", fmt.Errorf("invalid quoted database connection in %s: %s", filename, key)
 			}
