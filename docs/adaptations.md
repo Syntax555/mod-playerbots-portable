@@ -97,8 +97,10 @@ supported historical rules.
 
 The prepared MultiBot addon displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
-retained. Its talent button uses native inspection with EraTalents: historical
-trees and ranks belong to the inspected bot, and Wrath retains Blizzard's view.
+retained. In its inventory's Buy mode, merchant clicks buy for the selected bot
+with that bot's own gold. Its talent button uses native inspection with
+EraTalents: historical trees and ranks belong to the inspected bot, and Wrath
+retains Blizzard's view.
 Controlled group altbots can spend their earned Vanilla/TBC points there;
 other characters remain read-only. Optional quest, gear and guide addons and
 their installation sources are listed in [client addons](addons.md).
