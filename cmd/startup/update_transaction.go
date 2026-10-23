@@ -633,15 +633,32 @@ func discardIntactUpdate(root string) bool {
 	return true
 }
 
-// withoutUpdateCheck adds --no-update once, before any "--" terminator, so a
-// release that cannot be installed is not downloaded again in a loop.
+// Override earlier boolean values so a failed update cannot restart in a loop.
+// Use the launcher's flag definitions to preserve flag-like string values.
 func withoutUpdateCheck(args []string) []string {
-	for _, arg := range args {
-		if arg == "--no-update" || arg == "-no-update" {
-			return args
+	flags := startupFlagSet(new(startupOptions))
+	restart := make([]string, 0, len(args)+1)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return append(append(restart, "--no-update"), args[i:]...)
+		}
+		name, _, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if name == "no-update" {
+			continue
+		}
+		restart = append(restart, arg)
+		if option := flags.Lookup(name); option != nil && !inline {
+			boolean, ok := option.Value.(interface{ IsBoolFlag() bool })
+			if !ok || !boolean.IsBoolFlag() {
+				i++
+				if i < len(args) {
+					restart = append(restart, args[i])
+				}
+			}
 		}
 	}
-	return append([]string{"--no-update"}, args...)
+	return append(restart, "--no-update")
 }
 
 func restartPortableLauncher(root string, args []string) error {
