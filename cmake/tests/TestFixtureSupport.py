@@ -1,11 +1,12 @@
-"""Regression checks for shared fixture source options and independent WDBC data."""
+"""Regression checks for shared fixture source options, WDBC data and SQL rows."""
 
 import argparse
 from pathlib import Path
 import struct
+import tempfile
 import unittest
 
-from FixtureSupport import make_wdbc, source_argument, wdbc
+from FixtureSupport import make_wdbc, source_argument, sql_rows, sql_values, wdbc
 
 
 class FixtureSupportTests(unittest.TestCase):
@@ -48,6 +49,19 @@ class FixtureSupportTests(unittest.TestCase):
         args = parser.parse_args(['--source', 'custom', '--core', 'core', '--module', 'module'])
         self.assertEqual((Path('custom'), Path('core'), Path('module')), (args.source, args.core, args.module))
         self.assertIn('custom module directory', parser.format_help())
+
+
+    def test_sql_rows_use_named_columns_and_quoted_values(self):
+        self.assertEqual(['1', "it's, quoted", 'a\\b', ''], sql_values("1,'it\\'s, quoted','a\\\\b',''"))
+        with tempfile.TemporaryDirectory() as directory:
+            core = Path(directory)
+            table = core / 'data/sql/base/db_world/fixture.sql'
+            table.parent.mkdir(parents=True)
+            table.write_text('CREATE TABLE `fixture` (\n  `entry` int,\n  `name` text\n) ENGINE=InnoDB;\n'
+                             "INSERT INTO `fixture` VALUES\n(-7,'minus, seven'),\n(8,'eight');\n", encoding='utf-8')
+            self.assertEqual([{'entry': '-7', 'name': 'minus, seven'}], sql_rows(core, 'fixture', {-7}))
+            with self.assertRaises(AssertionError):
+                sql_rows(core, 'fixture', {9})
 
 
 if __name__ == '__main__':

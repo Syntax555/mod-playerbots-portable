@@ -19,9 +19,9 @@ from FixtureSupport import (
     prepared_core,
     reject_mutants,
     source_argument,
+    sql_rows,
     wdbc,
 )
-from TestDefiasCannon import sql_rows
 
 
 def native_contracts(core, source):
