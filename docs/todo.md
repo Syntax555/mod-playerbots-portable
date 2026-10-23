@@ -7,6 +7,15 @@ describe the current behavior. Prefer existing AzerothCore and module
 functions, with small integration changes where required by earned progression
 and ordinary player actions.
 
+## Keeping this list current
+
+Track open implementation and validation work here, with concrete steps and
+the checks needed to finish each item. Update affected entries as work
+progresses. Check an item only after its required verification passes, and
+update the relevant guides in the same commit. Keep in-game and Windows
+validation open when those checks have not been run, even if source fixtures
+pass.
+
 ## Dungeon integration
 
 - [ ] Earned replacements for the refused Dungeon Clear events so the remaining

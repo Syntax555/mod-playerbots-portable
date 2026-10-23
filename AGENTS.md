@@ -92,7 +92,8 @@ leave it to CI rather than claiming it works.
   behaviour that has not been verified.
 - Put detailed settings, source revisions and adaptations in the linked
   guides and dependency manifest. Preserve accurate upgrade steps and material
-  gameplay limitations. Record open work in `docs/todo.md`.
+  gameplay limitations. Track open work and outstanding validation in
+  `docs/todo.md`; update affected entries as tasks are completed.
 
 ## Releases and licensing
 
