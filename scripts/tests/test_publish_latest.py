@@ -549,6 +549,48 @@ class PublicationTests(unittest.TestCase):
             self.publish()
         self.assertEqual([], self.client.writes)
 
+    def test_corrupt_client_files_fail_before_api_calls(self):
+        for name in publisher.ZIP_CONTENTS.keys() - {publisher.SERVER_PACKAGE_NAME}:
+            for extra in ((False,) if name == publisher.QUESTIE_INSTALLER_NAME else (False, True)):
+                with self.subTest(name=name, extra=extra):
+                    self.setUp()
+                    path = next(self.directory.rglob(name))
+                    entry = "extra.lua" if extra else publisher.ZIP_CONTENTS[name][0]
+                    if extra:
+                        with zipfile.ZipFile(path, "a") as archive:
+                            archive.writestr(entry, f"test payload: {entry}")
+                    payload = path.read_bytes()
+                    original = f"test payload: {entry}".encode()
+                    self.assertIn(original, payload)
+                    path.write_bytes(payload.replace(original, b"x" + original[1:], 1))
+                    with self.assertRaisesRegex(publisher.PublishError, "file integrity verification"):
+                        self.publish()
+                    self.assertEqual([], self.client.calls)
+                    self.assertIn(1, self.client.releases)
+                    self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+                    self.assertFalse((self.directory / publisher.CHECKSUM_NAME).exists())
+
+    def test_invalid_deflate_data_is_reported_before_api_calls(self):
+        for name, required in publisher.ZIP_CONTENTS.items():
+            with self.subTest(name=name):
+                self.setUp()
+                path = next(self.directory.rglob(name))
+                with zipfile.ZipFile(path) as archive:
+                    files = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+                with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for entry, content in files.items():
+                        archive.writestr(entry, content)
+                with zipfile.ZipFile(path) as archive:
+                    self.assertIsNone(archive.testzip())
+                    entry = archive.getinfo(required[0])
+                payload = bytearray(path.read_bytes())
+                offset = entry.header_offset + 30 + len(entry.filename.encode()) + len(entry.extra)
+                payload[offset] = 7  # Reserved DEFLATE block type.
+                path.write_bytes(payload)
+                with self.assertRaisesRegex(publisher.PublishError, "file integrity verification|not a readable ZIP"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+
     def test_zip_missing_required_content_is_rejected(self):
         filename = next(self.directory.rglob("mod-playerbots-portable-latest.zip"))
         with zipfile.ZipFile(filename, "w") as archive:
