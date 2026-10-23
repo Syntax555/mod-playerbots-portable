@@ -129,7 +129,7 @@ AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1,
 Ruff 0.17.1 and actionlint 1.7.11. The gameplay fixtures execute selected native
 handlers with controlled adapters; a complete server build and live realm tests
 remain necessary for platform and encounter validation. These commands repeat the
-release workflow's launcher, packaging and native gameplay checks:
+checks workflow's launcher, packaging and native gameplay checks:
 
 ```bash
 go test ./...
@@ -156,7 +156,7 @@ python3 cmake/tests/run_fixtures.py gameplay
 `python3 cmake/tests/run_fixtures.py check` fails when a fixture in
 `cmake/tests` does not run in CI. The gameplay run also checks the
 documentation's links, anchors and stated versions. The MultiBot Lua and
-packaged-client fixtures run in the client job, as the release workflow names
+packaged-client fixtures run in the client job, as the checks workflow names
 them. Fixtures refuse to run under `python -O`, which would skip their assert
 checks.
 
@@ -166,47 +166,51 @@ CI job, use `python3 cmake/tests/run_fixtures.py gameplay --shard-index 0
 --shard-count 4`, replacing `0` with the job's zero-based index. The wiring check
 also verifies that the workflow matrix covers every shard exactly once.
 
-The release workflow also verifies historical spell mechanics in the generated
+The checks workflow also verifies historical spell mechanics in the generated
 MPQ, client locales, dependency notices, package inventories and update
 recovery. Historical class source revisions are recorded separately from the
 module pins in `versions.lock.json`.
 
 ## Automated builds
 
-The [release workflow](../.github/workflows/release.yml) validates the launcher
-and progression adaptations, builds the Windows server and client packages, and
-verifies the assembled archives.
-[Actions](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml)
-records the checks and source commit for each build. It runs for pushes to
-`main`, pull requests and manual runs. Feature branches are checked through
-their pull requests, so one update starts one automatic build. Use a manual run
-for a branch without a pull request. Commits that change only documentation do
-not start a build, so packaged guides and release-note links follow with the
-next build of `main` or a manual run.
+The [checks workflow](../.github/workflows/checks.yml) validates the launcher,
+progression adaptations and packaging for pushes to `main` and pull requests;
+feature branches are checked through their pull requests. Commits that change
+only documentation or agent instructions skip the checks, and the documentation
+check runs with the next checks or build.
 
-Fast launcher, lint and packaging checks run first. The Windows server build,
+The [release workflow](../.github/workflows/release.yml) builds the Windows
+server and client packages only when started manually: open
+[Build portable ZIP](https://github.com/Syntax555/mod-playerbots-portable/actions/workflows/release.yml),
+choose **Run workflow** and select the branch. It runs the complete checks
+first, compiles only after all of them pass and verifies the assembled archives.
+Actions records the checks and source commit for each build. A manual build of
+another branch produces build artifacts without publishing, and packaged guides
+and release-note links follow with the next manual build of `main`.
+
+Fast launcher, lint and packaging checks run first. The Windows launcher tests,
 historical client build and four native gameplay jobs then run in parallel.
-Native tests have their own time budget and do not delay compilation.
 All checks, builds and archive verifications must succeed before the publication
-workflow can select that run; a failing gameplay job still blocks a release.
-Both workflow files are checked by the pinned actionlint version before builds
-start. Checkouts do not persist Git credentials; the publisher sets `GH_TOKEN`
+workflow can select that run; a failing check stops a manual build before
+compilation. Every workflow file is checked by the pinned actionlint version.
+Checkouts do not persist Git credentials; the publisher sets `GH_TOKEN`
 explicitly for the steps that call the GitHub API.
 
 The [publication workflow](../.github/workflows/publish-latest.yml) runs
-[publish_latest.py](../scripts/publish_latest.py) after a successful push or
-manual build of `main`.
+[publish_latest.py](../scripts/publish_latest.py) after a successful manual
+build of `main`.
 
 The public
 [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
 contains the matching verified packages. Build artifacts are also available from
 eligible successful Actions runs.
 
-Builds of `main` run one at a time: a running build always finishes, and a newer
-push replaces any waiting build so the newest commit builds next. Each
-publication selects the most recently created eligible successful `main` build
-with matching workflow files and available server and client artifacts, so
-re-running an older build cannot replace a newer build waiting for publication.
+Manual builds of a branch run one at a time: a running build always finishes,
+and a newer request replaces any waiting build so the newest commit builds
+next. Each publication selects the most recently created eligible successful
+`main` build with matching workflow files and available server and client
+artifacts, so re-running an older build cannot replace a newer build waiting
+for publication.
 The selected build is published when its commit is still part of `main` and is
 not older than the current Latest.
 

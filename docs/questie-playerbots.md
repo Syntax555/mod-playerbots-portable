@@ -210,5 +210,5 @@ from the standalone fixtures.
 | `cmake/tests/TestQuestProgressBridge.py`, `cmake/tests/QuestProgressBridgeFixture.cpp` | Compile and exercise production server logic and mutation checks. |
 | `cmake/tests/TestQuestiePlayerbots.py`, `cmake/tests/QuestiePlayerbotsFixture.lua` | Run production Questie comms and map logic under Lua 5.1 with client API doubles and mutation checks. |
 | `cmake/tests/TestClientAddonPatches.py`, `cmake/tests/TestDocumentation.py` | Verify source-only preparation, package separation and pinned documentation. |
-| `cmake/tests/run_fixtures.py`, `.github/workflows/release.yml` | Run server and client regression fixtures in CI. |
+| `cmake/tests/run_fixtures.py`, `.github/workflows/checks.yml` | Run server and client regression fixtures in CI. |
 | `README.md`, `docs/addons.md`, `docs/adaptations.md`, `docs/module-versions.md`, `docs/todo.md`, `docs/questie-playerbots.md` | Release installer, installation, behavior, protocol, source inventory and remaining live validation. |

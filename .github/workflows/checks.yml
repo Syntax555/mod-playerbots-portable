@@ -1,0 +1,249 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+      - '.github/RELEASE_TEMPLATE.md'
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'docs/**'
+      - '.github/RELEASE_TEMPLATE.md'
+  # Build portable ZIP runs these checks before it compiles.
+  workflow_call:
+    outputs:
+      package_version:
+        value: ${{ jobs.launcher.outputs.package_version }}
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push or pull request update replaces running checks. A manual
+  # build runs them inside its own queue, so they are never cancelled here.
+  group: checks-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  launcher:
+    name: Check launcher and packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      package_version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Determine package version
+        id: version
+        run: |
+          # Only manual main builds can be published, so only they carry the rolling name.
+          if [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo 'value=latest' >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Lint GitHub Actions workflows
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+          "$RUNNER_TEMP/bin/actionlint"
+
+      - name: Test portable launcher logic and Windows compilation
+        run: |
+          go test ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go test -c -o "$RUNNER_TEMP/startup.test.exe" ./cmd/startup
+          GOOS=windows GOARCH=amd64 go vet ./...
+          GOBIN="$RUNNER_TEMP/bin" go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          "$RUNNER_TEMP/bin/staticcheck" ./...
+          GOOS=windows GOARCH=amd64 "$RUNNER_TEMP/bin/staticcheck" ./...
+
+      - name: Check that every fixture runs in CI
+        run: python3 cmake/tests/run_fixtures.py check
+
+      - name: Lint packaging, release and fixture scripts
+        run: pipx run --spec ruff==0.17.1 ruff check cmake scripts
+
+      - name: Test distribution assembly and ZIP validation
+        shell: pwsh
+        run: ./cmake/tests/TestPortableZip.ps1
+
+      - name: Test release publication and build annotation scripts
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Test dependency license packaging
+        shell: pwsh
+        run: ./cmake/tests/TestDependencyLicenses.ps1
+
+      - name: Test historical client packaging
+        run: python3 cmake/tests/TestEraClientPackaging.py
+
+      - name: Test patched client addon packaging
+        run: python3 cmake/tests/TestClientAddonPatches.py
+
+      - name: Test Questie installer packaging
+        run: python3 cmake/tests/TestQuestieInstallerPackaging.py
+
+      - name: Test Questie installation and settings preservation
+        run: python3 cmake/tests/TestQuestieInstaller.py
+
+      - name: Test client language merging and gameplay preservation
+        run: python3 cmake/tests/TestClientLocales.py
+
+  # The launcher handles Windows file locks and processes, so its tests also
+  # run on Windows rather than only compiling for it.
+  windows:
+    name: Check launcher on Windows
+    needs: launcher
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test startup launcher
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher tests failed.' }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher vet failed.' }
+
+      - name: Test Questie installer on Windows PowerShell
+        run: |
+          python cmake/tests/TestQuestieInstaller.py
+          if ($LASTEXITCODE -ne 0) { throw 'Questie installation tests failed.' }
+          python cmake/tests/TestQuestieInstallerPackaging.py
+          if ($LASTEXITCODE -ne 0) { throw 'Questie installer packaging tests failed.' }
+
+  # Every shard must pass before a manual build compiles and Publish Latest
+  # can select its artifacts.
+  gameplay:
+    name: Check native gameplay (${{ matrix.shard }})
+    needs: launcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install native gameplay test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential cmake lua5.1 python3-venv
+          python3 -m venv "$RUNNER_TEMP/gameplay-python"
+          "$RUNNER_TEMP/gameplay-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/gameplay-python/bin/python" -c 'import yaml; assert yaml.__version__ == "6.0.3"'
+          lua5.1 -e 'assert(_VERSION == "Lua 5.1")'
+          echo "$RUNNER_TEMP/gameplay-python/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare pinned sources
+        run: cmake -P cmake/PrepareModules.cmake
+
+      - name: Check gameplay rules against pinned sources
+        run: python3 cmake/tests/run_fixtures.py gameplay --shard-index ${{ matrix.shard }} --shard-count 4
+
+  era_client:
+    name: Build and verify historical client patch
+    needs: launcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PACKAGE_VERSION: ${{ needs.launcher.outputs.package_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Read the locked client locale source
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_ENV"
+          import json
+          source = json.load(open('versions.lock.json'))['clientPatch']['localizations']['deDE']
+          repository = source['url'].removeprefix('https://github.com/').removesuffix('.git')
+          print(f"LOCALE_REVISION={source['revision']}")
+          print(f"LOCALE_RAW_URL=https://raw.githubusercontent.com/{repository}/{source['revision']}")
+          PYTHON
+
+      - name: Install native client patch tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential cmake p7zip-full python3-venv lua5.1
+          python3 -m venv "$RUNNER_TEMP/era-client-python"
+          "$RUNNER_TEMP/era-client-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          echo "$RUNNER_TEMP/era-client-python/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare locked server and addon sources
+        run: |
+          cmake -P cmake/PrepareModules.cmake
+
+      - name: Test historical German text and addon behavior
+        run: |
+          cd .module-cache/prepared-core/modules/mod-era-talents
+          python3 tools/test_era_locales.py
+          # A missing fixture leaves the pattern unexpanded, so lua5.1 fails.
+          for fixture in client-addon/EraTalents/test_*.lua; do lua5.1 "$fixture"; done
+
+      - name: Test MultiBot inventory money display
+        run: python3 cmake/tests/TestMultiBotInventoryMoney.py
+
+      - name: Test MultiBot options initialization
+        run: python3 cmake/tests/TestMultiBotOptions.py
+
+      - name: Test Questie Playerbots native comms integration
+        run: python3 cmake/tests/TestQuestiePlayerbots.py
+
+      - name: Build merged IP and historical talent client ZIP
+        run: cmake "-DPACKAGE_VERSION=$PACKAGE_VERSION" -P cmake/PackageEraClient.cmake
+
+      - name: Test historical spell groups against native stacking rules
+        run: python3 cmake/tests/TestEraSpellGroups.py
+
+      - name: Verify world buff spell contracts in the packaged client
+        run: |
+          curl --fail --location --output output/SpellDuration.dbc "$LOCALE_RAW_URL/dbc/SpellDuration.dbc"
+          python3 cmake/tests/TestWorldBuffEvents.py --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip" --duration-dbc output/SpellDuration.dbc \
+            --spell-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --mpq-reader .module-cache/mpqread
+
+      - name: Verify historical class quest spells in the packaged client
+        run: |
+          python3 cmake/tests/TestHistoricalClassQuests.py --base-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip" \
+            --mpq-reader .module-cache/mpqread
+
+      - name: Upload verified historical client ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: era-client-zip
+          path: output/EraTalents-client-*.zip
+          if-no-files-found: error
+          compression-level: 0

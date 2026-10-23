@@ -4,7 +4,7 @@
   python3 cmake/tests/run_fixtures.py gameplay  run the gameplay fixtures in order
   python3 cmake/tests/run_fixtures.py gameplay --shard-index 0 --shard-count 4
 
-A fixture is wired when it is listed below or when the release workflow names
+A fixture is wired when it is listed below or when the checks workflow names
 its path.
 """
 
@@ -19,7 +19,10 @@ import time
 
 
 TESTS = Path(__file__).resolve().parent
-WORKFLOW = TESTS.parents[1] / ".github/workflows/release.yml"
+WORKFLOW = TESTS.parents[1] / ".github/workflows/checks.yml"
+# Packages are published only from release workflow runs, which must include the checks.
+RELEASE_WORKFLOW = TESTS.parents[1] / ".github/workflows/release.yml"
+CHECKS_CALL = "uses: ./.github/workflows/checks.yml"
 GAMEPLAY_COMMAND = "cmake/tests/run_fixtures.py gameplay"
 # Native no-cheat and gameplay fixtures, checked against the prepared sources,
 # and the documentation check.
@@ -75,10 +78,12 @@ def wiring_errors() -> list[str]:
     if GAMEPLAY_COMMAND in workflow:
         wired |= {f"{name}.py" for name in GAMEPLAY} & available
     else:
-        errors.append(f"The release workflow does not run {GAMEPLAY_COMMAND}")
+        errors.append(f"The checks workflow does not run {GAMEPLAY_COMMAND}")
     errors += gameplay_wiring_errors(workflow)
+    if CHECKS_CALL not in RELEASE_WORKFLOW.read_text(encoding="utf-8"):
+        errors.append("The release workflow does not run the checks workflow before it builds")
     errors += [f"{name} does not run in CI: list it in cmake/tests/run_fixtures.py or call it from "
-               ".github/workflows/release.yml" for name in sorted(available - wired)]
+               ".github/workflows/checks.yml" for name in sorted(available - wired)]
     return errors
 
 

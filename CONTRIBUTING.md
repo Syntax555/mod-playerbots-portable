@@ -50,7 +50,7 @@ python3 cmake/tests/run_fixtures.py gameplay
 ```
 
 New fixtures go into `GAMEPLAY` in `cmake/tests/run_fixtures.py`, or into the
-release workflow when they need its build outputs.
+checks workflow when they need its build outputs.
 
 ## Documentation and releases
 
@@ -67,9 +67,10 @@ which accepts the fields `{repository_url}`, `{source_url}`, `{commit_url}` and
 `{revision}`. Avoid conversational updates, implementation history and lists of
 past versions.
 
-Verified builds from `main` update the single **Latest** release. Pull requests
-and manual runs on other branches produce build artifacts without publishing.
-Feature branches are checked automatically through their pull requests; use
-`workflow_dispatch` for a standalone branch build.
+Pushes to `main` and pull requests run the checks without building packages.
+Packages are built on request with **Build portable ZIP > Run workflow** in
+Actions. A verified manual build of `main` updates the single **Latest**
+release; a manual build of another branch produces build artifacts without
+publishing.
 Keep stable asset names and retain the previous download until the replacement
 packages have passed verification.

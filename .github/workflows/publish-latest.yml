@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 concurrency:
-  # Only publishable builds share the queue, so the skipped run of a failed,
-  # cancelled or pull request build cannot replace a pending publication.
+  # Only publishable builds share the queue, so the skipped run of a failed
+  # or cancelled build cannot replace a pending publication.
   # The surviving publisher selects the newest successful main build, even
   # when an older re-run replaces a newer pending publication.
   group: >-

@@ -1,4 +1,4 @@
-"""Keep build triggers, mandatory checks and trusted publication connected."""
+"""Keep check and build triggers, mandatory checks and trusted publication connected."""
 
 from pathlib import Path
 import re
@@ -6,6 +6,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CHECKS = ROOT / '.github/workflows/checks.yml'
 RELEASE = ROOT / '.github/workflows/release.yml'
 PUBLISH = ROOT / '.github/workflows/publish-latest.yml'
 
@@ -25,14 +26,22 @@ def steps(text):
 
 
 class WorkflowTests(unittest.TestCase):
-    def check_workflows(self, release, publish):
-        events = block(release, 'on')
-        for event in ('pull_request', 'workflow_dispatch'):
+    def check_workflows(self, checks, release, publish):
+        events = block(checks, 'on')
+        for event in ('pull_request', 'workflow_call'):
             self.assertRegex(events, rf'(?m)^  {event}:')
         branches = block(block(events, 'push', 2), 'branches', 4)
         self.assertEqual(re.findall(r'(?m)^      - (\S+)', branches), ['main'])
 
-        launcher = block(release, 'launcher', 2)
+        # The Windows compile runs only on request, after the complete checks.
+        self.assertEqual(re.findall(r'(?m)^  (\w+):', block(release, 'on')), ['workflow_dispatch'])
+        self.assertRegex(block(release, 'checks', 2), r'(?m)^    uses: \./\.github/workflows/checks\.yml[ \t]*$')
+        build = block(release, 'build', 2)
+        self.assertRegex(build, r'(?m)^    needs: checks[ \t]*$')
+        self.assertIn('PACKAGE_VERSION: ${{ needs.checks.outputs.package_version }}', build)
+        self.assertNotRegex(build, r'(?m)^    continue-on-error:[ \t]*true')
+
+        launcher = block(checks, 'launcher', 2)
         linters = [step for step in steps(launcher) if 'actionlint' in step]
         self.assertEqual(len(linters), 1)
         lint = linters[0]
@@ -41,13 +50,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertRegex(lint, r'(?m)^          "\$RUNNER_TEMP/bin/actionlint"[ \t]*$')
         self.assertNotRegex(lint, r'(?m)^        (?:if:|continue-on-error:[ \t]*true)')
         self.assertLess(launcher.index(lint), launcher.index('go test ./...'))
-        for job in ('gameplay', 'era_client', 'build'):
-            body = block(release, job, 2)
+        for job in ('windows', 'gameplay', 'era_client'):
+            body = block(checks, job, 2)
             self.assertRegex(body, r'(?m)^    needs: launcher[ \t]*$')
             self.assertNotRegex(body, r'(?m)^    continue-on-error:[ \t]*true')
+        windows = block(checks, 'windows', 2)
+        self.assertRegex(windows, r'(?m)^    runs-on: windows-')
+        self.assertIn('go test ./...', windows)
 
         # Build jobs never push. The publisher receives its API token explicitly.
-        for workflow in (release, publish):
+        for workflow in (checks, release, publish):
             checkouts = [step for step in steps(workflow) if 'uses: actions/checkout@' in step]
             self.assertTrue(checkouts)
             for checkout in checkouts:
@@ -80,29 +92,35 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("--sha '${{ steps.build.outputs.sha }}'", publisher)
 
     def test_current_workflows(self):
-        self.check_workflows(RELEASE.read_text(), PUBLISH.read_text())
+        self.check_workflows(CHECKS.read_text(), RELEASE.read_text(), PUBLISH.read_text())
 
     def test_operational_regressions_are_rejected(self):
-        release, publish = RELEASE.read_text(), PUBLISH.read_text()
+        checks, release, publish = CHECKS.read_text(), RELEASE.read_text(), PUBLISH.read_text()
         mutations = (
             ('pull-request validation removed', 0, '  pull_request:', '  lost_pull_request:'),
             ('duplicate branch push', 0, '      - main\n', "      - main\n      - 'codex/**'\n"),
-            ('manual build removed', 0, '  workflow_dispatch:', '  lost_workflow_dispatch:'),
+            ('checks not callable', 0, '  workflow_call:', '  lost_workflow_call:'),
+            ('Windows launcher tests removed', 0, '  windows:', '  lost_windows:'),
             ('lint skipped', 0, '      - name: Lint GitHub Actions workflows\n',
              '      - name: Lint GitHub Actions workflows\n        if: false\n'),
             ('publisher lint omitted', 0, '          "$RUNNER_TEMP/bin/actionlint"\n',
-             '          "$RUNNER_TEMP/bin/actionlint" .github/workflows/release.yml\n'),
+             '          "$RUNNER_TEMP/bin/actionlint" .github/workflows/checks.yml\n'),
             ('credentials persisted', 0, 'persist-credentials: false', 'persist-credentials: true'),
-            ('publication success gate weakened', 1, "      github.event.workflow_run.conclusion == 'success'",
+            ('manual build removed', 1, '  workflow_dispatch:', '  lost_workflow_dispatch:'),
+            ('automatic build on push', 1, 'on:\n  workflow_dispatch:\n', 'on:\n  push:\n  workflow_dispatch:\n'),
+            ('build without checks', 1, '    uses: ./.github/workflows/checks.yml', '    uses: ./.github/workflows/other.yml'),
+            ('compile before checks', 1, '    needs: checks\n', '    needs: []\n'),
+            ('build credentials persisted', 1, 'persist-credentials: false', 'persist-credentials: true'),
+            ('publication success gate weakened', 2, "      github.event.workflow_run.conclusion == 'success'",
              "      github.event.workflow_run.conclusion != 'cancelled'"),
-            ('publisher checks out build source', 1, 'ref: ${{ github.sha }}',
+            ('publisher checks out build source', 2, 'ref: ${{ github.sha }}',
              'ref: ${{ github.event.workflow_run.head_sha }}'),
-            ('artifacts from another run', 1, 'run-id: ${{ steps.build.outputs.run_id }}',
+            ('artifacts from another run', 2, 'run-id: ${{ steps.build.outputs.run_id }}',
              'run-id: ${{ github.event.workflow_run.id }}'),
         )
         for label, target, before, after in mutations:
             with self.subTest(label=label):
-                values = [release, publish]
+                values = [checks, release, publish]
                 self.assertIn(before, values[target])
                 values[target] = values[target].replace(before, after, 1)
                 with self.assertRaises(AssertionError):

@@ -60,7 +60,7 @@ Run what applies before every commit; all of it must pass:
 
 - Go launcher: `gofmt -l cmd`, `go vet ./...`, `GOOS=windows go vet ./...`,
   `go test ./...`, `GOOS=windows go test -c -o /dev/null ./cmd/startup` and
-  staticcheck for both systems, as in `.github/workflows/release.yml`.
+  staticcheck for both systems, as in `.github/workflows/checks.yml`.
 - Patches: `cmake -P cmake/PrepareModules.cmake`, then compile every changed
   C++ file against the prepared sources, then
   `python3 cmake/tests/run_fixtures.py check` and

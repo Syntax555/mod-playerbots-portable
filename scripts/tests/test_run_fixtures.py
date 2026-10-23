@@ -82,24 +82,27 @@ class GameplayShardsTests(unittest.TestCase):
         shard: [0, 1, 2, 3]
     steps:
       - run: python3 cmake/tests/run_fixtures.py gameplay --shard-index ${{ matrix.shard }} --shard-count 4
+  checks:
+    uses: ./.github/workflows/checks.yml
 '''
         with patch.object(Path, "read_text", return_value=body):
             self.assertEqual([], runner.wiring_errors())
         with patch.object(Path, "read_text", return_value=body.replace(runner.GAMEPLAY_COMMAND, "missing-runner")):
             errors = runner.wiring_errors()
-        self.assertIn(f"The release workflow does not run {runner.GAMEPLAY_COMMAND}", errors)
+        self.assertIn(f"The checks workflow does not run {runner.GAMEPLAY_COMMAND}", errors)
         for before, after in (("[0, 1, 2, 3]", "[0, 1, 2]"),
                               ("[0, 1, 2, 3]", "[0, 1, 2, 2]"),
                               ("--shard-count 4", "--shard-count 3"),
                               ("--shard-count 4", "--shard-count 0"),
-                              ("  gameplay:", "  incomplete_job:")):
+                              ("  gameplay:", "  incomplete_job:"),
+                              (runner.CHECKS_CALL, "uses: ./.github/workflows/other.yml")):
             with (self.subTest(mutation=after),
                   patch.object(Path, "read_text", return_value=body.replace(before, after))):
                 self.assertTrue(runner.wiring_errors())
 
     def test_original_full_suite_workflow_stays_supported(self):
         body = "\n".join(f"# cmake/tests/{name}" for name in runner.fixtures())
-        body += f"\n  launcher:\n    steps:\n      - run: python3 {runner.GAMEPLAY_COMMAND}\n"
+        body += f"\n  launcher:\n    steps:\n      - run: python3 {runner.GAMEPLAY_COMMAND}\n  checks:\n    {runner.CHECKS_CALL}\n"
         with patch.object(Path, "read_text", return_value=body):
             self.assertEqual([], runner.wiring_errors())
 
