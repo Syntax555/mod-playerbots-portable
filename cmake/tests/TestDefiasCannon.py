@@ -15,38 +15,8 @@ from FixtureSupport import (
     prepared_core,
     reject_mutants,
     source_argument,
+    sql_rows,
 )
-
-
-def sql_values(row):
-    values, value, quoted, index = [], '', False, 0
-    while index < len(row):
-        char = row[index]
-        if quoted and char == '\\':
-            value += row[index + 1]
-            index += 1
-        elif char == "'":
-            quoted = not quoted
-        elif char == ',' and not quoted:
-            values.append(value)
-            value = ''
-        else:
-            value += char
-        index += 1
-    return values + [value]
-
-
-def sql_rows(core, table, entries):
-    """Read named fields, so changed upstream table layouts cannot silently change test data."""
-    text = (core / f'data/sql/base/db_world/{table}.sql').read_text(encoding='utf-8')
-    create = text.split(f'CREATE TABLE `{table}` (')[1].split(') ENGINE')[0]
-    columns = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
-    rows = []
-    for line in text.splitlines():
-        if line.startswith('(') and int(line.split(',', 1)[0][1:]) in entries:
-            rows.append(dict(zip(columns, sql_values(line.rstrip(',;')[1:-1]), strict=True)))
-    assert rows, (table, entries)
-    return rows
 
 
 def native_contracts(core, dc):
