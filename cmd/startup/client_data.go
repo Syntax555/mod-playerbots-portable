@@ -17,17 +17,14 @@ import (
 const defaultClientDataURL = "https://github.com/wowgaming/client-data/releases/download/v20.0/Data.zip"
 
 func isClientDataPresent(dataDir string) bool {
-	if !dirExists(dataDir) {
-		return false
-	}
-
 	requiredDirs := []string{"dbc", "maps", "vmaps", "mmaps"}
 	for _, req := range requiredDirs {
-		subDir := filepath.Join(dataDir, req)
-		if !dirExists(subDir) {
+		directory, err := os.Open(filepath.Join(dataDir, req))
+		if err != nil {
 			return false
 		}
-		entries, err := os.ReadDir(subDir)
+		entries, err := directory.Readdirnames(1)
+		directory.Close()
 		if err != nil || len(entries) == 0 {
 			return false
 		}
@@ -298,11 +295,11 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 	baseDataDir := filepath.Join(baseDir, "data")
 
 	// 1. Check if client data is already present in baseDir/data or workDir/data
-	if dirExists(baseDataDir) && isClientDataPresent(baseDataDir) {
+	if isClientDataPresent(baseDataDir) {
 		fmt.Printf("Client data verified at %s.\n", baseDataDir)
 		return nil
 	}
-	if dirExists(workDataDir) && isClientDataPresent(workDataDir) {
+	if isClientDataPresent(workDataDir) {
 		fmt.Printf("Client data verified at %s.\n", workDataDir)
 		return nil
 	}
