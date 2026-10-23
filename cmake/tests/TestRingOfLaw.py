@@ -19,9 +19,9 @@ from FixtureSupport import (
     prepared_core,
     reject_mutants,
     source_argument,
+    sql_rows,
     wdbc,
 )
-from TestDefiasCannon import sql_rows
 from TestEarnedDungeonEvents import stubs as audit_stubs
 
 

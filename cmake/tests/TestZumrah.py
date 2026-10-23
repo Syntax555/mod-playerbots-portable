@@ -15,8 +15,8 @@ from FixtureSupport import (
     prepared_core,
     reject_mutants,
     source_argument,
+    sql_rows,
 )
-from TestDefiasCannon import sql_rows
 
 
 def native_sources(core, source):

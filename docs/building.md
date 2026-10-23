@@ -186,7 +186,7 @@ next build of `main` or a manual run.
 
 Fast launcher, lint and packaging checks run first. The Windows server build,
 historical client build and four native gameplay jobs then run in parallel.
-Native tests no longer consume the launcher's time budget or delay compilation.
+Native tests have their own time budget and do not delay compilation.
 All checks, builds and archive verifications must succeed before the publication
 workflow can select that run; a failing gameplay job still blocks a release.
 Both workflow files are checked by the pinned actionlint version before builds

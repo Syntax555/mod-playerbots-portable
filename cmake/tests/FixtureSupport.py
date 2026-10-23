@@ -49,6 +49,38 @@ def make_wdbc(rows, strings=b'\0', fields=234):
     return struct.pack('<4s4I', b'WDBC', len(rows), fields, fields * 4, len(strings)) + b''.join(rows) + strings
 
 
+def sql_values(row):
+    """Split one SQL VALUES tuple body, honouring quotes and backslash escapes."""
+    values, value, quoted, index = [], '', False, 0
+    while index < len(row):
+        char = row[index]
+        if quoted and char == '\\':
+            value += row[index + 1]
+            index += 1
+        elif char == "'":
+            quoted = not quoted
+        elif char == ',' and not quoted:
+            values.append(value)
+            value = ''
+        else:
+            value += char
+        index += 1
+    return values + [value]
+
+
+def sql_rows(core, table, entries):
+    """Read named fields, so changed upstream table layouts cannot silently change test data."""
+    text = (core / f'data/sql/base/db_world/{table}.sql').read_text(encoding='utf-8')
+    create = text.split(f'CREATE TABLE `{table}` (')[1].split(') ENGINE')[0]
+    columns = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
+    rows = []
+    for line in text.splitlines():
+        if line.startswith('(') and int(line.split(',', 1)[0][1:]) in entries:
+            rows.append(dict(zip(columns, sql_values(line.rstrip(',;')[1:-1]), strict=True)))
+    assert rows, (table, entries)
+    return rows
+
+
 def function(source, signature):
     """The definition that starts at signature, through its matching closing brace."""
     start = source.index(signature)

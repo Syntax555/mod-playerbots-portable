@@ -25,15 +25,16 @@ import tempfile
 
 
 def run(*args, capture=False, env=None):
-    result = subprocess.run(args, check=True, text=True, env=env, stdout=subprocess.PIPE if capture else None)
+    # Captured output stays bytes: a patch must not pass through the host locale.
+    result = subprocess.run(args, check=True, env=env, stdout=subprocess.PIPE if capture else None)
     return result.stdout if capture else None
 
 
 def repository():
-    root = Path(run('git', 'rev-parse', '--show-toplevel', capture=True).strip())
+    root = Path(os.fsdecode(run('git', 'rev-parse', '--show-toplevel', capture=True).strip()))
     # A linked worktree has no prepared sources; use the main checkout's cache.
-    common = Path(run('git', '-C', str(root), 'rev-parse', '--path-format=absolute', '--git-common-dir',
-                      capture=True).strip())
+    common = Path(os.fsdecode(run('git', '-C', str(root), 'rev-parse', '--path-format=absolute',
+                                  '--git-common-dir', capture=True).strip()))
     return root, common.parent
 
 
@@ -111,7 +112,9 @@ def save(tree):
     meta = json.loads((tree / '.git' / 'patchwork.json').read_text())
     root, patch = Path(meta['repository']), meta['patch']
     git(tree, 'add', '-A')
-    diff = git(tree, 'diff', '--cached', 'base', capture=True)
+    # Host diff settings must not change the format that git apply expects.
+    diff = git(tree, 'diff', '--cached', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/',
+               'base', capture=True)
     git(tree, 'reset', '-q')
     if not diff.strip():
         raise SystemExit('The patch would be empty; remove it from versions.lock.json instead.')
@@ -123,7 +126,7 @@ def save(tree):
         extract(main, kind, entry, check / 'tree')
         with tempfile.NamedTemporaryFile(dir=(root / patch).parent, suffix='.patch', delete=False) as handle:
             candidate = Path(handle.name)
-            handle.write(diff.encode('utf-8'))
+            handle.write(diff)
         for item in entry['patches']:
             apply(check / 'tree', candidate if item == patch else root / item)
         # Publish only the validated chain, without exposing a partially written patch.
