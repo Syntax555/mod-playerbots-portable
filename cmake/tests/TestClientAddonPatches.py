@@ -578,6 +578,32 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.assertNotEqual(fixture.prepare().returncode, 0)
         self.assertEqual((prepared / "keep.txt").read_text(), "local checkout")
 
+    def test_addon_tocs_need_the_locked_interface_and_regular_files(self):
+        fixture = self.fixture()
+        source, _ = self.source_addon(fixture)
+        self.successful(fixture.prepare())
+        for entry, cache, asset, invalid in (
+            (fixture.addon, fixture.cached, "UI/Main.lua", ("UI/Missing.lua", "UI", "./UI/Main.lua", "C:/UI/Main.lua")),
+            (source, fixture.root / ".module-cache/client-addon-Questie-335", "Main.lua",
+             ("Missing.lua", ".", "./Main.lua", "C:/Main.lua")),
+        ):
+            valid = entry["revision"]
+            if os.name != "nt":
+                # A POSIX checkout can hold a name the Windows client cannot load.
+                (cache / "a:b.lua").write_bytes(b"return true\n")
+                git(cache, "add", "a:b.lua")
+                invalid += ("a:b.lua",)
+            for toc in ([f"## Interface: 12340\n{asset}\n"] + [f"## Interface: 30300\n{path}\n" for path in invalid]):
+                with self.subTest(addon=entry["name"], toc=toc):
+                    (cache / entry["toc"]).write_text(toc)
+                    git(cache, "commit", "--quiet", "-am", "Invalid TOC")
+                    entry["revision"] = git(cache, "rev-parse", "HEAD")
+                    fixture.write_lock()
+                    self.rejected(fixture.prepare())
+            entry["revision"] = valid
+            fixture.write_lock()
+        self.successful(fixture.prepare())
+
     def test_patchwork_regenerates_source_addon_patch(self):
         fixture = self.fixture()
         addon, prepared = self.source_addon(fixture)
