@@ -28,11 +28,15 @@ disenchanting.
 
 Buyers select useful equipment, supplies or gathering tools (mining picks,
 skinning knives and fishing poles) while reserving money for ordinary upkeep.
-Each purchase costs at most a quarter of the current balance and must fit the
-available category budget. Bots cannot buy their own or same-account auctions.
-They wait while an outstanding bid or an uncollected won item exists. Other
-bots' auctions are eligible because the buyer pays and the seller gives up the
-actual item.
+Bags follow the vendor bag rules: a general bag for an empty bag slot or, with a
+free backpack slot, a larger one in place of the smallest general bag. Quivers,
+ammo pouches and profession bags stay equipped, quivers are not bought, and no
+bag is bought while the bot carries an unequipped upgrade. A won bag waits in
+the mail until the backpack has room for it. Each purchase costs at most a
+quarter of the current balance and must fit the available category budget. Bots
+cannot buy their own or same-account auctions. They wait while an outstanding
+bid or an uncollected won item exists. Other bots' auctions are eligible because
+the buyer pays and the seller gives up the actual item.
 
 A bot maintains at most 20 listings, at most two of the same item, and attempts
 at most two new listings and one purchase per visit. The purchase goes to the
