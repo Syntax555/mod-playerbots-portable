@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1059,15 +1060,45 @@ func TestPortableUpdateFailedHelperRestartsInstalledRelease(t *testing.T) {
 	}
 }
 
+func TestPortableUpdateRestartDisablesUpdateChecks(t *testing.T) {
+	for _, args := range [][]string{
+		nil,
+		{"--skip-sql"},
+		{"--no-update"},
+		{"-no-update", "--skip-sql"},
+		{"--no-update=false"},
+		{"-no-update=0", "--port", "3307"},
+		{"--no-update", "--no-update=false"},
+		{"--no-update=false", "--"},
+		{"--mysql-dir", "--no-update"},
+		{"--mysql-dir", "--no-update=false", "--no-update=false"},
+		{"--mysql-dir=--no-update", "--no-update=false"},
+		{"--mysql-dir", "--"},
+		{"--mysql-dir", "--", "--"},
+	} {
+		t.Run(fmt.Sprint(args), func(t *testing.T) {
+			want, err := parseArgs(args)
+			if err != nil {
+				t.Fatalf("invalid original arguments: %v", err)
+			}
+			want.noUpdate = true
+			original := slices.Clone(args)
+			restart := withoutUpdateCheck(args)
+			got, err := parseArgs(restart)
+			if err != nil || got != want {
+				t.Fatalf("restart arguments %q: got %+v, %v; want %+v", restart, got, err, want)
+			}
+			if !slices.Equal(args, original) {
+				t.Fatalf("original arguments changed: %q", args)
+			}
+			if repeated := withoutUpdateCheck(restart); !slices.Equal(repeated, restart) {
+				t.Fatalf("repeated restart changed arguments: %q -> %q", restart, repeated)
+			}
+		})
+	}
+}
+
 func TestPortableUpdateFailedHelperKeepsUnrestoredInstallation(t *testing.T) {
-	if got := withoutUpdateCheck([]string{"--skip-sql"}); strings.Join(got, " ") != "--no-update --skip-sql" {
-		t.Fatalf("restart arguments: %q", got)
-	}
-	for _, args := range [][]string{{"--no-update"}, {"-no-update", "--skip-sql"}} {
-		if got := withoutUpdateCheck(args); strings.Join(got, " ") != strings.Join(args, " ") {
-			t.Fatalf("--no-update was added twice: %q", got)
-		}
-	}
 	root := t.TempDir()
 	updateTestWrite(t, root, "startup.exe", []byte("original launcher"))
 	archive, manifest := updateTestArchive(t, updateTestFiles(), "")

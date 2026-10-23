@@ -34,9 +34,7 @@ type startupOptions struct {
 	showExpansion    bool
 }
 
-func parseArgs(args []string) (startupOptions, error) {
-	var opts startupOptions
-
+func startupFlagSet(opts *startupOptions) *flag.FlagSet {
 	fs := flag.NewFlagSet("startup", flag.ContinueOnError)
 
 	defaultMysql := findDefaultMySQLDir()
@@ -61,6 +59,12 @@ func parseArgs(args []string) (startupOptions, error) {
 		fmt.Fprintf(fs.Output(), "Start MySQL server in console mode and initialize AzerothCore database.\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
+	return fs
+}
+
+func parseArgs(args []string) (startupOptions, error) {
+	var opts startupOptions
+	fs := startupFlagSet(&opts)
 
 	if err := fs.Parse(args); err != nil {
 		return opts, err
