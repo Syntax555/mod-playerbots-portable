@@ -211,11 +211,16 @@ assert(entry("Tankbot",200,-3).id == 99999 and entry("Tankbot",200,-4).id == 888
 quests[33] = {ObjectiveData={{Type="item", Id=50432}}}
 quests[34] = {ObjectiveData={{Type="item", Id=1}, {Type="item", Id=2}}}
 quests[35] = {ObjectiveData={{Type="item", Id=1}}}
-begin("Tankbot",tank); quest("Tankbot",tank,33); quest("Tankbot",tank,34); quest("Tankbot",tank,35)
+quests[36] = {ObjectiveData={{Type="item", Id=1}, {Type="item", Id=2}, {Type="item", Id=5}}}
+begin("Tankbot",tank)
+quest("Tankbot",tank,33); quest("Tankbot",tank,34); quest("Tankbot",tank,35); quest("Tankbot",tank,36)
 objective("Tankbot",tank,33,"i",1,750,3,8,0)
 objective("Tankbot",tank,34,"i",1,3,1,5,0)
 objective("Tankbot",tank,35,"i",1,3,1,5,0)
 objective("Tankbot",tank,35,"i",2,4,2,5,0)
+objective("Tankbot",tank,36,"i",1,5,1,5,0)
+objective("Tankbot",tank,36,"i",2,3,2,5,0)
+objective("Tankbot",tank,36,"i",3,4,3,5,0)
 finish("Tankbot",tank)
 assert(entry("Tankbot",33,1).id == 50432 and entry("Tankbot",33,1).fulfilled == 3,
     "mismatched database objective was not paired")
@@ -224,6 +229,8 @@ assert(not entry("Tankbot",34,1) and not entry("Tankbot",34,2) and entry("Tankbo
     "ambiguous database objectives were paired")
 assert(not entry("Tankbot",35,1) and entry("Tankbot",35,-1).id == 3 and entry("Tankbot",35,-2).id == 4,
     "ambiguous server objectives were paired")
+assert(entry("Tankbot",36,3).fulfilled == 1 and entry("Tankbot",36,1).id == 1 and entry("Tankbot",36,1).fulfilled == 2
+    and entry("Tankbot",36,2).id == 2 and entry("Tankbot",36,2).fulfilled == 3, "remaining objectives were not paired in order")
 
 -- Partial snapshots expire without replacing the last complete state.
 begin("Healbot",heal); quest("Healbot",heal,100)

@@ -66,7 +66,7 @@ index d4c56d2..c159ea8 100644
                  spawnList = cachedSpawnList or {},
                  AlreadySpawned = {},
 diff --git a/Modules/Network/QuestiePlayerbots.lua b/Modules/Network/QuestiePlayerbots.lua
-index 2c57d4e..ae60e96 100644
+index 2c57d4e..d7b9038 100644
 --- a/Modules/Network/QuestiePlayerbots.lua
 +++ b/Modules/Network/QuestiePlayerbots.lua
 @@ -13,19 +13,28 @@ local PROTOCOL_VERSION = "1"
@@ -272,45 +272,42 @@ index 2c57d4e..ae60e96 100644
  
              usedIndices[objectiveIndex] = true
              return objectiveIndex
-@@ -276,6 +328,24 @@ local function FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
+@@ -276,6 +328,15 @@ local function FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
      return nil
  end
  
-+-- Questie's database can name another item or target than the server for the
-+-- same objective. Pair it only when the type leaves no other candidate.
-+local function FindSameTypeObjectiveIndex(questId, rawObjective, usedIndices)
-+    local quest = QuestieDB.GetQuest(questId)
-+    local match
-+    for objectiveIndex, objective in ipairs(quest and quest.ObjectiveData or {}) do
-+        if not usedIndices[objectiveIndex] and objective.Type == objectiveTypeMap[rawObjective.type] then
-+            if match then return nil end
-+            match = objectiveIndex
++local function FindSameTypeObjectiveIndex(quest, objectiveType, usedIndices)
++    for objectiveIndex, objective in ipairs(quest.ObjectiveData) do
++        if not usedIndices[objectiveIndex] and objective.Type == objectiveType then
++            usedIndices[objectiveIndex] = true
++            return objectiveIndex
 +        end
 +    end
-+
-+    if match then
-+        usedIndices[match] = true
-+    end
-+    return match
 +end
 +
  local function BuildQuestieQuestPacket(questId, questState)
      local questPacket = {
          id = questId,
-@@ -283,20 +353,35 @@ local function BuildQuestieQuestPacket(questId, questState)
+@@ -283,20 +344,45 @@ local function BuildQuestieQuestPacket(questId, questState)
          objectives = {},
      }
  
 -    local usedIndices = {}
 +    local quest = QuestieDB.GetQuest(questId)
-+    local usedIndices, indices, unmatched = {}, {}, {}
++    local usedIndices, indices, unmatched, remaining = {}, {}, {}, {}
  
 -    for _, rawObjective in ipairs(questState.objectives) do
 -        local objectiveIndex = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
 +    for position, rawObjective in ipairs(questState.objectives) do
 +        indices[position] = FindQuestieObjectiveIndex(questId, rawObjective, usedIndices)
++        local objectiveType = objectiveTypeMap[rawObjective.type]
 +        if not indices[position] then
-+            unmatched[rawObjective.type] = (unmatched[rawObjective.type] or 0) + 1
++            unmatched[objectiveType] = (unmatched[objectiveType] or 0) + 1
++        end
++    end
++    for objectiveIndex, objective in ipairs(quest and quest.ObjectiveData or {}) do
++        if not usedIndices[objectiveIndex] then
++            remaining[objective.Type] = (remaining[objective.Type] or 0) + 1
 +        end
 +    end
  
@@ -323,8 +320,12 @@ index 2c57d4e..ae60e96 100644
 -                req = rawObjective.required,
 -            }
 +    for position, rawObjective in ipairs(questState.objectives) do
-+        if not indices[position] and unmatched[rawObjective.type] == 1 then
-+            indices[position] = FindSameTypeObjectiveIndex(questId, rawObjective, usedIndices)
++        -- Questie's database can name other items or targets than the server for
++        -- the same objectives. Like a Questie client, pair the rest of a type in
++        -- order when the database leaves exactly as many objectives of that type.
++        local objectiveType = objectiveTypeMap[rawObjective.type]
++        if not indices[position] and unmatched[objectiveType] == remaining[objectiveType] then
++            indices[position] = FindSameTypeObjectiveIndex(quest, objectiveType, usedIndices)
          end
 +
 +        -- Native database and special objectives use positive indices. Keep unknown
@@ -344,7 +345,7 @@ index 2c57d4e..ae60e96 100644
      end
  
      return questPacket
-@@ -309,30 +394,67 @@ local function BuildQuestStateSignature(questState)
+@@ -309,30 +395,67 @@ local function BuildQuestStateSignature(questState)
  
      for _, objective in ipairs(questState.objectives) do
          parts[#parts + 1] = table.concat({
@@ -415,7 +416,7 @@ index 2c57d4e..ae60e96 100644
  
          if not alreadyApplied then
              -- Remove the previous tooltip registration before replacing
-@@ -342,12 +464,18 @@ local function ApplyProgressSnapshot(snapshot)
+@@ -342,12 +465,18 @@ local function ApplyProgressSnapshot(snapshot)
              local questPacket = BuildQuestieQuestPacket(questId, questState)
              QuestieComms:InsertQuestDataPacket(questPacket, botName)
          end
@@ -436,7 +437,7 @@ index 2c57d4e..ae60e96 100644
              players[botName] = nil
              QuestieComms.data:RemoveQuestFromPlayer(questId, botName)
              QuestiePartyObjectives:ScheduleUpdate(questId)
-@@ -355,10 +483,15 @@ local function ApplyProgressSnapshot(snapshot)
+@@ -355,10 +484,15 @@ local function ApplyProgressSnapshot(snapshot)
      end
  
      appliedQuestStates[botName] = nextStates
@@ -452,7 +453,7 @@ index 2c57d4e..ae60e96 100644
      local playerName = UnitName("player")
      local senderName = sender and sender:gsub("%-.*$", "")
  
-@@ -410,7 +543,10 @@ local function HandleBridgeMessage(message, sender)
+@@ -410,7 +544,10 @@ local function HandleBridgeMessage(message, sender)
  
          if not bridgeCapabilities.QUEST_PROGRESS_V1 then
              bridgeReady = false
@@ -464,7 +465,7 @@ index 2c57d4e..ae60e96 100644
              return
          end
  
-@@ -424,9 +560,16 @@ local function HandleBridgeMessage(message, sender)
+@@ -424,9 +561,16 @@ local function HandleBridgeMessage(message, sender)
          local botName = UrlDecode(fields[2])
          local token = fields[3]
  
@@ -481,7 +482,7 @@ index 2c57d4e..ae60e96 100644
          }
  
          return
-@@ -440,11 +583,16 @@ local function HandleBridgeMessage(message, sender)
+@@ -440,11 +584,16 @@ local function HandleBridgeMessage(message, sender)
  
          local snapshot = progressSnapshots[token]
  
@@ -499,7 +500,7 @@ index 2c57d4e..ae60e96 100644
          end
  
          return
-@@ -455,20 +603,35 @@ local function HandleBridgeMessage(message, sender)
+@@ -455,20 +604,35 @@ local function HandleBridgeMessage(message, sender)
          local token = fields[3]
          local questId = tonumber(fields[4])
          local objectiveType = fields[5]
@@ -538,7 +539,7 @@ index 2c57d4e..ae60e96 100644
          end
  
          return
-@@ -480,13 +643,29 @@ local function HandleBridgeMessage(message, sender)
+@@ -480,13 +644,29 @@ local function HandleBridgeMessage(message, sender)
  
          local snapshot = progressSnapshots[token]
  
@@ -572,7 +573,7 @@ index 2c57d4e..ae60e96 100644
          return
      end
  
-@@ -495,7 +674,11 @@ local function HandleBridgeMessage(message, sender)
+@@ -495,7 +675,11 @@ local function HandleBridgeMessage(message, sender)
          local token = fields[4]
          local reason = UrlDecode(fields[5])
  
@@ -585,7 +586,7 @@ index 2c57d4e..ae60e96 100644
              pendingRequests[token] = nil
              Print("|cFFFF4444Bridge error for " .. tostring(requestType) .. ":|r " .. tostring(reason))
          end
-@@ -529,6 +712,8 @@ function QuestiePlayerbots:Initialize()
+@@ -529,6 +713,8 @@ function QuestiePlayerbots:Initialize()
          if event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
              if bridgeReady then
                  ScheduleRosterSync()
@@ -594,7 +595,7 @@ index 2c57d4e..ae60e96 100644
              end
          end
      end)
-@@ -544,6 +729,27 @@ function QuestiePlayerbots:Initialize()
+@@ -544,6 +730,27 @@ function QuestiePlayerbots:Initialize()
          if rosterSyncAt and now >= rosterSyncAt then
              SyncGroupRoster()
          end

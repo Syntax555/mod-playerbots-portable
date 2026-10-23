@@ -57,10 +57,12 @@ initial snapshots and subscriptions happen automatically, including after
    `CreatureOrGOCount`; delivery objectives use `ItemCount`. Exploration/event,
    player-kill, money and reputation objectives use their native state.
 4. Questie maps IDs to its database objective indices, including kill-credit
-   roots and alternative targets. When Questie's database names another item
-   or target for the only remaining objective of a type, the bot reports
-   Questie's objective, as a Questie client does, so tooltips use the same
-   sources as your own progress. Complete snapshots replace only the bot's
+   roots and alternative targets. Quest versions from Individual Progression
+   can require other items or targets than Questie's database. When the
+   database leaves as many objectives of a type as remain unmatched, they are
+   paired in order and the bot reports Questie's objective, as a Questie
+   client does. Tooltips then show Questie's name for it, on the same
+   creatures as your own progress. Complete snapshots replace only the bot's
    previously applied data; absent quests remove its old registrations.
 5. The bridge checks watched bots once per second after the map-update barrier.
    It sends a new authoritative snapshot when state changes, including quest
