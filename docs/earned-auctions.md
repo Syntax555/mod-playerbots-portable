@@ -15,9 +15,11 @@ trading and blocked movement prevent market trips.
 ## What bots can trade
 
 Sellers keep quest items, needed equipment, reagents of learned class spells,
-supplies and the last pet food of a hunter's summoned pet. Random bots do not
-craft, so they keep profession materials only within Playerbots' ordinary stack
-limits; SelfBots and altbots keep the reagents of their learned recipes.
+supplies and the last pet-food reserve for their own hunter pets, including
+dismissed and stabled pets and pets temporarily unsummoned by a mount. Food
+must match an owned pet's diet. Random bots do not craft, so they keep
+profession materials only within Playerbots' ordinary stack limits; SelfBots
+and altbots keep the reagents of their learned recipes.
 Equipped, bound, conjured, temporary and otherwise ineligible items are not
 listed. Each listing transfers an existing whole stack and pays its normal
 deposit from the bot's balance. Automatic vendor selling also protects these

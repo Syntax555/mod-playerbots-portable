@@ -446,10 +446,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..509d8da
+index 0000000..3b2ee13
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,847 @@
+@@ -0,0 +1,872 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -635,6 +635,32 @@ index 0000000..509d8da
 +    std::unordered_set<uint32> _reagents;
 +};
 +
++bool IsPetFood(Player* bot, ItemTemplate const* proto)
++{
++    if (!proto->FoodType || proto->FoodType > 32)
++        return false;
++    if (Pet* pet = bot->GetPet(); pet && pet->HaveInDiet(proto))
++        return true;
++
++    // Dismissed, stabled and temporarily unsummoned pets still need their food.
++    PetStable const* stable = bot->GetPetStable();
++    if (!stable)
++        return false;
++    auto inDiet = [proto](PetStable::PetInfo const& pet)
++    {
++        if (pet.Type != HUNTER_PET)
++            return false;
++        CreatureTemplate const* creature = sObjectMgr->GetCreatureTemplate(pet.CreatureId);
++        CreatureFamilyEntry const* family = creature ? sCreatureFamilyStore.LookupEntry(creature->family) : nullptr;
++        return family && (family->petFoodMask & (1u << (proto->FoodType - 1)));
++    };
++    if (stable->CurrentPet && inDiet(*stable->CurrentPet))
++        return true;
++    return std::any_of(stable->StabledPets.begin(), stable->StabledPets.end(),
++                       [&inDiet](auto const& pet) { return pet && inDiet(*pet); }) ||
++           std::any_of(stable->UnslottedPets.begin(), stable->UnslottedPets.end(), inDiet);
++}
++
 +bool NeededForProgression(PlayerbotAI* ai, Item* item, ProgressionSupplies& supplies)
 +{
 +    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
@@ -650,10 +676,9 @@ index 0000000..509d8da
 +        return true;
 +    // Keep the last pet-food supply, even when the generic usage classifier
 +    // regards it as a food the hunter no longer needs for themself.
-+    if (Pet* pet = bot->GetPet())
-+        if (pet->HaveInDiet(proto) &&
-+            std::uint64_t(bot->GetItemCount(item->GetEntry(), false)) < std::uint64_t(item->GetCount()) + 20)
-+            return true;
++    if (IsPetFood(bot, proto) &&
++        std::uint64_t(bot->GetItemCount(item->GetEntry(), false)) < std::uint64_t(item->GetCount()) + 20)
++        return true;
 +
 +    return supplies.IsReagent(item->GetEntry());
 +}

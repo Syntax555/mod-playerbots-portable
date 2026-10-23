@@ -43,14 +43,37 @@ auction_header = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.h').
 auction_source = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.cpp').read_text()
 auction_handlers = (args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
 shared_defines = (args.core / 'src/server/shared/SharedDefines.h').read_text()
+pet_defines = (args.core / 'src/server/game/Entities/Pet/PetDefines.h').read_text()
+pet_source = (args.core / 'src/server/game/Entities/Pet/Pet.cpp').read_text()
 native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
     (item_header, 'enum ItemSubclassWeapon'), (item_header, 'enum ItemSubclassContainer'),
     (item_header, 'enum ItemSubclassQuiver'), (item_header, 'enum InventoryType'),
     (auction_header, 'enum MailAuctionAnswers'),
-    (shared_defines, 'enum ItemQualities')))
+    (shared_defines, 'enum ItemQualities'), (pet_defines, 'enum PetType : uint8')))
 # Doubles for these producers keep their native shape.
 assert 'uint32 TotemCategory;' in item_header and 'uint32 RequiredLevel;' in item_header
+assert 'uint32 FoodType;' in item_header
+for field in ('uint32 CreatureId = 0;', 'PetType Type = MAX_PET_TYPE;',
+              'Optional<PetInfo> CurrentPet;', 'std::array<Optional<PetInfo>, MAX_PET_STABLES> StabledPets;',
+              'std::vector<PetInfo> UnslottedPets;'):
+    assert field in pet_defines, field
+assert 'constexpr auto MAX_PET_STABLES = 4;' in pet_defines
+assert ('PetStable const* GetPetStable() const { return m_petStable.get(); }'
+        in (args.core / 'src/server/game/Entities/Player/Player.h').read_text())
+player_source = (args.core / 'src/server/game/Entities/Player/Player.cpp').read_text()
+stable_loader = function(player_source, 'void Player::_LoadPetStable(uint8 petStableSlots, PreparedQueryResult result)')
+for producer in ('petInfo.CreatureId = fields[1].Get<uint32>();',
+                 'petInfo.Type = PetType(fields[15].Get<uint8>());',
+                 'm_petStable->CurrentPet = std::move(petInfo);',
+                 'm_petStable->StabledPets[slot - 1] = std::move(petInfo);',
+                 'm_petStable->UnslottedPets.push_back(std::move(petInfo));'):
+    assert producer in stable_loader, producer
+assert ('RemovePet(pet, PET_SAVE_AS_CURRENT);'
+        in function(player_source, 'void Player::UnsummonPetTemporaryIfAny()'))
+assert re.search(r'uint32\s+family;', (args.core / 'src/server/game/Entities/Creature/CreatureData.h').read_text())
+assert re.search(r'uint32\s+petFoodMask;', (args.core / 'src/server/shared/DataStores/DBCStructure.h').read_text())
+pet_diet = function(pet_source, 'bool Pet::HaveInDiet(ItemTemplate const* item) const')
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
 storage = (args.core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
 assert 'return item->ToBag();' in function(storage, 'Bag* Player::GetBagByPos(uint8 bag) const')
@@ -275,8 +298,9 @@ struct ItemTemplate
     struct Spell { int SpellId = 0; };
     std::array<Spell, 5> Spells{};
     uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = ITEM_CLASS_MISC,
-        SubClass = 0, Bonding = 0, TotemCategory = 0, RequiredLevel = 0, ContainerSlots = 0, InventoryType = 0;
-    bool conjured = false, petFood = false;
+        SubClass = 0, Bonding = 0, TotemCategory = 0, RequiredLevel = 0, ContainerSlots = 0, InventoryType = 0,
+        FoodType = 0;
+    bool conjured = false;
     bool HasFlag(int) const { return conjured; }
 };
 struct Item
@@ -308,7 +332,28 @@ struct Bag : Item
     uint32 GetBagSize() const { return items.size(); }
     Item* GetItemByPos(uint32 position) const { return items.at(position); }
 };
-struct Pet { bool HaveInDiet(ItemTemplate const* item) const { return item->petFood; } };
+struct CreatureTemplate { uint32 family = 1; };
+struct CreatureFamilyEntry { uint32 petFoodMask = 0; };
+struct CreatureFamilyStore
+{
+    std::map<uint32, CreatureFamilyEntry> rows;
+    CreatureFamilyEntry const* LookupEntry(uint32 id) const
+    { auto it = rows.find(id); return it == rows.end() ? nullptr : &it->second; }
+} sCreatureFamilyStore;
+struct Pet
+{
+    CreatureTemplate info;
+    CreatureTemplate const* GetCreatureTemplate() const { return &info; }
+    bool HaveInDiet(ItemTemplate const* item) const;
+};
+@@PETDIET@@
+struct PetStable
+{
+    struct PetInfo { uint32 CreatureId = 0; PetType Type = MAX_PET_TYPE; };
+    std::optional<PetInfo> CurrentPet;
+    std::array<std::optional<PetInfo>, 4> StabledPets;
+    std::vector<PetInfo> UnslottedPets;
+};
 struct PlayerSpell { int State = 0; bool Active = true; };
 struct SpellInfo
 {
@@ -338,9 +383,12 @@ struct Quest
 struct ObjectMgr
 {
     std::map<uint32, Quest> quests;
+    std::map<uint32, CreatureTemplate> creatures;
     mutable unsigned lookups = 0;
     Quest const* GetQuestTemplate(uint32 id) const
     { ++lookups; auto it = quests.find(id); return it == quests.end() ? nullptr : &it->second; }
+    CreatureTemplate const* GetCreatureTemplate(uint32 id) const
+    { auto it = creatures.find(id); return it == creatures.end() ? nullptr : &it->second; }
 } objectMgr;
 auto* sObjectMgr = &objectMgr;
 template<class T> struct Value { T value{}; void Reset() {} T Get() const { return value; } };
@@ -476,6 +524,7 @@ struct Player
     std::map<uint32, PlayerSpell*> spells;
     std::array<uint32, MAX_QUEST_LOG_SIZE> quests{};
     Creature auctioneer, creatureMailbox; GameObject mailbox; Pet* pet = nullptr;
+    std::unique_ptr<PetStable> stable;
     Player() { session.bot = this; ai.bot = this; auctioneer.guid = {100001};
         creatureMailbox.guid = {100002}; mailbox.guid = {200001}; }
     ObjectGuid GetGUID() const { return guid; }
@@ -495,6 +544,7 @@ struct Player
     uint32 GetItemCount(uint32 entry, bool) const
     { uint32 count = 0; for (auto const& [id, item] : inventory) if (item->GetEntry() == entry) count += item->count; return count; }
     Pet* GetPet() const { return pet; }
+    PetStable const* GetPetStable() const { return stable.get(); }
     auto const& GetSpellMap() const { return spells; }
     uint32 GetQuestSlotQuestId(uint8 slot) const { return quests.at(slot); }
     bool IsInWorld() const { return online; } bool IsAlive() const { return alive; }
@@ -684,7 +734,9 @@ struct Scenario
         static uint32 nextBot = 1;
         bot.guid = {nextBot++}; connected.clear(); connected[bot.guid] = &bot;
         auctionMgr.house.auctions.clear(); auctionMgr.items.clear(); characterCache.accounts.clear();
-        allocatedItems.clear(); objectMgr.quests.clear(); spellMgr.spells.clear(); spellMgr.abilities.clear();
+        allocatedItems.clear(); objectMgr.quests.clear(); objectMgr.creatures.clear();
+        spellMgr.spells.clear(); spellMgr.abilities.clear();
+        sCreatureFamilyStore.rows = {{1, {1}}, {2, {2}}};
         sSkillLineStore.rows = {{SKILL_TAILORING, {SKILL_TAILORING, SKILL_CATEGORY_PROFESSION}},
                                 {SKILL_DEFENSE, {SKILL_DEFENSE, SKILL_CATEGORY_WEAPON}}};
         objectMgr.lookups = 0; spellMgr.lookups = 0;
@@ -887,7 +939,61 @@ void ServiceTests()
         Scenario s; Item& item = s.BagItem(); PlayerSpell spell; s.bot.spells[99] = &spell;
         spellMgr.spells[99].Reagent[0] = int(item.GetEntry()); assert(!HasSurplus(&s.bot.ai));
         spell.State = PLAYERSPELL_REMOVED; assert(HasSurplus(&s.bot.ai));
-        s.bot.spells.clear(); Pet pet; item.proto.petFood = true; s.bot.pet = &pet; assert(!HasSurplus(&s.bot.ai));
+        s.bot.spells.clear(); Pet pet; item.proto.FoodType = 1; s.bot.pet = &pet; assert(!HasSurplus(&s.bot.ai));
+    }
+    for (int location = 0; location < 3; ++location)
+    {
+        // Dismissed/mounted current pets, stable slots and unslotted pets retain food.
+        Scenario s; Item& food = s.BagItem(100, 20); food.proto.FoodType = 1;
+        s.bot.stable = std::make_unique<PetStable>(); objectMgr.creatures[123].family = 1;
+        PetStable::PetInfo pet{123, HUNTER_PET};
+        if (location == 0) s.bot.stable->CurrentPet = pet;
+        if (location == 1) s.bot.stable->StabledPets.back() = pet;
+        if (location == 2) s.bot.stable->UnslottedPets.push_back(pet);
+        assert(!HasSurplus(&s.bot.ai)); assert(!s.Visit()); assert(!s.bot.session.sells);
+        sPlayerbotAIConfig.earnedAuctions = false;
+        assert(ShouldReserveForAuction(&s.bot.ai, &food, ITEM_USAGE_VENDOR));
+        assert(!HasVendorSurplus(&s.bot.ai));
+        sPlayerbotAIConfig.earnedAuctions = true;
+        Item& extra = s.BagItem(100, 20); extra.proto.FoodType = 1;
+        assert(HasSurplus(&s.bot.ai));
+        now += sPlayerbotAIConfig.earnedAuctionInterval;
+        assert(s.Visit()); assert(s.bot.session.sells == 1);
+        assert(!s.bot.GetItemByGuid(food.guid) && s.bot.GetItemByGuid(extra.guid) == &extra);
+        assert(!HasSurplus(&s.bot.ai));
+    }
+    for (int excluded = 0; excluded < 8; ++excluded)
+    {
+        Scenario s; Item& food = s.BagItem(100, 20); food.proto.FoodType = 1;
+        s.bot.stable = std::make_unique<PetStable>(); objectMgr.creatures[123].family = 1;
+        s.bot.stable->CurrentPet = PetStable::PetInfo{123, HUNTER_PET};
+        if (excluded == 0) food.proto.FoodType = 0;
+        if (excluded == 1) food.proto.FoodType = 2;
+        if (excluded == 2) s.bot.stable->CurrentPet->Type = SUMMON_PET;
+        if (excluded == 3) s.bot.stable->CurrentPet.reset();
+        if (excluded == 4) objectMgr.creatures.clear();
+        if (excluded == 5) sCreatureFamilyStore.rows.clear();
+        if (excluded == 6) food.proto.FoodType = 33;
+        if (excluded == 7) s.bot.stable.reset();
+        assert(HasSurplus(&s.bot.ai));
+        sPlayerbotAIConfig.earnedAuctions = false;
+        assert(!ShouldReserveForAuction(&s.bot.ai, &food, ITEM_USAGE_VENDOR));
+        assert(HasVendorSurplus(&s.bot.ai));
+    }
+    {
+        // The active pet's diet must not hide a different diet in an owned stable slot.
+        Scenario s; Item& food = s.BagItem(100, 20); food.proto.FoodType = 1;
+        Pet active; active.info.family = 2; s.bot.pet = &active;
+        s.bot.stable = std::make_unique<PetStable>(); objectMgr.creatures[123].family = 1;
+        s.bot.stable->StabledPets[0] = PetStable::PetInfo{123, HUNTER_PET};
+        assert(!HasSurplus(&s.bot.ai));
+    }
+    {
+        Scenario s; Item& food = s.BagItem(100, 20); food.proto.FoodType = 32;
+        s.bot.stable = std::make_unique<PetStable>(); objectMgr.creatures[123].family = 1;
+        s.bot.stable->CurrentPet = PetStable::PetInfo{123, HUNTER_PET};
+        sCreatureFamilyStore.rows[1].petFoodMask = 1u << 31;
+        assert(!HasSurplus(&s.bot.ai));
     }
     for (int excluded = 0; excluded < 4; ++excluded)
     {
@@ -1145,8 +1251,8 @@ void ServiceTests()
     {
         // Selling one stack changes the live pet-food reserve for the next stack.
         Scenario s; Pet pet; s.bot.pet = &pet;
-        Item& first = s.BagItem(100, 20); first.proto.petFood = true;
-        Item& second = s.BagItem(100, 20); second.proto.petFood = true;
+        Item& first = s.BagItem(100, 20); first.proto.FoodType = 1;
+        Item& second = s.BagItem(100, 20); second.proto.FoodType = 1;
         assert(s.Visit()); assert(s.bot.session.sells == 1);
         assert(!s.bot.GetItemByGuid(first.guid) && s.bot.GetItemByGuid(second.guid) == &second);
     }
@@ -1508,6 +1614,7 @@ tools = tool_rows()
 def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
     text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
+    text = text.replace('@@PETDIET@@', pet_diet)
     text = text.replace('@@BAGS@@', parts['bags'])
     text = text.replace('@@AUCTIONRULES@@', auction_rules).replace('@@TOOLS@@', tools)
     # The policy headers are compiled from private copies, so mutants can change them.
@@ -1536,6 +1643,23 @@ mutations = [
     ('visit cooldown skipped', 'service', 'now - it->second < interval)', 'now - it->second < interval * 0)'),
     ('soulbound items listed', 'service', 'item->IsSoulBound() || ', ''),
     ('quest objectives sold', 'service', 'if (supplies.NeededForQuest(item))\n        return true;', ''),
+    ('pet food sold', 'service', 'if (IsPetFood(bot, proto) &&', 'if (IsPetFood(bot, proto) && false &&'),
+    ('summoned pet food ignored', 'service', 'pet && pet->HaveInDiet(proto))',
+     'pet && pet->HaveInDiet(proto) && false)'),
+    ('current unsummoned pet ignored', 'service', 'if (stable->CurrentPet && inDiet(*stable->CurrentPet))',
+     'if (stable->CurrentPet && inDiet(*stable->CurrentPet) && false)'),
+    ('stabled pet ignored', 'service', 'return pet && inDiet(*pet);', 'return pet && inDiet(*pet) && false;'),
+    ('unslotted pet ignored', 'service',
+     'std::any_of(stable->UnslottedPets.begin(), stable->UnslottedPets.end(), inDiet)', 'false'),
+    ('nonhunter stored pet reserves food', 'service', 'if (pet.Type != HUNTER_PET)',
+     'if (pet.Type == MAX_PET_TYPE)'),
+    ('stored pet diet ignored', 'service',
+     'return family && (family->petFoodMask & (1u << (proto->FoodType - 1)));',
+     'return family && (family->petFoodMask || proto->FoodType);'),
+    ('invalid pet food type shifts out of range', 'service', 'if (!proto->FoodType || proto->FoodType > 32)',
+     'if (!proto->FoodType)'),
+    ('missing pet stable dereferenced', 'service', 'if (!stable)\n        return false;',
+     'if (!stable && false)\n        return false;'),
     ('listings beyond the cap', 'service', 'if (listed >= MaxSalesPerVisit || listings >= MaxListings)',
      'if (listed >= MaxSalesPerVisit)'),
     ('deposit above the budget', 'service', 'deposit > budget || ', 'deposit > (budget | MaxCopper) || '),
