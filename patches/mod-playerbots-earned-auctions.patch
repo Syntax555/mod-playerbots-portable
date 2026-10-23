@@ -282,7 +282,7 @@ index 0636393..7221642 100644
      static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
      static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
 diff --git a/src/Ai/World/Rpg/Action/NewRpgAction.cpp b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
-index d1f6fd3..9aa1f4a 100644
+index d1f6fd3..9828d3b 100644
 --- a/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 +++ b/src/Ai/World/Rpg/Action/NewRpgAction.cpp
 @@ -10,6 +10,8 @@
@@ -294,7 +294,7 @@ index d1f6fd3..9aa1f4a 100644
  #include "GossipDef.h"
  #include "IVMapMgr.h"
  #include "MaintenanceValues.h"
-@@ -42,11 +44,85 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+@@ -42,11 +44,86 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
      Value<NaturalMaintenanceTask>* value = context->GetValue<NaturalMaintenanceTask>("natural maintenance");
      if (!CanRunNaturalMaintenance(botAI))
      {
@@ -317,9 +317,10 @@ index d1f6fd3..9aa1f4a 100644
 +        if (arrived || (distance <= 150.0f && GetMSTimeDiffToNow(lastAuctioneerSearch) >= 2 * IN_MILLISECONDS))
 +        {
 +            lastAuctioneerSearch = getMSTime();
++            ObjectGuid const rejected = EarnedAuctionTravel::RejectedTarget(botAI);
 +            for (ObjectGuid guid : AI_VALUE(GuidVector, "possible new rpg targets"))
 +            {
-+                if (EarnedAuctionTravel::CompatibleAuctioneer(botAI, botAI->GetCreature(guid)))
++                if (guid != rejected && EarnedAuctionTravel::CompatibleAuctioneer(botAI, botAI->GetCreature(guid)))
 +                {
 +                    value->Set({guid, NaturalMaintenanceType::AUCTION});
 +                    return true;
@@ -380,7 +381,7 @@ index d1f6fd3..9aa1f4a 100644
      Creature* npc = botAI->GetCreature(task.target);
      if (!npc || !npc->IsAlive() || !npc->IsFriendlyTo(bot))
      {
-@@ -99,6 +175,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
+@@ -99,6 +176,9 @@ bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)
              }
              break;
          case NaturalMaintenanceType::NONE:
@@ -445,10 +446,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..7632b1f
+index 0000000..509d8da
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,843 @@
+@@ -0,0 +1,847 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -835,6 +836,8 @@ index 0000000..7632b1f
 +        if (subject && subject->response == AUCTION_SUCCESSFUL)
 +            Unsold().Sold(bot->GetGUID().GetCounter(), subject->item);
 +        bool const expired = subject && subject->response == AUCTION_EXPIRED;
++        // The core mails a return when its auction expires, so stacks of one round share it.
++        time_t const returned = mail->deliver_time;
 +        if (mail->money)
 +        {
 +            uint32 const before = mail->money;
@@ -862,9 +865,9 @@ index 0000000..7632b1f
 +            // The core may merge/delete the attachment; never reuse its pointer.
 +            bool const taken = !bot->GetMItem(itemGuid);
 +            collected = collected || taken;
-+            // A returned stack counts when the core hands it back, once per listing round.
-+            if (taken && expired)
-+                Unsold().Record(stock, now, ListingSeconds(), ListingSeconds());
++            // A returned stack counts once per listing round, timed by its return.
++            if (expired)
++                Unsold().Record(stock, returned, ListingSeconds(), ListingSeconds());
 +        }
 +        mail = bot->GetMail(id);
 +        // HandleMailDelete does not protect attachments. Only delete after
@@ -1209,7 +1212,7 @@ index 0000000..7632b1f
 +    // even when earned trading is disabled or emergency vendoring is needed.
 +    if (NeededForProgression(ai, item, supplies))
 +        return true;
-+    if (!IsEnabled(ai) || usage != ITEM_USAGE_AH || !CanList(ai, item))
++    if (!IsEnabled(ai) || usage != ITEM_USAGE_AH || !MeetsAuctionLevel(ai->GetBot()) || !CanList(ai, item))
 +        return false;
 +    // Stock that keeps expiring unsold goes to the vendor instead of paying more deposits.
 +    if (!RelistAllowed(ai, item))
@@ -1257,12 +1260,14 @@ index 0000000..7632b1f
 +    if (usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH)
 +        return true;
 +    // Natural upkeep has no disenchanting, so a random bot sells outgrown bound gear
-+    // instead of keeping it in its bags. Vendors refuse gear without a price, and
-+    // bots in a real guild keep rare gear as they would from disenchanting.
++    // instead of keeping it in its bags. Vendors refuse gear without a price, gear the
++    // bot cannot wear yet may still become an upgrade, and bots in a real guild keep
++    // rare gear as they would from disenchanting.
 +    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
-+    return usage == ITEM_USAGE_DISENCHANT && proto && proto->SellPrice && sPlayerbotAIConfig.naturalProgression && ai &&
-+           ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster() &&
-+           (proto->Quality <= ITEM_QUALITY_UNCOMMON || !ai->IsInRealGuild());
++    return usage == ITEM_USAGE_DISENCHANT && proto && proto->SellPrice && item->IsSoulBound() &&
++           sPlayerbotAIConfig.naturalProgression && ai && ai->GetBot() &&
++           proto->RequiredLevel <= ai->GetBot()->GetLevel() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) &&
++           !ai->HasGameClientMaster() && (proto->Quality <= ITEM_QUALITY_UNCOMMON || !ai->IsInRealGuild());
 +}
 +
 +bool HasVendorSurplus(PlayerbotAI* ai)
@@ -1508,10 +1513,10 @@ index 0000000..c092b8e
 +#endif
 diff --git a/src/Bot/EarnedAuctionTravel.cpp b/src/Bot/EarnedAuctionTravel.cpp
 new file mode 100644
-index 0000000..ff699e7
+index 0000000..71b8ea1
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionTravel.cpp
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,198 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1650,6 +1655,8 @@ index 0000000..ff699e7
 +    FinishTrip(ai);
 +    ai->rpgInfo.earnedAuctionLastVisit = getMSTime();
 +    ai->rpgInfo.earnedAuctionVisitDelay = TravelBackoffMs;
++    // A failed turn passes to the other visit kind, as a completed one does.
++    ai->rpgInfo.earnedAuctionVisitMailbox = !ai->rpgInfo.earnedAuctionVisitMailbox;
 +}
 +
 +// An unreachable mailbox or auctioneer would otherwise be chosen for every visit

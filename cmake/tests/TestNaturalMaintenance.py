@@ -1166,6 +1166,23 @@ void AuctionTravelTests()
         assert(s.value->Get().type == Type::NONE && world.visits.empty());
     }
     {
+        // A failed trip hands the next turn to the mailbox, and a rejected auctioneer
+        // is skipped at the market too.
+        Scenario s;
+        WorldPosition market(0, 1000.0f, 0.0f);
+        world.market = &market;
+        Creature& auctioneer = s.Npc(UNIT_NPC_FLAG_AUCTIONEER, 1000.0f, 2.0f);
+        s.ai.rpgInfo.earnedAuctionRejected = auctioneer.guid;
+        s.ai.rpgInfo.earnedAuctionRejectedAt = now;
+        s.DueAuctionVisit();
+        s.ai.rpgInfo.earnedAuctionVisitMailbox = false;
+        assert(s.Evaluate().type == Type::AUCTION_TRAVEL);
+        int ticks = 0;
+        while (s.Tick(100))
+            assert(++ticks < 40);
+        assert(s.value->Get().type == Type::NONE && world.visits.empty() && s.ai.rpgInfo.earnedAuctionVisitMailbox);
+    }
+    {
         // A failed path or an expired trip also backs off.
         Scenario s;
         WorldPosition market(0, 1000.0f, 0.0f);
@@ -1198,7 +1215,7 @@ void StarvationTests()
         assert(!s.Tick() && s.value->Get().type == Type::NONE && world.visits.empty());
         assert(s.ai.rpgInfo.earnedAuctionLastVisit == now &&
                s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
-        assert(s.ai.rpgInfo.earnedAuctionVisitMailbox);
+        assert(!s.ai.rpgInfo.earnedAuctionVisitMailbox); // The failed turn passes to the auctioneer.
         now += 30 * IN_MILLISECONDS;
         assert(s.Is(s.value->Get(), Type::REPAIR, smith));
         assert(s.Tick(0) && s.Tick(0) && world.actions.back().first == "repair");
@@ -1254,7 +1271,7 @@ void StarvationTests()
         world.queueAccepts = false;
         s.DueAuctionVisit();
         assert(s.Is(s.Evaluate(), Type::AUCTION, auctioneer) && s.Tick(0));
-        assert(!s.Tick(0) && world.visits.size() == 1 && !s.ai.rpgInfo.earnedAuctionVisitMailbox);
+        assert(!s.Tick(0) && world.visits.size() == 1 && s.ai.rpgInfo.earnedAuctionVisitMailbox);
         assert(s.ai.rpgInfo.earnedAuctionLastVisit == now &&
                s.ai.rpgInfo.earnedAuctionVisitDelay == EarnedAuctionTravel::TravelBackoffMs);
         assert(s.Is(s.Evaluate(), Type::SELL, vendor));
@@ -1543,6 +1560,11 @@ mutations = [
       '                if (guid != rejected)\n                    return {guid, NaturalMaintenanceType::AUCTION_MAIL};\n\n'
       '            if (WorldPosition destination = EarnedAuctionTravel::PlanTrip(botAI))\n'
       '                return {{}, NaturalMaintenanceType::AUCTION_TRAVEL, 0, 0, destination};')),
+    ('failed turn keeps its kind', 'travel',
+     '    ai->rpgInfo.earnedAuctionVisitMailbox = !ai->rpgInfo.earnedAuctionVisitMailbox;\n', ''),
+    ('rejected auctioneer chosen on a trip', 'action',
+     'if (guid != rejected && EarnedAuctionTravel::CompatibleAuctioneer(botAI, botAI->GetCreature(guid)))',
+     'if ((guid != rejected || true) && EarnedAuctionTravel::CompatibleAuctioneer(botAI, botAI->GetCreature(guid)))'),
     ('rejection never expires', 'travel', 'RejectionActive(GetMSTimeDiffToNow(info.earnedAuctionRejectedAt))',
      '(RejectionActive(GetMSTimeDiffToNow(info.earnedAuctionRejectedAt)) || true)'),
     ('rejected visit retried', 'action', 'else\n            EarnedAuctionTravel::PostponeVisit(botAI);',

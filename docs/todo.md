@@ -114,8 +114,9 @@ and ordinary player actions.
 - [ ] Verify in-game the behavior covered so far only by fixtures: discovered
   flight routes, Drain Soul shards for every warlock spec, SelfBot talent
   points, weighted bot specs, Spirit of Zandalar at the Zul'Gurub stage, Halion
-  credit in the Twilight Realm, dungeon recruitment at refused portals and
-  vendor bag purchases.
+  credit in the Twilight Realm, dungeon recruitment at refused portals,
+  vendor bag purchases and earned auction trading: market trips, listings,
+  bids, refusals and receipt collection.
 - [ ] Verify era experience in game: quest values per era, battleground
   objective XP, heirloom and holiday bonuses, and rest and quest money at the
   60/70 era caps.
@@ -150,6 +151,25 @@ and ordinary player actions.
   experience removes the duplicate for TBC-era characters only.
 - [ ] Recruit-a-Friend started after the 2.4.3 release; decide whether TBC and
   Wrath characters should regain it.
+
+## Auction economy
+
+- [ ] Disenchanting in natural upkeep. Enchanting bots sell outgrown bound gear
+  to vendors and keep gear without a sell price.
+- [ ] `Playerbots.DeleteRandomBotAccounts` deletes the items of random bots'
+  auctions with their characters; the core then drops those auctions without
+  refunding their bidders.
+- [ ] While a hunter's quiver or ammo pouch is its smallest bag, bots buy no
+  larger general bag for the other slots, because `EquipAction` would replace
+  the quiver. A type-aware bag slot there would also change players' equip
+  commands.
+- [ ] Unsold-stock records live in server memory; a restart forgets them.
+- [ ] A won item the bot can never store, such as a second unique copy, holds
+  up its auction purchases until the mail expires.
+- [ ] Upkeep can buy a vendor bag while a won auction bag still waits in the
+  mail; the later bag may no longer be an upgrade.
+- [ ] Pet food is protected only while the hunter's pet is summoned, not while
+  it is dismissed, stabled or unsummoned by a mount.
 
 ## Launcher and updates
 

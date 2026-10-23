@@ -7,23 +7,24 @@ or artificial buyers.
 
 Trading requires natural progression, earned auctions and a random bot without a
 player master. As at the auction window, bots below the core's
-`LevelReq.Auction` do not trade at auctioneers; they still collect auction mail.
-Bots walk to an auctioneer or mailbox and reach ordinary interaction range.
-Combat, flight, battlegrounds, dungeons, teleport, trading and blocked movement
-prevent market trips.
+`LevelReq.Auction` do not trade at auctioneers; they still collect auction mail
+and sell surplus to vendors. Bots walk to an auctioneer or mailbox and reach
+ordinary interaction range. Combat, flight, battlegrounds, dungeons, teleport,
+trading and blocked movement prevent market trips.
 
 ## What bots can trade
 
 Sellers keep quest items, needed equipment, reagents of learned class spells,
-supplies and the hunter's last pet food. Random bots do not craft, so they keep
-profession materials only within Playerbots' ordinary stack limits; SelfBots and
-altbots keep the reagents of their learned recipes. Equipped, bound, conjured,
-temporary and otherwise ineligible items are not listed. Each listing transfers
-an existing whole stack and pays its normal deposit from the bot's balance.
-Automatic vendor selling also protects these essentials under natural
-progression. Natural upkeep does not disenchant, so a random bot with Enchanting
-sells outgrown bound gear that a vendor buys. In a guild led by a player it
-keeps rare and better gear, as it would from disenchanting.
+supplies and the last pet food of a hunter's summoned pet. Random bots do not
+craft, so they keep profession materials only within Playerbots' ordinary stack
+limits; SelfBots and altbots keep the reagents of their learned recipes.
+Equipped, bound, conjured, temporary and otherwise ineligible items are not
+listed. Each listing transfers an existing whole stack and pays its normal
+deposit from the bot's balance. Automatic vendor selling also protects these
+essentials under natural progression. Natural upkeep does not disenchant, so a
+random bot with Enchanting sells outgrown bound gear that a vendor buys. In a
+guild led by a player it keeps rare and better gear, as it would from
+disenchanting.
 
 Buyers select useful equipment, supplies or gathering tools (mining picks,
 skinning knives and fishing poles) while reserving money for ordinary upkeep.
@@ -41,9 +42,9 @@ whose buyout is missing or not acceptable takes the core's minimum bid instead
 when it ends within two visit intervals, unless a player leads it. Bots list for
 the 12-hour duration, which `Rate.Auction.Time` scales.
 
-An item that returns unsold in two listing rounds, or is refused a listing
-twice, is not listed again for a week, or for three listing durations if that is
-longer. Stacks returning within one listing duration count as one round. The bot
+An item that returns unsold or is refused a listing on two occasions is not
+listed again for a week, or for three listing durations if that is longer.
+Stacks returning within one listing duration count as one occasion. The bot
 sells such stock to a vendor instead. A completed sale of the item clears that
 record. The record is kept in server memory, so a restart forgets it.
 
@@ -70,13 +71,14 @@ reserves. Nearby auctioneers and mailboxes are searched within 150 yards.
 A trip has a ten-minute budget including its final approach. New plans wait
 fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable
 nearby auctioneers or mailboxes postpone the visit for fifteen minutes and
-return the bot to ordinary activity, including repairs, sales and training. An
-unreachable mailbox or auctioneer is then skipped for an hour, so another can
-serve. On an auctioneer turn without a nearby auctioneer, a distant market in
-reach comes before a nearby mailbox. Trading depends on pathfinding and NPC
-availability. Bots may vendor surplus when bags reach 80% usage or their budget
-cannot cover the neutral auction house's deposit for the stack. Stock whose
-ordinary price cannot repay that house's deposit and cut is vendored.
+return the bot to ordinary activity, including repairs, sales and training. The
+last unreachable mailbox or auctioneer is then skipped for an hour, so another
+can serve, and a failed turn passes to the other visit kind. On an auctioneer
+turn without a nearby auctioneer, a distant market in reach comes before a
+nearby mailbox. Trading depends on pathfinding and NPC availability. Bots may
+vendor surplus when bags reach 80% usage or their budget cannot cover the
+neutral auction house's deposit for the stack. Stock whose ordinary price cannot
+repay that house's deposit and cut is vendored.
 
 ## Mail delivery
 

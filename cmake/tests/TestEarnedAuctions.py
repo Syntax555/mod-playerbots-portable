@@ -48,7 +48,7 @@ native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (item_header, 'enum ItemSubclassWeapon'), (auction_header, 'enum MailAuctionAnswers'),
     (shared_defines, 'enum ItemQualities')))
 # Doubles for these producers keep their native shape.
-assert 'uint32 TotemCategory;' in item_header
+assert 'uint32 TotemCategory;' in item_header and 'uint32 RequiredLevel;' in item_header
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
 assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in auction_handlers
 assert auction_handlers.count('CONFIG_AUCTION_LEVEL_REQ') == 2 and (
@@ -271,7 +271,7 @@ struct ItemTemplate
     struct Spell { int SpellId = 0; };
     std::array<Spell, 5> Spells{};
     uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = 1, SubClass = 0,
-        Bonding = 0, TotemCategory = 0;
+        Bonding = 0, TotemCategory = 0, RequiredLevel = 0;
     bool conjured = false, petFood = false;
     bool HasFlag(int) const { return conjured; }
 };
@@ -1133,8 +1133,10 @@ void ServiceTests()
     }
     {
         // LevelReq.Auction applies as at the auction window; mailboxes stay open.
-        Scenario s; s.BagItem(100, 5); world.auctionLevel = 20; s.bot.level = 19;
+        Scenario s; Item& stock = s.BagItem(100, 5); world.auctionLevel = 20; s.bot.level = 19;
         assert(!MeetsAuctionLevel(&s.bot) && !QueueVisit(&s.bot.ai, s.bot.auctioneer.guid, false));
+        assert(!ShouldReserveForAuction(&s.bot.ai, &stock, ITEM_USAGE_AH));
+        s.bot.level = 20; assert(ShouldReserveForAuction(&s.bot.ai, &stock, ITEM_USAGE_AH)); s.bot.level = 19;
         s.Receipt(nullptr, 400); assert(s.Visit(true)); assert(s.bot.money == 10400);
         auto& processor = PlayerbotWorldThreadProcessor::instance();
         s.bot.level = 20; assert(QueueVisit(&s.bot.ai, s.bot.auctioneer.guid, false)); s.bot.level = 19;
@@ -1220,6 +1222,10 @@ void ServiceTests()
         assert(SellsToVendor(&s.bot.ai, &gear, ITEM_USAGE_DISENCHANT) && HasVendorSurplus(&s.bot.ai));
         s.bot.ai.master = true; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.ai.master = false;
         s.bot.random = false; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.random = true;
+        // Only bound gear the bot can already wear is outgrown.
+        gear.bound = false; assert(!HasVendorSurplus(&s.bot.ai)); gear.bound = true;
+        gear.proto.RequiredLevel = 81; assert(!HasVendorSurplus(&s.bot.ai)); gear.proto.RequiredLevel = 80;
+        assert(HasVendorSurplus(&s.bot.ai));
         // Vendors refuse gear without a price, which would hold a bot at the vendor.
         gear.proto.SellPrice = 0; assert(!HasVendorSurplus(&s.bot.ai)); gear.proto.SellPrice = 100;
         // As with disenchanting, a bot in a real guild keeps rare gear.
@@ -1267,6 +1273,16 @@ void ServiceTests()
             now += sPlayerbotAIConfig.earnedAuctionInterval;
         }
         assert(!HasSurplus(&s.bot.ai));
+    }
+    {
+        // A stack left in the mail counts with the round it returned in.
+        Scenario s; Item& first = s.BagItem(100, 5); Item& second = s.BagItem(100, 5);
+        assert(s.Visit()); now += s.Listing(); std::int64_t const returned = now;
+        s.Receipt(&first).subject = s.Subject(first, AUCTION_EXPIRED); auctionMgr.items.erase(first.guid);
+        assert(s.Visit(true)); now += s.Listing() + sPlayerbotAIConfig.earnedAuctionInterval;
+        Mail& late = s.Receipt(&second); late.subject = s.Subject(second, AUCTION_EXPIRED);
+        late.deliver_time = returned; auctionMgr.items.erase(second.guid);
+        assert(s.Visit(true)); assert(s.bot.GetItemByGuid(second.guid) == &second && HasSurplus(&s.bot.ai));
     }
     {
         // Long Rate.Auction.Time listings still count both unsold rounds.
@@ -1499,13 +1515,19 @@ mutations = [
       '        return true;\n'), ''),
     ('multi-tools refused', 'service', '        case 161:  // Gnomish Army Knife\n', ''),
     ('bound gear vendored outside natural progression', 'service',
-     'proto->SellPrice && sPlayerbotAIConfig.naturalProgression &&', 'proto->SellPrice &&'),
+     'sPlayerbotAIConfig.naturalProgression && ai && ai->GetBot() &&\n', 'ai && ai->GetBot() &&\n'),
     ('bound gear vendored for a bot a player owns', 'service',
-     'ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster() &&\n           (proto',
-     'ai->GetBot() && !ai->HasGameClientMaster() &&\n           (proto'),
+     '->GetLevel() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) &&', '->GetLevel() &&'),
     ('bound gear vendored with a game-client master', 'service',
-     'ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) && !ai->HasGameClientMaster() &&\n           (proto',
-     'ai->GetBot() && sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) &&\n           (proto'),
+     '!ai->HasGameClientMaster() && (proto->Quality', '(proto->Quality'),
+    ('unbound gear vendored', 'service', ' && item->IsSoulBound() &&', ' &&'),
+    ('gear the bot cannot wear vendored', 'service', 'proto->RequiredLevel <= ai->GetBot()->GetLevel() && ', ''),
+    ('stock reserved below the auction level', 'service', ' || !MeetsAuctionLevel(ai->GetBot()) || !CanList(ai, item))',
+     ' || !CanList(ai, item))'),
+    ('returned stacks counted apart', 'service', 'Unsold().Record(stock, returned, ListingSeconds(), ListingSeconds());',
+     'Unsold().Record(stock, returned, 0, ListingSeconds());'),
+    ('returns timed at collection', 'service', 'Unsold().Record(stock, returned, ',
+     'Unsold().Record(stock, now + 0 * returned, '),
     ('unpriced gear vendored', 'service', 'proto && proto->SellPrice && ', 'proto && '),
     ('rare gear of a real guild vendored', 'service', '|| !ai->IsInRealGuild())', '|| !ai->IsInRealGuild() || true)'),
     ('uncommon gear of a real guild kept', 'service', 'proto->Quality <= ITEM_QUALITY_UNCOMMON',
@@ -1514,7 +1536,6 @@ mutations = [
     ('unsold stock listed again', 'service', 'return CanList(ai, item) && RelistAllowed(ai, item) && ',
      'return CanList(ai, item) && '),
     ('unsold stock kept from the vendor', 'service', '    if (!RelistAllowed(ai, item))\n        return false;\n', ''),
-    ('refused take counted as unsold', 'service', 'if (taken && expired)', 'if (expired)'),
     ('every receipt counted as unsold', 'service',
      'bool const expired = subject && subject->response == AUCTION_EXPIRED;', 'bool const expired = true;'),
     ('sale keeps the unsold record', 'service', 'Unsold().Sold(bot->GetGUID().GetCounter(), subject->item);',
@@ -1528,8 +1549,6 @@ mutations = [
     ('memory shorter than long listings', 'policy', 'UnsoldMemorySeconds, 3 * listing)', 'UnsoldMemorySeconds, 0 * listing)'),
     ('listing duration without Rate.Auction.Time', 'service', '* sWorld->getRate(RATE_AUCTION_TIME);',
      '* (sWorld->getRate(RATE_AUCTION_TIME) * 0 + 1);'),
-    ('returned stacks counted apart', 'service', 'Unsold().Record(stock, now, ListingSeconds(), ListingSeconds());',
-     'Unsold().Record(stock, now, 0, ListingSeconds());'),
     ('refusals wait for a listing round', 'service', 'Unsold().Record(StockKey(bot, item), now, 0, ListingSeconds());',
      'Unsold().Record(StockKey(bot, item), now, ListingSeconds(), ListingSeconds());'),
     ('subject with a second field accepted', 'policy', '    if (fields[1])\n        return {};\n', ''),
