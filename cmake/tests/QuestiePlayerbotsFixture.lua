@@ -37,7 +37,9 @@ local quests = {
 module("QuestieDB").GetQuest = function(id) return quests[id] end
 module("QuestieDB").GetNPC = function(_, id) return {name="NPC"..id} end
 module("QuestieDB").GetObject = function(_, id) return {name="Object"..id} end
-module("QuestieDB").GetItem = function(_, id) return {name="Item"..id} end
+-- QuestieDB:GetItem always returns a Sources list built from the item's drops.
+local itemSources = {[50432]={{Id=299, Type="monster"}}, [750]={{Id=705, Type="monster"}}}
+module("QuestieDB").GetItem = function(_, id) return {Id=id, name="Item"..id, Sources=itemSources[id] or {}} end
 module("QuestieLib").Count = function(_, values) local n=0; for _ in pairs(values) do n=n+1 end; return n end
 module("QuestiePartyObjectives").ScheduleUpdate = function(_, id) updates[#updates+1] = id or 0 end
 
@@ -203,6 +205,25 @@ assert(entry("Tankbot",200,1).fulfilled == 2 and entry("Tankbot",200,2).fulfille
     "per-type objective indices were rejected")
 assert(entry("Tankbot",200,-3).id == 99999 and entry("Tankbot",200,-4).id == 88888,
     "per-type unknown counters collided")
+
+-- Questie's database can name another item than the server for one objective.
+-- Bots then report the database objective like a Questie client.
+quests[33] = {ObjectiveData={{Type="item", Id=50432}}}
+quests[34] = {ObjectiveData={{Type="item", Id=1}, {Type="item", Id=2}}}
+quests[35] = {ObjectiveData={{Type="item", Id=1}}}
+begin("Tankbot",tank); quest("Tankbot",tank,33); quest("Tankbot",tank,34); quest("Tankbot",tank,35)
+objective("Tankbot",tank,33,"i",1,750,3,8,0)
+objective("Tankbot",tank,34,"i",1,3,1,5,0)
+objective("Tankbot",tank,35,"i",1,3,1,5,0)
+objective("Tankbot",tank,35,"i",2,4,2,5,0)
+finish("Tankbot",tank)
+assert(entry("Tankbot",33,1).id == 50432 and entry("Tankbot",33,1).fulfilled == 3,
+    "mismatched database objective was not paired")
+assert(comms.data:GetTooltip("m_299")[33].Tankbot[1].fulfilled == 3, "database drop source has no tooltip")
+assert(not entry("Tankbot",34,1) and not entry("Tankbot",34,2) and entry("Tankbot",34,-1).id == 3,
+    "ambiguous database objectives were paired")
+assert(not entry("Tankbot",35,1) and entry("Tankbot",35,-1).id == 3 and entry("Tankbot",35,-2).id == 4,
+    "ambiguous server objectives were paired")
 
 -- Partial snapshots expire without replacing the last complete state.
 begin("Healbot",heal); quest("Healbot",heal,100)
