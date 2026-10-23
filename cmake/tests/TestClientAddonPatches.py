@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -211,6 +213,62 @@ class ClientAddonPatchTests(unittest.TestCase):
         fixture.write_lock()
         self.rejected(fixture.export(self.directory / "reversed"))
         self.assertEqual(git(fixture.cached, "show", "HEAD:UI/Main.lua"), MAIN.decode().strip())
+
+    def test_patched_exports_ignore_host_line_ending_conversion(self):
+        def verify(index, mutation=None):
+            fixture = AddonFixture(self.directory / f"repository-{index}")
+            (fixture.cached / "Native.lua").write_bytes(b"return true\r\n")
+            git(fixture.cached, "add", "Native.lua")
+            git(fixture.cached, "commit", "--quiet", "-m", "Preserve native CRLF source")
+            fixture.addon["revision"] = git(fixture.cached, "rev-parse", "HEAD")
+            fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
+            patch = fixture.root / "patches/module.patch"
+            patch.write_bytes(b"diff --git a/src/module.cpp b/src/module.cpp\n"
+                              b"--- a/src/module.cpp\n+++ b/src/module.cpp\n@@ -1 +1 @@\n"
+                              b"-int module_fixture = 1;\n+int module_fixture = 2;\n")
+            fixture.lock["modules"][0]["patches"] = ["patches/module.patch"]
+            fixture.write_lock()
+            if mutation:
+                path = fixture.root / "cmake" / mutation
+                source = path.read_text(encoding="utf-8")
+                setting = ('-c "core.autocrlf=false" ' if path.suffix == ".cmake"
+                           else ', "-c", "core.autocrlf=false"')
+                path.write_text(source.replace(setting, ""), encoding="utf-8")
+            spec = importlib.util.spec_from_file_location(
+                f"era_client_endings_{index}", fixture.root / "cmake/PackageEraClient.py")
+            package = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(package)
+            expected = MAIN.replace(b"upstream", b"release")
+            environment = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "core.autocrlf",
+                           "GIT_CONFIG_VALUE_0": "true", "GIT_CONFIG_KEY_1": "core.eol",
+                           "GIT_CONFIG_VALUE_1": "crlf"}
+            with mock.patch.dict(os.environ, environment):
+                exported = self.directory / f"export-{index}"
+                self.successful(fixture.export(exported))
+                self.assertEqual((exported / "UI/Main.lua").read_bytes(), expected)
+                self.assertEqual((exported / "Native.lua").read_bytes(), b"return true\r\n")
+                self.successful(fixture.prepare())
+                self.assertEqual((fixture.prepared / "UI/Main.lua").read_bytes(), expected)
+                prepared = fixture.root / ".module-cache/prepared-core"
+                self.assertEqual((prepared / "README.md").read_bytes(), b"Fixture core\n")
+                self.assertEqual((prepared / "modules/mod-fixture/src/module.cpp").read_bytes(),
+                                 b"int module_fixture = 2;\n")
+                self.successful(fixture.package())
+                with zipfile.ZipFile(fixture.archive) as archive:
+                    self.assertEqual(archive.read("MultiBot/UI/Main.lua"), expected)
+                module = self.directory / f"module-{index}"
+                package.export_module(fixture.root, fixture.lock["modules"][0], module, GIT)
+                self.assertEqual((module / "src/module.cpp").read_bytes(), b"int module_fixture = 2;\n")
+
+        verify(0)
+        for index, mutation in enumerate(("ExportClientAddon.py", "PrepareModules.cmake",
+                                           "PackageClientAddons.cmake", "PackageEraClient.py"), 1):
+            source = (ROOT / "cmake" / mutation).read_text(encoding="utf-8")
+            setting = ('-c "core.autocrlf=false" ' if mutation.endswith(".cmake")
+                       else ', "-c", "core.autocrlf=false"')
+            self.assertIn(setting, source)
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                verify(index, mutation)
 
     def test_crlf_patch_applies_but_provenance_hashes_original_bytes(self):
         fixture = self.fixture()

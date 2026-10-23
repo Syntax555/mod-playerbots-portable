@@ -154,7 +154,7 @@ foreach(index RANGE 0 ${last_addon})
     set(source_archive "${stage}/source.tar")
     file(REMOVE_RECURSE "${stage}")
     file(MAKE_DIRECTORY "${export}")
-    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${cached_source}" archive --format=tar
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -c "core.autocrlf=false" -C "${cached_source}" archive --format=tar
         "--output=${source_archive}" "${revision}"
         RESULT_VARIABLE result ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
@@ -173,7 +173,7 @@ foreach(index RANGE 0 ${last_addon})
         file(CONFIGURE OUTPUT "${stage}/addon.patch" CONTENT "@patch_contents@" @ONLY NEWLINE_STYLE LF)
         foreach(operation "--numstat" "--check" "" "--reverse;--check")
             execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${staging_root}"
-                "${GIT_EXECUTABLE}" -C "${export}" apply ${operation} "${stage}/addon.patch"
+                "${GIT_EXECUTABLE}" -c "core.autocrlf=false" -C "${export}" apply ${operation} "${stage}/addon.patch"
                 RESULT_VARIABLE result OUTPUT_VARIABLE patch_output ERROR_VARIABLE error)
             if(NOT result EQUAL 0 OR (operation STREQUAL "--numstat" AND patch_output STREQUAL ""))
                 message(FATAL_ERROR "Cannot apply locked client addon patch ${addon_patch}: ${error}")

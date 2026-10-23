@@ -26,7 +26,7 @@ function(portable_git)
     # Git repository: git apply would silently skip patches outside its subdir.
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env
         "GIT_CEILING_DIRECTORIES=${PORTABLE_SOURCE_DIR}/.module-cache"
-        "${GIT_EXECUTABLE}" ${ARGN}
+        "${GIT_EXECUTABLE}" -c "core.autocrlf=false" ${ARGN}
         RESULT_VARIABLE _result OUTPUT_VARIABLE _output ERROR_VARIABLE _error)
     if(NOT _result EQUAL 0)
         message(FATAL_ERROR "Git failed (${_result}): ${ARGN}\n${_output}${_error}")
