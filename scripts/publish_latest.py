@@ -20,6 +20,7 @@ import argparse
 from collections.abc import Iterator
 from dataclasses import dataclass
 import hashlib
+from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -146,10 +147,10 @@ class GitHubClient:
             # Do not include headers or request representations in diagnostics.
             try:
                 message = json.loads(error.read()).get("message", "request failed")
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, OSError, HTTPException):
                 message = "request failed"
             raise APIError(error.code, str(message)) from None
-        except (URLError, TimeoutError, OSError):
+        except (URLError, TimeoutError, OSError, HTTPException):
             raise PublishError("GitHub request failed; check the job's network access") from None
         if not body:
             return None
