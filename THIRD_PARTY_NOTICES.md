@@ -17,6 +17,9 @@ The server ZIP includes `versions.lock.json`, `patches/` and `licenses/`.
 Client addons include their upstream license and `SOURCE_REVISION.txt`; the
 combined EraTalents client pack includes dependency licenses and
 `SOURCE_MANIFEST.json` with source revisions and patch hashes.
+The Questie installer ZIP contains installation tooling and local patch data;
+it downloads the pinned original addon directly from upstream and preserves its
+notices. Its `LICENSE` applies to the installer tooling, not to Questie.
 
 ## Included projects
 
@@ -39,6 +42,7 @@ applicable.
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | No explicit license declaration at the locked revision; provenance notice retained. | `licenses/mod-multibot-bridge/NOTICE.txt` |
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | MIT upstream license; portable integration files also carry GPL-2.0-or-later notices. | Server: `licenses/mod-era-talents/LICENSE`, `licenses/GPL-2.0.txt`. Combined client pack: `Interface/AddOns/EraTalents/LICENSE`, `licenses/mod-era-talents.txt`. |
 | [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | GPL version 3 upstream license text. | `MultiBot/LICENSE` in the separate addon ZIP. |
+| [Questie-335](https://github.com/Aldori15/Questie/tree/335) | No general root license declaration at the locked revision. Individual library and icon notices remain applicable. | The installer downloads the upstream archive directly; the complete addon is not redistributed in the release ZIP. |
 | [StormLib](https://github.com/ladislav-zezula/StormLib) | MIT; used to build and verify the client patch. | `licenses/StormLib.txt` in the combined client pack |
 | [CMaNGOS Classic DB](https://github.com/cmangos/classic-db) and [TBC DB](https://github.com/cmangos/tbc-db) | GPL version 3 project license texts; historical quest and trainer data retain their original terms. | `licenses/historical-class-data/NOTICE.txt`, `licenses/GPL-3.0.txt` in the server and combined client pack |
 | [CMaNGOS Classic core](https://github.com/cmangos/mangos-classic) and [TBC core](https://github.com/cmangos/mangos-tbc) | GPL version 2 root texts and GPL-2.0-or-later source notices; historical spell corrections retain their source notices. | `licenses/historical-class-data/NOTICE.txt`, `licenses/GPL-2.0.txt` in the server and combined client pack |
