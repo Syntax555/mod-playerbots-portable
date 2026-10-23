@@ -137,7 +137,10 @@ multiple observers share the bot snapshot built during each poll.
 Group departure, loss of bot access and logout invalidate subscriptions and
 clear the bot's prior client data. The addon also rejects stale tokens,
 non-group senders, malformed snapshots and incomplete frames. Partial replies
-expire; bridge probes and requests retry. Cleanup preserves tables subsequently
+expire and requests retry. An unanswered bridge probe is retried three times
+at 30-second intervals, and the addon probes again only when the group
+changes; realms without the bridge therefore see no further addon traffic,
+and Questie works as usual. Cleanup preserves tables subsequently
 written by ordinary QuestieComms, including when a character gains a real
 client. Older unpatched Questie can read ordinary snapshots, but needs the
 supplied addon patch for lease renewal, robust cleanup and special objectives.

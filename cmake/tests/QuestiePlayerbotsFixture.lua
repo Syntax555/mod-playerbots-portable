@@ -313,6 +313,23 @@ roster = {"Human"}
 advance(2)
 assert(not entry("Healbot"), "snapshot-only bridge did not clean departed bot")
 
+-- A bridge that answers without quest progress support is not probed again.
+comms:ResetAll(); loadAddon()
+receive("CAPS_BEGIN"); receive("CAPS~INVENTORY_OPEN_V1"); receive("CAPS_END")
+local beforeUnsupported = #sent
+advance(31)
+assert(#sent == beforeUnsupported, "unsupported bridge was probed again")
+
+-- Without any bridge answer, HELLO is retried only a few times.
+local beforeSilent = #sent
+comms:ResetAll(); loadAddon()
+for _=1,5 do advance(31) end
+local hellos = 0
+for i=beforeSilent+1,#sent do
+    if sent[i].message == "HELLO~1" then hellos = hellos + 1 end
+end
+assert(hellos == 4, "realm without a bridge kept receiving HELLO probes")
+
 -- Exercise the complete native party renderer, objective preparation and spawn
 -- handlers. Only client map/frame APIs and the static DB query boundary are doubled.
 comms:ResetAll()

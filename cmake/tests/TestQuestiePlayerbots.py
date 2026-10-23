@@ -54,8 +54,10 @@ class QuestiePlayerbotsTests(unittest.TestCase):
 
     def test_regressions_are_detected(self):
         mutations = (
-            (FILES[0], "token == current or", "true or", "request token ownership"),
-            (FILES[0], 'token:sub(1, 3) ~= "qpb"', "true", "stale issued token"),
+            (FILES[0], "local owned = token == current\n", "local owned = true\n", "request token ownership"),
+            (FILES[0], "token:sub(1, #TOKEN_PREFIX) ~= TOKEN_PREFIX", "true", "stale issued token"),
+            (FILES[0], "not bridgeUnsupported and helloRetries", "helloRetries", "unsupported bridge probing"),
+            (FILES[0], "helloRetries < MAX_HELLO_RETRIES\n", "true\n", "bounded bridge probing"),
             (FILES[0], "request.watch and token and", "token and", "push token requires WATCH"),
             (FILES[0], "and objective.type == objectiveType", "", "per-type objective indices"),
             (FILES[0], "or -position", "or -rawObjective.index", "per-type unknown counters"),
@@ -63,8 +65,7 @@ class QuestiePlayerbotsTests(unittest.TestCase):
              "indices[position] = nil and FindSameTypeObjectiveIndex(", "database objective pairing"),
             (FILES[0], "databaseObjective and databaseObjective.Id or", "", "database objective identity"),
             (FILES[0], "unmatched[objectiveType] == remaining[objectiveType]", "true", "ambiguous objective counts"),
-            (FILES[2], 'if localObjective and QuestieLib:GetObjectiveDescription(localObjective) ~= "" then',
-             "if false then", "local objective text"),
+            (FILES[2], 'if localText and localText ~= "" then', "if false then", "local objective text"),
             (FILES[0], "if not usedIndices[objectiveIndex] then", "if true then", "remaining database objectives"),
             (FILES[0], 'fields[4] == "NO_BOT"', "false", "NO_BOT backoff"),
             (FILES[0], "request.watch = nil", "", "NO_BOT without UNWATCH"),
