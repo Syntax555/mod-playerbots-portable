@@ -38,7 +38,7 @@ GAMEPLAY = (
     "TestRaidClearWindowsBuild", "TestEarnedRaidComposition", "TestEarnedRaidGroups",
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge",
-    "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestFormationMovement",
+    "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestMultiBotVendorPurchases", "TestFormationMovement",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
     "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",

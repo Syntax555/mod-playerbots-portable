@@ -48,6 +48,10 @@ pass.
 
 ## Gameplay validation
 
+- [ ] Verify MultiBot altbot vendor purchases on a live 3.3.5a client: Buy mode,
+  left/right clicks, quantities, expensive and currency-item confirmations,
+  bot switches and inventory closure. Confirm the bot's own gold and bag
+  changes, native vendor refusals and no owner purchase on bridge failure.
 - [ ] Validate the [Questie Playerbots integration](questie-playerbots.md) on a
   live 3.3.5a client using the release installer and matching server ZIP:
   shared quests, simultaneous bot progress, kill-credit and

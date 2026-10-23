@@ -137,6 +137,12 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
 | Raid Clear | Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
 
+For vendor purchases, open the altbot's MultiBot inventory, select **Buy** and
+click an item in the merchant window. While that inventory is visible in Buy
+mode, purchases use the selected bot's own gold and inventory. The bot must be
+able to interact with the vendor. Leaving Buy mode, changing bots or closing
+the inventory cancels pending purchase confirmations and quantity selection.
+
 Dungeon and raid difficulty does not scale to the number of players or bots
 present. Smaller groups face the same creature stats and encounter requirements
 as full groups. Bring suitable roles, earned equipment and enough participants
