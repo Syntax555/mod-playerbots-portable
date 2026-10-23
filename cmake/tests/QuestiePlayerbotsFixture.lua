@@ -41,6 +41,13 @@ module("QuestieDB").GetObject = function(_, id) return {name="Object"..id} end
 local itemSources = {[50432]={{Id=299, Type="monster"}}, [750]={{Id=705, Type="monster"}}}
 module("QuestieDB").GetItem = function(_, id) return {Id=id, name="Item"..id, Sources=itemSources[id] or {}} end
 module("QuestieLib").Count = function(_, values) local n=0; for _ in pairs(values) do n=n+1 end; return n end
+-- Production QuestieLib:GetObjectiveDescription strips one trailing period; the
+-- local quest log starts empty and holds quest objects by ID.
+module("QuestieLib").GetObjectiveDescription = function(_, objective)
+    local text = objective and (objective.FullDescription or objective.Description) or ""
+    return (text:gsub("%.$", ""))
+end
+module("QuestiePlayer").currentQuestlog = {}
 module("QuestiePartyObjectives").ScheduleUpdate = function(_, id) updates[#updates+1] = id or 0 end
 
 -- Load complete production modules, including the native insertion and tooltip lookup.
@@ -225,6 +232,11 @@ finish("Tankbot",tank)
 assert(entry("Tankbot",33,1).id == 50432 and entry("Tankbot",33,1).fulfilled == 3,
     "mismatched database objective was not paired")
 assert(comms.data:GetTooltip("m_299")[33].Tankbot[1].fulfilled == 3, "database drop source has no tooltip")
+assert(comms.data:GetTooltip("m_299")[33].Tankbot[1].text == "Item50432")
+-- With the quest in the local log, members' lines use its text like map icon tooltips.
+module("QuestiePlayer").currentQuestlog[33] = {Objectives={[1]={Description="Tough Wolf Meat."}}}
+assert(comms.data:GetTooltip("m_299")[33].Tankbot[1].text == "Tough Wolf Meat", "party line ignored local objective text")
+module("QuestiePlayer").currentQuestlog[33] = nil
 assert(not entry("Tankbot",34,1) and not entry("Tankbot",34,2) and entry("Tankbot",34,-1).id == 3,
     "ambiguous database objectives were paired")
 assert(not entry("Tankbot",35,1) and entry("Tankbot",35,-1).id == 3 and entry("Tankbot",35,-2).id == 4,

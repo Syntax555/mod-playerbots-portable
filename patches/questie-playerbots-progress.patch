@@ -1,8 +1,32 @@
 diff --git a/Modules/Network/QuestieCommsData.lua b/Modules/Network/QuestieCommsData.lua
-index 79d910f..3bfccba 100755
+index 79d910f..f92ecb3 100755
 --- a/Modules/Network/QuestieCommsData.lua
 +++ b/Modules/Network/QuestieCommsData.lua
-@@ -80,6 +80,7 @@ end
+@@ -7,6 +7,8 @@ local QuestieDB = QuestieLoader:ImportModule("QuestieDB");
+ local QuestieComms = QuestieLoader:ImportModule("QuestieComms");
+ ---@type QuestieLib
+ local QuestieLib = QuestieLoader:ImportModule("QuestieLib");
++---@type QuestiePlayer
++local QuestiePlayer = QuestieLoader:ImportModule("QuestiePlayer");
+ 
+ QuestieComms.data = {}
+ 
+@@ -45,7 +47,13 @@ function QuestieComms.data:GetTooltip(tooltipKey)
+                     tooltipData[questId][playerName][objectiveIndex] = {};
+                 end
+                 local oName = "";
+-                if((objective.type == "monster" or objective.type == "m") and objective.id) then
++                local localQuest = QuestiePlayer.currentQuestlog[questId]
++                local localObjective = localQuest and localQuest.Objectives and localQuest.Objectives[objectiveIndex]
++                if localObjective and QuestieLib:GetObjectiveDescription(localObjective) ~= "" then
++                    -- Name it like the local player's objective, as map icon tooltips do;
++                    -- the database can name another item or target than the server.
++                    oName = QuestieLib:GetObjectiveDescription(localObjective)
++                elseif((objective.type == "monster" or objective.type == "m") and objective.id) then
+                     local npc = QuestieDB:GetNPC(objective.id);
+                     oName = (npc and npc.name) or ("NPC missing from DB: " .. objective.id);
+                 elseif((objective.type == "object" or objective.type == "o") and objective.id) then
+@@ -80,6 +88,7 @@ end
  ---@param playerName string
  ---@param objectives table @Contains objectives o[index].text
  function QuestieComms.data:RegisterTooltip(questId, playerName, objectives)
@@ -10,7 +34,7 @@ index 79d910f..3bfccba 100755
      if(not playerRegisteredTooltips[playerName]) then
          playerRegisteredTooltips[playerName] = {}
      end
-@@ -110,6 +111,26 @@ function QuestieComms.data:RegisterTooltip(questId, playerName, objectives)
+@@ -110,6 +119,26 @@ function QuestieComms.data:RegisterTooltip(questId, playerName, objectives)
                  -- Show non-item objectives when hovering their direct objective entity.
                  QuestieComms.data:AddTooltip(playerName, questId, lookupKey, objectiveIndex, objective);
              end

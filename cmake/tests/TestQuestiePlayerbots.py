@@ -63,6 +63,8 @@ class QuestiePlayerbotsTests(unittest.TestCase):
              "indices[position] = nil and FindSameTypeObjectiveIndex(", "database objective pairing"),
             (FILES[0], "databaseObjective and databaseObjective.Id or", "", "database objective identity"),
             (FILES[0], "unmatched[objectiveType] == remaining[objectiveType]", "true", "ambiguous objective counts"),
+            (FILES[2], 'if localObjective and QuestieLib:GetObjectiveDescription(localObjective) ~= "" then',
+             "if false then", "local objective text"),
             (FILES[0], "if not usedIndices[objectiveIndex] then", "if true then", "remaining database objectives"),
             (FILES[0], 'fields[4] == "NO_BOT"', "false", "NO_BOT backoff"),
             (FILES[0], "request.watch = nil", "", "NO_BOT without UNWATCH"),

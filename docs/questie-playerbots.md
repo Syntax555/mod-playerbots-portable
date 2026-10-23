@@ -61,8 +61,10 @@ initial snapshots and subscriptions happen automatically, including after
    can require other items or targets than Questie's database. When the
    database leaves as many objectives of a type as remain unmatched, they are
    paired in order and the bot reports Questie's objective, as a Questie
-   client does. Tooltips then show Questie's name for it, on the same
-   creatures as your own progress. Complete snapshots replace only the bot's
+   client does, so its count appears on the same creatures as your own
+   progress. When you have the same quest, group members' tooltip lines use
+   your quest log's objective text, as map icon tooltips do; otherwise they
+   use Questie's name. Complete snapshots replace only the bot's
    previously applied data; absent quests remove its old registrations.
 5. The bridge checks watched bots once per second after the map-update barrier.
    It sends a new authoritative snapshot when state changes, including quest
