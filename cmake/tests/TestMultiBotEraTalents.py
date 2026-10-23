@@ -221,7 +221,8 @@ PanelTemplates_UpdateTabs=function() end
 GameTooltip={lines={},SetOwner=function() end,SetText=function(self,s) self.title=s;self.lines={} end,AddLine=function(self,s) table.insert(self.lines,s) end,Show=function() end,Hide=function() end}
 local warnings={}
 DEFAULT_CHAT_FRAME={AddMessage=function(_,s) table.insert(warnings,s) end}
-UIErrorsFrame={AddMessage=function() error("inspect cannot learn talents") end}
+local talentErrors=0
+UIErrorsFrame={AddMessage=function() talentErrors=talentErrors+1 end}
 local units={party1="0x0000000000000002",party2="0x0000000000000003",player="0x0000000000000001"}
 UnitGUID=function(unit) return units[unit] end
 UnitExists=function(unit) return units[unit]~=nil end
@@ -235,18 +236,26 @@ local hooks={}
 hooksecurefunc=function(name,fn) hooks[name]=fn end
 HideUIPanel=function(frame) frame:Hide(); if frame==InspectFrame then InspectTalentFrame:Hide() end end
 local calls=0
+local unitLevel=60
+UnitLevel=function() return unitLevel end
+InspectSwitchTabs=function(tab)
+  assert(tab==1 or tab==3,"the native talent inspect tab is 3; tab 2 is PvP")
+  if tab==3 then InspectTalentFrame:Show() else InspectTalentFrame:Hide() end
+end
+-- Native 3.3.5 InspectFrame_Show always selects equipment before its post-hook.
 InspectUnit=function(unit)
   calls=calls+1
   HideUIPanel(InspectFrame)
   InspectFrame.unit=unit
-  InspectFrame:Show(); InspectTalentFrame:Show()
+  InspectFrame:Show(); InspectSwitchTabs(1)
   if hooks.InspectFrame_Show then hooks.InspectFrame_Show() end
 end
 IsAddOnLoaded=function() return true end
 local sent={}
+local learning=false
 SendAddonMessage=function(prefix,message,channel,recipient)
   assert(prefix=="ERATAL" and channel=="WHISPER" and recipient=="Master")
-  assert(message:match("^INSPECT ") or message=="HELLO","inspection must never send LEARN or a preset")
+  assert(message:match("^INSPECT ") or message=="HELLO" or (learning and message:match("^ILEARN ")),"inspection must never send own LEARN or a preset")
   table.insert(sent,message)
 end
 GetSpellInfo=function(id) if id==932999 then return "EraTalents Gen a1b2c3d4" end; return "Spell "..id end
@@ -271,7 +280,9 @@ __SET_TALENTS__
 local function suppressed() return not InspectTalentFrameScrollFrame:IsShown() end
 local function close() HideUIPanel(InspectFrame) end
 ET.state.serverGen=nil; ET.state.clientGen=nil
+InspectUnit("party1")
 button.doLeft(button)
+assert(InspectTalentFrame:IsShown(),"MultiBot's talent button must open the talent tab rather than equipment")
 assert(suppressed() and ET.inspectStatus:IsShown(),"a bot request before the first GEN must not reveal native Wrath talents")
 for _,record in ipairs(packets) do if record[1]=="0" and record[2]=="5" then ET.OnAddonMsg("ERATAL",record[3]) end end
 assert(suppressed() and (not ET.inspectView or not ET.inspectView.frame:IsShown()),"a historical reply waits for generation validation")
@@ -310,12 +321,62 @@ for _,record in ipairs(packets) do
     assert(suppressed() and view.frame:IsShown())
   end
 end
+-- Only server-authorized controlled altbots can spend their own historical points.
+for _,cls in ipairs({1,2,3,4,5,7,8,9,11}) do
+for _,era in ipairs({0,1}) do
+  close(); button.doLeft(button)
+  local replies={}
+  for _,record in ipairs(packets) do
+    if record[1]==tostring(era) and record[2]==tostring(cls) then
+      table.insert(replies,record[3]); ET.OnAddonMsg("ERATAL",record[3])
+    end
+  end
+  local guid=UnitGUID("party1")
+  local view=ET.inspectView
+  local tree=EraTalentsData[era][cls]
+  local node
+  for _,candidate in ipairs(tree.talents) do
+    if candidate.tab==view.activeTab and candidate.maxRank>2 and not candidate.grant then node=candidate; break end
+  end
+  local rankButton=view.frame.pools[tree][node.id]
+  ET.OnAddonMsg("ERATAL","IEDIT "..guid.." 1 2")
+  assert(not view.readOnly and view.state.availPts==2,"controlled altbots must be editable with their server-earned point budget")
+  assert(view.frame.footerUnspent.text==string.format(ET.L["Unspent Talents: %d"],2))
+  local before=#sent
+  learning=true; rankButton.scripts.OnClick(rankButton); learning=false
+  assert(#sent==before+1 and sent[#sent]=="ILEARN "..guid.." "..node.id,"talent clicks must target the selected bot rather than the player")
+  assert(view.state.ranks[node.id]==1 and ET.state.era==2 and next(ET.state.ranks)==nil,"learning waits for server ranks and preserves the master's build")
+  rankButton.scripts.OnClick(rankButton)
+  assert(#sent==before+1,"pending learning must not spend a second point on a repeated click")
+  for _,message in ipairs(replies) do ET.OnAddonMsg("ERATAL",message:gsub(node.id..":1",node.id..":2")) end
+  ET.OnAddonMsg("ERATAL","IEDIT "..guid.." 1 1")
+  assert(not view.readOnly and view.state.ranks[node.id]==2 and view.state.availPts==1,"fresh server replies update the bot's ranks and remaining points")
+  ET.OnAddonMsg("ERATAL","IEDIT "..guid.." 0 0")
+  rankButton.scripts.OnClick(rankButton)
+  assert(view.readOnly and #sent==before+1,"revoked permission keeps foreign bots and players read-only")
+  ET.OnAddonMsg("ERATAL","IEDIT "..guid.." 1 0")
+  local errorsBefore=talentErrors
+  rankButton.scripts.OnClick(rankButton)
+  assert(#sent==before+1 and talentErrors==errorsBefore+1,"a bot without earned points cannot send another purchase")
+  ET.OnAddonMsg("ERATAL","IEDIT "..guid.." 1 1")
+  ET.OnAddonMsg("ERATAL",replies[1])
+  assert(view.readOnly or not view.frame:IsShown(),"a fresh rank snapshot must discard previous edit permission")
+  close()
+  rankButton.scripts.OnClick(rankButton)
+  assert(#sent==before+1,"a stale click after closing cannot spend the master's talents")
+  ET.OnAddonMsg("ERATAL","IEDIT "..guid.." 1 51")
+  assert(next(ET.inspect.cache)==nil,"late edit replies cannot restore closed bot state")
+end
+end
+button.doLeft(button)
 -- Mixed party targets discard a late reply for the previously inspected GUID.
 selected="Otherbot"; button.doLeft(button)
 assert(ET.inspect.current==UnitGUID("party2") and MultiBot.talent.name=="Otherbot")
 local before=calls; MultiBot.talent.setTalents()
 assert(calls==before and ET.inspect.current==UnitGUID("party2"),"a delayed retry cannot reopen the previous bot")
 ET.OnAddonMsg("ERATAL",packets[1][3]); assert(ET.inspect.cache[UnitGUID("party1")]==nil)
+ET.OnAddonMsg("ERATAL","IEDIT "..UnitGUID("party1").." 1 51")
+assert(ET.inspect.cache[UnitGUID("party1")]==nil,"late edit permissions cannot authorize a different selected bot")
 selected="Altbot"; close(); button.doLeft(button)
 for _,record in ipairs(packets) do if record[1]=="0" and record[2]=="5" then ET.OnAddonMsg("ERATAL",record[3]) end end
 assert(ET.inspectView.frame:IsShown())
@@ -359,8 +420,11 @@ assert(InspectFrame:IsShown() and MultiBot.auto.talent and not suppressed(),"a r
 MultiBot.talent.setTalents()
 assert(rendered==1,"a realm without EraTalents renders MultiBot's talent window")
 close(); ET.CheckGeneration("a1b2c3d4")
+unitLevel=9; button.doLeft(button)
+assert(not InspectTalentFrame:IsShown(),"the native talent tab remains disabled below level 10")
+close(); unitLevel=60
 allowed=false; assert(not ET.OpenBotInspect("party1",false)); assert(not ET.OpenBotInspect("missing",false))
-print("MultiBot era talents: "..locale.." selected-character trees, native Wrath, read-only ranks, stale replies and client-data guards passed")
+print("MultiBot era talents: "..locale.." all-class Vanilla/TBC learning, native Wrath, read-only inspection, stale replies and client-data guards passed")
 '''
 
 
@@ -394,6 +458,11 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
                                'a stale retry must not reopen closed inspection',
                                'a silent server restores the stock inspect tree',
                                'bot inspection without a server stays native',
+                               'controlled altbots must be editable',
+                               'inspection must never send own LEARN or a preset',
+                               'read-only bot view cannot learn talents',
+                               "MultiBot's talent button must open the talent tab",
+                               'the native talent tab remains disabled',
                                "a realm without EraTalents renders MultiBot's talent window")
             if not any(message in result.stderr for message in expected_errors):
                 raise AssertionError('Mutation failed for an unrelated fixture error: ' + result.stderr)
@@ -419,6 +488,8 @@ def main() -> None:
         directory = Path(temporary)
         era, bot = directory / 'era', directory / 'bot'
         shutil.copytree(args.module_source / 'client-addon', era / 'client-addon')
+        (era / 'src').mkdir()
+        shutil.copyfile(args.module_source / 'src/EraTalentsComms.cpp', era / 'src/EraTalentsComms.cpp')
         # Native sources are read directly; release/prepared sources are never edited.
         (bot / 'UI').mkdir(parents=True)
         (bot / 'Core').mkdir()
@@ -449,6 +520,20 @@ def main() -> None:
             inspect.write_text(safe_inspect.replace(silent_guard, replacement, 1))
             client_fixture(era, bot, packets, directory, expect_failure=True)
         inspect.write_text(safe_inspect)
+        for relative, before, after in (
+                ('Inspect.lua', 'if level <= 0 or level >= 10 then InspectSwitchTabs(3) end', 'InspectSwitchTabs(3)'),
+                ('Inspect.lua', 'InspectSwitchTabs(3)', 'InspectSwitchTabs(1)'),
+                ('Inspect.lua', '    v.readOnly = not e.editable\n', ''),
+                ('Inspect.lua', '      ET.inspectView.readOnly = true\n', ''),
+                ('Comms.lua', '  e.editable = false\n', ''),
+                ('TalentUI.lua', 'if v.guid then ET.LearnInspect(v.guid, node.id) else ET.Learn(node.id) end', 'ET.Learn(node.id)')):
+            path = era / 'client-addon/EraTalents' / relative
+            original = path.read_text()
+            if before not in original:
+                raise AssertionError('Expected production bot-learning guard: ' + relative)
+            path.write_text(original.replace(before, after, 1))
+            client_fixture(era, bot, packets, directory, expect_failure=True)
+            path.write_text(original)
         frame = bot / 'UI/MultiBotTalentFrame.lua'
         safe_frame = frame.read_text()
         retry_guard = '    if toggle == false then return true end\n'

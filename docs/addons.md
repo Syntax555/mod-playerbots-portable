@@ -23,8 +23,10 @@ for the matching addon/MPQ generation and locale checks.
 
 With both matching addons loaded, MultiBot's talent button opens the selected
 bot in the Blizzard inspect window. EraTalents displays its own Vanilla or TBC
-tree and allocated ranks there; Wrath uses the native inspect view. Historical
-inspection is read-only and still requires normal inspect access and range.
+tree and allocated ranks there; Wrath uses the native inspect view. For an altbot
+you control in your group, click historical talents to spend its earned points.
+The server validates each purchase against that bot's own era and prerequisites.
+Other characters remain read-only; normal inspect access and range still apply.
 The separate MultiBot talent window and its Custom/Glyph tabs are not opened
 through this route. On a realm with native trees (`EraTalents.Enable = 0`), the
 server sends no EraTalents data and the button keeps MultiBot's talent window.

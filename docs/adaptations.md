@@ -99,7 +99,8 @@ The prepared MultiBot addon displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
 retained. Its talent button uses native inspection with EraTalents: historical
 trees and ranks belong to the inspected bot, and Wrath retains Blizzard's view.
-Historical inspection is read-only. Optional quest, gear and guide addons and
+Controlled group altbots can spend their earned Vanilla/TBC points there;
+other characters remain read-only. Optional quest, gear and guide addons and
 their installation sources are listed in [client addons](addons.md).
 
 The [Questie Playerbots integration](questie-playerbots.md) sends authorized

@@ -74,6 +74,14 @@ spec weights in `Playerbots.RandomClassSpecProb`, including feral cat druids.
 for that allocation. Altbots and SelfBot characters keep unspent points for their
 owner to spend.
 
+With the matching MultiBot and EraTalents addons, use the grouped altbot's talent
+button to open its Vanilla or TBC tree. Click a talent to buy one rank with that
+bot's unspent points; the displayed ranks and remaining points update from the
+server's reply. The bot must be under your control, in your group and within
+normal inspect range. Other characters' trees remain read-only.
+After choosing a different specialization, select its combat strategy in
+MultiBot so the bot's rotation matches the build.
+
 Historical trainer spells require ordinary paid purchases with gold, level and
 prerequisite checks. Talent and class-quest spells require their earned sources.
 Known spell variants transfer on an era conversion; ambiguous collapsed ranks
