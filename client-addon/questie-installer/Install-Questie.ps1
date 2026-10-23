@@ -144,6 +144,9 @@ try {
         $archivePath = Join-Path $stage 'upstream.zip'
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
         Write-Host 'Downloading the pinned Questie version directly from its upstream project...'
+        # Windows PowerShell 5.1 redraws its progress bar per received block,
+        # which slows a large download many times over.
+        $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $manifest.sourceArchive.url -OutFile $archivePath -UseBasicParsing
     }
     Assert-Hash $manifest.sourceArchive.sha256 ([System.IO.File]::ReadAllBytes($archivePath)) 'Questie source archive'
