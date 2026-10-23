@@ -460,6 +460,11 @@ func rollbackUpdateAfterError(root string, plan *portableUpdatePlan, cause error
 }
 
 func rollbackPortableUpdate(root string, plan *portableUpdatePlan) error {
+	// A failed commit write can leave the in-memory phase ahead of the journal.
+	plan.Phase = "applying"
+	if err := writePortableUpdatePlan(root, plan); err != nil {
+		return err
+	}
 	for i := len(plan.Operations) - 1; i >= 0; i-- {
 		op := &plan.Operations[i]
 		if op.State == "" || op.State == "rolled-back" {
