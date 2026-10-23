@@ -115,15 +115,24 @@ def save(tree):
     git(tree, 'reset', '-q')
     if not diff.strip():
         raise SystemExit('The patch would be empty; remove it from versions.lock.json instead.')
-    (root / patch).write_text(diff)
     kind, entry = lock_entry(root, patch)
     _, main = repository()
     check = Path(tempfile.mkdtemp(prefix='patchwork-check-'))
+    candidate = None
     try:
         extract(main, kind, entry, check / 'tree')
+        with tempfile.NamedTemporaryFile(dir=(root / patch).parent, suffix='.patch', delete=False) as handle:
+            candidate = Path(handle.name)
+            handle.write(diff.encode('utf-8'))
         for item in entry['patches']:
-            apply(check / 'tree', root / item)
+            apply(check / 'tree', candidate if item == patch else root / item)
+        # Publish only the validated chain, without exposing a partially written patch.
+        if (root / patch).exists():
+            shutil.copymode(root / patch, candidate)
+        candidate.replace(root / patch)
     finally:
+        if candidate is not None:
+            candidate.unlink(missing_ok=True)
         shutil.rmtree(check)
     print(f"Saved {patch}; the complete {entry['name']} patch chain applies to the pinned revision.")
 
