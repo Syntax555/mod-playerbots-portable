@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 from FixtureSupport import make_wdbc as dbc
@@ -492,6 +493,13 @@ class ClientDbcTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "changed IP spell record"):
             PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932999})
 
+    def test_unexpected_spell_records_are_rejected(self):
+        base = dbc([record(10)])
+        merged = dbc([record(10), record(932999, 1), record(12345)],
+                     b"\0EraTalents Gen 1234abcd\0")
+        with self.assertRaisesRegex(ValueError, "unexpected spell record"):
+            PACKAGE.verify_merged_spell(base, merged, "1234abcd", {932999})
+
     def test_truncation_and_duplicate_record_ids_rejected(self):
         for raw in (b"WDBC", dbc([record(10)])[:-1], dbc([record(10), record(10)])):
             with self.assertRaises(ValueError):
@@ -509,6 +517,32 @@ class ClientDbcTests(unittest.TestCase):
         corrupted[4] = 3
         with self.assertRaisesRegex(ValueError, "changed IP skill record"):
             PACKAGE.verify_merged_skill(base, dbc([bytes(corrupted), era], fields=14), {920010})
+
+    def test_unexpected_skill_mappings_are_rejected(self):
+        original = struct.pack("<14I", 1, 2, 10, *([0] * 11))
+        era = struct.pack("<14I", 900010, 2, 920010, *([0] * 11))
+        foreign = struct.pack("<14I", 900011, 2, 12345, *([0] * 11))
+        base = dbc([original], fields=14)
+        merged = dbc([original, era, foreign], fields=14)
+        with self.assertRaisesRegex(ValueError, "unexpected skill record"):
+            PACKAGE.verify_merged_skill(base, merged, {920010})
+
+    def test_unexpected_record_checks_reject_mutations(self):
+        source = Path(SPEC.origin).read_text(encoding="utf-8")
+        for kind, check in (("spell", self.test_unexpected_spell_records_are_rejected),
+                            ("skill", self.test_unexpected_skill_mappings_are_rejected)):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix="dbc-merge-mutation-") as temporary:
+                guard = f'raise ValueError("Merged client contains an unexpected {kind} record")'
+                self.assertEqual(source.count(guard), 1)
+                path = Path(temporary) / "PackageEraClient.py"
+                path.write_text(source.replace(guard, "pass"), encoding="utf-8")
+                spec = importlib.util.spec_from_file_location("mutated_era_client_package", path)
+                mutated = importlib.util.module_from_spec(spec)
+                mutated.__file__ = SPEC.origin
+                spec.loader.exec_module(mutated)
+                function = f"verify_merged_{kind}"
+                with mock.patch.object(PACKAGE, function, getattr(mutated, function)), self.assertRaises(AssertionError):
+                    check()
 
 
 class NativeSpellRestorationTests(unittest.TestCase):
