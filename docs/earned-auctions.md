@@ -34,10 +34,12 @@ bots' auctions are eligible because the buyer pays and the seller gives up the
 actual item.
 
 A bot maintains at most 20 listings, at most two of the same item, and attempts
-at most two new listings and one buyout per visit. The buyout goes to the most
-useful offer: gear upgrades, then ammunition, consumables and gathering tools;
-within a kind, the offer cheapest against its valuation limit. Bots list for the
-12-hour duration, which `Rate.Auction.Time` scales.
+at most two new listings and one purchase per visit. The purchase goes to the
+most useful offer: gear upgrades, then ammunition, consumables and gathering
+tools; within a kind, the offer cheapest against its valuation limit. An auction
+whose buyout is missing or not acceptable takes the core's minimum bid instead
+when it ends within two visit intervals, unless a player leads it. Bots list for
+the 12-hour duration, which `Rate.Auction.Time` scales.
 
 An item that returns unsold in two listing rounds, or is refused a listing
 twice, is not listed again for a week, or for three listing durations if that is
@@ -78,10 +80,10 @@ ordinary price cannot repay that house's deposit and cut is vendored.
 
 ## Mail delivery
 
-Bought items, sale proceeds and expired auctions use normal auction mail and
-delivery delays. Bots visit a mailbox and process at most 20 auction receipts
-per visit through the core handlers. Other mail is left alone; undelivered,
-expired and COD mail is skipped.
+Bought and won items, sale proceeds, outbid bids and expired auctions use normal
+auction mail and delivery delays. Bots visit a mailbox and process at most 20
+auction receipts per visit through the core handlers. Other mail is left alone;
+undelivered, expired and COD mail is skipped.
 
 If bags are full, attachments remain in mail until space is available. Money can
 be collected with full bags. A receipt is deleted only after its money and all

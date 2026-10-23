@@ -41,6 +41,7 @@ values_source = (args.source / 'Ai/Base/Value/MaintenanceValues.cpp').read_text(
 item_header = (args.core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
 auction_header = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.h').read_text()
 auction_source = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.cpp').read_text()
+auction_handlers = (args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
 shared_defines = (args.core / 'src/server/shared/SharedDefines.h').read_text()
 native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
@@ -49,7 +50,6 @@ native = '\n'.join(function(source, signature) + ';' for source, signature in (
 # Doubles for these producers keep their native shape.
 assert 'uint32 TotemCategory;' in item_header
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
-auction_handlers = (args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
 assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in auction_handlers
 assert auction_handlers.count('CONFIG_AUCTION_LEVEL_REQ') == 2 and (
     'if (GetPlayer()->GetLevel() < sWorld->getIntConfig(CONFIG_AUCTION_LEVEL_REQ))'
@@ -65,7 +65,16 @@ auction_rules = '\n'.join([
     function(auction_source, 'uint32 AuctionHouseMgr::GetAuctionDeposit(AuctionHouseEntry const* entry, uint32 time, '
                              'Item* pItem, uint32 count)'),
     function(auction_source, 'uint32 AuctionEntry::GetAuctionCut() const'),
+    function(auction_source, 'uint32 AuctionEntry::CalculateAuctionOutBid(uint32 bid)'),
 ])
+bid_handler = function(auction_handlers, 'void WorldSession::HandleAuctionPlaceBid(WorldPacket& recvData)')
+for rule in ('if (price <= auction->bid || price < auction->startbid)',
+             ('if ((price < auction->buyout || auction->buyout == 0) &&\n'
+              '            price < auction->bid + AuctionEntry::CalculateAuctionOutBid(auction->bid))'),
+             'if (!player->HasEnoughMoney(price))', 'if (price < auction->buyout || auction->buyout == 0)',
+             'sAuctionMgr->SendAuctionOutbiddedMail(auction, price, GetPlayer(), trans);',
+             'auction->bidder = player->GetGUID();\n        auction->bid = price;'):
+    assert rule in bid_handler, rule
 assert "strm << item_template << \":0:\" << response << ':' << Id << ':' << itemCount;" in subject_writer
 
 
@@ -163,6 +172,9 @@ void PolicyTests()
     assert(!Affordable(101, 1000, 100));
     assert(!Affordable(UINT32_MAX, UINT32_MAX, UINT32_MAX));
     assert(WithinPriceCeiling(200, 200) && !WithinPriceCeiling(201, 200));
+    // Bids go to auctions ending within two visits, at the core's minimum.
+    assert(BidWindow(1, 300) && BidWindow(600, 300) && !BidWindow(601, 300) && !BidWindow(0, 300));
+    assert(MinimumBid(400, 0, 1) == 400 && MinimumBid(400, 500, 25) == 525 && !MinimumBid(1, MaxCopper, 1));
     // Gear outranks consumables; within a tier the better bargain, then the lower price, wins.
     assert(BetterOffer(RankOffer(0, 900, 1000), RankOffer(2, 100, 5000)));
     assert(BetterOffer(RankOffer(0, 600, 2000), RankOffer(0, 500, 1000)));
@@ -373,8 +385,9 @@ struct AuctionHouseEntry { uint32 houseId = 0, faction = 0, depositPercent = 0, 
 AuctionHouseEntry const factionHouse{2, 12, 5, 5}, neutralHouse{7, 0, 25, 15};
 struct AuctionEntry
 {
-    uint32 Id = 0, item_template = 0, itemCount = 0, buyout = 0, bid = 0;
+    uint32 Id = 0, item_template = 0, itemCount = 0, buyout = 0, bid = 0, startbid = 0;
     ObjectGuid item_guid, owner, bidder;
+    static uint32 CalculateAuctionOutBid(uint32 bid);
     std::int64_t expire_time = 100000;
     AuctionHouseEntry const* auctionHouseEntry = &factionHouse;
     std::string BuildAuctionMailSubject(MailAuctionAnswers response) const;
@@ -431,6 +444,7 @@ struct WorldSession
     int inboxes = 0, sells = 0, buys = 0, takesMoney = 0, takesItem = 0, deletes = 0;
     uint32 lastCount = 0, lastPrice = 0, lastAuction = 0, depositPaid = 0;
     ObjectGuid lastItem;
+    std::vector<std::pair<ObjectGuid, uint32>> refunds;
     uint32 GetAccountId() const { return account; }
     void HandleGetMailList(WorldPacket&);
     void HandleMailTakeMoney(WorldPacket&);
@@ -486,8 +500,12 @@ struct Player
         flag == UNIT_NPC_FLAG_MAILBOX && id == creatureMailbox.guid ? &creatureMailbox : nullptr; }
     bool IsWithinDistInMap(WorldObject*, float) const { return range; }
 };
-struct Config { bool naturalProgression = true, earnedAuctions = true; uint32 earnedAuctionInterval = 300; }
-    sPlayerbotAIConfig;
+struct Config
+{
+    bool naturalProgression = true, earnedAuctions = true; uint32 earnedAuctionInterval = 300;
+    std::set<uint32> randomAccounts{2};
+    bool IsInRandomAccountList(uint32 id) const { return randomAccounts.contains(id); }
+} sPlayerbotAIConfig;
 struct RandomMgr { bool IsRandomBot(Player* bot) const { return bot->random; } } sRandomPlayerbotMgr;
 #define GET_PLAYERBOT_AI(bot) (&(bot)->ai)
 std::map<ObjectGuid, Player*> connected;
@@ -559,9 +577,27 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& packet)
 void WorldSession::HandleAuctionPlaceBid(WorldPacket& packet)
 {
     ++buys; lastAuction = packet.data.at(1); lastPrice = packet.data.at(2);
-    AuctionEntry* offer = auctionMgr.house.GetAuction(lastAuction); assert(offer && offer->buyout == lastPrice);
+    AuctionEntry* offer = auctionMgr.house.GetAuction(lastAuction);
+    assert(offer && offer->bidder != bot->guid && (!offer->buyout || lastPrice <= offer->buyout));
     if (rejectBuy) return;
-    assert(bot->money >= lastPrice); bot->money -= lastPrice; auctionMgr.house.auctions.erase(lastAuction);
+    // The core's checks, in its order: the bid and start bid, the increment below
+    // the buyout, then the bidder's gold.
+    if (lastPrice <= offer->bid || lastPrice < offer->startbid)
+        return;
+    bool const bid = lastPrice < offer->buyout || !offer->buyout;
+    if (bid && lastPrice < offer->bid + AuctionEntry::CalculateAuctionOutBid(offer->bid))
+        return;
+    if (bot->money < lastPrice)
+        return;
+    bot->money -= lastPrice;
+    if (!bid)
+    {
+        auctionMgr.house.auctions.erase(lastAuction);
+        return;
+    }
+    if (offer->bidder)
+        refunds.push_back({offer->bidder, offer->bid});
+    offer->bidder = bot->guid; offer->bid = lastPrice;
 }
 namespace EarnedAuction
 {
@@ -638,6 +674,11 @@ struct Scenario
         item->owner = bot.guid; item->proto.ItemId = entry; item->count = count;
         Item& result = *item; items.push_back(item->guid); allocatedItems[result.guid] = std::move(item);
         SetUsage(result, usage); return result;
+    }
+    AuctionEntry& BidOffer(Item& item, uint32 startbid = 400, std::int64_t timeLeft = 300)
+    {
+        AuctionEntry& offer = Offer(item, 1, 0); offer.startbid = startbid; offer.expire_time = now + timeLeft;
+        return offer;
     }
     Item& BagItem(uint32 entry = 100, uint32 count = 1, ItemUsage usage = ITEM_USAGE_AH)
     {
@@ -1114,6 +1155,54 @@ void ServiceTests()
         assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.session.lastAuction == 2 && s.bot.money == 9400);
     }
     {
+        // A bid-only auction ending before the next visits takes the start bid.
+        Scenario s; Item& item = s.MakeItem(100, 1, ITEM_USAGE_EQUIP); AuctionEntry& offer = s.BidOffer(item);
+        assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.session.lastPrice == 400 && s.bot.money == 9600);
+        assert(auctionMgr.house.GetAuction(1) == &offer && offer.bidder == s.bot.guid && offer.bid == 400);
+        // The outstanding bid holds up further purchases.
+        Item& other = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); s.Offer(other, 2, 300);
+        now += sPlayerbotAIConfig.earnedAuctionInterval; assert(!s.Visit()); assert(s.bot.session.buys == 1);
+    }
+    {
+        // Another bot's lead is outbid by the core's increment, and its gold returns.
+        Scenario s; Item& item = s.MakeItem(100, 1, ITEM_USAGE_EQUIP); AuctionEntry& offer = s.BidOffer(item);
+        offer.bid = 500; offer.bidder = {777}; characterCache.accounts[offer.bidder] = 2;
+        assert(s.Visit()); assert(s.bot.session.lastPrice == 525 && s.bot.money == 9475 && offer.bid == 525);
+        assert(s.bot.session.refunds.size() == 1 && s.bot.session.refunds[0].second == 500);
+    }
+    {
+        // An unaffordable buyout leaves a bid below it.
+        Scenario s; Item& item = s.MakeItem(100, 1, ITEM_USAGE_EQUIP); AuctionEntry& offer = s.BidOffer(item);
+        offer.buyout = 3000; assert(s.Visit()); assert(s.bot.session.lastPrice == 400 && offer.bidder == s.bot.guid);
+    }
+    {
+        // The core refuses a buyout below the start bid, so none is sent.
+        Scenario s; Item& item = s.MakeItem(100, 1, ITEM_USAGE_EQUIP); AuctionEntry& offer = s.Offer(item, 1, 300);
+        offer.startbid = 400; assert(!s.Visit()); assert(!s.bot.session.buys && s.bot.money == 10000);
+    }
+    {
+        // A bid-only auction outside its bid window needs no item evaluation.
+        Scenario s; Item& item = s.MakeItem(100, 1, ITEM_USAGE_EQUIP);
+        s.BidOffer(item, 400, 2 * sPlayerbotAIConfig.earnedAuctionInterval + 1);
+        assert(!s.Visit()); assert(!s.bot.ai.context.usageLookups && !s.bot.session.buys);
+    }
+    for (int refusal = 0; refusal < 5; ++refusal)
+    {
+        // No bid on an auction ending later or one a player leads, nor one beyond
+        // the valuation or budget; a bid the core refuses is no purchase.
+        Scenario s; Item& item = s.MakeItem(100, 1, ITEM_USAGE_EQUIP); AuctionEntry& offer = s.BidOffer(item);
+        switch (refusal)
+        {
+            case 0: offer.expire_time = now + 2 * sPlayerbotAIConfig.earnedAuctionInterval + 1; break;
+            case 1: offer.bid = 500; offer.bidder = {778}; characterCache.accounts[offer.bidder] = 9; break;
+            case 2: offer.startbid = 1001; break;
+            case 3: s.bot.ai.context.budget.value = 399; break;
+            case 4: s.bot.session.rejectBuy = true; break;
+        }
+        assert(!s.Visit()); assert(s.bot.session.buys == (refusal == 4 ? 1 : 0) && s.bot.money == 10000);
+        assert(offer.bidder != s.bot.guid);
+    }
+    {
         // A Blacksmith Hammer serves crafting.
         Scenario s; Item& hammer = s.MakeItem(5956, 1, ITEM_USAGE_SKILL); hammer.proto.Class = ITEM_CLASS_WEAPON;
         hammer.proto.SubClass = ITEM_SUBCLASS_WEAPON_MISC; hammer.proto.TotemCategory = 162; s.Offer(hammer);
@@ -1358,6 +1447,26 @@ mutations = [
     ('deposit above the budget', 'service', 'deposit > budget || ', 'deposit > (budget | MaxCopper) || '),
     ('same-account auctions bought', 'service', 'if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId())',
      'if (!ownerAccount)'),
+    ('buyout below the start bid sent', 'service',
+     ' || (auction->buyout && auction->buyout < auction->startbid) ||\n            (!auction->buyout',
+     ' ||\n            (!auction->buyout'),
+    ('bid-only auctions evaluated early', 'service',
+     ' ||\n            (!auction->buyout && !BidWindow(auction->expire_time - now, VisitInterval())))', ')'),
+    ('bid beyond the next visits', 'policy', 'timeLeft <= 2 * std::int64_t(interval)',
+     'timeLeft <= 4 * std::int64_t(interval)'),
+    ('bid on an ended auction', 'policy', 'return timeLeft > 0 && ', 'return '),
+    ('bid below the increment', 'policy', 'std::uint64_t(bid) + increment', 'std::uint64_t(bid) + increment * 0 + 1'),
+    ('bid above the minimum', 'policy', 'std::uint64_t(bid) + increment : startbid',
+     'std::uint64_t(bid) + increment : startbid + 1'),
+    ('player lead outbid', 'service', '(auction->bidder && !BotBidder(auction->bidder))',
+     '(auction->bidder && !BotBidder(auction->bidder) && false)'),
+    ('bid without a valuation', 'service',
+     ('(auction->bid));\n'
+      '            if (!Affordable(price, budget, bot->GetMoney()) || !WithinPriceCeiling(price, ceiling))'),
+     ('(auction->bid));\n'
+      '            if (!Affordable(price, budget | MaxCopper, bot->GetMoney()) ||\n'
+      '                !WithinPriceCeiling(price, ceiling | MaxCopper))')),
+    ('refused bid reported', 'service', 'return placed ? placed->bidder == bot->GetGUID() : ', 'return placed ? true : '),
     ('purchase above the budget', 'service', 'Affordable(auction->buyout, budget, bot->GetMoney())',
      'Affordable(auction->buyout, budget | MaxCopper, bot->GetMoney())'),
     ('purchase without bag space', 'service',
@@ -1375,17 +1484,16 @@ mutations = [
      'return ai->HasGameClientMaster();'),
     ('profession materials bought', 'service', 'else if (usage == ITEM_USAGE_SKILL && GatheringTool(proto))',
      'else if (usage == ITEM_USAGE_SKILL)'),
-    ('usage tiers ignored', 'service', 'RankOffer(tier, auction->buyout, ceiling)',
-     'RankOffer(tier * 0, auction->buyout, ceiling)'),
-    ('offers ranked by absolute price', 'service', 'RankOffer(tier, auction->buyout, ceiling)',
-     'RankOffer(tier, auction->buyout, ceiling * 0 + 1)'),
+    ('usage tiers ignored', 'service', 'RankOffer(tier, price, ceiling)', 'RankOffer(tier * 0, price, ceiling)'),
+    ('offers ranked by absolute price', 'service', 'RankOffer(tier, price, ceiling)',
+     'RankOffer(tier, price, ceiling * 0 + 1)'),
     ('auction level ignored at the auctioneer', 'service', 'else if (MeetsAuctionLevel(bot))',
      'else if (MeetsAuctionLevel(bot) || true)'),
     ('auction level ignored when queuing', 'service', ' || (!mailbox && !MeetsAuctionLevel(ai->GetBot()))', ''),
     ('travel below the auction level', 'travel', 'std::max(MinimumLevel, auctionLevel)',
      'std::max(MinimumLevel, auctionLevel * 0)'),
-    ('crafting tools bought', 'service', '        default:\n            return false;\n    }\n}\n\nbool BuyUseful',
-     '        default:\n            return true;\n    }\n}\n\nbool BuyUseful'),
+    ('crafting tools bought', 'service', '        default:\n            return false;\n    }\n}\n\nuint32 VisitInterval',
+     '        default:\n            return true;\n    }\n}\n\nuint32 VisitInterval'),
     ('fishing poles refused', 'service',
      ('    if (proto->Class == ITEM_CLASS_WEAPON && proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE)\n'
       '        return true;\n'), ''),

@@ -445,10 +445,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..77f3259
+index 0000000..7632b1f
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,819 @@
+@@ -0,0 +1,843 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1060,6 +1060,15 @@ index 0000000..77f3259
 +    }
 +}
 +
++uint32 VisitInterval() { return std::clamp<uint32>(sPlayerbotAIConfig.earnedAuctionInterval, 60, 3600); }
++
++// Bots do not outbid a player's lead.
++bool BotBidder(ObjectGuid bidder)
++{
++    uint32 const account = sCharacterCache->GetCharacterAccountIdByGuid(bidder);
++    return account && sPlayerbotAIConfig.IsInRandomAccountList(account);
++}
++
 +bool BuyUseful(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house, std::vector<uint32> const& sample)
 +{
 +    Player* bot = ai->GetBot();
@@ -1069,9 +1078,13 @@ index 0000000..77f3259
 +    for (uint32 id : sample)
 +    {
 +        AuctionEntry* auction = house->GetAuction(id);
-+        if (!auction || !auction->buyout || auction->buyout <= auction->bid || auction->expire_time <= now ||
-+            auction->owner == bot->GetGUID() || auction->bidder == bot->GetGUID())
++        // The core refuses a buyout below the start bid, and a bid-only auction waits for
++        // its bid window before its item is evaluated.
++        if (!auction || auction->expire_time <= now || auction->owner == bot->GetGUID() ||
++            auction->bidder == bot->GetGUID() || (auction->buyout && auction->buyout < auction->startbid) ||
++            (!auction->buyout && !BidWindow(auction->expire_time - now, VisitInterval())))
 +            continue;
++        uint32 price = auction->buyout;
 +        uint32 const ownerAccount = sCharacterCache->GetCharacterAccountIdByGuid(auction->owner);
 +        if (!ownerAccount || ownerAccount == bot->GetSession()->GetAccountId())
 +            continue;
@@ -1095,11 +1108,20 @@ index 0000000..77f3259
 +        uint32 const budget = PurchaseBudget(ai, usage);
 +        uint32 const ceiling = PriceCeiling(proto->BuyPrice, proto->BuyCount, proto->SellPrice, auction->itemCount);
 +        if (!Affordable(auction->buyout, budget, bot->GetMoney()) || !WithinPriceCeiling(auction->buyout, ceiling))
-+            continue;
++        {
++            // Without an acceptable buyout, bid the core's minimum on an auction that ends
++            // before the next visits, unless a player leads it.
++            if (!BidWindow(auction->expire_time - now, VisitInterval()) ||
++                (auction->bidder && !BotBidder(auction->bidder)))
++                continue;
++            price = MinimumBid(auction->startbid, auction->bid, AuctionEntry::CalculateAuctionOutBid(auction->bid));
++            if (!Affordable(price, budget, bot->GetMoney()) || !WithinPriceCeiling(price, ceiling))
++                continue;
++        }
 +        ItemPosCountVec destination;
 +        if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
 +            continue;
-+        OfferRank const rank = RankOffer(tier, auction->buyout, ceiling);
++        OfferRank const rank = RankOffer(tier, price, ceiling);
 +        if (!bestId || BetterOffer(rank, best))
 +        {
 +            bestId = id;
@@ -1115,7 +1137,9 @@ index 0000000..77f3259
 +    packet << auctioneer->GetGUID() << bestId << best.price;
 +    bot->GetSession()->HandleAuctionPlaceBid(packet);
 +    // A successful buyout deletes the auction; never dereference its old pointer.
-+    return bot->GetMoney() < before && !house->GetAuction(bestId);
++    // A successful bid keeps it listed with the bot leading.
++    AuctionEntry const* placed = house->GetAuction(bestId);
++    return placed ? placed->bidder == bot->GetGUID() : bot->GetMoney() < before;
 +}
 +
 +class EarnedAuctionVisit final : public PlayerbotOperation
@@ -1155,7 +1179,7 @@ index 0000000..77f3259
 +        time_t const now = GameTime::GetGameTime().count();
 +        auto const key = std::make_pair(botGuid, isMailbox);
 +        auto it = lastVisits.find(key);
-+        uint32 const interval = std::clamp<uint32>(sPlayerbotAIConfig.earnedAuctionInterval, 60, 3600);
++        uint32 const interval = VisitInterval();
 +        if (it != lastVisits.end() && now - it->second < interval)
 +            return false;
 +        lastVisits[key] = now;
@@ -1302,10 +1326,10 @@ index 0000000..70244cb
 +#endif
 diff --git a/src/Bot/EarnedAuctionPolicy.h b/src/Bot/EarnedAuctionPolicy.h
 new file mode 100644
-index 0000000..59ac112
+index 0000000..c092b8e
 --- /dev/null
 +++ b/src/Bot/EarnedAuctionPolicy.h
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,176 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -1384,6 +1408,20 @@ index 0000000..59ac112
 +}
 +
 +inline bool WithinPriceCeiling(std::uint32_t price, std::uint32_t ceiling) { return price && price <= ceiling; }
++
++// A bid wins only when its auction ends. Bots bid on auctions ending before their
++// next visits, so gold another bidder outbids returns quickly.
++inline bool BidWindow(std::int64_t timeLeft, std::uint32_t interval)
++{
++    return timeLeft > 0 && timeLeft <= 2 * std::int64_t(interval);
++}
++
++// The core's lowest acceptable bid: the start bid, or the current bid plus its increment.
++inline std::uint32_t MinimumBid(std::uint32_t startbid, std::uint32_t bid, std::uint32_t increment)
++{
++    std::uint64_t const next = bid ? std::uint64_t(bid) + increment : startbid;
++    return next <= MaxCopper ? static_cast<std::uint32_t>(next) : 0;
++}
 +
 +// One purchase per visit goes to the most useful tier: gear upgrades, ammunition,
 +// consumables, then gathering tools. Within a tier the offer cheapest against its
