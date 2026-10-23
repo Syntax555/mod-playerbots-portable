@@ -4,11 +4,13 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -88,6 +90,31 @@ class QuestieInstallerPackagingTests(unittest.TestCase):
         first = self.output.read_bytes()
         packaging.package(self.root, self.output, self.archive)
         self.assertEqual(self.output.read_bytes(), first)
+
+    def test_patch_data_preserves_bytes_despite_git_line_ending_settings(self):
+        def verify(module):
+            file = module.patch_data(self.root, self.addon, self.archive)["files"][0]
+            self.assertEqual(file["afterSha256"], hashlib.sha256(self.expected).hexdigest())
+            lines = self.files["Main.lua"].decode("utf-8").split("\n")
+            for hunk in reversed(file["hunks"]):
+                lines[hunk["start"]:hunk["start"] + hunk["deleteCount"]] = hunk["lines"]
+            self.assertEqual("\n".join(lines).encode("utf-8"), self.expected)
+
+        environment = {"GIT_CONFIG_COUNT": "2",
+                       "GIT_CONFIG_KEY_0": "core.autocrlf", "GIT_CONFIG_VALUE_0": "true",
+                       "GIT_CONFIG_KEY_1": "core.eol", "GIT_CONFIG_VALUE_1": "crlf"}
+        with mock.patch.dict(os.environ, environment):
+            verify(packaging)
+            source = Path(SPEC.origin).read_text(encoding="utf-8")
+            setting = '"-c", "core.autocrlf=false", '
+            self.assertEqual(source.count(setting), 1)
+            mutated_path = self.root / "PackageQuestieInstaller.py"
+            mutated_path.write_text(source.replace(setting, ""), encoding="utf-8")
+            mutated_spec = importlib.util.spec_from_file_location("questie_packaging_mutated", mutated_path)
+            mutated = importlib.util.module_from_spec(mutated_spec)
+            mutated_spec.loader.exec_module(mutated)
+            with self.assertRaises(AssertionError):
+                verify(mutated)
 
     @unittest.skipUnless(POWERSHELL, "PowerShell is required to exercise the packaged installer")
     def test_generated_package_installs_the_changes_without_external_patch_files(self):
