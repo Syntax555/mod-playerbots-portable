@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -16,8 +17,10 @@ const automaticProfileState = ".portable-profiles.json"
 
 // Old templates can survive a manual update. Never recreate their active
 // configuration after the module has been removed from the distribution.
+var retiredModuleConfigs = []string{"AutoBalance.conf", "AutoBalance.conf.dist"}
+
 func retiredModuleConfig(name string) bool {
-	return strings.EqualFold(name, "AutoBalance.conf") || strings.EqualFold(name, "AutoBalance.conf.dist")
+	return slices.ContainsFunc(retiredModuleConfigs, func(retired string) bool { return strings.EqualFold(name, retired) })
 }
 
 type managedProfileState struct {
@@ -179,7 +182,7 @@ func migrateConfigProfiles(root string) ([]string, error) {
 	sort.Strings(names)
 	timestamp := backupTimestamp()
 	var updates []profileUpdate
-	for _, name := range []string{"AutoBalance.conf", "AutoBalance.conf.dist"} {
+	for _, name := range retiredModuleConfigs {
 		path := filepath.Join(root, "configs", "modules", name)
 		original, mode, exists, err := readConfigForUpdate(root, path)
 		if err != nil {
