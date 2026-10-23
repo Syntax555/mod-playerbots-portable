@@ -40,7 +40,8 @@ and ordinary player actions.
 ## Gameplay validation
 
 - [ ] Validate the [Questie Playerbots integration](questie-playerbots.md) on a
-  live 3.3.5a client: shared quests, simultaneous bot progress, kill-credit and
+  live 3.3.5a client using the release installer and matching server ZIP:
+  shared quests, simultaneous bot progress, kill-credit and
   event objectives, turn-in/abandonment, mixed human groups, logout/reconnect,
   `/reload` and party map settings. Measure tick time and addon traffic with
   several watched groups; standalone C++/Lua fixtures do not exercise rendering

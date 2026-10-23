@@ -412,6 +412,19 @@ class PublicationTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
+        self.questie_patch_data = json.dumps({"schemaVersion": 1, "files": [{
+            "path": "Modules/Network/QuestiePlayerbots.lua",
+            "beforeSha256": hashlib.sha256(b"return false\n").hexdigest(),
+            "afterSha256": hashlib.sha256(b"return true\n").hexdigest(),
+            "hunks": [{"start": 0, "deleteCount": 1, "lines": ["return true"]}],
+        }]}).encode()
+        self.questie_source_manifest = {
+            "schemaVersion": 1, "name": "Questie-335", "repository": "https://github.com/Aldori15/Questie.git",
+            "revision": OLDER_SHA, "interface": 30300,
+            "sourceArchive": {"url": f"https://github.com/Aldori15/Questie/archive/{OLDER_SHA}.zip", "sha256": "1" * 64},
+            "patches": {"patches/questie-playerbots-progress.patch": "2" * 64},
+            "patchDataSha256": hashlib.sha256(self.questie_patch_data).hexdigest(),
+        }
         for filename, required in publisher.ZIP_CONTENTS.items():
             # Download-artifact normally puts each job in a separate directory.
             artifact_dir = self.directory / filename.removesuffix(".zip")
@@ -422,6 +435,11 @@ class PublicationTests(unittest.TestCase):
                     if entry == "portable-release.json":
                         content = json.dumps({"schema": 1, "revision": SHA,
                                               "package": publisher.SERVER_PACKAGE_NAME, "version": "latest"})
+                    if filename == publisher.QUESTIE_INSTALLER_NAME:
+                        if entry == "SOURCE_MANIFEST.json":
+                            content = json.dumps(self.questie_source_manifest)
+                        elif entry == "PATCH_DATA.json":
+                            content = self.questie_patch_data
                     archive.writestr(entry, content)
                 if filename == publisher.SERVER_PACKAGE_NAME:
                     for entry in ("configs/worldserver.conf.dist", "src/data/sql/base/db_auth/base.sql",
@@ -450,12 +468,80 @@ class PublicationTests(unittest.TestCase):
                 archive.writestr(name, content)
         return path
 
+    def rewrite_questie_installer(self, replacements=None, omit=(), extra=None):
+        path = next(self.directory.rglob(publisher.QUESTIE_INSTALLER_NAME))
+        with zipfile.ZipFile(path) as archive:
+            files = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+        files.update(replacements or {})
+        files.update(extra or {})
+        with zipfile.ZipFile(path, "w") as archive:
+            for name, content in files.items():
+                if name not in omit:
+                    archive.writestr(name, content)
+
     def test_missing_artifact_fails_before_api_writes(self):
         next(self.directory.rglob("EraTalents-client-latest.zip")).unlink()
         with self.assertRaisesRegex(publisher.PublishError, "Expected exactly one artifact"):
             self.publish()
         self.assertEqual([], self.client.calls)
         self.assertFalse((self.directory / publisher.CHECKSUM_NAME).exists())
+
+    def test_missing_questie_installer_preserves_existing_latest_before_api_calls(self):
+        next(self.directory.rglob(publisher.QUESTIE_INSTALLER_NAME)).unlink()
+        with self.assertRaisesRegex(publisher.PublishError, "Expected exactly one artifact named Questie-335-latest.zip"):
+            self.publish()
+        self.assertEqual([], self.client.calls)
+        self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+        self.assertIn(1, self.client.releases)
+        self.assertFalse((self.directory / publisher.CHECKSUM_NAME).exists())
+
+    def test_missing_questie_patch_metadata_is_rejected_before_api_calls(self):
+        for entry in ("SOURCE_MANIFEST.json", "PATCH_DATA.json"):
+            with self.subTest(entry=entry):
+                self.setUp()
+                self.rewrite_questie_installer(omit=(entry,))
+                with self.assertRaisesRegex(publisher.PublishError, f"missing {re.escape(entry)}"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+                self.assertIn(1, self.client.releases)
+                self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+
+    def test_corrupt_questie_patch_metadata_is_rejected_before_api_calls(self):
+        for entry, content in (("SOURCE_MANIFEST.json", b"not json"), ("PATCH_DATA.json", b"not json"),
+                               ("SOURCE_MANIFEST.json", b"{}"), ("PATCH_DATA.json", b"{}")):
+            with self.subTest(entry=entry, content=content):
+                self.setUp()
+                self.rewrite_questie_installer(replacements={entry: content})
+                with self.assertRaisesRegex(publisher.PublishError, "invalid patch metadata"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+                self.assertIn(1, self.client.releases)
+
+    def test_questie_patch_hash_mismatch_is_rejected_before_api_calls(self):
+        patch_data = json.loads(self.questie_patch_data)
+        patch_data["files"][0]["hunks"][0]["lines"] = ["return unsafe"]
+        self.rewrite_questie_installer(replacements={"PATCH_DATA.json": json.dumps(patch_data)})
+        with self.assertRaisesRegex(publisher.PublishError, "invalid patch metadata"):
+            self.publish()
+        self.assertEqual([], self.client.calls)
+        self.assertEqual(OLDER_SHA, self.client.tags["latest"])
+
+    def test_questie_installer_requires_pinned_upstream_archive_and_nonempty_patches(self):
+        for field, value in (("sourceArchive", {"url": "https://github.com/Aldori15/Questie/archive/335.zip",
+                                              "sha256": "1" * 64}), ("patches", {})):
+            with self.subTest(field=field):
+                self.setUp()
+                manifest = {**self.questie_source_manifest, field: value}
+                self.rewrite_questie_installer(replacements={"SOURCE_MANIFEST.json": json.dumps(manifest)})
+                with self.assertRaisesRegex(publisher.PublishError, "invalid patch metadata"):
+                    self.publish()
+                self.assertEqual([], self.client.calls)
+
+    def test_questie_installer_does_not_publish_upstream_runtime_files(self):
+        self.rewrite_questie_installer(extra={"Questie-335/Icons/upstream.tga": b"upstream image"})
+        with self.assertRaisesRegex(publisher.PublishError, "contains unexpected files"):
+            self.publish()
+        self.assertEqual([], self.client.calls)
 
     def test_corrupt_zip_fails_before_api_writes(self):
         next(self.directory.rglob("MultiBot-Chatless-latest.zip")).write_bytes(b"not a zip")
@@ -619,7 +705,7 @@ class PublicationTests(unittest.TestCase):
         self.client.main_values = [SHA, OLDER_SHA]
         result = self.publish()
         self.assertTrue(result.skipped)
-        self.assertEqual(5, self.client.upload_count)
+        self.assertEqual(6, self.client.upload_count)
         self.assertIn(1, self.client.releases)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
         self.assertNotIn(self.client.draft_id, self.client.releases)
@@ -861,7 +947,7 @@ class PublicationTests(unittest.TestCase):
         result = self.publish()
         self.assertFalse(result.skipped)
         self.assertEqual(f"https://github.com/{REPOSITORY}/releases/tag/latest", result.url)
-        self.assertEqual(5, result.assets)
+        self.assertEqual(6, result.assets)
         self.assertEqual(3, result.removed_staging)
         self.assertEqual(SHA, self.client.tags["latest"])
         release = self.client.releases[self.client.draft_id]
@@ -932,10 +1018,10 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertNotIn(("upload_asset", "EraTalents-latest.zip"), self.client.calls)
 
-    def test_checksum_file_covers_three_public_zips_and_update_manifest(self):
+    def test_checksum_file_covers_four_public_zips_and_update_manifest(self):
         self.publish()
         checksum_lines = (self.directory / publisher.CHECKSUM_NAME).read_text().splitlines()
-        self.assertEqual(4, len(checksum_lines))
+        self.assertEqual(5, len(checksum_lines))
         self.assertEqual(sorted(set(publisher.ZIP_CONTENTS) | {publisher.UPDATE_MANIFEST_NAME}),
                          [line.split("  ")[1] for line in checksum_lines])
         for line in checksum_lines:

@@ -13,6 +13,7 @@ packages from the server's [Latest release](https://github.com/Syntax555/mod-pla
 | --- | --- |
 | [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | Required for every player: historical talents, spell data and German text. Install both `Interface/AddOns/EraTalents/` and `Data/patch-V.mpq`. |
 | [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional bot controls. Install `Interface/AddOns/MultiBot/`; open with `/mb`, and settings with `/mbopt`. |
+| [Questie-335 installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd`; Internet access is required. Choose the client's `Interface/AddOns/` folder; see [installation](questie-playerbots.md#installation). |
 
 Each addon folder must directly contain its matching `.toc` file. Avoid nested
 archive folders and mixed files from different versions. Back up existing addon
@@ -30,6 +31,15 @@ server sends no EraTalents data and the button keeps MultiBot's talent window.
 Install both updated addons together; mixed addon or MPQ generations cannot
 supply a reliable historical view.
 
+Use the matching Questie-335 installer for the complete bot quest integration;
+the ordinary upstream download does not include all local adaptations. The
+installer downloads the pinned addon directly from upstream and applies the
+integration locally. Its server support is included in the prebuilt server,
+so no source build is needed.
+Static quest locations and availability can differ under Individual Progression
+or custom quest rules. See [Questie bot progress](questie-playerbots.md) for
+supported behavior and remaining live validation.
+
 ## Optional upstream addons
 
 These links identify suitable client projects and their limits. They are
@@ -38,7 +48,6 @@ requires in-game testing.
 
 | Addon | Source and installation | Progression limits |
 | --- | --- | --- |
-| Questie-335 | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335). Install as `Interface/AddOns/Questie-335/Questie-335.toc`; do not rename the TOC. For server-controlled group bots, install the [prepared integration](questie-playerbots.md#build-and-install). | The MultiBot Bridge supplies actual bot progress to existing group tooltips. Static quest locations and availability can differ under Individual Progression or custom quest rules. |
 | GearScore2 | [cozawariat/gearscore2](https://github.com/cozawariat/gearscore2), the 3.3.5a project with interface `30300`. Install as `Interface/AddOns/GearScore2/GearScore2.toc`; open settings with `/gs2`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
 | DungeonClear | [jrad7/mod-dungeon-clear-addon](https://github.com/jrad7/mod-dungeon-clear-addon), the 3.3.5a companion interface. Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. | Controls and displays server-side runs. Party formation, travel and earned access remain server rules. Spectate is disabled in the default profile; `.dc on` in chat can expose refusal messages omitted by the UI. |
 | Zygor Guides Viewer Remaster | [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK). Install only its `ZygorGuidesViewerRM/` addon folder. | Guide routes and the bundled Wrath Talent Advisor do not follow each character's EraTalents trees or content gates. Prefer Questie for quest information during historical progression unless the guide's talent compatibility has been verified. |
@@ -54,8 +63,7 @@ hides advisor features but does not remove all these hooks. Disable the whole
 `ZygorGuidesViewerRM` addon and reload when isolating talent or protected-action
 conflicts; the checkbox alone does not provide a clean comparison.
 
-Optional addons remain upstream downloads; the Questie integration also has a
-pinned, patched local source export. Their code, guides, images and
+The addons in the upstream table are separate downloads. Their code, guides, images and
 libraries have separate licensing terms; a public repository or viewer license
 does not automatically authorize repackaging every included file. Addon-only
 updates do not require compiling server modules.

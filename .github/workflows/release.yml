@@ -93,6 +93,12 @@ jobs:
       - name: Test patched client addon packaging
         run: python3 cmake/tests/TestClientAddonPatches.py
 
+      - name: Test Questie installer packaging
+        run: python3 cmake/tests/TestQuestieInstallerPackaging.py
+
+      - name: Test Questie installation and settings preservation
+        run: python3 cmake/tests/TestQuestieInstaller.py
+
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
 
@@ -248,6 +254,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Launcher tests failed.' }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { throw 'Launcher vet failed.' }
+
+      - name: Test Questie installer on Windows PowerShell
+        run: |
+          python cmake/tests/TestQuestieInstaller.py
+          if ($LASTEXITCODE -ne 0) { throw 'Questie installation tests failed.' }
+          python cmake/tests/TestQuestieInstallerPackaging.py
+          if ($LASTEXITCODE -ne 0) { throw 'Questie installer packaging tests failed.' }
 
       - name: Install Boost
         # Third-party action pinned by commit; Dependabot proposes updates.
@@ -578,6 +591,12 @@ jobs:
               if ($packageExitCode -ne 0) {
                   $details = ($addonPackageLog | Select-Object -Last 30) -join "`n"
                   throw "Client addon ZIP packaging failed (exit code $packageExitCode).`n$details"
+              }
+              python cmake/PackageQuestieInstaller.py --output "output/Questie-335-$env:PACKAGE_VERSION.zip" 2>&1 | Tee-Object -Variable questiePackageLog
+              $packageExitCode = $LASTEXITCODE
+              if ($packageExitCode -ne 0) {
+                  $details = ($questiePackageLog | Select-Object -Last 30) -join "`n"
+                  throw "Questie installer ZIP packaging failed (exit code $packageExitCode).`n$details"
               }
           }
 

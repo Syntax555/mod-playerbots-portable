@@ -209,6 +209,7 @@
       "name": "Questie-335",
       "url": "https://github.com/Aldori15/Questie.git",
       "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87",
+      "archiveSha256": "3301082d34fffd618ac92b736f0ca148540560e767e9defafdf9395cb20710d4",
       "interface": 30300,
       "toc": "Questie-335.toc",
       "patches": [

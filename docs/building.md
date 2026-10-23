@@ -38,6 +38,7 @@ pwsh -File scripts/CopyDependencyLicenses.ps1 -DistDir dist `
   -BoostRootDir "C:/local/boost_1_92_0"
 cmake --build build --config Release --target package_zip
 cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
+python cmake/PackageQuestieInstaller.py --output output/Questie-335-dev.zip
 ```
 
 Run each command only after the previous command succeeds.
@@ -51,6 +52,7 @@ Outputs:
 
 - `output/mod-playerbots-portable-dev.zip`: portable server bundle.
 - `output/MultiBot-Chatless-dev.zip`: optional client interface.
+- `output/Questie-335-dev.zip`: optional Questie installer with bot progress integration.
 
 The complete `EraTalents-client-dev.zip` also requires the merged client MPQ. It
 is built separately on Linux; see
@@ -209,8 +211,8 @@ The selected build is published when its commit is still part of `main` and is
 not older than the current Latest.
 
 Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP,
-recording each file's size and SHA-256 hash. Latest contains three ZIPs, this
-update manifest and `SHA256SUMS.txt`, which covers all four payloads. GitHub
+recording each file's size and SHA-256 hash. Latest contains four ZIPs, this
+update manifest and `SHA256SUMS.txt`, which covers all five payloads. GitHub
 refuses the Actions token tag and release changes at commits whose workflow
 files differ from `main`, so selection skips those builds before downloading
 their artifacts; publication checks this again before making changes. The newer

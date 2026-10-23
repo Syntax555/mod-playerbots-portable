@@ -99,14 +99,16 @@ The prepared MultiBot addon displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
 retained. Its talent button uses native inspection with EraTalents: historical
 trees and ranks belong to the inspected bot, and Wrath retains Blizzard's view.
-Historical inspection is read-only. Optional quest, gear and guide addons are linked in
-[client addons](addons.md) and installed from their upstream projects.
+Historical inspection is read-only. Optional quest, gear and guide addons and
+their installation sources are listed in [client addons](addons.md).
 
 The [Questie Playerbots integration](questie-playerbots.md) sends authorized
 group bots' native quest counters through the MultiBot Bridge. Questie uses
 its existing group tooltips and optional party map objectives. A small pinned
-addon patch handles special objectives, WATCH renewal and stale-data cleanup;
-the local source export is installed separately from the released client ZIPs.
+addon patch handles special objectives, WATCH renewal and stale-data cleanup.
+Run the separate Questie-335 installer from the matching Latest release. It
+downloads the pinned upstream addon and applies the patch locally; the prebuilt
+server includes its MultiBot Bridge support.
 
 ## Validation and supported scope
 
