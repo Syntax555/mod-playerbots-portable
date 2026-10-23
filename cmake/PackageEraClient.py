@@ -409,6 +409,16 @@ def verify_zip(path: Path, lock):
     return files, manifest
 
 
+def package_zip(path: Path, files, lock):
+    with tempfile.TemporaryDirectory(prefix="era-client-package-", dir=path.parent) as temporary:
+        staged = Path(temporary) / path.name
+        write_zip(staged, files)
+        verified_files, _ = verify_zip(staged, lock)
+        if verified_files != files:
+            raise ValueError("Packaged client files differ from verified build inputs")
+        staged.replace(path)
+
+
 def build(args):
     repository = args.repository.resolve()
     lock = json.loads((repository / "versions.lock.json").read_text())
@@ -577,10 +587,7 @@ def build(args):
         files["SOURCE_MANIFEST.json"] = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
         args.output.mkdir(parents=True, exist_ok=True)
         output = args.output / f"{spec['name']}-{args.version}.zip"
-        write_zip(output, files)
-        verified_files, verified_manifest = verify_zip(output, lock)
-        if verified_files != files or verified_manifest != manifest:
-            raise ValueError("Packaged client files differ from verified build inputs")
+        package_zip(output, files, lock)
         shutil.copy2(mpqread, cache / "mpqread")
         print(f"Verified historical client ZIP: {output} ({len(files)} files, generation {generation})")
         print(f"SHA-256: {sha(output.read_bytes())}")

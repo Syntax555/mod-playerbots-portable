@@ -110,6 +110,28 @@ class ClientZipTests(unittest.TestCase):
         PACKAGE.write_zip(self.path, dict(reversed(list(self.files.items()))))
         self.assertEqual(self.path.read_bytes(), first)
 
+    def test_rejected_package_preserves_verified_output(self):
+        PACKAGE.package_zip(self.path, self.files, self.lock)
+        previous = self.path.read_bytes()
+        del self.files["Interface/AddOns/EraTalents/Main.lua"]
+        del self.files["SOURCE_MANIFEST.json"]
+        add_manifest(self.files, self.lock)
+        with self.assertRaisesRegex(ValueError, "Missing EraTalents TOC asset"):
+            PACKAGE.package_zip(self.path, self.files, self.lock)
+        self.assertEqual(self.path.read_bytes(), previous)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+
+    def test_verified_package_replaces_output(self):
+        PACKAGE.package_zip(self.path, self.files, self.lock)
+        previous = self.path.read_bytes()
+        self.files["Data/patch-V.mpq"] += b"new generation"
+        del self.files["SOURCE_MANIFEST.json"]
+        add_manifest(self.files, self.lock)
+        PACKAGE.package_zip(self.path, self.files, self.lock)
+        self.assertNotEqual(self.path.read_bytes(), previous)
+        self.assertEqual(PACKAGE.verify_zip(self.path, self.lock)[0], self.files)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+
     def test_modified_texture_or_mpq_rejected(self):
         for name in ("Data/patch-V.mpq", "Interface/AddOns/EraTalents/Main.lua"):
             with self.subTest(name=name):
