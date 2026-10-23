@@ -29,8 +29,12 @@ func findExecutable(dir, name string) string {
 	exts := []string{".exe", ".bat", ".cmd", ""}
 
 	if dir != "" {
+		absolute, err := filepath.Abs(dir)
+		if err != nil {
+			return ""
+		}
 		for _, ext := range exts {
-			fullPath := filepath.Join(dir, name+ext)
+			fullPath := filepath.Join(absolute, name+ext)
 			if fileExists(fullPath) {
 				return fullPath
 			}
