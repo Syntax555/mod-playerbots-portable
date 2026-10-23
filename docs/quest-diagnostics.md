@@ -84,7 +84,7 @@ Run each command against the same affected character:
 | --- | --- |
 | `.quest status 5635 Althea` | Desperate Prayer: human/dwarf priest, minimum level 10. Variants 5634–5639 are alternatives; query the other variant when exclusivity blocks acceptance. |
 | `.quest status 5641 Althea` | A Lack of Fear (Fear Ward): priest, minimum level 20. Its native race mask includes draenei, but the restored Vanilla quest adds a dwarf-only condition: type 16, value1 4. A draenei can fail this condition without a native race-requirement message. |
-| `.quest status 287 Althea` then `.quest status 291 Althea` | Frostmane Hold no longer requires 420 in the shipped data; The Reports (291) still requires rewarded 287. |
+| `.quest status 287 Althea` then `.quest status 291 Althea` | Frostmane Hold (287) does not require 420 in the shipped data; The Reports (291) still requires rewarded 287. |
 | `.quest status 10259 Althea` then `.ip get Althea` | Into the Breach must be **rewarded**, with the preceding earned milestone chain satisfied, for the TBC transition. `Complete` alone does not open TBC. |
 | `.quest status 66007 Althea` / `.quest status 66008 Althea` / `.quest status 66013 Althea` | Inspect saved tier-7, TBC and Wrath reward markers respectively; these marker quests are not repeatable. |
 
