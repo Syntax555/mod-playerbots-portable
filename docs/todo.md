@@ -152,10 +152,10 @@ pass.
   guards; the [checked upstream sources](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/upstream/README.md#integration-status)
   still need all four local fixes. Pin compatible accepted fixes before removing
   only their corresponding local hunks.
-- [ ] Contribute the Questie Playerbots integration to Questie-335; its
-  maintainer offered to adopt it with attribution in
-  [Aldori15/Questie#171](https://github.com/Aldori15/Questie/issues/171).
-  After an accepted revision is pinned, remove the merged hunks of
+- [ ] Follow the Questie Playerbots integration upstream in
+  [Aldori15/Questie#172](https://github.com/Aldori15/Questie/pull/172), which
+  carries the current patch and its regression test. After an accepted
+  revision is pinned, remove the merged hunks of
   `patches/questie-playerbots-progress.patch` and rerun the Questie fixtures.
 
 ## Core and module patches
