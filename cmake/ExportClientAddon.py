@@ -18,7 +18,7 @@ def run_git(repository: Path, *arguments: str, ceiling: Path | None = None) -> b
     environment = os.environ.copy()
     if ceiling is not None:
         environment["GIT_CEILING_DIRECTORIES"] = str(ceiling)
-    result = subprocess.run(["git", "-C", str(repository), *arguments], env=environment,
+    result = subprocess.run(["git", "-c", "core.autocrlf=false", "-C", str(repository), *arguments], env=environment,
                             capture_output=True, check=False)
     if result.returncode:
         raise ValueError(f"Cannot reconstruct locked addon source: {result.stderr.decode(errors='replace').strip()}")

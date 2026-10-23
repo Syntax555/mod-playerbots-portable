@@ -114,9 +114,10 @@ def historical_class_files(repository: Path, lock):
 def export_module(repository: Path, module, destination: Path, git: str):
     """Re-export a pinned commit and ordered patches, independently of prepared files."""
     cache = repository / module.get("source", f".module-cache/{module['name']}")
-    run([git, "-C", str(cache), "cat-file", "-e", f"{module['revision']}^{{commit}}"], quiet=True)
+    command = [git, "-c", "core.autocrlf=false"]
+    run([*command, "-C", str(cache), "cat-file", "-e", f"{module['revision']}^{{commit}}"], quiet=True)
     archive = destination.parent / f"{module['name']}.tar"
-    run([git, "-C", str(cache), "archive", "--format=tar", f"--output={archive}", module["revision"]], quiet=True)
+    run([*command, "-C", str(cache), "archive", "--format=tar", f"--output={archive}", module["revision"]], quiet=True)
     destination.mkdir(parents=True)
     with tarfile.open(archive) as source:
         # A module export must not contain links, special files or escaping paths.
@@ -137,8 +138,8 @@ def export_module(repository: Path, module, destination: Path, git: str):
         patch.write_bytes(content.replace(b"\r\n", b"\n"))
         env = os.environ.copy()
         env["GIT_CEILING_DIRECTORIES"] = str(destination.parent)
-        subprocess.run([git, "-C", str(destination), "apply", "--check", str(patch)], env=env, check=True)
-        subprocess.run([git, "-C", str(destination), "apply", str(patch)], env=env, check=True)
+        subprocess.run([*command, "-C", str(destination), "apply", "--check", str(patch)], env=env, check=True)
+        subprocess.run([*command, "-C", str(destination), "apply", str(patch)], env=env, check=True)
         patch.unlink()
     return {"url": module["url"], "revision": module["revision"], "patches": patches}
 
