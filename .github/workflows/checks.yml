@@ -236,7 +236,7 @@ jobs:
 
       - name: Verify world buff spell contracts in the packaged client
         run: |
-          curl --fail --location --output output/SpellDuration.dbc "$LOCALE_RAW_URL/dbc/SpellDuration.dbc"
+          curl --fail --location --retry 3 --output output/SpellDuration.dbc "$LOCALE_RAW_URL/dbc/SpellDuration.dbc"
           python3 cmake/tests/TestWorldBuffEvents.py --era-client "output/EraTalents-client-${PACKAGE_VERSION}.zip" --duration-dbc output/SpellDuration.dbc \
             --spell-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc" --mpq-reader .module-cache/mpqread
 
