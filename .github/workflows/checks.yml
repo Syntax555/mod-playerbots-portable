@@ -9,6 +9,7 @@ on:
       - 'AGENTS.md'
       - 'CONTRIBUTING.md'
       - 'docs/**'
+      - '.agents/**'
       - '.github/RELEASE_TEMPLATE.md'
   pull_request:
     paths-ignore:
@@ -16,6 +17,7 @@ on:
       - 'AGENTS.md'
       - 'CONTRIBUTING.md'
       - 'docs/**'
+      - '.agents/**'
       - '.github/RELEASE_TEMPLATE.md'
   # Build portable ZIP runs these checks before it compiles.
   workflow_call:
