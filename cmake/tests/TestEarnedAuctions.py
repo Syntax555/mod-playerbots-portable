@@ -45,11 +45,15 @@ auction_handlers = (args.core / 'src/server/game/Handlers/AuctionHouseHandler.cp
 shared_defines = (args.core / 'src/server/shared/SharedDefines.h').read_text()
 native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
-    (item_header, 'enum ItemSubclassWeapon'), (auction_header, 'enum MailAuctionAnswers'),
+    (item_header, 'enum ItemSubclassWeapon'), (item_header, 'enum ItemSubclassContainer'),
+    (item_header, 'enum ItemSubclassQuiver'), (item_header, 'enum InventoryType'),
+    (auction_header, 'enum MailAuctionAnswers'),
     (shared_defines, 'enum ItemQualities')))
 # Doubles for these producers keep their native shape.
 assert 'uint32 TotemCategory;' in item_header and 'uint32 RequiredLevel;' in item_header
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
+storage = (args.core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
+assert 'return item->ToBag();' in function(storage, 'Bag* Player::GetBagByPos(uint8 bag) const')
 assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in auction_handlers
 assert auction_handlers.count('CONFIG_AUCTION_LEVEL_REQ') == 2 and (
     'if (GetPlayer()->GetLevel() < sWorld->getIntConfig(CONFIG_AUCTION_LEVEL_REQ))'
@@ -270,8 +274,8 @@ struct ItemTemplate
 {
     struct Spell { int SpellId = 0; };
     std::array<Spell, 5> Spells{};
-    uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = 1, SubClass = 0,
-        Bonding = 0, TotemCategory = 0, RequiredLevel = 0;
+    uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = ITEM_CLASS_MISC,
+        SubClass = 0, Bonding = 0, TotemCategory = 0, RequiredLevel = 0, ContainerSlots = 0, InventoryType = 0;
     bool conjured = false, petFood = false;
     bool HasFlag(int) const { return conjured; }
 };
@@ -294,6 +298,7 @@ struct Item
     bool CanBeTraded() const { return tradable; }
     bool IsNotEmptyBag() const { return nonempty; }
     bool IsSoulBound() const { return bound; }
+    bool IsBag() const { return proto.InventoryType == INVTYPE_BAG; }
     uint32 GetUInt32Value(int) const { return duration; }
 };
 std::map<ObjectGuid, std::unique_ptr<Item>> allocatedItems;
@@ -345,9 +350,12 @@ struct AiObjectContext
     std::map<std::string, Value<ItemUsage>> usage;
     std::string lastQualifier;
     unsigned usageLookups = 0;
+    std::map<uint32, Value<ItemUsage>> upgrades;
     template<class T, class Q = std::string> Value<T>* GetValue(std::string const& name, Q qualifier = {})
     {
-        if constexpr (std::is_same_v<T, bool>) return &canMove;
+        if constexpr (std::is_same_v<T, ItemUsage> && !std::is_same_v<Q, std::string>)
+        { assert(name == "item upgrade"); return &upgrades[qualifier]; }
+        else if constexpr (std::is_same_v<T, bool>) return &canMove;
         else if constexpr (std::is_same_v<T, uint8>) return &bagSpace;
         else if constexpr (std::is_same_v<T, uint32>) return name == "money needed for" ? &supplies : &budget;
         else { ++usageLookups; lastQualifier = qualifier; return &usage[qualifier]; }
@@ -474,8 +482,14 @@ struct Player
     WorldSession* GetSession() { return &session; }
     uint32 GetMoney() const { return money; }
     bool HasEnoughMoney(uint32 price) const { return price <= money; }
+    std::map<uint8, Bag*> bags;
     Item* GetItemByPos(uint8, uint8 slot) const
-    { auto it = backpack.find(slot); return it == backpack.end() ? nullptr : it->second; }
+    {
+        if (slot >= INVENTORY_SLOT_BAG_START && slot < INVENTORY_SLOT_BAG_END)
+        { auto bag = bags.find(slot); return bag == bags.end() ? nullptr : bag->second; }
+        auto it = backpack.find(slot); return it == backpack.end() ? nullptr : it->second;
+    }
+    Bag* GetBagByPos(uint8 slot) const { return dynamic_cast<Bag*>(GetItemByPos(INVENTORY_SLOT_BAG_0, slot)); }
     Item* GetItemByGuid(ObjectGuid id) const
     { auto it = inventory.find(id); return it == inventory.end() ? nullptr : it->second; }
     uint32 GetItemCount(uint32 entry, bool) const
@@ -491,7 +505,15 @@ struct Player
     Mail* GetMail(uint32 id) const { for (Mail* mail : mails) if (mail->messageID == id) return mail; return nullptr; }
     Item* GetMItem(uint32 id) const
     { auto it = attachments.find(id); return it == attachments.end() ? nullptr : it->second; }
-    int CanStoreItem(int, int, ItemPosCountVec&, Item*, bool) const { return store ? EQUIP_ERR_OK : 1; }
+    int CanStoreItem(int bag, int, ItemPosCountVec&, Item*, bool) const
+    {
+        if (!store || bag != INVENTORY_SLOT_BAG_0)
+            return store ? EQUIP_ERR_OK : 1;
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+            if (!backpack.count(slot))
+                return EQUIP_ERR_OK;
+        return 1;
+    }
     int CanUseItem(ItemTemplate const*) const { return usable ? EQUIP_ERR_OK : 1; }
     GameObject* GetGameObjectIfCanInteractWith(ObjectGuid id, int)
     { return range && id == mailbox.guid ? &mailbox : nullptr; }
@@ -500,6 +522,7 @@ struct Player
         flag == UNIT_NPC_FLAG_MAILBOX && id == creatureMailbox.guid ? &creatureMailbox : nullptr; }
     bool IsWithinDistInMap(WorldObject*, float) const { return range; }
 };
+@@BAGS@@
 struct Config
 {
     bool naturalProgression = true, earnedAuctions = true; uint32 earnedAuctionInterval = 300;
@@ -679,6 +702,24 @@ struct Scenario
     {
         AuctionEntry& offer = Offer(item, 1, 0); offer.startbid = startbid; offer.expire_time = now + timeLeft;
         return offer;
+    }
+    // Fill the bag slots; the first holds the smallest container.
+    void EquipBags(uint32 smallestClass = ITEM_CLASS_CONTAINER, uint32 smallestSubclass = ITEM_SUBCLASS_CONTAINER)
+    {
+        for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
+        {
+            auto bag = std::make_unique<Bag>(); bag->guid = {uint32(items.size() + 1000)}; bag->owner = bot.guid;
+            bool const smallest = slot == INVENTORY_SLOT_BAG_START;
+            bag->proto.ItemId = 900 + slot; bag->proto.Class = smallest ? smallestClass : uint32(ITEM_CLASS_CONTAINER);
+            bag->proto.SubClass = smallest ? smallestSubclass : uint32(ITEM_SUBCLASS_CONTAINER);
+            bag->proto.ContainerSlots = smallest ? 6 : 8; bag->items.assign(bag->proto.ContainerSlots, nullptr);
+            bot.bags[slot] = bag.get(); items.push_back(bag->guid); allocatedItems[bag->guid] = std::move(bag);
+        }
+    }
+    Item& OfferBag(uint32 slots)
+    {
+        Item& bag = MakeItem(101, 1, ITEM_USAGE_EQUIP); bag.proto.Class = ITEM_CLASS_CONTAINER;
+        bag.proto.ContainerSlots = slots; bag.proto.InventoryType = INVTYPE_BAG; Offer(bag); return bag;
     }
     Item& BagItem(uint32 entry = 100, uint32 count = 1, ItemUsage usage = ITEM_USAGE_AH)
     {
@@ -1204,6 +1245,39 @@ void ServiceTests()
         assert(!s.Visit()); assert(s.bot.session.buys == (refusal == 4 ? 1 : 0) && s.bot.money == 10000);
         assert(offer.bidder != s.bot.guid);
     }
+    for (int refusal = 0; refusal < 5; ++refusal)
+    {
+        // Auction bags follow the vendor bag rules: a larger general bag replaces the
+        // smallest general bag from a free backpack slot, once. A hunter's quiver rated
+        // an upgrade could not hold the items of the bag it would replace.
+        Scenario s; s.EquipBags(refusal == 1 ? ITEM_CLASS_QUIVER : ITEM_CLASS_CONTAINER);
+        Item& bag = s.OfferBag(10);
+        if (refusal == 2)
+            for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+                s.BagItem(100, 1, ITEM_USAGE_KEEP);
+        if (refusal == 3)
+        {
+            Item& upgrade = s.BagItem(102, 1, ITEM_USAGE_KEEP); upgrade.proto.Class = ITEM_CLASS_CONTAINER;
+            upgrade.proto.ContainerSlots = 12; s.bot.ai.context.upgrades[102].value = ITEM_USAGE_EQUIP;
+        }
+        if (refusal == 4)
+        {
+            bag.proto.Class = ITEM_CLASS_QUIVER; bag.proto.SubClass = ITEM_SUBCLASS_QUIVER;
+            bag.proto.InventoryType = INVTYPE_QUIVER;
+        }
+        assert(s.Visit() == !refusal); assert(s.bot.session.buys == (refusal ? 0 : 1));
+    }
+    {
+        // A won bag waits in the mail until the backpack can take it, so it can be equipped.
+        Scenario s;
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+            s.BagItem(100, 1, ITEM_USAGE_KEEP);
+        Item& bag = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); bag.proto.Class = ITEM_CLASS_CONTAINER;
+        bag.proto.InventoryType = INVTYPE_BAG; s.Receipt(&bag).subject = s.Subject(bag, AUCTION_WON);
+        assert(!s.Visit(true)); assert(!s.bot.GetItemByGuid(bag.guid));
+        s.bot.backpack.erase(INVENTORY_SLOT_ITEM_START); now += sPlayerbotAIConfig.earnedAuctionInterval;
+        assert(s.Visit(true)); assert(s.bot.GetItemByGuid(bag.guid) == &bag);
+    }
     {
         // A Blacksmith Hammer serves crafting.
         Scenario s; Item& hammer = s.MakeItem(5956, 1, ITEM_USAGE_SKILL); hammer.proto.Class = ITEM_CLASS_WEAPON;
@@ -1420,6 +1494,9 @@ production = {
     'service': '\n'.join(line for line in (module / 'EarnedAuction.cpp').read_text().splitlines()
                           if not line.lstrip().startswith('#include')),
     'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
+    # The vendor bag rules, which auction bag purchases share.
+    'bags': '\n'.join([re.search(r'namespace\n\{\n.*?\n\}  // namespace', values_source, re.DOTALL).group(0),
+                       function(values_source, 'bool BagPurchaseUseful(PlayerbotAI* botAI, ItemTemplate const* proto)')]),
     'policy': (module / 'EarnedAuctionPolicy.h').read_text(),
     'travel': (travel_module / 'EarnedAuctionTravelPolicy.h').read_text(),
 }
@@ -1431,6 +1508,7 @@ tools = tool_rows()
 def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
     text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
+    text = text.replace('@@BAGS@@', parts['bags'])
     text = text.replace('@@AUCTIONRULES@@', auction_rules).replace('@@TOOLS@@', tools)
     # The policy headers are compiled from private copies, so mutants can change them.
     headers = Path(directory) / name
@@ -1498,6 +1576,16 @@ mutations = [
     ('altbot recipe reagents sold', 'service',
      'return !sRandomPlayerbotMgr.IsRandomBot(ai->GetBot()) || ai->HasGameClientMaster();',
      'return ai->HasGameClientMaster();'),
+    ('auction bags skip the bag rules', 'service',
+     ('        if ((proto->Class == ITEM_CLASS_CONTAINER || proto->Class == ITEM_CLASS_QUIVER) &&\n'
+      '            !BagPurchaseUseful(ai, proto))\n            continue;\n'), ''),
+    ('quivers skip the bag rules', 'service', ' || proto->Class == ITEM_CLASS_QUIVER)', ')'),
+    ('quivers bought as bags', 'bags', 'return IsGeneralBag(proto) && ReplaceableBagSize(',
+     'return (IsGeneralBag(proto) || true) && ReplaceableBagSize('),
+    ('won bag stored in a bag', 'service', '? uint8(INVENTORY_SLOT_BAG_0) : uint8(NULL_BAG)',
+     '? uint8(NULL_BAG) : uint8(NULL_BAG)'),
+    ('second bag upgrade bought', 'bags', '!CarriesBagUpgrade(botAI, replaceable)',
+     '(!CarriesBagUpgrade(botAI, replaceable) || true)'),
     ('profession materials bought', 'service', 'else if (usage == ITEM_USAGE_SKILL && GatheringTool(proto))',
      'else if (usage == ITEM_USAGE_SKILL)'),
     ('usage tiers ignored', 'service', 'RankOffer(tier, price, ceiling)', 'RankOffer(tier * 0, price, ceiling)'),

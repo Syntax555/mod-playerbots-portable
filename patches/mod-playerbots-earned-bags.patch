@@ -1,5 +1,5 @@
 diff --git a/src/Ai/Base/Value/MaintenanceValues.cpp b/src/Ai/Base/Value/MaintenanceValues.cpp
-index 8859f4e..1867955 100644
+index 8859f4e..c1807a3 100644
 --- a/src/Ai/Base/Value/MaintenanceValues.cpp
 +++ b/src/Ai/Base/Value/MaintenanceValues.cpp
 @@ -8,6 +8,7 @@
@@ -10,7 +10,7 @@ index 8859f4e..1867955 100644
  #include "BudgetValues.h"
  #include "EarnedAuction.h"
  #include "EarnedAuctionTravel.h"
-@@ -32,6 +33,64 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
+@@ -32,6 +33,71 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI)
             !botAI->HasGameClientMaster() && botAI->GetAiObjectContext()->GetValue<bool>("can move around")->Get();
  }
  
@@ -72,10 +72,17 @@ index 8859f4e..1867955 100644
 +}
 +}  // namespace
 +
++bool BagPurchaseUseful(PlayerbotAI* botAI, ItemTemplate const* proto)
++{
++    uint32 replaceable = 0;
++    return IsGeneralBag(proto) && ReplaceableBagSize(botAI->GetBot(), replaceable) &&
++           !CarriesBagUpgrade(botAI, replaceable);
++}
++
  NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
  {
      if (!CanRunNaturalMaintenance(botAI))
-@@ -117,8 +176,16 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -117,8 +183,16 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
          }
      }
  
@@ -93,7 +100,7 @@ index 8859f4e..1867955 100644
          return {};
  
      // An unreachable or failed NPC must not block the others while it stays nearest.
-@@ -157,19 +224,38 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -157,19 +231,38 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
              }
          }
  
@@ -133,7 +140,7 @@ index 8859f4e..1867955 100644
              // Match the wanted supply from template fields before the costlier usability check.
              std::string const type = (needsFood || needsDrink) && proto->Class == ITEM_CLASS_CONSUMABLE
                                           ? ItemUsageValue::GetConsumableType(proto, bot->GetMaxPower(POWER_MANA) > 0)
-@@ -202,6 +288,8 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
+@@ -202,6 +295,8 @@ NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()
              if (price <= budget && bot->HasEnoughMoney(price))
                  return {guid, NaturalMaintenanceType::BUY, proto->ItemId, uint32(budgetType)};
          }
@@ -142,3 +149,53 @@ index 8859f4e..1867955 100644
      }
  
      return {};
+diff --git a/src/Ai/Base/Value/MaintenanceValues.h b/src/Ai/Base/Value/MaintenanceValues.h
+index 21d71dc..a7ab6e5 100644
+--- a/src/Ai/Base/Value/MaintenanceValues.h
++++ b/src/Ai/Base/Value/MaintenanceValues.h
+@@ -11,6 +11,7 @@
+ #include "Value.h"
+ 
+ class PlayerbotAI;
++struct ItemTemplate;
+ 
+ enum class NaturalMaintenanceType : uint8
+ {
+@@ -39,6 +40,11 @@ bool CanRunNaturalMaintenance(PlayerbotAI* botAI);
+ // Natural bots do not craft, so a spell on a profession skill line is no upkeep goal.
+ bool IsProfessionSpell(uint32 spellId);
+ 
++// A general bag rated an upgrade may be bought when the ordinary upgrade action can
++// equip it without displacing a quiver, ammo pouch or profession bag, and no carried
++// bag already upgrades.
++bool BagPurchaseUseful(PlayerbotAI* botAI, ItemTemplate const* proto);
++
+ class NaturalMaintenanceValue : public CalculatedValue<NaturalMaintenanceTask>
+ {
+ public:
+diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
+index 509d8da..3e1c04e 100644
+--- a/src/Bot/EarnedAuction.cpp
++++ b/src/Bot/EarnedAuction.cpp
+@@ -404,7 +404,9 @@ bool CollectReceipts(Player* bot, ObjectGuid mailbox)
+         {
+             Item* item = bot->GetMItem(itemGuid);
+             ItemPosCountVec destination;
+-            if (!item || bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
++            // A bag stored inside the bag it replaces could not be equipped from there.
++            uint8 const bag = item && item->IsBag() ? uint8(INVENTORY_SLOT_BAG_0) : uint8(NULL_BAG);
++            if (!item || bot->CanStoreItem(bag, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK)
+                 continue;
+             UnsoldStock::Key const stock = StockKey(bot, item);
+             WorldPacket packet(CMSG_MAIL_TAKE_ITEM);
+@@ -656,6 +658,10 @@ bool BuyUseful(PlayerbotAI* ai, Creature* auctioneer, AuctionHouseObject* house,
+             tier = 3;
+         else if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
+             continue;
++        // Bags follow the vendor bag rules; a quiver cannot hold the items of a bag it replaces.
++        if ((proto->Class == ITEM_CLASS_CONTAINER || proto->Class == ITEM_CLASS_QUIVER) &&
++            !BagPurchaseUseful(ai, proto))
++            continue;
+         uint32 const budget = PurchaseBudget(ai, usage);
+         uint32 const ceiling = PriceCeiling(proto->BuyPrice, proto->BuyCount, proto->SellPrice, auction->itemCount);
+         if (!Affordable(auction->buyout, budget, bot->GetMoney()) || !WithinPriceCeiling(auction->buyout, ceiling))
