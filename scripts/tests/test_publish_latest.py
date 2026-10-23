@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from http.client import HTTPResponse
 import io
 import json
 from pathlib import Path
 import re
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -1385,6 +1387,43 @@ class ClientTests(unittest.TestCase):
                 self.assertRaisesRegex(publisher.APIError, "HTTP 500"):
             client._request("GET", "/releases/1")
         self.assertEqual(3, len(self.opened))
+
+    def test_truncated_http_response_is_retried_without_exposing_partial_data(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        raw = b'HTTP/1.1 200 OK\r\nContent-Length: 50\r\n\r\n{"private":"partial"}'
+
+        def truncated_response(request, timeout):
+            response = HTTPResponse(SimpleNamespace(makefile=lambda *args: io.BytesIO(raw)))
+            response.begin()
+            return response
+
+        with patch.object(publisher, "urlopen", side_effect=truncated_response) as open_request, \
+                patch.object(publisher.time, "sleep") as sleep, \
+                self.assertRaisesRegex(publisher.PublishError, "GitHub request failed") as error:
+            client._request("GET", "/releases/1")
+        self.assertEqual(3, open_request.call_count)
+        self.assertEqual([((2,),), ((5,),)], sleep.call_args_list)
+        self.assertNotIn("private", str(error.exception))
+
+    def test_truncated_http_error_body_retains_status_and_retries_server_errors(self):
+        client = publisher.GitHubClient(REPOSITORY, "test-token")
+        for status, attempts in ((502, 3), (403, 1)):
+            raw = f'HTTP/1.1 {status} Failed\r\nContent-Length: 50\r\n\r\n{{"message":"private"}}'.encode()
+
+            def truncated_error(request, timeout, raw=raw, status=status):
+                response = HTTPResponse(SimpleNamespace(makefile=lambda *args: io.BytesIO(raw)))
+                response.begin()
+                raise HTTPError(request.full_url, status, "Failed", response.headers, response)
+
+            with self.subTest(status=status), \
+                    patch.object(publisher, "urlopen", side_effect=truncated_error) as open_request, \
+                    patch.object(publisher.time, "sleep") as sleep, \
+                    self.assertRaises(publisher.APIError) as error:
+                client._request("GET", "/releases/1")
+            self.assertEqual(attempts, open_request.call_count)
+            self.assertEqual(attempts - 1, sleep.call_count)
+            self.assertEqual(status, error.exception.status)
+            self.assertEqual("request failed", error.exception.message)
 
     def test_client_errors_and_non_idempotent_requests_are_not_repeated(self):
         client = publisher.GitHubClient(REPOSITORY, "test-token")
