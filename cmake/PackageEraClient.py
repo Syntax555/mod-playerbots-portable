@@ -252,6 +252,8 @@ def verify_merged_spell(base: bytes, merged: bytes, stamp: str, custom_ids, expe
             raise ValueError(f"Merged client changed IP spell record {key}")
     if not set(custom_ids).issubset(records):
         raise ValueError("Merged client is missing visible era spell rows")
+    if records.keys() - base_records.keys() - set(custom_ids):
+        raise ValueError("Merged client contains an unexpected spell record")
     def text(record, field):
         offset = struct.unpack_from("<I", record, field * 4)[0]
         if offset >= len(strings):
@@ -298,6 +300,9 @@ def verify_merged_skill(base: bytes, merged: bytes, custom_spells):
         spell = struct.unpack_from("<I", record, 2 * 4)[0]
         if spell not in custom_spells and records.get(key) != record:
             raise ValueError(f"Merged client changed IP skill record {key}")
+    for key, record in records.items():
+        if key not in base_records and struct.unpack_from("<I", record, 2 * 4)[0] not in custom_spells:
+            raise ValueError("Merged client contains an unexpected skill record")
     spells = {struct.unpack_from("<I", record, 2 * 4)[0] for record in records.values()}
     if not set(custom_spells).issubset(spells):
         raise ValueError("Merged client is missing era spellbook skill mappings")
