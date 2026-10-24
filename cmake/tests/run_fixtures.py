@@ -38,7 +38,7 @@ GAMEPLAY = (
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestRocknotAle", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
     "TestRaidClearWindowsBuild", "TestEarnedRaidComposition", "TestEarnedRaidGroups",
     "TestOnyxiaIntegration",
-    "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge",
+    "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestMultiBotVendorPurchases", "TestFormationMovement",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
     "TestWarlockSoulShards", "TestNaturalMaintenance",
