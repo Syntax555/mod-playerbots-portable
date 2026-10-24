@@ -1,0 +1,4 @@
+diff --git a/data/sql/world/base/00_cleanup.sql b/data/sql/world/base/2026_06_16_00_ip_cleanup.sql
+similarity index 100%
+rename from data/sql/world/base/00_cleanup.sql
+rename to data/sql/world/base/2026_06_16_00_ip_cleanup.sql

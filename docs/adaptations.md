@@ -65,6 +65,7 @@ and schedules. Events require the default Individual Progression chain.
 | Adaptation | Scope |
 | --- | --- |
 | Era creature modifiers | A module SQL update restores Individual Progression's damage and armor modifiers for the 532 creatures affected by the core's `2026_09_27_06.sql`. It replaces only fields still matching the core update's values, preserving other fields and subsequent custom values. |
+| World database setup | A new world database applies Individual Progression's cleanup after the core renames `creature.id1` to `id` and before the module's zone data. The file keeps its contents, so existing realms record the new name without applying it again. |
 | Frostmane Hold, quest 287 | The SQL update removes prerequisite 420 only when that is the existing value. Ordinary level/faction checks remain; follow-up quest 291 still requires 287. Existing unrelated custom prerequisites are preserved. |
 | Historical priest quests | Original teacher relations and personal race, level and era gates select historical rank-1 rewards. Later ranks use paid training; native Wrath records are retained. See [class quests](class-quests.md). |
 | Client cache | A world SQL migration assigns a stable `version.cache_id` for bundled quest and item data. The core uses it with `ClientCacheVersion = 0`; unchanged restarts retain it. Explicit overrides and higher database versions are preserved. See [cache updates and verification](updating.md#server-data-and-the-client-cache). |
@@ -78,6 +79,7 @@ Source: [era creature modifiers](../patches/mod-individual-progression-creature-
 [Recruit-a-Friend grant limit](../patches/azerothcore-recruit-a-friend-grant-limit.patch),
 [shared experience rules](../patches/azerothcore-experience-rules.patch),
 [quest availability](../patches/mod-individual-progression-frostmane-hold.patch),
+[world database setup](../patches/mod-individual-progression-cleanup-order.patch),
 [spell-group contracts](../patches/mod-era-talents-spell-groups.patch) and
 [formation movement](../patches/azerothcore-formation-minimum-velocity.patch).
 SQL updates run through the ordinary database updater.
