@@ -267,11 +267,19 @@ def mutations():
         ('refresh', m, 'if msg and string.lower(msg) == "refresh" then IP:Refresh() end', ''),
         ('status text', m, 'lines[#lines + 1] = L.next:format(s.next, self:MilestoneText(s.next))', ''),
         ('German text', m, '\t\tstatus_level = "Erfahrung endet bei Level %d bis zur Stufe der nächsten Erweiterung.",\n', ''),
+        ('historical talent points', 'Item-ItemScore.lua',
+         'if ZGV.IP then eraPoints, eraTotal, eraAvailable = ZGV.IP:EraTalentPoints(classToken) end', ''),
+        ('historical native trees', 'Item-ItemScore.lua', 'elseif ZGV.IP and ZGV.IP:NativeTalentsHistorical() then',
+         'elseif false then'),
+        ('native retry kept', m, 'return self:Gated() and self.state.era < 2', 'return true'),
+        ('historical rescore', m, '\t\tlast = signature\n\t\tscore:DelayedRefreshUserData()\n', '\t\tlast = signature\n'),
+        ('unchanged historical rescore', m, '\t\tif signature == last then return end\n', ''),
     )
 
 
-def run_lua(lua, source, fixture=FIXTURE):
-    return run_fixture([lua, '-e', 'SOURCE=' + json.dumps(str(source)), str(fixture)], 'Zygor progression fixture')
+def run_lua(lua, source, era, fixture=FIXTURE):
+    globals_ = f'SOURCE={json.dumps(str(source))} ERA_SOURCE={json.dumps(str(era))}'
+    return run_fixture([lua, '-e', globals_, str(fixture)], 'Zygor progression fixture')
 
 
 def upstream_suite(lua, addon, tools_root):
@@ -305,7 +313,8 @@ def main():
     contracts(addon, core)
     print('Zygor progression contracts match Individual Progression, the bridge and the core', flush=True)
 
-    result = run_lua(args.lua, addon)
+    era = core / 'modules/mod-era-talents/client-addon/EraTalents'
+    result = run_lua(args.lua, addon, era)
     if result.returncode:
         raise AssertionError(result.stdout + result.stderr)
     print(result.stdout.strip(), flush=True)
@@ -324,7 +333,7 @@ def main():
             if old not in text:
                 raise AssertionError(f'{label} mutation was not applied')
             (work / relative).write_text(text.replace(old, new))
-            outcome = run_lua(args.lua, work)
+            outcome = run_lua(args.lua, work, era)
             return outcome.returncode != 0 and 'FIXTURE FAILED' in outcome.stderr
 
         cases = mutations()

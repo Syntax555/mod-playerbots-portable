@@ -50,10 +50,10 @@ index 21563ca..d223dd2 100644
  			if featuredMeta then
 diff --git a/ZygorGuidesViewerRM/IndividualProgression.lua b/ZygorGuidesViewerRM/IndividualProgression.lua
 new file mode 100644
-index 0000000..dad3a12
+index 0000000..0f4f13f
 --- /dev/null
 +++ b/ZygorGuidesViewerRM/IndividualProgression.lua
-@@ -0,0 +1,1116 @@
+@@ -0,0 +1,1156 @@
 +-- Individual Progression: the character's own earned tier and the server's
 +-- quest, giver and instance gates, read from the MultiBot Bridge. Guides, the
 +-- Gear Finder, the Gold Guide and the Talent Advisor ask this module before
@@ -1033,6 +1033,45 @@ index 0000000..dad3a12
 +	return self.state.era ~= 2, L.talent_blocked
 +end
 +
++-- EraTalents keeps a Vanilla/TBC character's points outside the native talent API, which then
++-- reports none spent and none free. Points per tab of the synchronised historical tree, the spent
++-- total and the unspent points; nil while EraTalents does not manage this character.
++function IP:EraTalentPoints(classToken)
++	local era = _G.EraTalents
++	local state = era and era.state
++	if not (state and state.isEraChar and type(era.SpecPoints) == "function") then return nil end
++	local trees = _G.EraTalentsData and _G.EraTalentsData[state.era]
++	for _, tree in pairs(trees or {}) do
++		if tree.className == classToken then
++			local points = era.SpecPoints(tree, state.ranks)
++			return points, points[1] + points[2] + points[3], tonumber(state.availPts) or 0
++		end
++	end
++end
++
++-- Before its earned Wrath era a gated character's points live in historical trees, so empty native
++-- trees do not mean that talent data is still loading.
++function IP:NativeTalentsHistorical()
++	return self:Gated() and self.state.era < 2
++end
++
++-- EraTalents synchronises historical points without native talent events; rescore gear when they change.
++function IP:WatchEraTalents()
++	local era = _G.EraTalents
++	if self.eraWatched or not (era and type(era.Refresh) == "function") then return end
++	self.eraWatched = true
++	local last
++	hooksecurefunc(era, "Refresh", function()
++		local score = ZGV.ItemScore
++		if not (score and score.Initialised) then return end
++		local points, _, free = IP:EraTalentPoints(score.playerclass)
++		local signature = points and table.concat(points, ",") .. "/" .. free or ""
++		if signature == last then return end
++		last = signature
++		score:DelayedRefreshUserData()
++	end)
++end
++
 +------------------------------------------------------------------------
 +-- Display
 +------------------------------------------------------------------------
@@ -1154,6 +1193,7 @@ index 0000000..dad3a12
 +	ZGV:AddEvent("SKILL_LINES_CHANGED", function() IP:InvalidateQuests(R.SKILL) end)
 +	ZGV:AddEvent("UPDATE_FACTION", function() IP:InvalidateQuests(R.REPUTATION) end)
 +	ZGV:ScheduleRepeatingTimer(function() IP:Tick() end, 1)
++	self:WatchEraTalents()
 +	self:Probe()
 +end
 +
@@ -1219,10 +1259,39 @@ index f30127b..04c3b79 100644
  
  	-- 3.3.5a: no Chromie Time, no Mythic+
 diff --git a/ZygorGuidesViewerRM/Item-ItemScore.lua b/ZygorGuidesViewerRM/Item-ItemScore.lua
-index e091873..9b955c4 100644
+index e091873..2e13193 100644
 --- a/ZygorGuidesViewerRM/Item-ItemScore.lua
 +++ b/ZygorGuidesViewerRM/Item-ItemScore.lua
-@@ -1664,6 +1664,8 @@ local function bis_slot_list_contains(list, itemID)
+@@ -1366,6 +1366,18 @@ function ItemScore:GetTalentState(classToken, level)
+ 		end
+ 	end
+ 
++	local eraPoints, eraTotal, eraAvailable
++	if ZGV.IP then eraPoints, eraTotal, eraAvailable = ZGV.IP:EraTalentPoints(classToken) end
++	if eraPoints then
++		treePoints, totalPoints, availablePoints = eraPoints, eraTotal, eraAvailable
++		bestTree, bestPoints = fallbackBuild, 0
++		for i = 1, 3 do
++			if eraPoints[i] > bestPoints then
++				bestTree, bestPoints = i, eraPoints[i]
++			end
++		end
++	end
++
+ 	local preTalentState = false
+ 	local uncertain = false
+ 	if level < 10 then
+@@ -1375,6 +1387,9 @@ function ItemScore:GetTalentState(classToken, level)
+ 			preTalentState = true
+ 		elseif availablePoints and availablePoints > 0 then
+ 			preTalentState = true
++		elseif ZGV.IP and ZGV.IP:NativeTalentsHistorical() then
++			-- Without EraTalents' data the historical build is unknown; waiting would retry forever.
++			preTalentState = true
+ 		else
+ 			uncertain = true
+ 		end
+@@ -1664,6 +1679,8 @@ local function bis_slot_list_contains(list, itemID)
  end
  
  function ItemScore:GetCurrentBISPhaseRank()
@@ -1231,7 +1300,7 @@ index e091873..9b955c4 100644
  	local phases = ZGV and ZGV.Dungeons and ZGV.Dungeons.Phases
  	local highest = nil
  	if phases then
-@@ -1686,6 +1688,8 @@ function ItemScore:GetBISAnnotation(itemID, slot, buildNum, classToken)
+@@ -1686,6 +1703,8 @@ function ItemScore:GetBISAnnotation(itemID, slot, buildNum, classToken)
  	local classData = self.BISData and self.BISData[classToken]
  	local buildData = classData and classData[buildNum]
  	if not buildData then return nil end

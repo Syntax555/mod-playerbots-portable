@@ -1,8 +1,10 @@
 -- Runs Zygor Guides Viewer's Individual Progression layer from the patched
 -- production files. The WoW client API, the bridge and the other addons are
 -- recording doubles; replies follow the bridge's IP_PROGRESS_V1 wire format.
--- TestZygorProgression.py sets SOURCE to the patched addon directory.
+-- TestZygorProgression.py sets SOURCE to the patched addon directory and
+-- ERA_SOURCE to the prepared EraTalents client addon.
 local ROOT = assert(SOURCE, "SOURCE is required")
+local ERA = assert(ERA_SOURCE, "ERA_SOURCE is required")
 
 local function check(condition, message)
 	if not condition then error("FIXTURE FAILED: " .. message, 2) end
@@ -806,6 +808,77 @@ sendState({stored = 17, effective = 17, era = 2, next = 18})
 check(not ZGV.ItemScore:GetBISAnnotation(105, 1, 1, "MAGE").future, "the Ruby Sanctum list is current at tier 17")
 IP.state = nil
 check(ZGV.ItemScore:GetBISAnnotation(100, 1, 1, "MAGE") == nil, "an unknown state shows no list")
+
+------------------------------------------------------------------------
+-- Gear Advisor talent state
+------------------------------------------------------------------------
+
+-- EraTalents' real initial state, protocol parser and tree helpers with its generated Mage trees.
+local function readEra(path)
+	local file = assert(io.open(ERA .. "/" .. path, "rb"))
+	local text = file:read("*a")
+	file:close()
+	return text
+end
+EraTalents = nil
+for _, path in ipairs({"Locales.lua", "Comms.lua", "TalentUI.lua", "data/generated/MageVanilla.lua"}) do
+	compile(readEra(path), path)()
+end
+local ET = EraTalents
+local eraMain = readEra("EraTalents.lua")
+compile("local ET = EraTalents\n" .. assert(eraMain:match('ET%.PREFIX = "%u+"')) .. "\n"
+	.. assert(eraMain:match("ET%.state = %b{}")), "EraTalents.lua")()
+local fire
+for _, node in ipairs(EraTalentsData[0][8].talents) do
+	if node.tab == 2 and node.maxRank >= 5 then fire = node break end
+end
+check(fire and EraTalentsData[0][8].className == "MAGE", "the generated Vanilla Mage tree has a five-rank Fire talent")
+
+local nativeSpent, nativeFree = 0, 0
+function GetNumTalentTabs() return 3 end
+function GetTalentTabInfo(tab) return "Tree", "", tab == 1 and nativeSpent or 0 end
+function UnitCharacterPoints() return nativeFree end
+function GetActiveTalentGroup() return 1 end
+compile(section("Item-ItemScore.lua", "ItemScore.LevelingBuildFallback = {", "function ItemScore:GetGearRoleBuild"),
+	"Item-ItemScore.lua", scoreEnv)()
+ZGV.ItemScore.rules = {MAGE = {[1] = {}, [2] = {}, [3] = {}}}
+function ZGV.ItemScore:IsKnownWeightClass(token) return self.rules[token] ~= nil end
+local function talentState() return ZGV.ItemScore:GetTalentState("MAGE", 15) end
+
+-- Native trees stay empty for an era character; without EraTalents' data that is final, not loading.
+sendState({stored = 0, effective = 0, era = 0, next = 1})
+local gearState = talentState()
+check(gearState.preTalentState and not gearState.uncertain, "empty native trees before Wrath do not retry the spec detection")
+ET.ParseSync(ET.state, "SYNC 0 1 3 " .. fire.id .. ":5")
+gearState = talentState()
+check(gearState.totalPoints == 5 and gearState.bestTree == fire.tab and gearState.availablePoints == 3, "historical points select the gear tree")
+check(not gearState.uncertain and not gearState.preTalentState, "a historical build is certain")
+check(ZGV.ItemScore:DetectActiveBuild("MAGE", 15) == fire.tab, "the Gear Advisor uses the historical primary tree")
+-- Wrath trees and an unreported realm keep the native talent API and its retry while it loads.
+ET.ParseSync(ET.state, "SYNC 2 0 0")
+sendState({stored = 13, effective = 13, era = 2, next = 14})
+check(talentState().uncertain, "empty native Wrath trees are still loading")
+sendState({stored = 0, effective = 0, era = 0, next = 1})
+IP.state = nil
+check(talentState().uncertain, "an unreported realm keeps the native retry")
+nativeSpent = 7
+check(talentState().totalPoints == 7 and not talentState().uncertain, "native points keep the native build")
+nativeSpent = 0
+
+-- Historical points arrive without native talent events; a changed SYNC rescores gear once.
+local refreshes = 0
+ZGV.ItemScore.Initialised, ZGV.ItemScore.playerclass = true, "MAGE"
+local delayedRefresh = ZGV.ItemScore.DelayedRefreshUserData
+function ZGV.ItemScore:DelayedRefreshUserData() refreshes = refreshes + 1 end
+IP:WatchEraTalents()
+ET.OnAddonMsg(ET.PREFIX, "SYNC 0 1 3 " .. fire.id .. ":5")
+check(refreshes == 1, "historical points rescore gear")
+ET.OnAddonMsg(ET.PREFIX, "SYNC 0 1 3 " .. fire.id .. ":5")
+check(refreshes == 1, "an unchanged SYNC does not restart the Gear Finder")
+ET.OnAddonMsg(ET.PREFIX, "SYNC 0 1 2 " .. fire.id .. ":6")
+check(refreshes == 2, "spending a historical point rescores gear")
+ZGV.ItemScore.DelayedRefreshUserData, ZGV.ItemScore.Initialised = delayedRefresh, nil
+ET.ParseSync(ET.state, "SYNC 0 0 0")
 
 ------------------------------------------------------------------------
 -- Talent Advisor
