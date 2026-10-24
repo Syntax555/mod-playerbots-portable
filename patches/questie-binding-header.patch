@@ -1,0 +1,15 @@
+diff --git a/Bindings.xml b/Bindings.xml
+index 3961a4d..c983b90 100644
+--- a/Bindings.xml
++++ b/Bindings.xml
+@@ -2,8 +2,8 @@
+     <Binding name="QUESTIE_TOGGLE_JOURNEY" header="QUESTIE">
+         QuestieLoader:ImportModule("QuestieJourney"):ToggleJourneyWindow()
+     </Binding>
+-    <Binding name="QUESTIE_TOGGLE_TRACKER" header="QUESTIE">
++    <Binding name="QUESTIE_TOGGLE_TRACKER">
+         QuestieLoader:ImportModule("QuestieTracker").ToggleTracker()
+     </Binding>
+-    <Binding name="CLICK Questie_NearestQuestItemButton:LeftButton" header="QUESTIE" />
++    <Binding name="CLICK Questie_NearestQuestItemButton:LeftButton" />
+ </Bindings>

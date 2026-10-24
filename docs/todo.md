@@ -48,6 +48,11 @@ pass.
 
 ## Gameplay validation
 
+- [ ] Verify addon startup on a live 3.3.5a client with the matching MultiBot
+  package and Questie installer: the minimap button loads and all three Questie
+  bindings remain available without library or duplicate-header errors. Keep
+  existing account and character settings; fixtures cover the library load
+  order and binding definitions, not the client's rendered UI.
 - [ ] Validate the dependency refresh on a stopped test copy of an existing
   realm: numeric account locales migrate to language codes without changing
   login language or characters; `.lfgprogress` explains mixed human/bot earned

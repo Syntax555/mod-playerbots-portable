@@ -147,7 +147,8 @@
         "patches/multibot-options-initialization.patch",
         "patches/multibot-era-talent-inspect.patch",
         "patches/multibot-role-strategies.patch",
-        "patches/multibot-vendor-purchases.patch"
+        "patches/multibot-vendor-purchases.patch",
+        "patches/multibot-library-load-order.patch"
       ]
     }
   ],
@@ -217,7 +218,8 @@
       "interface": 30300,
       "toc": "Questie-335.toc",
       "patches": [
-        "patches/questie-playerbots-progress.patch"
+        "patches/questie-playerbots-progress.patch",
+        "patches/questie-binding-header.patch"
       ]
     }
   ]
