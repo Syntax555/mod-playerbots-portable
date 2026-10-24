@@ -6,6 +6,7 @@ import hashlib
 import math
 import re
 import sqlite3
+import struct
 
 from FixtureSupport import (
     pinned_source,
@@ -143,6 +144,16 @@ def columns(table):
     return [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
 
 
+# Exact row membership relies on native uniqueness, non-null fields and FLOAT storage.
+smart_schema = (world / 'smart_scripts.sql').read_text().split('CREATE TABLE `smart_scripts` (')[1].split(') ENGINE')[0]
+assert len(columns('smart_scripts')) == 31
+assert all(re.search(rf'^  `{column}` [^\n]*\bNOT NULL\b', smart_schema, re.MULTILINE)
+           for column in columns('smart_scripts'))
+assert 'PRIMARY KEY (`entryorguid`,`source_type`,`id`,`link`)' in smart_schema
+for column in ('target_x', 'target_y', 'target_z', 'target_o'):
+    assert re.search(rf'^  `{column}` float NOT NULL\b', smart_schema, re.MULTILINE)
+
+
 creature_columns = []
 for path in [zone, *core_updates]:
     for statement in relevant(path):
@@ -155,6 +166,7 @@ assert {'guid', 'id', 'map', 'MovementType'} <= set(creature_columns)
 
 def database():
     db = sqlite3.connect(':memory:')
+    db.create_function('FLOAT32', 1, lambda value: struct.unpack('<f', struct.pack('<f', value))[0])
     for table in KEYS:
         db.execute(f'CREATE TABLE `{table}` (' + ','.join(f'`{column}`' for column in columns(table)) + ')')
     db.execute('CREATE TABLE `creature` (' + ','.join(f'`{column}`' for column in creature_columns) + ')')
@@ -165,6 +177,14 @@ def run(db, paths, sources=None):
     for path in paths:
         for statement in (sources or {}).get(path) or relevant(path):
             db.execute(statement)
+    # The native coordinate columns store single precision, unlike SQLite's REAL.
+    db.execute('UPDATE smart_scripts SET ' + ', '.join(
+        f'`{column}` = FLOAT32(`{column}`)' for column in ('target_x', 'target_y', 'target_z', 'target_o')))
+
+
+def replay_repair(db, sql):
+    # MySQL's CAST AS FLOAT uses the same single precision as the stored coordinates.
+    db.executescript(re.sub(r'CAST\(([^()]+) AS FLOAT\)', r'FLOAT32(\1)', sql))
 
 
 def snapshot(db):
@@ -182,7 +202,7 @@ def realms(sql):
     run(fresh, [*core_updates, zone])
     run(existing, [zone, *core_updates])
     for db in (fresh, existing):
-        db.executescript(sql)
+        replay_repair(db, sql)
     return fresh, existing
 
 
@@ -190,7 +210,7 @@ fresh, existing = realms(repair_sql)
 assert snapshot(fresh) == snapshot(existing), 'existing realms keep core rows a fresh realm replaces'
 expected = snapshot(fresh)
 for db in (fresh, existing):
-    db.executescript(repair_sql)
+    replay_repair(db, repair_sql)
     assert snapshot(db) == expected, 'the Netherstorm repair is not idempotent'
 drijya = sorted(row[2] for row in fresh.execute('SELECT * FROM smart_scripts WHERE entryorguid = 20281 AND source_type = 0'))
 assert drijya == list(range(15)), drijya
@@ -209,15 +229,54 @@ def customized(sql, rows, customize):
     run(db, [zone, *core_updates])
     db.execute(customize)
     before = sorted(db.execute('SELECT * FROM ' + rows))
-    db.executescript(sql)
+    replay_repair(db, sql)
     return before, sorted(db.execute('SELECT * FROM ' + rows))
+
+
+def check_drijya_customizations(sql):
+    rows = 'smart_scripts WHERE entryorguid = 20281 AND source_type = 0'
+    for column in columns('smart_scripts'):
+        change = f'`{column}` + 1' if column != 'comment' else 'LOWER(`comment`)'
+        before, after = customized(sql, rows,
+            f'UPDATE smart_scripts SET `{column}` = {change} '
+            'WHERE entryorguid = 20281 AND source_type = 0 AND id = 6')
+        assert before == after, ('the repair changed a customized Drijya column', column)
+    # Preserve even the smallest stored coordinate change and case-only comments.
+    for column in ('target_x', 'target_y', 'target_z', 'target_o'):
+        value, = existing_before.execute(
+            f'SELECT `{column}` FROM smart_scripts WHERE entryorguid = 20281 AND source_type = 0 AND id = 15').fetchone()
+        bits, = struct.unpack('<I', struct.pack('<f', value))
+        changed, = struct.unpack('<f', struct.pack('<I', bits + 1))
+        before, after = customized(sql, rows,
+            f'UPDATE smart_scripts SET `{column}` = {changed!r} '
+            'WHERE entryorguid = 20281 AND source_type = 0 AND id = 15')
+        assert before == after, ('the repair rounded away a customized coordinate', column)
+
+
+drijya_guard = re.search(r' AND MIN\(\((.*?)\) IN \(.*?\)\) = 1', repair_sql, re.DOTALL)
+assert drijya_guard, 'the Drijya repair must compare complete rows'
+assert re.findall(r'`(\w+)`', drijya_guard[1]) == columns('smart_scripts'), 'the repair omitted a native script column'
+check_drijya_customizations(repair_sql)
+for label, mutant in (
+    ('complete customized Drijya rows', repair_sql.replace(drijya_guard[0], '', 1)),
+    ('complete Drijya row count', repair_sql.replace('COUNT(*) = 22 AND ', '', 1)),
+):
+    assert mutant != repair_sql, label
+    try:
+        check_drijya_customizations(mutant)
+    except AssertionError:
+        print('Netherstorm guard mutation rejected: ' + label)
+    else:
+        raise AssertionError('the Drijya fixture accepted ' + label)
+without_float_casts = re.sub(r'CAST\(([^()]+) AS FLOAT\)', r'\1', repair_sql)
+assert without_float_casts != repair_sql
+unrounded_fresh, unrounded_existing = realms(without_float_casts)
+assert snapshot(unrounded_fresh) != snapshot(unrounded_existing), 'the fixture missed native FLOAT comparison precision'
+print('Netherstorm guard mutation rejected: unrounded native coordinate literals')
 
 
 # Each guard keeps a row the realm changed since the core update.
 for label, rows, customize, guard in (
-    ('custom Drijya script', 'smart_scripts WHERE entryorguid = 20281 AND source_type = 0',
-     'UPDATE smart_scripts SET action_param1 = 6000 WHERE entryorguid = 20281 AND source_type = 0 AND id = 6',
-     ' AND SUM(`action_param1`) = 4203637'),
     ('custom spawn', 'creature WHERE guid = 52066', 'UPDATE creature SET id = 99999 WHERE guid = 52066',
      ' AND `id` = 18855'),
     ('custom addon', 'creature_addon WHERE guid = 70141', 'UPDATE creature_addon SET emote = 1 WHERE guid = 70141',
