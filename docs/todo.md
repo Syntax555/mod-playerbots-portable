@@ -67,9 +67,10 @@ pass.
   fixtures do not start a realm.
 - [ ] Start the worldserver on an empty world database and on a stopped copy of
   an existing realm: the updater must finish without errors and record the
-  Individual Progression cleanup under its new name without reapplying it. A
-  MySQL replay of the updater and the fixtures cover the data, not a running
-  realm.
+  Individual Progression cleanup under its new name without reapplying it. On
+  the upgraded copy, complete Drijya's escort (quest 10310) and confirm Summoner
+  Kanthin's patrol and no duplicate Sunfury Magisters. A MySQL replay of the
+  updater and the fixtures cover the data, not a running realm.
 - [ ] Verify MultiBot altbot vendor purchases on a live 3.3.5a client: Buy mode,
   left/right clicks, quantities, expensive and currency-item confirmations,
   bot switches and inventory closure. Confirm the bot's own gold and bag

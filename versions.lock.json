@@ -54,7 +54,8 @@
         "patches/mod-individual-progression-client-cache.patch",
         "patches/mod-individual-progression-submerge-binding.patch",
         "patches/mod-individual-progression-startup-data.patch",
-        "patches/mod-individual-progression-cleanup-order.patch"
+        "patches/mod-individual-progression-cleanup-order.patch",
+        "patches/mod-individual-progression-netherstorm-updates.patch"
       ]
     },
     {
