@@ -186,20 +186,21 @@ def verify_source_semantics(base: bytes, english_source: bytes, filename: str, o
 def _pinned_dbc(path: Path, filename: str, url: str, expected: str):
     if not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9]{64}", expected):
         raise ValueError(f"Invalid client text source checksum: {filename}")
-    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+    raw = path.read_bytes() if path.is_file() else None
+    if raw is None or hashlib.sha256(raw).hexdigest() != expected:
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as output:
                 temporary = Path(output.name)
                 with urlopen(Request(url, headers={"User-Agent": "Playerbots-client-locales"}), timeout=120) as response:
                     shutil.copyfileobj(response, output)
-            if hashlib.sha256(temporary.read_bytes()).hexdigest() != expected:
+            raw = temporary.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != expected:
                 raise ValueError(f"Client text source checksum mismatch: {filename}")
             temporary.replace(path)
         finally:
             if temporary is not None and temporary.exists():
                 temporary.unlink()
-    raw = path.read_bytes()
     _records(raw, filename)
     return raw
 
