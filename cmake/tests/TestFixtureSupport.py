@@ -58,9 +58,16 @@ class FixtureSupportTests(unittest.TestCase):
             table = core / 'data/sql/base/db_world/fixture.sql'
             table.parent.mkdir(parents=True)
             table.write_text('CREATE TABLE `fixture` (\n  `entry` int,\n  `name` text\n) ENGINE=InnoDB;\n'
-                             "INSERT INTO `fixture` VALUES\n(-7,'minus, seven'),\n(8,'eight');\n", encoding='utf-8')
+                             "INSERT INTO `fixture` VALUES\n(-7,'minus, seven'),\n(8,'eight');\n"
+                             "INSERT INTO `fixture` VALUES\n(8,'acht');", encoding='utf-8')
             self.assertEqual([{'entry': '-7', 'name': 'minus, seven'}], sql_rows(core, 'fixture', {-7}))
+            self.assertEqual([{'entry': '8', 'name': 'eight'}, {'entry': '8', 'name': 'acht'}],
+                             sql_rows(core, 'fixture', {8}))
             with self.assertRaises(AssertionError):
+                sql_rows(core, 'fixture', {9})
+            with table.open('a', encoding='utf-8') as output:
+                output.write("\n(9,'wrong','column count');\n")
+            with self.assertRaises(ValueError):
                 sql_rows(core, 'fixture', {9})
 
 

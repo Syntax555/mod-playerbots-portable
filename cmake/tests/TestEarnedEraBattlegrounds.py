@@ -30,14 +30,7 @@ bridge = (module / 'src/IndividualProgressionBattlegrounds.h').read_text()
 bridge = re.sub(r'^#include ".*"\n', '', bridge, flags=re.MULTILINE)
 # Exercise the native same-faction side/list moves with the production filter.
 native_queue = (prepared_core(repo) / 'src/server/game/Battlegrounds/BattlegroundQueue.cpp').read_text()
-start = native_queue.index('bool BattlegroundQueue::CheckSkirmishForSameFaction(')
-opening = native_queue.index('{', start)
-depth = 1
-end = opening + 1
-while depth:
-    depth += (native_queue[end] == '{') - (native_queue[end] == '}')
-    end += 1
-native_skirmish = native_queue[start:end]
+native_skirmish = function(native_queue, 'bool BattlegroundQueue::CheckSkirmishForSameFaction(')
 
 # Team creation/invitation checks the current realm maximum; joining an
 # existing team to a rated queue does not. A TBC team survives opening Wrath.

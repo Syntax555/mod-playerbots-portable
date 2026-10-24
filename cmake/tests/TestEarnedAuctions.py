@@ -22,6 +22,7 @@ from FixtureSupport import (
     profession_skills,
     run_fixture,
     source_argument,
+    sql_values,
 )
 
 
@@ -103,24 +104,6 @@ for rule in ('if (price <= auction->bid || price < auction->startbid)',
              'auction->bidder = player->GetGUID();\n        auction->bid = price;'):
     assert rule in bid_handler, rule
 assert "strm << item_template << \":0:\" << response << ':' << Id << ':' << itemCount;" in subject_writer
-
-
-def sql_values(row):
-    values, value, quoted, index = [], '', False, 0
-    while index < len(row):
-        char = row[index]
-        if quoted and char == '\\':
-            value += row[index + 1]
-            index += 1
-        elif char == "'":
-            quoted = not quoted
-        elif char == ',' and not quoted:
-            values.append(value)
-            value = ''
-        else:
-            value += char
-        index += 1
-    return values + [value]
 
 
 def tool_rows():

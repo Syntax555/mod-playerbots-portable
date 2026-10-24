@@ -1,6 +1,7 @@
 """Shared helpers for the cmake/tests fixtures."""
 
 from concurrent.futures import ThreadPoolExecutor
+from itertools import takewhile
 import json
 import os
 from pathlib import Path
@@ -70,13 +71,13 @@ def sql_values(row):
 
 def sql_rows(core, table, entries):
     """Read named fields, so changed upstream table layouts cannot silently change test data."""
-    text = (core / f'data/sql/base/db_world/{table}.sql').read_text(encoding='utf-8')
-    create = text.split(f'CREATE TABLE `{table}` (')[1].split(') ENGINE')[0]
-    columns = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
     rows = []
-    for line in text.splitlines():
-        if line.startswith('(') and int(line.split(',', 1)[0][1:]) in entries:
-            rows.append(dict(zip(columns, sql_values(line.rstrip(',;')[1:-1]), strict=True)))
+    with (core / f'data/sql/base/db_world/{table}.sql').open(encoding='utf-8') as source:
+        create = ''.join(takewhile(lambda line: ') ENGINE' not in line, source)).split(f'CREATE TABLE `{table}` (')[1]
+        columns = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
+        for line in source:
+            if line.startswith('(') and int(line.split(',', 1)[0][1:]) in entries:
+                rows.append(dict(zip(columns, sql_values(line.rstrip('\n,;')[1:-1]), strict=True)))
     assert rows, (table, entries)
     return rows
 
