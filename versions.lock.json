@@ -222,6 +222,17 @@
         "patches/questie-playerbots-progress.patch",
         "patches/questie-binding-header.patch"
       ]
+    },
+    {
+      "name": "ZygorGuidesViewerRM",
+      "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
+      "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718",
+      "path": "ZygorGuidesViewerRM",
+      "interface": 30300,
+      "toc": "ZygorGuidesViewerRM.toc",
+      "patches": [
+        "patches/zygor-individual-progression.patch"
+      ]
     }
   ]
 }

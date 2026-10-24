@@ -84,6 +84,13 @@ pass.
   turn-in/abandonment, mixed human groups and logout/reconnect. Measure tick
   time and addon traffic with several watched groups; standalone C++/Lua
   fixtures do not exercise rendering or sustained realm load.
+- [ ] Validate the [Zygor Individual Progression integration](zygor-progression.md)
+  on a live 3.3.5a client with the matching server: status after login and
+  reconnect, step skipping for a tier-gated quest and a hidden giver, the hold
+  before Outland at level 60 and before Northrend at 70, the guide browser,
+  Gear Finder sources at tiers 7, 8 and 13, the inactive Talent Advisor for an
+  EraTalents character and addon traffic in a group. The Lua fixture does not
+  render frames or exercise the live bridge.
 - [ ] Verify complete runs in-game for each enabled Vanilla, TBC and Wrath
   dungeon: walking to the entrance, combat, loot rolls, quest objectives, wipes
   and normal recovery.

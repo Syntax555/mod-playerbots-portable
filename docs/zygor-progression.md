@@ -1,9 +1,99 @@
 # Zygor Individual Progression
 
-The server reports each character's own Individual Progression state to its
-client through the MultiBot Bridge. Client addons read it to follow the
-character's earned tier instead of its level. The interface only reads state;
-it cannot award, change or bypass progression.
+Zygor Guides Viewer Remaster follows each character's own Individual
+Progression tier with a pinned local patch. The server reports the tier, quest
+availability and instance access through the MultiBot Bridge; the addon only
+reads them. It cannot award, change or bypass progression, and an unknown
+state never unlocks content.
+
+## Guide behaviour
+
+The **Progress** options panel (`/zgprogress`) and `/zygorip` show the mode,
+the saved and usable tier, the realm ceiling, the experience cap and the next
+milestone of the default chain. `/zygorip refresh` asks the server again.
+
+| Mode | Behaviour |
+| --- | --- |
+| Automatic (default) | Follows the server when it reports Individual Progression. Without a bridge, or on a realm without the module, guides behave as on an ordinary realm. |
+| On | As Automatic, but later content stays locked while no server answer is available. |
+| Off | No Individual Progression limits. |
+
+Until the server's first answer arrives, later content counts as unknown. A
+client that gets no bridge answer after three probes, about a minute, uses the
+mode's behaviour without a bridge.
+
+Gates apply to normal accounts. Bot and excluded accounts and game master mode
+are not limited, as on the server. Content is classified as available, locked
+or unknown; locked and unknown content is never presented as available.
+
+- **Quests.** A step is skipped and a goal hidden only when the server reports
+  its quest unavailable for a lasting reason: a progression marker condition,
+  a quest giver hidden at this tier, class, race, a disabled quest, an
+  outleveled quest, a taken alternative or a breadcrumb whose follow-up is
+  taken. A missing level, reputation, skill, previous quest or reset keeps the
+  step. Quests in the quest log and completed quests are always kept. Goal
+  tooltips name the reason and the tier a quest needs or retired at.
+- **Guides.** A guide needs the tier of the zones it travels to: Outland 8,
+  Isle of Quel'Danas 12 and Northrend 13, as Individual Progression's map gate
+  decides. The TBC race starting zones need no tier for Draenei and Blood
+  Elves; other races are treated as tier 8 because their account unlock is not
+  visible to the client. A leveling guide that starts at the character's
+  experience cap (60 before tier 8, 70 before tier 13) is locked, and so is a
+  guide entering an instance that Individual Progression's map gate refuses.
+- **Guide chains.** A finished guide does not switch to a next guide this
+  character cannot follow; a final step names the guide and the reason.
+  Loading such a guide manually prints the reason once. The guide browser's
+  suggestions leave such guides out, and its details show the reason.
+- **Milestones.** *Individual Progression\\Milestone Chain* lists the default
+  chain; each step completes from the server's tier, and milestones above the
+  realm ceiling are replaced by a note.
+- **Gear Finder.** Dungeon and raid loot counts as current only when the earned
+  tier opens the content's era and Wrath phase and the server reports the
+  instance accessible in its difficulty. Content behind a later tier is a
+  *next tier* or *later tier* source. Disabled, unmapped and unverified sources,
+  such as outdoor world bosses, are neither current nor future. Currency
+  vendors follow their era. Crafted gear needs an earned era and a recipe the
+  character knows or a trainer recipe; other recipe sources are not verified.
+- **Best-in-slot lists.** The Wrath lists apply from tier 13; tier 13 opens T7
+  and each later tier the next list. Earlier eras get no annotation.
+- **Talent Advisor.** The bundled advisor knows only the native Wrath trees.
+  It stays inactive, with the native `LearnTalent` function and learn button,
+  for EraTalents characters, before the earned Wrath era and while the era is
+  unknown. It makes no suggestions, popups or automatic learning then.
+- **Quest automation.** *Bang a Gong!*, *Chaos and Destruction* and *Into the
+  Breach* decide progression and are never accepted or turned in automatically.
+- **Gold Guide.** Farming and gathering routes follow the same zone and
+  instance checks.
+
+Text is available in English and German.
+
+### Feature review
+
+| Feature | Upstream behaviour | Progression risk | Server source | Integration | Unknown state | Off or other realms | Verification | Limit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Leveling steps | Level and quest chain data | Quests of later tiers or hidden givers | `IP_QUESTS` | Skip steps, hide goals | Step kept | Unchanged | Fixture | Unspawned or differently scripted givers count as visible |
+| Guide chains | `next` switches at the end | TBC at 60, Wrath at 70 | `IP_STATE`, `IP_ACCESS` | Hold with reason | Held | Unchanged | Fixture | Zones outside the table need no tier |
+| Guide browser | Level, class and chain suggestions | Later-tier guides suggested | Same | Suggestions filtered, reason shown | Filtered | Unchanged | Fixture | Manual selection stays possible |
+| Dungeons and raids | Level and attunement | Locked raids shown as current | `IP_ACCESS` | Future or unknown source | Not current | Unchanged | Fixture | Locks and group rules not reported |
+| Gear Finder phases | All Wrath phases on 3.3.5a | Later raid tiers | `IP_STATE` | Phase per tier 13–17 | Inactive | Unchanged | Fixture | Wrath phases only |
+| Vendors and crafting | Expansion filters | Later-era currency and recipes | `IP_STATE` | Era gate, known or trainer recipes | Not current | Unchanged | Fixture | Recipe drops not verified |
+| Best-in-slot | Wrath phase lists | Later raid lists as current | `IP_STATE` | Rank from tier | No annotation | Unchanged | Fixture | Wrath lists only |
+| Talent Advisor | Wraps `LearnTalent`, Wrath builds | Wrong trees, automatic spending | `IP_STATE`, EraTalents | Inactive outside Wrath | Inactive | Unchanged | Fixture | Wrath builds only |
+| Quest automation | Auto accept and turn-in | Progression decisions | — | Transition quests manual | Manual | Unchanged | Fixture | — |
+| Gold Guide routes | Skill and level | Routes in locked zones | Same as guides | Route validity | Invalid | Unchanged | Fixture | Auction data is the player's own scan |
+| Questie and MultiBot | Separate addons | — | Bridge | Unchanged | — | — | Upstream suites | — |
+
+Reputation, profession, mount, pet, achievement, daily and event guides use the
+same quest, zone and instance checks. Their own requirements remain the
+guides' steps. The module does not change navigation and adds no route,
+teleport or purchase.
+
+### Upstream revision
+
+The patch is pinned to `ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK`; see
+[dependencies](module-versions.md). The fell-lucas fork adds party goal sync
+(`Sync.lua`, AceComm and LibDeflate) on an older base. It is not included: it
+shares goal progress between party members and does not concern progression.
 
 ## Server progression interface
 
@@ -117,4 +207,14 @@ reasons and every map without the progression gate.
 Individual Progression's own progression functions against native-shaped
 doubles. It compares every visibility rule with the module's scripts, checks
 that the native checks it calls send no messages, and rejects 27 mutations of
-its gates. It does not start a realm or a WoW client.
+its gates.
+
+`python3 cmake/tests/TestZygorProgression.py` loads the
+[patched addon files](../patches/zygor-individual-progression.patch) with Lua
+5.1 and the bridge's wire format: discovery, state validation, quest batching,
+step and goal gating, guide chains, the milestone guide, quest automation, the
+Gear Finder, best-in-slot lists and the Talent Advisor. It ties the zone,
+experience, instance, difficulty, milestone and reason tables to Individual
+Progression's, the bridge's and the core's sources, rejects every mutation of
+these gates and runs the upstream Zygor regression suite on the patched addon.
+Neither test starts a realm or a WoW client.
