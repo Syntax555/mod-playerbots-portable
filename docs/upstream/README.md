@@ -29,7 +29,7 @@ reset hooks and earned-era arena selection rules are outside these proposals.
 The source comparison uses AzerothCore `master`
 [`aa921a00a2789f7594a99f535ef30f90780f8cda`](https://github.com/azerothcore/azerothcore-wotlk/commit/aa921a00a2789f7594a99f535ef30f90780f8cda)
 and the required Playerbots core `Playerbot` branch
-[`8a4e76eac8c4ccebf547113afe7b51d6c3e91641`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/8a4e76eac8c4ccebf547113afe7b51d6c3e91641).
+[`3f2969ddb0da42b48b4fca050c02b19163ba1e20`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/3f2969ddb0da42b48b4fca050c02b19163ba1e20).
 The latter is already the locked core revision. Open issues alone do not
 establish that a fix is available in either branch.
 
@@ -41,9 +41,8 @@ establish that a fix is available in either branch.
 
 Individual Progression `master`
 [`4933d455d2f611eed50c74c68c78832df4ed37a3`](https://github.com/ZhengPeiRu21/mod-individual-progression/commit/4933d455d2f611eed50c74c68c78832df4ed37a3)
-is [one commit ahead of the locked revision](https://github.com/ZhengPeiRu21/mod-individual-progression/compare/acaa9b3c73f7b756dcf0a7c388b438dcc68cdd17...4933d455d2f611eed50c74c68c78832df4ed37a3).
-That commit changes only Scarab Gong gossip. Both numeric account predicates
-still call `GetAccountMatch` unconditionally, and character creation shares
+is the locked revision and includes the Scarab Gong gossip correction. Both
+numeric account predicates still call `GetAccountMatch` unconditionally, and character creation shares
 those predicates. The cache therefore still performs an initial account-name
 query when both filters are empty. The local guards remain necessary for each
 disabled filter, including after a configuration reload.

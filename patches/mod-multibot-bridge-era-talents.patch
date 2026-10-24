@@ -1,5 +1,5 @@
 diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
-index 077f85c..0622485 100644
+index c771c1b..d24f7d1 100644
 --- a/src/MultiBotBridge.cpp
 +++ b/src/MultiBotBridge.cpp
 @@ -34,6 +34,7 @@
@@ -9,8 +9,8 @@ index 077f85c..0622485 100644
 +#include "EraTalentBridge.h"
  #include "Event.h"
  #include "EventProcessor.h"
- #include "Trigger.h"
-@@ -1072,6 +1073,16 @@ std::array<uint32, 3> BuildTalentTabPoints(Player* bot)
+ #include "Strategy.h"
+@@ -1073,6 +1074,16 @@ std::array<uint32, 3> BuildTalentTabPoints(Player* bot)
      if (!bot)
          return tabs;
  

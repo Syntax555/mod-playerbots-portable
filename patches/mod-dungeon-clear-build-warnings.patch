@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 4cc5867..6e12e16 100644
+index c718e1b..4b9149f 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -58,8 +58,6 @@ AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src")
@@ -8,9 +8,9 @@ index 4cc5867..6e12e16 100644
  
 -AC_ADD_CONFIG_FILE("${CMAKE_CURRENT_LIST_DIR}/conf/mod_dungeon_clear.conf.dist")
 -
- # New files added: Util/DcDungeonAccess.{h,cpp}
- #   (making a throwaway pool bot ELIGIBLE for the destination. Player::TeleportTo
- #    refuses a far teleport silently in two places — the
+ # New files added: Action/DcLyceumCloseUpAction.cpp, Util/DcLyceumCloseUpDecision.h
+ #   (BRD Lyceum: in a fight inside the room every member stands within 15yd of
+ #    the tank — the combat-engine rung that walks a member back, plus the
 diff --git a/src/Lab/DcLabInject.cpp b/src/Lab/DcLabInject.cpp
 index 3a0d418..1c1a1c6 100644
 --- a/src/Lab/DcLabInject.cpp

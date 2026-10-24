@@ -48,6 +48,13 @@ pass.
 
 ## Gameplay validation
 
+- [ ] Validate the dependency refresh on a stopped test copy of an existing
+  realm: numeric account locales migrate to language codes without changing
+  login language or characters; `.lfgprogress` explains mixed human/bot earned
+  eras; MultiBot role changes survive an AI reset. Verify revised TBC tactics,
+  Twin Emperors target priority and dungeon navigation/loot/recovery in-game.
+  Natural progression must still refuse floor-rescue teleports and unpaid
+  Rocknot quest progress. Native fixtures do not start a realm or WoW client.
 - [ ] Verify startup data repairs on a fresh world database and an existing
   installation: historical priest rank chains, AQ event dragon menus, the
   retired Mirelow pool and the native Submerge Visual binding. Confirm the

@@ -368,9 +368,10 @@ def authored_sources(source):
         authored.append(function(builder, signature))
     events = (source / 'Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp').read_text()
     authored.append(re.search(r'constexpr uint32 BRD_RING_OF_LAW_HOOK\s*=\s*1;', events).group())
-    start = events.index('out.push_back(')
-    end = events.index('.Build());', start) + len('.Build());')
-    authored.append('void RegisterRingEvent(std::vector<DungeonEvent>& out){' + events[start:end] + '}')
+    registration = function(events, 'void RegisterBlackrockDepthsEvents(')
+    start = registration.index('out.push_back(')
+    end = registration.index('.Build());', start) + len('.Build());')
+    authored.append('void RegisterRingEvent(std::vector<DungeonEvent>& out){' + registration[start:end] + '}')
     return registry, '\n'.join(authored)
 
 

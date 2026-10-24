@@ -1,3 +1,3 @@
 module github.com/onur/mod-playerbots-portable
 
-go 1.26.9
+go 1.27.3

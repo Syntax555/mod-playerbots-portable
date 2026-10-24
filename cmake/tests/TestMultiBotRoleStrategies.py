@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -117,20 +118,86 @@ end
 
 def native_strategy_names(module, directory):
     """Compile the real producer methods instead of inventing server state tokens."""
-    code = '#include <iostream>\n#include <string>\n'
-    for cls, _, strategy, _, _ in ROLES:
+    bridge = (module.parents[1] / 'mod-multibot-bridge/src/MultiBotBridge.cpp').read_text()
+    mutation = function(bridge, 'bool ApplyNativeStrategyMutation(')
+    assert 'ResolveStrategyMutationCanonicalNames(botAI, resolvedOperations, resolvedChanges)' in mutation
+    context = (module / 'Bot/Engine/AiObjectContext.cpp').read_text()
+    assert 'return strategyContexts.GetContextObject(name, botAI);' in function(
+        context, 'Strategy* AiObjectContext::GetStrategy(')
+    code = r'''
+#include <cassert>
+#include <cctype>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
+struct Strategy { virtual ~Strategy() = default; virtual std::string const getName() = 0; };
+struct AiObjectContext {
+    std::map<std::string, Strategy*> strategies;
+    Strategy* GetStrategy(std::string const& name) { return strategies.contains(name) ? strategies[name] : nullptr; }
+};
+struct PlayerbotAI {
+    AiObjectContext* context = nullptr;
+    AiObjectContext* GetAiObjectContext() { return context; }
+};
+'''
+    # The bridge's own limits apply to the extracted parser and resolver.
+    limits = re.findall(r'std::size_t constexpr kMax(?:StrategyName|Command)Length = [^;]+;', bridge)
+    assert len(limits) == 2
+    code += '\n'.join(limits) + '\n'
+    code += function(bridge, 'std::string Trim(') + '\n'
+    code += function(bridge, 'bool IsValidStrategyName(') + '\n'
+    code += 'struct StrategyMutationOperation { bool enable; std::string name; };\n'
+    resolver = function(bridge, 'bool ResolveStrategyMutationCanonicalNames(')
+    for cls, _, strategy, name, alias in ROLES:
         header = (module / f'Ai/Class/{cls}/Strategy/{strategy}.h').read_text()
-        method = function(header, 'std::string const getName()').replace(' override', '')
-        code += f'struct {strategy} {{ {method} }};\n'
-    code += 'int main() {\n'
-    for _, _, strategy, _, _ in ROLES:
-        code += f' std::cout << {strategy}().getName() << "\\n";\n'
-    code += '}\n'
+        method = function(header, 'std::string const getName()')
+        code += f'struct {strategy} : Strategy {{ {method} }};\n'
+        factory = (module / f'Ai/Class/{cls}/{cls}AiObjectContext.cpp').read_text()
+        canonical = re.findall(r'creators\["' + name + r'"\] = ([^;]+);', factory)
+        aliases = re.findall(r'creators\["' + alias + r'"\] = ([^;]+);', factory)
+        assert canonical and canonical[0] in aliases, f'{cls} native alias changed'
+        assert f'return new {strategy}(botAI);' in factory
+    code += resolver + '\nint main() {\n'
+    for _, _, strategy, name, alias in ROLES:
+        code += f'''
+ {{ {strategy} strategy; AiObjectContext context; context.strategies["{alias}"] = &strategy;
+    PlayerbotAI ai{{&context}};
+    std::cout << strategy.getName() << "\\n";
+    for (bool enable : {{false, true}}) {{
+        std::vector<StrategyMutationOperation> operations = {{{{enable, "{alias}"}}, {{!enable, "unknown"}}}};
+        std::string changes;
+        assert(ResolveStrategyMutationCanonicalNames(&ai, operations, changes));
+        assert(operations[0].name == "{name}" && operations[1].name == "unknown");
+        assert(changes == std::string(enable ? "+" : "-") + "{name}," + (!enable ? "+" : "-") + "unknown");
+    }}
+ }}
+'''
+    code += r'''
+ AiObjectContext context; PlayerbotAI ai{&context}, noContext;
+ std::vector<StrategyMutationOperation> operations; std::string changes;
+ assert(!ResolveStrategyMutationCanonicalNames(nullptr, operations, changes));
+ assert(!ResolveStrategyMutationCanonicalNames(&noContext, operations, changes));
+ assert(!ResolveStrategyMutationCanonicalNames(&ai, operations, changes));
+ operations.push_back({true, std::string(kMaxCommandLength, 'a')});
+ assert(!ResolveStrategyMutationCanonicalNames(&ai, operations, changes));
+ struct InvalidStrategy : Strategy { std::string const getName() override { return "invalid~name"; } } invalid;
+ context.strategies["invalid"] = &invalid;
+ operations = {{true, "invalid"}};
+ assert(!ResolveStrategyMutationCanonicalNames(&ai, operations, changes));
+}
+'''
     source, binary = directory / 'native.cpp', directory / 'native'
     source.write_text(code)
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(binary)], check=True)
     names = subprocess.run([str(binary)], check=True, text=True, capture_output=True, timeout=20).stdout.splitlines()
     assert names == [role[3] for role in ROLES], 'Playerbots canonical role names changed'
+    assert 'operation.name = canonicalName;' in code
+    source.write_text(code.replace('operation.name = canonicalName;', 'static_cast<void>(canonicalName);'))
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(binary)], check=True)
+    result = subprocess.run([str(binary)], capture_output=True, timeout=20, check=False)
+    assert result.returncode != 0, 'bridge canonical strategy mutation survived'
 
 
 def run_lua(lua, directory):
@@ -172,7 +239,7 @@ def main():
                 assert run_lua(args.lua, directory).returncode != 0, f'{cls} {button} {label} mutant survived'
                 path.write_text(original)
                 print(f'MultiBot roles mutation rejected: {cls} {button} {label}')
-    print('MultiBot roles: 5 native names, bot/SelfBot enable/disable and 15 mutations passed')
+    print('MultiBot roles: 5 native names and aliases, bot/SelfBot toggles and 16 mutations passed')
 
 
 if __name__ == '__main__':

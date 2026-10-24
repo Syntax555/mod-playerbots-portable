@@ -23,6 +23,7 @@ STUBS = r'''
 #include <initializer_list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 using uint8=uint8_t; using uint32=uint32_t;
@@ -39,7 +40,7 @@ namespace lfg {
  struct LFGDungeonData {uint32 id=0; uint32 map=0;uint8 difficulty=0;uint8 expansion=0;uint8 type=1;bool seasonal=false;};
  struct Lfg5Guids {std::vector<ObjectGuid> guids;std::string toString()const{return "proposal";}};
 }
-struct WorldSession {bool headless=false;uint32 account=0;bool IsHeadless()const{return headless;}uint32 GetAccountId()const{return account;}};
+struct WorldSession {Player* player=nullptr;bool headless=false;uint32 account=0;bool IsHeadless()const{return headless;}uint32 GetAccountId()const{return account;}};
 struct GroupReference {
  Player* source=nullptr;GroupReference* following=nullptr;
  Player* GetSource(){return source;}GroupReference* next(){return following;}
@@ -54,7 +55,7 @@ class Player {
 public:
  ObjectGuid guid;uint8 level=60,tier=0;Group* group=nullptr;WorldSession session;
  bool gm=false;uint8 cls=1;bool dkRewarded=false;int syntheticRewards=0,refreshes=0;
- explicit Player(uint32 id=1):guid{id}{}
+ explicit Player(uint32 id=1):guid{id}{session.player=this;}
  Group* GetGroup(){return group;}uint8 GetLevel(){return level;}ObjectGuid GetGUID(){return guid;}
  WorldSession* GetSession(){return &session;}std::string GetName(){return "character";}
  bool IsClass(uint8 id){return cls==id;}bool IsGameMaster(){return gm;}
@@ -62,6 +63,24 @@ public:
  void SetRewardedQuest(uint32){++syntheticRewards;dkRewarded=true;}
 };
 void Group::Set(std::initializer_list<Player*> members){refs.clear();for(Player* p:members){p->group=this;refs.push_back({p,nullptr});}for(size_t i=0;i+1<refs.size();++i)refs[i].following=&refs[i+1];}
+class ChatHandler;
+namespace Acore::ChatCommands {
+ enum class Console {No};
+ struct Command {char const* name;bool (*handler)(ChatHandler*);int permission;Console console;};
+ using ChatCommandTable=std::vector<Command>;
+}
+constexpr int SEC_PLAYER=0;
+class ChatHandler {
+ WorldSession* session;
+public:
+ static inline std::vector<std::string> messages;
+ explicit ChatHandler(WorldSession* value):session(value){}
+ Player* GetPlayer(){return session->player;}
+ void SendSysMessage(char const* text){messages.push_back(text);}
+ template<class... Args> void PSendSysMessage(char const* format,Args const&... args){
+  std::ostringstream out;out<<format;((out<<" "<<args),...);messages.push_back(out.str());
+ }
+};
 struct ConfigMgr {std::map<std::string,uint32> opts;template<class T>T GetOption(char const* name,T fallback){auto it=opts.find(name);return it==opts.end()?fallback:static_cast<T>(it->second);}};
 ConfigMgr config;ConfigMgr* sConfigMgr=&config;
 struct IndividualProgression {
@@ -82,6 +101,7 @@ LFGMgr lfgMgr;LFGMgr* sLFGMgr=&lfgMgr;
 constexpr uint8 CLASS_DEATH_KNIGHT=6,TEAM_ALLIANCE=0;
 constexpr int GLOBALHOOK_ON_INITIALIZE_LOCKED_DUNGEONS=1,GLOBALHOOK_ON_AFTER_INITIALIZE_LOCKED_DUNGEONS=2,GLOBALHOOK_CAN_CREATE_LFG_PROPOSAL=3;
 constexpr int PLAYERHOOK_ON_QUEUE_RANDOM_DUNGEON=1,PLAYERHOOK_CAN_JOIN_LFG=2,PLAYERHOOK_ON_LEVEL_CHANGED=3,PLAYERHOOK_ON_LOGOUT=4,GROUPHOOK_ON_DISBAND=1;
+struct CommandScript {explicit CommandScript(char const*){}virtual ~CommandScript()=default;virtual Acore::ChatCommands::ChatCommandTable GetCommands()const=0;};
 struct WorldScript {explicit WorldScript(char const*){}virtual ~WorldScript()=default;virtual void OnAfterConfigLoad(bool){};};
 struct GlobalScript {GlobalScript(char const*,std::initializer_list<int>){}virtual ~GlobalScript()=default;virtual void OnInitializeLockedDungeons(Player*,uint8&,uint32&,lfg::LFGDungeonData const*){}virtual void OnAfterInitializeLockedDungeons(Player*){}virtual bool CanCreateLfgProposal(lfg::Lfg5Guids const&){return true;}};
 struct PlayerScript {PlayerScript(char const*,std::initializer_list<int>){}virtual ~PlayerScript()=default;virtual void OnPlayerQueueRandomDungeon(Player*,uint32&){}virtual bool OnPlayerCanJoinLfg(Player*,uint8,std::set<uint32>&,std::string const&){return true;}virtual void OnPlayerLevelChanged(Player*,uint8){}virtual void OnPlayerLogout(Player*){}};
@@ -120,6 +140,18 @@ int main(){
  random=LfgProgression::RDF_WOTLK_HEROIC;queue.OnPlayerQueueRandomDungeon(&bot,random);assert(random==LfgProgression::RDF_CLASSIC);
  bot.tier=8;random=LfgProgression::RDF_WOTLK_HEROIC;queue.OnPlayerQueueRandomDungeon(&human,random);assert(random==LfgProgression::RDF_TBC_HEROIC);
  bot.tier=13;random=LfgProgression::RDF_WOTLK;queue.OnPlayerQueueRandomDungeon(&human,random);assert(random==LfgProgression::RDF_WOTLK);
+ // The new status command and queue explanations use every member's earned era,
+ // including high-level legacy bots and humans, without a level shortcut.
+ bot.tier=0;bot.level=80;auto eras=GroupEras(&human);assert(eras.size()==2&&eras[1].ipTier==0&&eras[1].expansion==0);
+ human.tier=0;eras=GroupEras(&human);assert(eras[0].expansion==0);human.tier=13;
+ ChatHandler chat(human.GetSession());ChatHandler::messages.clear();
+ assert(LfgProgressionCommands::HandleStatus(&chat));
+ assert(std::any_of(ChatHandler::messages.begin(),ChatHandler::messages.end(),[](std::string const& line){return line.find("Every online member keeps their own earned era")!=std::string::npos;}));
+ assert(std::any_of(ChatHandler::messages.begin(),ChatHandler::messages.end(),[](std::string const& line){return line.find("stage 8")!=std::string::npos;}));
+ assert(LfgProgression::UnlockRequirement(g_settings,80,0,1).find("stage 8")!=std::string::npos);
+ assert(LfgProgression::UnlockRequirement(g_settings,80,0,2).find("stage 13")!=std::string::npos);
+ assert(LfgProgression::UnlockRequirement(g_settings,80,2,2).empty());
+ assert(LfgProgression::UnlockRequirement(g_settings,60,-1,1)=="reach level 61");
  // Each join rebuilds every member's native lock map, including unchanged-level progression.
  std::set<uint32> selected{259};queue.OnPlayerCanJoinLfg(&human,1,selected,"");assert(human.refreshes==1&&bot.refreshes==1);
  bot.tier=0;queue.OnPlayerCanJoinLfg(&human,1,selected,"");assert(human.refreshes==2&&bot.refreshes==2);
@@ -156,7 +188,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='lfg-earned-') as temp:
         work=Path(temp)
         (work/'NativeStubs.h').write_text(STUBS.replace('// NATIVE_PROGRESSION_ENUM',progression_enum)+'\n'+earned_era)
-        for name in ('Config.h','Group.h','LFG.h','LFGMgr.h','Log.h','ObjectMgr.h','Player.h','ScriptMgr.h','WorldSession.h','IndividualProgression.h','PlayerbotAIConfig.h'):
+        for name in ('Chat.h','ChatCommand.h','Config.h','Group.h','LFG.h','LFGMgr.h','Log.h','ObjectMgr.h','Player.h','ScriptMgr.h','WorldSession.h','IndividualProgression.h','PlayerbotAIConfig.h'):
             (work/name).write_text('#include "NativeStubs.h"\n')
         (work/'fixture.cpp').write_text(HARNESS)
         exe=work/('fixture.exe' if os.name=='nt' else 'fixture')
@@ -171,8 +203,11 @@ def main():
             ('native lock bypass', 'LfgProgression.cpp',
              'if (lockData)\n            return;', 'if (false)\n            return;'),
             ('invited bot era bypass', 'LfgProgression.cpp',
-             'if (!member || member == player)',
-             'if (!member || member == player || IsRandomBot(member))'),
+             'if (!member)',
+             'if (!member || IsRandomBot(member))'),
+            ('group legacy level shortcut', 'LfgProgression.cpp',
+             'int const ipTier = IpTier(member);',
+             'int const ipTier = -1;'),
         ]
         reject_mutants(work, mutations, lambda directory, executable: [
             compiler, '-std=c++20', '-O1', '-I', str(directory), '-I', str(source),

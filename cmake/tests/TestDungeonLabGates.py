@@ -48,6 +48,7 @@ namespace DcFollowerLifecycle{
  void ReapStrandedPassives(){calls.push_back("passives");}
 }
 namespace DcStatusPublisher{void TickStatusPushes(uint32 diff){assert(diff==expectedDiff);calls.push_back("status");}}
+namespace DcLyceum{void Tick(uint32 diff,bool){assert(diff==expectedDiff);calls.push_back("lyceum");}}
 namespace DcCombatPurge{void Tick(uint32 diff){assert(diff==expectedDiff);calls.push_back("purge");}}
 namespace DcStrategyGate{void ReconcileAllBots(){calls.push_back("strategies");}}
 namespace DcTestDriver{
@@ -92,14 +93,14 @@ int main(){
  FixtureWorld world;
  // Natural ticks retain real party work and cleanup but never provision labs.
  world.OnUpdate(1000);
- assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","earned","orphaned","passives","paths","status"}));
+ assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","lyceum","earned","orphaned","passives","paths","status"}));
  calls.clear();expectedDiff=2000;world.OnUpdate(2000);
- assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","earned","orphaned","passives","paths","status","strategies"}));
+ assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","lyceum","earned","orphaned","passives","paths","status","strategies"}));
  // Existing unrestricted test-driver, plan, run and lab ordering stays intact.
  natural=false;calls.clear();expectedDiff=1000;world.OnUpdate(1000);
- assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","earned","orphaned","passives","paths","status","purge","driver","plan","runs","lab"}));
+ assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","lyceum","earned","orphaned","passives","paths","status","purge","driver","plan","runs","lab"}));
  enabled=false;calls.clear();world.OnUpdate(1000);
- assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","earned"}));
+ assert((calls==std::vector<std::string>{"budget","dungeon queue","battleground queue","lyceum","earned"}));
  enabled=true;natural=true;
  // Both command entry points refuse before a console driver's login or listing.
  for(bool console:{false,true})for(bool batch:{false,true}){

@@ -8,16 +8,16 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 
 | Component | Upstream repository | Locked revision | Role |
 | --- | --- | --- | --- |
-| AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `8a4e76eac8c4` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `d750b4b3a50e` | Natural progression, earned auctions and era-aware bots |
-| Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `acaa9b3c73f7` | Earned content milestones and expansion access |
-| Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `381554742ac0` | Autonomous earned-era parties and player-led clears without event shortcuts |
-| Raid Clear | [buildthehomelab/wow-mod-raid-clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | `fa299223a92a` | Boss and trash mechanics for Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj |
+| AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `3f2969ddb0da` | Core server, historical spell/accounting hooks and earned-era PvP rules |
+| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `e88cc4099e69` | Natural progression, earned auctions and era-aware bots |
+| Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `4933d455d2f6` | Earned content milestones and expansion access |
+| Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `fcb680fb279c` | Autonomous earned-era parties and player-led clears without event shortcuts |
+| Raid Clear | [buildthehomelab/wow-mod-raid-clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | `c9dbb3471e9b` | Boss and trash mechanics for Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj |
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `c3955915c76d` | Scoped party sharing of naturally dropped quest items |
 | World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Timed Vanilla events with individual earned-era and native recipient checks |
 | Era Events | [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) | `cf02786aceb5` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
-| LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `5d64585dd2ac` | Always included access guards for optional Dungeon Finder use |
-| MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `8f703da2bbdb` | Server support for the MultiBot controls |
+| LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `2615e82902cf` | Always included access guards for optional Dungeon Finder use |
+| MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `ebfa01a129dd` | Server support for the MultiBot controls |
 | MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
 | Questie-335 (source only) | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335) | `d695e9048e6d` | Prepared bot quest progress integration; installer downloads upstream files separately |
 | Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
@@ -71,6 +71,30 @@ The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
 skips despawned quest givers). The regression fixture checks all four fixes
 against the prepared sources.
 
+Core and Playerbots use the matching asynchronous module-database API. The
+core's auth migration converts existing numeric account locales to language
+codes; accounts and characters are retained. Registered locales are shared
+with Playerbots. Hunter traps use the corrected native targeting and spell
+finish handling, and battleground reputation follows the native bracket rules.
+
+Playerbots includes controlled-bot queue exclusions, arena bracket and queue
+locking fixes and revised TBC encounter tactics. Natural progression retains
+ordinary movement and refuses encounter position-rescue teleports. The
+MultiBot Bridge resolves strategy aliases to their native canonical names
+before applying and verifying role commands.
+
+Individual Progression offers the Scarab Gong's next quest only through its
+personal Scepter and native quest-acceptance checks. Raid Clear prioritizes
+mutated scarabs and scorpions during the Twin Emperors encounter. LFG
+Progression supplies read-only queue diagnostics using every group member's
+own earned era; it does not unlock content.
+
+Dungeon Clear includes route, encounter-loot and recovery improvements. Its
+new BRD and Upper Blackrock Spire event controllers remain subject to the
+earned-action audit; unaudited controllers do not enable autonomous routes.
+Rocknot's ale event requires the bot's own mugs and native quest eligibility,
+without the upstream unpaid reward fallback.
+
 The natural-progression, earned-auctions, earned-bags and era-talents patches
 target this pin. Natural progression uses the upstream ammunition checks and
 preserves queue-assigned battleground brackets. The era bridge resolves
@@ -120,7 +144,7 @@ Chatless and MultiBot Bridge are checked as a compatible pair. New bridge
 endpoints, such as pet creation, glyph application and maintenance, must
 preserve natural progression.
 
-The Playerbots pin `d750b4b3` reads `Playerbots.*` configuration names.
+The Playerbots pin `e88cc409` reads `Playerbots.*` configuration names.
 Profiles and launcher settings use that prefix. Normal startup migrates legacy
 `AiPlayerbot.*` values and their managed baselines before merging profile
 updates; existing `Playerbots.*` values take precedence. See

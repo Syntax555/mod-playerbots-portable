@@ -1,8 +1,8 @@
 diff --git a/conf/mod_dungeon_clear.conf.dist b/conf/mod_dungeon_clear.conf.dist
-index a6615b8..d49d116 100644
+index 317270e..aaed27e 100644
 --- a/conf/mod_dungeon_clear.conf.dist
 +++ b/conf/mod_dungeon_clear.conf.dist
-@@ -2047,3 +2047,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
+@@ -2049,3 +2049,18 @@ DungeonClear.BgQueueFill.GearQuality = 0
  #
  
  DungeonClear.BgQueueFill.LogoutOnRelease = 1
@@ -52,10 +52,10 @@ index f02f6d7..491ee15 100644
  
      // The self-bot suppression isUseful() already applies, repeated here
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
-index adb8a96..9c18d72 100644
+index 6b1d795..3fbdd93 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcActionShared.cpp
-@@ -74,6 +74,7 @@
+@@ -75,6 +75,7 @@
  #include "Ai/Dungeon/DungeonClear/Value/DungeonClearStateValues.h"
  #include "Playerbots.h"
  #include "DcActionShared.h"
@@ -63,7 +63,7 @@ index adb8a96..9c18d72 100644
  #include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
  #include "Util/DcPlayerbotsConfig.h"
  
-@@ -753,7 +754,7 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
+@@ -754,7 +755,7 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
                                  bool normal_only, bool exact_waypoint, MovementPriority priority,
                                  bool lessDelay, bool backwards, bool ignoreEnemyTargets)
  {
@@ -72,7 +72,7 @@ index adb8a96..9c18d72 100644
          return false;
      DcMovement::ResolveEscortConflict(bot);
  
-@@ -789,6 +790,17 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
+@@ -790,6 +791,17 @@ bool DcMovementAction::DcMoveTo(uint32 mapId, float x, float y, float z, bool id
              destZ = snap.z;
      }
  
@@ -91,7 +91,7 @@ index adb8a96..9c18d72 100644
                                     priority, lessDelay, backwards, ignoreEnemyTargets);
  
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp
-index 4ebe94b..62e7601 100644
+index 5467612..4b88436 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcAdvanceAction.cpp
 @@ -4,6 +4,7 @@
@@ -112,7 +112,7 @@ index 4ebe94b..62e7601 100644
              return false;
          // No navmesh to land on: on a map the core runs without pathfinding
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
-index 10b9e59..1670bda 100644
+index eded46e..e10571f 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcEngageActions.cpp
 @@ -3,6 +3,8 @@
@@ -124,7 +124,7 @@ index 10b9e59..1670bda 100644
  #include "DungeonClearActions.h"
  #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
  
-@@ -2012,8 +2014,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2182,8 +2184,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // and the same Yield/Hold pair, as the UseItemOnGO branch below.
              //
              // Only once ARRIVED: while still walking in, the move is the work.
@@ -135,7 +135,7 @@ index 10b9e59..1670bda 100644
              // the encounter resetting behind the party, so it must not be yielded.
              //
              // The raid-muster step (DC_HOOK_RAID_MUSTER) is a camp too, with no
-@@ -2085,7 +2087,10 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2267,7 +2269,10 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // its attackers + self-heal gossip + watchdog) the whole way to the
              // final boss. DriveEscortCreature returns false only once that boss
              // exists, so we fall through to Drive and the completion gate latches.
@@ -147,7 +147,7 @@ index 10b9e59..1670bda 100644
              {
                  if (DriveEscortCreature(step, prog))
                      return true;
-@@ -2096,7 +2101,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2278,7 +2283,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // tick and pin the leader on the lip (the prior attempts' failure).
              // DriveDropInHole returns false once landed, so we fall through to
              // Drive and RunStep's gate pulls the followers down + latches Done.
@@ -156,7 +156,7 @@ index 10b9e59..1670bda 100644
              {
                  if (DriveDropInHole(step))
                      return true;
-@@ -2106,7 +2111,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2288,7 +2293,8 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // approach every tick and the tank can't thread a house doorway to a
              // barrel inside (it stalls "close but not inside"). Returns false once in
              // cast range, so we fall through to Drive and RunStep fires the GO.
@@ -166,7 +166,7 @@ index 10b9e59..1670bda 100644
              {
                  // Recover between barrels. DriveUseItemOnGO owns the tick at
                  // DcRel::AtObjective (30) — above the NeedsRest triggers (26.5) —
-@@ -2142,7 +2148,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
+@@ -2324,7 +2330,7 @@ bool DcObjectiveArriveAction::Execute(Event /*event*/)
              // step timeout. Recover between crates for the same reason the barrels
              // do: this rung sits above NeedsRest (26.5), the five crates are 330yd
              // apart end to end, and the party has the whole intro RP ahead of it.
@@ -175,7 +175,7 @@ index 10b9e59..1670bda 100644
              {
                  switch (EventRestDecision())
                  {
-@@ -2544,6 +2550,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
+@@ -2728,6 +2734,11 @@ bool DungeonClearDisableOnClearedAction::Execute(Event /*event*/)
  
  bool DungeonClearBreakStuckCombatAction::Execute(Event /*event*/)
  {
@@ -188,7 +188,7 @@ index 10b9e59..1670bda 100644
      // nothing fightable for the full StuckCombatTimeout — no holder that is both
      // reachable and actually coming for us. Force-clear it exactly as a GM
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
-index 6bc8a74..0cacc23 100644
+index 59ec4f6..ebd5cba 100644
 --- a/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp
 @@ -4,6 +4,10 @@
@@ -217,7 +217,7 @@ index 6bc8a74..0cacc23 100644
      // A transit is driving the column to a published cursor: every branch below
      // positions against the TANK instead, and while the tank is snared behind its
      // own cursor those two answers fight each other tick by tick. See
-@@ -764,6 +776,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
+@@ -773,6 +785,18 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
                      ++sameMap;
          followDist = std::max(followDist, DcFormation::RingRadius(sameMap, followDist));
      }
@@ -268,7 +268,7 @@ index 5863371..0bfd101 100644
                  {
                      // Land him a few yards off the anchor on the tank's side rather
 diff --git a/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp b/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
-index 59f79af..f7b267f 100755
+index 98f0542..5c7ab13 100755
 --- a/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Action/DungeonClearChatActions.cpp
 @@ -4,6 +4,8 @@
@@ -327,7 +327,7 @@ index 97f5205..b97418d 100644
  
      return AutoReleaseSpiritAction::isUseful();
 diff --git a/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h b/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
-index aad74c4..aca32c9 100644
+index 8e470e6..f1dd14a 100644
 --- a/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
 +++ b/src/Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h
 @@ -70,20 +70,12 @@ enum class EventStepKind : uint8
@@ -357,7 +357,7 @@ index aad74c4..aca32c9 100644
      DropInHole,              // DROP the party down a narrow vertical hole into the
                               // water below (Wailing Caverns' return-fall off Verdan's
                               // shelf to reach the Disciple). A ground move clamps to
-@@ -732,17 +724,9 @@ public:
+@@ -744,17 +736,9 @@ public:
      // alone still ends the step. Chain it right after the step it arms:
      //   .MoveToHoldUntilInstanceData(x, y, z, r, dataId, min).WhileHolding(hook)
      //
@@ -379,12 +379,20 @@ index aad74c4..aca32c9 100644
      EventBuilder& UseGO(uint32 goEntry, float searchRadius = 0.0f,
                          float x = 0.0f, float y = 0.0f, float z = 0.0f);
 diff --git a/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp b/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp
-index 3ad71d6..2098cb0 100644
+index a476c12..7f9ba5b 100644
 --- a/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp
-@@ -9,81 +9,12 @@
- 
+@@ -15,6 +15,7 @@
  #include <unordered_map>
+ #include <vector>
+ 
++#include "DcEarnedPlay.h"
+ #include "Bag.h"
+ #include "CharmInfo.h"
+ #include "Creature.h"
+@@ -43,81 +44,12 @@
+ #include "Ai/Dungeon/DungeonClear/Util/DcTargeting.h"
+ #include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
  
 -// --- Blackrock Depths (map 230) — the RING OF LAW, ANCHORED + PERSISTENT ---
 -// A sealed arena gauntlet that gates the way between Houndmaster Grebmar and
@@ -468,7 +476,16 @@ index 3ad71d6..2098cb0 100644
  
      // --- Shadowforge Lock (event 2) ---------------------------------------
      // The lever in the East Garrison, and the Giant Doors it drives. GOState
-@@ -116,22 +47,8 @@ void RegisterBlackrockDepthsEvents(std::vector<DungeonEvent>& out)
+@@ -410,6 +342,8 @@ namespace
+                      "{} mug(s) left", bot->GetName(), QUEST_ALE, bot->GetItemCount(ITEM_DARK_IRON_ALE_MUG));
+         else
+         {
++            if (DcEarnedPlay::Active())
++                return ObjectiveArriveResult::Blocked;
+             // The player's route is closed (see the header): count this hand-in
+             // the script's own way so the bar still opens.
+             if (bot->GetQuestStatus(QUEST_ALE) == QUEST_STATUS_INCOMPLETE)
+@@ -1045,22 +979,8 @@ void RegisterBlackrockDepthsEvents(std::vector<DungeonEvent>& out)
          EventBuilder(230, 1, "Ring of Law")
              .Anchored(/*encounterIndex*/ 3)
              .Persistent()
@@ -1031,7 +1048,7 @@ index c636456..b601819 100644
  }
  
 diff --git a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
-index 0348d68..ea2dfe2 100644
+index 2cbcee1..56644a7 100644
 --- a/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.cpp
 @@ -3,6 +3,8 @@
@@ -1297,7 +1314,7 @@ index 0348d68..ea2dfe2 100644
              Reg::AddHook(t, 6, &DriveMellicharWaves);    // Arcatraz — poke Mellichar, hold through the waves
              Reg::AddHook(t, 7, &DriveAnzuSummon);        // Sethekk Halls — force-summon Anzu (send-event 14797)
              Reg::AddHook(t, 9, &StartNethekurseIntro);   // Shattered Halls — fire Nethekurse's client-only intro
-@@ -888,6 +762,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
+@@ -890,6 +764,10 @@ ObjectiveArriveResult ObjectiveHookRegistry::Run(uint32 hookId, Player* bot, AiO
  {
      if (hookId == 0)
          return ObjectiveArriveResult::Done;
@@ -1366,7 +1383,7 @@ index c58d3b8..39a906f 100644
          if (bot->IsSitState())
              bot->SetStandState(UNIT_STAND_STATE_STAND);
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp
-index cfb8ead..6f8d5ee 100644
+index a07fa81..4bae516 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DcRezRecovery.cpp
 @@ -3,6 +3,7 @@
@@ -1377,7 +1394,7 @@ index cfb8ead..6f8d5ee 100644
  #include "DcRezRecovery.h"
  
  #include "Ai/Dungeon/DungeonClear/Data/DcNeverTargetRegistry.h"
-@@ -502,7 +503,7 @@ namespace DcRezRecovery
+@@ -568,7 +569,7 @@ namespace DcRezRecovery
  {
      bool Enabled(Player* bot)
      {
@@ -1385,8 +1402,8 @@ index cfb8ead..6f8d5ee 100644
 +        return !DcEarnedPlay::Active() && DcSettings::GetBool(bot, "PostCombatRez");
      }
  
-     Plan Evaluate(Player* bot)
-@@ -654,6 +655,8 @@ namespace DcRezRecovery
+     SpellInfo const* KnownResurrectSpell(Player const* p)
+@@ -787,6 +788,8 @@ namespace DcRezRecovery
  
      bool RegroupAtEntrance(Player* bot)
      {
@@ -1417,7 +1434,7 @@ index 6d01e6d..d9d1b7c 100644
              return;
  
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp b/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp
-index 74b95dd..3e78cf8 100644
+index b5dbbe4..24488b5 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.cpp
 @@ -3,6 +3,7 @@
@@ -1428,7 +1445,7 @@ index 74b95dd..3e78cf8 100644
  #include "DcStrandedRecovery.h"
  
  #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
-@@ -152,7 +153,7 @@ namespace DcStrandedRecovery
+@@ -171,7 +172,7 @@ namespace DcStrandedRecovery
  {
      bool Enabled(Player* bot)
      {
@@ -1438,7 +1455,7 @@ index 74b95dd..3e78cf8 100644
  
      bool Evaluate(Player* bot)
 diff --git a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
-index 7355d38..5ce5b60 100644
+index d08b6e1..5897268 100644
 --- a/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 +++ b/src/Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.cpp
 @@ -3,6 +3,12 @@
@@ -1454,7 +1471,7 @@ index 7355d38..5ce5b60 100644
  #include "DungeonEventExecutor.h"
  
  #include <algorithm>
-@@ -175,6 +181,10 @@ namespace
+@@ -188,6 +194,10 @@ namespace
      {
          if (bot->isMoving())
              return;
@@ -1465,7 +1482,7 @@ index 7355d38..5ce5b60 100644
          bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
                                            /*generatePath*/ true, false);
      }
-@@ -492,11 +502,18 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -505,11 +515,18 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  {
      if (!bot)
          return StepResult::Blocked;
@@ -1484,7 +1501,7 @@ index 7355d38..5ce5b60 100644
              // Boss-state gate, evaluated BEFORE the walk: an encounter that has
              // finished or reset needs nothing from the garrison spot, and walking
              // back to it first would only delay the retry.
-@@ -617,6 +634,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -638,6 +655,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  
          case EventStepKind::UseGameObject:
          {
@@ -1494,7 +1511,7 @@ index 7355d38..5ce5b60 100644
              float const search = step.radius > 0.0f ? step.radius : DC_EVENT_GO_SEARCH;
              GameObject* go = bot->FindNearestGameObject(step.goEntry, search);
              if (!go)
-@@ -647,6 +667,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -668,6 +688,25 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
                            bot->GetName(), go->GetGUID().ToString(), go->GetName());
                  return StepResult::Running;
              }
@@ -1520,7 +1537,7 @@ index 7355d38..5ce5b60 100644
              // A GO script that gates on a carried key item refuses a click from an
              // empty bag without a word the headless harness can see (Karazhan's
              // Blackened Urn under mod-individual-progression). Grant it first.
-@@ -881,6 +920,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -909,6 +948,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  
          case EventStepKind::EscortCreature:
          {
@@ -1530,7 +1547,7 @@ index 7355d38..5ce5b60 100644
              // PURE COMPLETION GATE only. The follow + threat-engage + self-heal
              // gossip + watchdog are all driven by the ACTION
              // (DcObjectiveArriveAction::DriveEscortCreature), which owns the tick
-@@ -1116,6 +1158,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -1144,6 +1186,8 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
              if (step.itemId == 0)
                  return StepResult::Done;
              Item* item = bot->GetItemByEntry(step.itemId);
@@ -1539,7 +1556,7 @@ index 7355d38..5ce5b60 100644
              if (!item)
              {
                  bot->AddItem(step.itemId, 1);
-@@ -1137,6 +1181,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
+@@ -1165,6 +1209,9 @@ StepResult DungeonEventExecutor::RunStep(Player* bot, AiObjectContext* context,
  
          case EventStepKind::UseItemOnGO:
          {
@@ -1549,7 +1566,7 @@ index 7355d38..5ce5b60 100644
              // Plant a bomb on the barrel the step's (x,y,z) anchor sits on. The
              // barrel's only interaction is SMART_EVENT_SPELLHIT of the bomb spell,
              // and that spell (32744) is SPELL_EFFECT_OPEN_LOCK against the barrel's
-@@ -1355,11 +1402,10 @@ EventDriveOutcome DungeonEventExecutor::Advance(DungeonEvent const& ev, DungeonE
+@@ -1383,11 +1430,10 @@ EventDriveOutcome DungeonEventExecutor::Advance(DungeonEvent const& ev, DungeonE
      EventStep const& step = ev.steps[prog.stepIndex];
      uint32 const timeout = step.timeoutMs ? step.timeoutMs : defaultTimeoutMs;
  
@@ -2715,7 +2732,7 @@ index e3a2da4..6800f90 100644
          std::string target, word, sweep;
          uint32 seed = 0, repeat = 1;
 diff --git a/src/DungeonClearModule.cpp b/src/DungeonClearModule.cpp
-index 9e0f1e9..62c30fc 100644
+index 4d25185..445cc09 100644
 --- a/src/DungeonClearModule.cpp
 +++ b/src/DungeonClearModule.cpp
 @@ -50,6 +50,8 @@
@@ -2727,7 +2744,7 @@ index 9e0f1e9..62c30fc 100644
  #include "AllCreatureScript.h"
  #include "Cell.h"
  #include "CellImpl.h"
-@@ -283,6 +285,7 @@ public:
+@@ -285,6 +287,7 @@ public:
      void OnAfterConfigLoad(bool /*reload*/) override
      {
          DcSettings::InvalidateConfCache();
@@ -2735,18 +2752,15 @@ index 9e0f1e9..62c30fc 100644
          // The one tunable a reload CANNOT apply: say so rather than leaving an
          // admin to wonder why the module is still running (or still absent).
          DcModule::WarnIfConfDiffersFromLatch();
-@@ -553,9 +556,9 @@ public:
-         // provisioning ration ahead of the test harness.
-         DcBgQueueFillManager::Instance().Tick(diff);
+@@ -560,6 +563,7 @@ public:
+         // put passive — it must hand back when the module goes off.
+         DcLyceum::Tick(diff, DcModule::IsEnabled());
  
 +        EarnedDungeonParties::Update(diff);
          if (!DcModule::IsEnabled())
              return;
--
-         DcFollowerLifecycle::ReapOrphanedFollows();
-         // Authoritative advanced-pull passive teardown: release any follower DC
-         // put passive once its leader is no longer mid-pull (released / dc off /
-@@ -581,7 +584,8 @@ public:
+ 
+@@ -588,7 +592,8 @@ public:
          // bots on the COMBAT engine, where the clear's non-combat triggers never
          // get one. Internally throttled and gated on the map having a row, so it
          // is a handful of integer compares on every other map.
@@ -2756,7 +2770,7 @@ index 9e0f1e9..62c30fc 100644
  
          // `.dc test` harness state machine (spawn -> gear -> group -> teleport
          // -> dc on -> watchdogs -> record). Cheap no-op while no test run is
-@@ -589,12 +593,15 @@ public:
+@@ -596,12 +601,15 @@ public:
          // Headless-driver login poll first (a console start may be waiting on
          // it), then the plan scheduler (a launch it makes this tick enters the
          // run manager's tick loop immediately below).

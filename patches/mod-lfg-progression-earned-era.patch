@@ -71,7 +71,7 @@ index 23ac717..3dcc305 100644
  #
  
 diff --git a/src/LfgProgression.cpp b/src/LfgProgression.cpp
-index 0533553..8dd225e 100644
+index 8c58590..ca27523 100644
 --- a/src/LfgProgression.cpp
 +++ b/src/LfgProgression.cpp
 @@ -43,9 +43,9 @@
@@ -87,7 +87,7 @@ index 0533553..8dd225e 100644
   */
  
  #include <algorithm>
-@@ -95,20 +95,17 @@ namespace
+@@ -98,20 +98,17 @@ namespace
  #endif
      }
  
@@ -115,7 +115,7 @@ index 0533553..8dd225e 100644
  #else
          return -1;
  #endif
-@@ -116,15 +113,11 @@ namespace
+@@ -119,9 +116,6 @@ namespace
  
      uint8 PlayerExpansion(Player* player, uint8 level)
      {
@@ -125,6 +125,23 @@ index 0533553..8dd225e 100644
          return LfgProgression::PlayerExpansion(g_settings, level, IpTier(player));
      }
  
+@@ -140,11 +134,10 @@ namespace
+         std::vector<MemberEra> members;
+         auto add = [&members](Player* member)
+         {
+-            if (!member || IsRandomBot(member))
++            if (!member)
+                 return;
+             uint8 const level = member->GetLevel();
+-            int const ipTier = LfgProgression::ExpansionForLevel(g_settings, level) == LfgProgression::EXPANSION_WOTLK
+-                ? -1 : IpTier(member);
++            int const ipTier = IpTier(member);
+             members.push_back({ member, level, ipTier, LfgProgression::PlayerExpansion(g_settings, level, ipTier) });
+         };
+         if (Group* group = player->GetGroup())
+@@ -172,8 +165,7 @@ namespace
+     }
+ 
      // InitializeLockedDungeons() calls the lock hook once per dungeon with the
 -    // same player, and IpTier() costs two synchronous auth database lookups
 -    // and two regexes per call. So the expansion is worked out once per pass
@@ -132,7 +149,7 @@ index 0533553..8dd225e 100644
      // and forgotten in OnAfterInitializeLockedDungeons -- the IP tier can
      // change without the level changing. thread_local, because the locks are
      // worked out both in the world thread (login) and in the map threads
-@@ -145,29 +138,8 @@ namespace
+@@ -194,29 +186,8 @@ namespace
      }
  
  #ifdef LFGP_WITH_PLAYERBOTS
@@ -164,7 +181,7 @@ index 0533553..8dd225e 100644
  
      // Queue entries by LFG's queue guid (the group's, otherwise the player's).
      // Written in the world thread on join and on level change in the map
-@@ -277,35 +249,14 @@ public:
+@@ -326,35 +297,14 @@ public:
          if (!dungeon || !player || !g_settings.enabled)
              return;
  
@@ -203,17 +220,7 @@ index 0533553..8dd225e 100644
              return;
  
          // "You have not completed the required quest", not the expansion reason: the client
-@@ -357,8 +308,8 @@ class LfgProgressionPlayer : public PlayerScript
- public:
-     LfgProgressionPlayer() : PlayerScript("LfgProgressionPlayer", {
-         PLAYERHOOK_ON_QUEUE_RANDOM_DUNGEON,
--#ifdef LFGP_WITH_PLAYERBOTS
-         PLAYERHOOK_CAN_JOIN_LFG,
-+#ifdef LFGP_WITH_PLAYERBOTS
-         PLAYERHOOK_ON_LEVEL_CHANGED,
-         PLAYERHOOK_ON_LOGOUT,
- #endif
-@@ -372,18 +323,13 @@ public:
+@@ -421,11 +371,6 @@ public:
          if (!player || !g_settings.enabled)
              return;
  
@@ -222,29 +229,14 @@ index 0533553..8dd225e 100644
 -        if (IsRandomBot(player))
 -            return;
 -
-         uint8 groupExpansion = PlayerExpansion(player, player->GetLevel());
-         if (Group* group = player->GetGroup())
-         {
-             for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-             {
-                 Player* member = ref->GetSource();
--                if (!member || member == player || IsRandomBot(member))
-+                if (!member || member == player)
-                     continue;
-                 groupExpansion = LfgProgression::GroupExpansion({ groupExpansion, PlayerExpansion(member, member->GetLevel()) });
-             }
-@@ -398,7 +344,6 @@ public:
-         rDungeonId = swapped;
-     }
- 
--#ifdef LFGP_WITH_PLAYERBOTS
-     // First in LFGMgr::JoinLfg, with the player who queues -- the group
-     // leader, if there is a group. Random bots come here too (they send
-     // CMSG_LFG_JOIN, which HandleBotPackets runs in the world thread).
-@@ -408,6 +353,21 @@ public:
+         std::vector<MemberEra> const members = GroupEras(player);
+         uint8 groupExpansion = LfgProgression::EXPANSION_WOTLK;
+         for (MemberEra const& member : members)
+@@ -458,6 +403,21 @@ public:
+         if (!player)
              return true;
  
-         Group* group = player->GetGroup();
++        Group* group = player->GetGroup();
 +        if (g_settings.enabled)
 +        {
 +            // Progression can change without a level-up. Rebuild each member's
@@ -259,22 +251,41 @@ index 0533553..8dd225e 100644
 +                sLFGMgr->InitializeLockedDungeons(player);
 +        }
 +
-+#ifdef LFGP_WITH_PLAYERBOTS
+         if (g_settings.enabled && !IsRandomBot(player))
+         {
+             // At most one explanation per member and target era, even when
+@@ -479,7 +439,6 @@ public:
+         }
+ 
+ #ifdef LFGP_WITH_PLAYERBOTS
+-        Group* group = player->GetGroup();
          ObjectGuid const key = group ? group->GetGUID() : player->GetGUID();
  
          // An entry from before BotLock was reloaded to 0 must not be read
-@@ -423,9 +383,11 @@ public:
- 
-         std::lock_guard<std::mutex> lock(g_queueMutex);
-         g_queueEntries[key] = entry;
-+#endif
-         return true;
+@@ -574,7 +533,7 @@ public:
+         uint8 lowest = LfgProgression::EXPANSION_WOTLK;
+         for (MemberEra const& member : members)
+             lowest = std::min(lowest, member.expansion);
+-        chat->PSendSysMessage("Dungeon Finder: your group's lowest era is {}. Online characters are checked; random bots do not set the era.",
++        chat->PSendSysMessage("Dungeon Finder: your group's lowest era is {}. Every online member keeps their own earned era.",
+             LfgProgression::ExpansionName(lowest));
+         for (MemberEra const& member : members)
+         {
+diff --git a/src/lfg_progression_explanations.h b/src/lfg_progression_explanations.h
+index bb6b25c..a92754b 100644
+--- a/src/lfg_progression_explanations.h
++++ b/src/lfg_progression_explanations.h
+@@ -16,8 +16,8 @@ namespace LfgProgression
+         }
      }
  
-+#ifdef LFGP_WITH_PLAYERBOTS
-     // A random bot can be randomized while it is in the queue.
-     void OnPlayerLevelChanged(Player* player, uint8 /*oldLevel*/) override
+-    // Describe the same effective era used by matchmaking, including its level
+-    // floor. Never tell an IP-excluded character to complete progression raids.
++    // Describe the same earned era used by matchmaking. Level fallback only
++    // applies without active Individual Progression.
+     inline std::string UnlockRequirement(Settings const& settings, uint8_t level, int ipTier, uint8_t target)
      {
+         if (!settings.enabled || target <= PlayerExpansion(settings, level, ipTier) || target > EXPANSION_WOTLK)
 diff --git a/src/lfg_progression_rules.h b/src/lfg_progression_rules.h
 index f43f175..2e6e4bc 100644
 --- a/src/lfg_progression_rules.h

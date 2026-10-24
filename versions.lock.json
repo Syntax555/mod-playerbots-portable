@@ -3,7 +3,7 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-    "revision": "8a4e76eac8c4ccebf547113afe7b51d6c3e91641",
+    "revision": "3f2969ddb0da42b48b4fca050c02b19163ba1e20",
     "patches": [
       "patches/azerothcore-era-shatter.patch",
       "patches/azerothcore-era-corruption.patch",
@@ -26,7 +26,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/mod-playerbots/mod-playerbots.git",
-      "revision": "d750b4b3a50effdf22bedc8032f0e8e5f7cb8091",
+      "revision": "e88cc4099e69f35126b28942a412ca702d20453b",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
@@ -41,7 +41,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
-      "revision": "acaa9b3c73f7b756dcf0a7c388b438dcc68cdd17",
+      "revision": "4933d455d2f611eed50c74c68c78832df4ed37a3",
       "patches": [
         "patches/mod-individual-progression-empty-account-filters.patch",
         "patches/mod-individual-progression-earned-milestones.patch",
@@ -59,7 +59,7 @@
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-      "revision": "381554742ac04361fff5cab95a12e0564fb16382",
+      "revision": "fcb680fb279cd25696e7f848fad72c5d41282032",
       "patches": [
         "patches/mod-dungeon-clear-earned-parties.patch",
         "patches/mod-dungeon-clear-build-warnings.patch",
@@ -69,7 +69,7 @@
     {
       "name": "mod-raid-clear",
       "url": "https://github.com/buildthehomelab/wow-mod-raid-clear.git",
-      "revision": "fa299223a92a0806eb778a182e85a76f3f3feb62",
+      "revision": "c9dbb3471e9b1d164007b3fca2773c47f5ae2cc1",
       "patches": [
         "patches/mod-raid-clear-natural-progression.patch",
         "patches/mod-raid-clear-windows-identifiers.patch"
@@ -91,7 +91,7 @@
     {
       "name": "mod-lfg-progression",
       "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
-      "revision": "5d64585dd2ac6d9313165f8c46f278980ae89f37",
+      "revision": "2615e82902cf92c0e7dd93dd6c2472d7b40fe14a",
       "patches": [
         "patches/mod-lfg-progression-earned-era.patch"
       ]
@@ -108,7 +108,7 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
-      "revision": "8f703da2bbdbb4a6daf6b0aaa292387a89f4ccc4",
+      "revision": "ebfa01a129dd4c441b2527e42dcc37b6da95e6c2",
       "patches": [
         "patches/mod-multibot-bridge-natural-progression.patch",
         "patches/mod-multibot-bridge-era-talents.patch",

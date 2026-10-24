@@ -35,7 +35,7 @@ GAMEPLAY = (
     "TestWorldStartupData", "TestSubmergeBinding",
     "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestEraEvents", "TestLfgProgression",
-    "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
+    "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestRocknotAle", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
     "TestRaidClearWindowsBuild", "TestEarnedRaidComposition", "TestEarnedRaidGroups",
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge",
@@ -43,7 +43,7 @@ GAMEPLAY = (
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
     "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
-    "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
+    "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
 )
 
 

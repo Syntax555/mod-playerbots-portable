@@ -332,7 +332,11 @@ Finder, keep `LfgProgression.Enable = 1` in
 earned expansion, including bots, and retains native quest, item, achievement,
 class and instance restrictions. Random dungeon selection uses the lowest
 earned expansion in the group; each join refreshes every member's access checks.
-The module does not form autonomous parties, navigate or run encounters.
+Use `.lfgprogress` to see each online group member's earned expansion and the
+requirements for the next expansion. Queue messages explain a remapped random
+selection or a later-era restriction; native level, attunement and gear checks
+still apply. The module does not form autonomous parties, navigate or run
+encounters.
 
 Keep `IndividualProgression.DisableRDF = 0` in
 `configs/modules/individualProgression.conf`: setting it to `1` forces specific

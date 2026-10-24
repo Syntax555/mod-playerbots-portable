@@ -9,7 +9,7 @@ development or custom configurations.
 
 - Windows 10/11 x64.
 - Visual Studio 2022 with the Desktop development with C++ workload.
-- CMake 3.25 or newer, Go 1.26.9 or newer, Python 3.12 or newer, PowerShell 7 and Git.
+- CMake 3.25 or newer, Go 1.27.3 or newer, Python 3.12 or newer, PowerShell 7 and Git.
 - Boost 1.92 or newer, MySQL Server 8.0 x64 and OpenSSL 3 x64.
 
 Use the Visual Studio generator and x64 dependencies throughout.
