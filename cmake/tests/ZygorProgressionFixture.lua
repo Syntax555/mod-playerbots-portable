@@ -725,8 +725,11 @@ local dungeons = ZGV.Dungeons.hardcoded_dungeons
 ZGV.db.profile.gear_1, ZGV.db.profile.gear_2, ZGV.db.profile.gear_3, ZGV.db.profile.gear_4, ZGV.db.profile.gear_14 = true, true, true, true, true
 ZGV.db.profile.gear_5, ZGV.db.profile.gear_6 = true, true
 
--- Every Gear Finder instance resolves to a server map except outdoor bosses.
-for ident, dungeon in pairs(dungeons) do
+-- Every Gear Finder instance resolves to a server map except outdoor bosses. The Gear Finder passes
+-- the objects Dungeons.lua builds from the hardcoded data, not the hardcoded rows.
+for ident in pairs(dungeons) do
+	local dungeon = ZGV.Dungeons[ident]
+	check(dungeon and dungeon.instancename == nil, "Dungeons.lua objects carry no instance name")
 	local map, difficulty = IP:DungeonMap(ident, dungeon)
 	if dungeon.name == "World Bosses" or ident == "quests" then
 		check(map == nil, "outdoor sources have no instance map")
@@ -735,12 +738,14 @@ for ident, dungeon in pairs(dungeons) do
 		check(difficulty >= 0 and difficulty <= 3, "difficulty slot is valid")
 	end
 end
-check(select(2, IP:DungeonMap(2159, dungeons[2159])) == 2 and select(2, IP:DungeonMap(3456, dungeons[3456])) == 2,
+check(select(2, IP:DungeonMap(2159, ZGV.Dungeons[2159])) == 2 and select(2, IP:DungeonMap(3456, ZGV.Dungeons[3456])) == 2,
 	"40-player Onyxia and Naxxramas use the 10-player heroic slot")
-check(select(2, IP:DungeonMap("533_10", dungeons["533_10"])) == 0 and select(2, IP:DungeonMap("631_25H", dungeons["631_25H"])) == 3,
+check(select(2, IP:DungeonMap("533_10", ZGV.Dungeons["533_10"])) == 0 and select(2, IP:DungeonMap("631_25H", ZGV.Dungeons["631_25H"])) == 3,
 	"Wrath raid sizes map to their difficulty slots")
-check(select(2, IP:DungeonMap("9111H", dungeons["9111H"])) == 1, "heroic idents use the heroic slot")
-check(IP:DungeonMap(2557, dungeons[2557]) == 429 and IP:DungeonMap(796, dungeons[796]) == 189, "wing names map to their instance")
+check(select(2, IP:DungeonMap("9111H", ZGV.Dungeons["9111H"])) == 1, "heroic idents use the heroic slot")
+check(IP:DungeonMap(2557, ZGV.Dungeons[2557]) == 429 and IP:DungeonMap(796, ZGV.Dungeons[796]) == 189
+	and IP:DungeonMap(2102, ZGV.Dungeons[2102]) == 349 and IP:DungeonMap(2018, ZGV.Dungeons[2018]) == 329,
+	"wing names map to their instance")
 
 sendState({stored = 7, effective = 7, era = 0, next = 8})
 answerAccess({"409:A---", "309:G---", "532:----", "533:--A-"})
@@ -754,6 +759,14 @@ valid, future, _, _, _, _, comment = gearEnv.GearFinder:IsValidDungeon(1977)
 check(not valid and future and comment:find("progression", 1, true), "a progression-gated raid is a future source")
 valid, future = gearEnv.GearFinder:IsValidDungeon(3456)
 check(valid, "40-player Naxxramas is checked in its own difficulty slot")
+answerAccess({"429:A---", "189:R---"})
+ZGV.ItemScore.playerlevel = 31
+valid, _, _, _, _, _, comment = gearEnv.GearFinder:IsValidDungeon(2557)
+check(valid, "a Dire Maul wing is a current source: " .. tostring(comment))
+ZGV.ItemScore.playerlevel = 25
+valid, future, _, _, _, _, comment = gearEnv.GearFinder:IsValidDungeon(796)
+check(not valid and future and not comment:find("not verified", 1, true), "a Scarlet Monastery wing waits for its access requirement: " .. tostring(comment))
+ZGV.ItemScore.playerlevel = 60
 valid, future, _, _, _, _, comment = gearEnv.GearFinder:IsValidDungeon(0)
 check(not valid and not future, "an unverified outdoor source is neither current nor future: " .. tostring(comment))
 sendState({stored = 13, effective = 13, era = 2, next = 14})

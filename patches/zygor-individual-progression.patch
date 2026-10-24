@@ -50,10 +50,10 @@ index 21563ca..d223dd2 100644
  			if featuredMeta then
 diff --git a/ZygorGuidesViewerRM/IndividualProgression.lua b/ZygorGuidesViewerRM/IndividualProgression.lua
 new file mode 100644
-index 0000000..0f4f13f
+index 0000000..9b56b40
 --- /dev/null
 +++ b/ZygorGuidesViewerRM/IndividualProgression.lua
-@@ -0,0 +1,1156 @@
+@@ -0,0 +1,1160 @@
 +-- Individual Progression: the character's own earned tier and the server's
 +-- quest, giver and instance gates, read from the MultiBot Bridge. Guides, the
 +-- Gear Finder, the Gold Guide and the Talent Advisor ask this module before
@@ -937,7 +937,11 @@ index 0000000..0f4f13f
 +
 +-- The server map and difficulty slot of a Gear Finder dungeon entry.
 +function IP:DungeonMap(ident, dungeon)
-+	local map = self.INSTANCES[dungeon.instancename or ""] or self.INSTANCES[dungeon.name or ""]
++	-- Dungeons.lua builds its objects without the hardcoded instance name of a dungeon's wings.
++	local hardcoded = ZGV.Dungeons and rawget(ZGV.Dungeons, "hardcoded_dungeons")
++	local wing = hardcoded and hardcoded[ident]
++	local map = self.INSTANCES[dungeon.instancename or ""] or self.INSTANCES[wing and wing.instancename or ""]
++		or self.INSTANCES[dungeon.name or ""]
 +	if not map then
 +		local text = tostring(ident)
 +		map = tonumber(string.match(text, "^(%d+)_")) or tonumber(string.match(text, "^(%d+)H?$"))

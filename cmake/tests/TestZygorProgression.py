@@ -271,6 +271,7 @@ def mutations():
          'if ZGV.IP then eraPoints, eraTotal, eraAvailable = ZGV.IP:EraTalentPoints(classToken) end', ''),
         ('historical native trees', 'Item-ItemScore.lua', 'elseif ZGV.IP and ZGV.IP:NativeTalentsHistorical() then',
          'elseif false then'),
+        ('wing instance names', m, 'self.INSTANCES[wing and wing.instancename or ""]', 'nil'),
         ('native retry kept', m, 'return self:Gated() and self.state.era < 2', 'return true'),
         ('historical rescore', m, '\t\tlast = signature\n\t\tscore:DelayedRefreshUserData()\n', '\t\tlast = signature\n'),
         ('unchanged historical rescore', m, '\t\tif signature == last then return end\n', ''),
