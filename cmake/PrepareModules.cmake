@@ -24,9 +24,11 @@ endif()
 function(portable_git)
     # Generated staging directories must not inherit the enclosing workspace's
     # Git repository: git apply would silently skip patches outside its subdir.
+    # Sources marked text without an eol attribute follow core.eol, which is
+    # CRLF on Windows; exports must keep the LF bytes the patches expect.
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env
         "GIT_CEILING_DIRECTORIES=${PORTABLE_SOURCE_DIR}/.module-cache"
-        "${GIT_EXECUTABLE}" -c "core.autocrlf=false" ${ARGN}
+        "${GIT_EXECUTABLE}" -c "core.autocrlf=false" -c "core.eol=lf" ${ARGN}
         RESULT_VARIABLE _result OUTPUT_VARIABLE _output ERROR_VARIABLE _error)
     if(NOT _result EQUAL 0)
         message(FATAL_ERROR "Git failed (${_result}): ${ARGN}\n${_output}${_error}")

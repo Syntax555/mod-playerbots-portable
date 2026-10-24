@@ -73,8 +73,9 @@ def git(directory: Path, *arguments: str, ceiling: Path | None = None) -> bytes:
     if ceiling is not None:
         environment["GIT_CEILING_DIRECTORIES"] = str(ceiling)
     # Reconstruct archive bytes without inheriting the host's checkout conversion.
-    result = subprocess.run(["git", "-c", "core.autocrlf=false", "-C", str(directory), *arguments], capture_output=True,
-                            env=environment, check=False)
+    # Zygor marks files text=auto without an eol, which follows core.eol.
+    result = subprocess.run(["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "-C", str(directory), *arguments],
+                            capture_output=True, env=environment, check=False)
     if result.returncode:
         raise ValueError("Cannot apply or read the pinned Zygor source: " + result.stderr.decode(errors="replace").strip())
     return result.stdout

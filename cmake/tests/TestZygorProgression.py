@@ -273,7 +273,8 @@ def upstream_suite(lua, addon, tools_root):
     with tempfile.TemporaryDirectory(prefix='zygor-tools-') as directory:
         lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
         revision = next(item['revision'] for item in lock['sourceAddons'] if item['name'] == 'ZygorGuidesViewerRM')
-        archive = subprocess.run(['git', '-C', str(tools_root), 'archive', revision, 'tools'],
+        archive = subprocess.run(['git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', '-C', str(tools_root),
+                                  'archive', revision, 'tools'],
                                  check=True, capture_output=True).stdout
         subprocess.run(['tar', '-x', '-C', directory], input=archive, check=True)
         tests = sorted(Path(directory).glob('tools/*/test_*.lua'))

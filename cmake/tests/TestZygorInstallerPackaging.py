@@ -42,7 +42,9 @@ class ZygorInstallerPackagingTests(unittest.TestCase):
                       f"{NAME}/files.xml": b'<Ui>\n\t<Script file="Main.lua"/>\n</Ui>\n',
                       f"{NAME}/Main.lua": b'local tier = "upstream"\nreturn tier\n',
                       f"{NAME}/Guides/Leveling.lua": UPSTREAM_ONLY + b"\n",
-                      "tools/test_main.lua": b"assert(true)\n", "LICENSE": b"Upstream license\n"}
+                      "tools/test_main.lua": b"assert(true)\n", "LICENSE": b"Upstream license\n",
+                      # Zygor's own attributes: text without an eol follows core.eol.
+                      ".gitattributes": b"* text=auto\n"}
         for relative, content in self.files.items():
             path = self.cache / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,15 +142,17 @@ class ZygorInstallerPackagingTests(unittest.TestCase):
         with mock.patch.dict(os.environ, environment):
             verify(packaging)
             source = Path(SPEC.origin).read_text(encoding="utf-8")
-            setting = '"-c", "core.autocrlf=false", '
-            self.assertEqual(source.count(setting), 1)
-            mutated_path = self.root / "PackageZygorInstaller.py"
-            mutated_path.write_text(source.replace(setting, ""), encoding="utf-8")
-            mutated_spec = importlib.util.spec_from_file_location("zygor_packaging_mutated", mutated_path)
-            mutated = importlib.util.module_from_spec(mutated_spec)
-            mutated_spec.loader.exec_module(mutated)
-            with self.assertRaises(AssertionError):
-                verify(mutated)
+            # Either host setting alone turns Zygor's text=auto files into CRLF.
+            for index, setting in enumerate(('"-c", "core.autocrlf=false", ', '"-c", "core.eol=lf", ')):
+                with self.subTest(setting=setting):
+                    self.assertEqual(source.count(setting), 1)
+                    mutated_path = self.root / f"PackageZygorInstaller{index}.py"
+                    mutated_path.write_text(source.replace(setting, ""), encoding="utf-8")
+                    mutated_spec = importlib.util.spec_from_file_location(f"zygor_packaging_mutated{index}", mutated_path)
+                    mutated = importlib.util.module_from_spec(mutated_spec)
+                    mutated_spec.loader.exec_module(mutated)
+                    with self.assertRaises(AssertionError):
+                        verify(mutated)
 
     def test_archive_must_match_the_pinned_tree_and_failures_keep_the_previous_package(self):
         self.output.parent.mkdir()

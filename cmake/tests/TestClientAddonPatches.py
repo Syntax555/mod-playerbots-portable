@@ -579,11 +579,20 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.assertEqual((prepared / "keep.txt").read_text(), "local checkout")
 
     def test_source_addon_in_repository_subdirectory_with_case_insensitive_toc(self):
+        # Zygor marks its files text=auto without an eol; Windows exports them with CRLF
+        # unless preparation fixes core.eol.
+        windows = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "core.autocrlf", "GIT_CONFIG_VALUE_0": "true",
+                   "GIT_CONFIG_KEY_1": "core.eol", "GIT_CONFIG_VALUE_1": "crlf"}
+        with mock.patch.dict(os.environ, windows):
+            self.source_addon_in_repository_subdirectory()
+
+    def source_addon_in_repository_subdirectory(self):
         fixture = self.fixture()
         cache = fixture.root / ".module-cache/client-addon-Zygor"
         files = {"Zygor/Zygor.toc": b"## Interface: 30300\nLibs\\LibStub\\LibStub.lua\nMain.lua\n",
                  "Zygor/libs/LibStub/LibStub.lua": b"return true\n", "Zygor/Main.lua": MAIN,
-                 "tools/test_main.lua": b"assert(true)\n", "LICENSE": b"Fixture upstream license\n"}
+                 "tools/test_main.lua": b"assert(true)\n", "LICENSE": b"Fixture upstream license\n",
+                 ".gitattributes": b"* text=auto\n"}
         revision = commit(cache, files)
         addon = {"name": "Zygor", "url": "https://github.com/example/Zygor.git", "revision": revision,
                  "path": "Zygor", "interface": 30300, "toc": "Zygor.toc", "patches": ["patches/zygor.patch"]}
@@ -611,8 +620,13 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.assertEqual(source.count(subdirectory), 1)
         script.write_text(source.replace(subdirectory, ""))
         self.rejected(fixture.prepare())
+        endings = '-c "core.eol=lf" '
+        self.assertEqual(source.count(endings), 1)
+        script.write_text(source.replace(endings, ""))
+        self.rejected(fixture.prepare())
         script.write_text(source)
         self.successful(fixture.prepare())
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
 
         for path in ("Other", "../Zygor", ""):
             with self.subTest(path=path):
@@ -645,6 +659,43 @@ class ClientAddonPatchTests(unittest.TestCase):
             entry["revision"] = valid
             fixture.write_lock()
         self.successful(fixture.prepare())
+
+    def test_patchwork_keeps_lf_sources_on_windows_line_ending_settings(self):
+        windows = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "core.autocrlf", "GIT_CONFIG_VALUE_0": "true",
+                   "GIT_CONFIG_KEY_1": "core.eol", "GIT_CONFIG_VALUE_1": "crlf"}
+        script = ROOT / "scripts/patchwork.py"
+        source = script.read_text(encoding="utf-8")
+        endings = "'-c', 'core.eol=lf', "
+        self.assertEqual(source.count(endings), 1)
+
+        def regenerate(name, patchwork):
+            fixture = AddonFixture(self.directory / name)
+            addon, _ = self.source_addon(fixture)
+            cache = fixture.root / ".module-cache/client-addon-Questie-335"
+            (cache / ".gitattributes").write_bytes(b"* text=auto\n")
+            git(cache, "add", ".gitattributes")
+            git(cache, "commit", "--quiet", "-m", "Normalize text")
+            addon["revision"] = git(cache, "rev-parse", "HEAD")
+            addon["patches"] = ["patches/questie.patch"]
+            fixture.write_lock()
+            git(fixture.root, "init", "--quiet")
+            with mock.patch.dict(os.environ, windows):
+                opened = run([sys.executable, str(patchwork), "open", "patches/questie.patch"], cwd=fixture.root)
+                self.successful(opened)
+                work = Path(opened.stdout.strip().splitlines()[-1])
+                self.assertNotIn(b"\r", (work / "Main.lua").read_bytes())
+                (work / "Main.lua").write_bytes(MAIN.replace(b"upstream", b"local"))
+                (fixture.root / "patches").mkdir()
+                self.successful(run([sys.executable, str(patchwork), "save", str(work)], cwd=fixture.root))
+            patch = (fixture.root / "patches/questie.patch").read_bytes()
+            self.assertNotIn(b"\r", patch)
+            self.assertIn(b'+local money = "local"', patch)
+
+        regenerate("lf-repository", script)
+        mutated = self.directory / "patchwork-without-eol.py"
+        mutated.write_text(source.replace(endings, ""), encoding="utf-8")
+        with self.assertRaises(AssertionError):
+            regenerate("crlf-repository", mutated)
 
     def test_patchwork_regenerates_source_addon_patch(self):
         fixture = self.fixture()

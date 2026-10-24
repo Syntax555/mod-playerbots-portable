@@ -60,7 +60,9 @@ def extract(main, kind, entry, target):
         raise SystemExit(f'Pinned source {source} is missing; run cmake -P cmake/PrepareModules.cmake first')
     target.mkdir(parents=True)
     archive = target / '.pinned.tar'
-    run('git', '-C', str(source), 'archive', '--format=tar', f'--output={archive}', entry['revision'])
+    # Match PrepareModules: no host line-ending conversion, also for text=auto sources.
+    run('git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', '-C', str(source), 'archive', '--format=tar',
+        f'--output={archive}', entry['revision'])
     run('tar', '-xf', str(archive), '-C', str(target))
     archive.unlink()
 
