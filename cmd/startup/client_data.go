@@ -19,13 +19,7 @@ const defaultClientDataURL = "https://github.com/wowgaming/client-data/releases/
 func isClientDataPresent(dataDir string) bool {
 	requiredDirs := []string{"dbc", "maps", "vmaps", "mmaps"}
 	for _, req := range requiredDirs {
-		directory, err := os.Open(filepath.Join(dataDir, req))
-		if err != nil {
-			return false
-		}
-		entries, err := directory.Readdirnames(1)
-		directory.Close()
-		if err != nil || len(entries) == 0 {
+		if !directoryHasEntries(filepath.Join(dataDir, req)) {
 			return false
 		}
 	}

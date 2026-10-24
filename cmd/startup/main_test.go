@@ -104,13 +104,13 @@ func TestParseArgsRejectsInvalidOptions(t *testing.T) {
 	}
 }
 
-func TestIsDataDirInitialized(t *testing.T) {
+func TestDirectoryHasEntries(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// 1. Non-existent directory
 	nonExistent := filepath.Join(tmpDir, "does_not_exist")
-	if isDataDirInitialized(nonExistent) {
-		t.Errorf("isDataDirInitialized on non-existent dir should be false")
+	if directoryHasEntries(nonExistent) {
+		t.Errorf("directoryHasEntries on non-existent dir should be false")
 	}
 
 	// 2. Empty directory
@@ -118,8 +118,8 @@ func TestIsDataDirInitialized(t *testing.T) {
 	if err := os.MkdirAll(emptyDir, 0755); err != nil {
 		t.Fatalf("failed to create empty dir: %v", err)
 	}
-	if isDataDirInitialized(emptyDir) {
-		t.Errorf("isDataDirInitialized on empty dir should be false")
+	if directoryHasEntries(emptyDir) {
+		t.Errorf("directoryHasEntries on empty dir should be false")
 	}
 
 	// 3. Initialized directory with 'mysql' subfolder
@@ -127,8 +127,8 @@ func TestIsDataDirInitialized(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(mysqlDataDir, "mysql"), 0755); err != nil {
 		t.Fatalf("failed to create mysql subfolder: %v", err)
 	}
-	if !isDataDirInitialized(mysqlDataDir) {
-		t.Errorf("isDataDirInitialized with mysql folder should be true")
+	if !directoryHasEntries(mysqlDataDir) {
+		t.Errorf("directoryHasEntries with mysql folder should be true")
 	}
 
 	// 4. Initialized directory with 'ibdata1' file
@@ -139,8 +139,8 @@ func TestIsDataDirInitialized(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(ibdataDir, "ibdata1"), []byte("data"), 0644); err != nil {
 		t.Fatalf("failed to write ibdata1: %v", err)
 	}
-	if !isDataDirInitialized(ibdataDir) {
-		t.Errorf("isDataDirInitialized with ibdata1 should be true")
+	if !directoryHasEntries(ibdataDir) {
+		t.Errorf("directoryHasEntries with ibdata1 should be true")
 	}
 }
 

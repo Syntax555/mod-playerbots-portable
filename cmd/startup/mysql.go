@@ -118,19 +118,6 @@ func findMySQLBinaries(mysqlDir string) (*mysqlBinaries, error) {
 	}, nil
 }
 
-func isDataDirInitialized(dataDir string) bool {
-	if !dirExists(dataDir) {
-		return false
-	}
-
-	entries, err := os.ReadDir(dataDir)
-	if err != nil || len(entries) == 0 {
-		return false
-	}
-
-	return true
-}
-
 func initializeMySQL(binaries *mysqlBinaries, dataDir string, configFile string) error {
 	absDataDir, err := filepath.Abs(dataDir)
 	if err != nil {

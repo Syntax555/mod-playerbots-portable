@@ -17,6 +17,16 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+func directoryHasEntries(path string) bool {
+	directory, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer directory.Close()
+	entries, err := directory.Readdirnames(1)
+	return err == nil && len(entries) > 0
+}
+
 func fileExists(path string) bool {
 	if path == "" {
 		return false
@@ -165,10 +175,8 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startu
 	dataDirForConf := "data"
 	baseDataDir := filepath.Join(baseDir, "data")
 	workDataDir := filepath.Join(workDir, "data")
-	if dirExists(baseDataDir) && baseDataDir != workDataDir {
-		if entries, err := os.ReadDir(baseDataDir); err == nil && len(entries) > 0 {
-			dataDirForConf = filepath.ToSlash(baseDataDir)
-		}
+	if baseDataDir != workDataDir && directoryHasEntries(baseDataDir) {
+		dataDirForConf = filepath.ToSlash(baseDataDir)
 	}
 
 	return filepath.Walk(configSrcDir, func(path string, info os.FileInfo, err error) error {
