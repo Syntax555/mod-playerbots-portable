@@ -578,6 +578,48 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.assertNotEqual(fixture.prepare().returncode, 0)
         self.assertEqual((prepared / "keep.txt").read_text(), "local checkout")
 
+    def test_source_addon_in_repository_subdirectory_with_case_insensitive_toc(self):
+        fixture = self.fixture()
+        cache = fixture.root / ".module-cache/client-addon-Zygor"
+        files = {"Zygor/Zygor.toc": b"## Interface: 30300\nLibs\\LibStub\\LibStub.lua\nMain.lua\n",
+                 "Zygor/libs/LibStub/LibStub.lua": b"return true\n", "Zygor/Main.lua": MAIN,
+                 "tools/test_main.lua": b"assert(true)\n", "LICENSE": b"Fixture upstream license\n"}
+        revision = commit(cache, files)
+        addon = {"name": "Zygor", "url": "https://github.com/example/Zygor.git", "revision": revision,
+                 "path": "Zygor", "interface": 30300, "toc": "Zygor.toc", "patches": ["patches/zygor.patch"]}
+        patch = fixture.root / "patches/zygor.patch"
+        patch.parent.mkdir()
+        patch.write_bytes(text_patch("Zygor/Main.lua", "upstream", "local"))
+        fixture.lock["sourceAddons"] = [addon]
+        fixture.write_lock()
+        prepared = fixture.root / ".module-cache/prepared-source-addons/Zygor"
+
+        self.successful(fixture.prepare())
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        self.assertEqual((prepared / "SOURCE_REVISION.txt").read_text(), revision + "\n")
+        self.assertFalse((prepared / "tools").exists() or (prepared / "LICENSE").exists() or (prepared / "Zygor").exists())
+
+        # The client resolves TOC paths without regard to case; a strict check rejects the real addon.
+        script = fixture.root / "cmake/PrepareModules.cmake"
+        source = script.read_text()
+        folded = 'string(TOLOWER "${_asset}" _asset_key)'
+        self.assertEqual(source.count(folded), 1)
+        script.write_text(source.replace(folded, 'set(_asset_key "${_asset}")'))
+        shutil.rmtree(prepared)
+        self.rejected(fixture.prepare())
+        subdirectory = 'set(_addon_stage "${_source_stage}/${_path}")'
+        self.assertEqual(source.count(subdirectory), 1)
+        script.write_text(source.replace(subdirectory, ""))
+        self.rejected(fixture.prepare())
+        script.write_text(source)
+        self.successful(fixture.prepare())
+
+        for path in ("Other", "../Zygor", ""):
+            with self.subTest(path=path):
+                addon["path"] = path
+                fixture.write_lock()
+                self.rejected(fixture.prepare())
+
     def test_addon_tocs_need_the_locked_interface_and_regular_files(self):
         fixture = self.fixture()
         source, _ = self.source_addon(fixture)
