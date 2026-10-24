@@ -88,7 +88,8 @@ func validateUpdatePath(name string) error {
 		if part == "" || part == "." || part == ".." || strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ") {
 			return fmt.Errorf("invalid update path %q", name)
 		}
-		base := strings.ToUpper(strings.SplitN(part, ".", 2)[0])
+		base, _, _ := strings.Cut(part, ".")
+		base = strings.ToUpper(base)
 		if base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" || (len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '0' && base[3] <= '9') {
 			return fmt.Errorf("reserved Windows name in update path %q", name)
 		}
@@ -369,10 +370,11 @@ func indexedUpdateZip(reader io.ReaderAt, manifest portableUpdateManifest) (map[
 		if !file.Mode().IsRegular() || file.Flags&1 != 0 {
 			return nil, fmt.Errorf("unsupported ZIP entry: %s", file.Name)
 		}
-		if _, exists := index[strings.ToLower(name)]; exists {
+		key := strings.ToLower(name)
+		if _, exists := index[key]; exists {
 			return nil, fmt.Errorf("duplicate ZIP entry: %s", file.Name)
 		}
-		index[strings.ToLower(name)] = file
+		index[key] = file
 	}
 	if len(index) != len(manifest.Files) {
 		return nil, errors.New("ZIP file list does not match the update manifest")

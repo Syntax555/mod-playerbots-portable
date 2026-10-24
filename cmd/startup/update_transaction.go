@@ -424,13 +424,12 @@ func applyPortableUpdate(root string, plan *portableUpdatePlan, progress *portab
 			}
 		}
 		if !op.Remove {
-			if err := os.Chmod(stage, 0644); err != nil {
-				return rollbackUpdateAfterError(root, plan, err)
-			}
+			mode := os.FileMode(0644)
 			if strings.HasSuffix(strings.ToLower(op.File.Path), ".exe") {
-				if err := os.Chmod(stage, 0755); err != nil {
-					return rollbackUpdateAfterError(root, plan, err)
-				}
+				mode = 0755
+			}
+			if err := os.Chmod(stage, mode); err != nil {
+				return rollbackUpdateAfterError(root, plan, err)
 			}
 			if err := renameUpdateFile(stage, target); err != nil {
 				return rollbackUpdateAfterError(root, plan, err)

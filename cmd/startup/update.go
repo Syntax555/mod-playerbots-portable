@@ -259,13 +259,11 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 	for _, f := range manifest.Files {
 		target, pathErr := safeUpdateTarget(root, f.Path)
 		if pathErr != nil {
-			err = pathErr
-			return nil, err
+			return nil, pathErr
 		}
 		digest, hashErr := hashUpdateFile(target, f.Size)
 		if hashErr != nil && !errors.Is(hashErr, os.ErrNotExist) {
-			err = hashErr
-			return nil, err
+			return nil, hashErr
 		}
 		if digest != f.SHA256 {
 			info, statErr := os.Lstat(target)
@@ -301,8 +299,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 			}
 			target, pathErr := safeUpdateTarget(root, old.Path)
 			if pathErr != nil {
-				err = pathErr
-				return nil, err
+				return nil, pathErr
 			}
 			if digest, hashErr := hashUpdateFile(target, old.Size); hashErr == nil && digest == old.SHA256 {
 				plan.Operations = append(plan.Operations, portableUpdateOperation{File: old, HadOriginal: true, OriginalSize: old.Size, OriginalSHA256: old.SHA256, Remove: true})
@@ -311,8 +308,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 		}
 		progress.finish()
 	} else if !errors.Is(previousErr, os.ErrNotExist) {
-		err = previousErr
-		return nil, err
+		return nil, previousErr
 	}
 	for i := range plan.Operations {
 		plan.Operations[i].Stage = fmt.Sprintf("stage/%06d", i)
@@ -358,14 +354,12 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 		entry := index[strings.ToLower(op.File.Path)]
 		input, openErr := entry.Open()
 		if openErr != nil {
-			err = openErr
-			return nil, err
+			return nil, openErr
 		}
 		stage, createErr := os.OpenFile(stagePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if createErr != nil {
 			input.Close()
-			err = createErr
-			return nil, err
+			return nil, createErr
 		}
 		hash := sha256.New()
 		written, copyErr := io.Copy(updateProgressWriter{output: io.MultiWriter(stage, hash), progress: progress}, io.LimitReader(input, op.File.Size+1))
@@ -395,8 +389,7 @@ func stagePortableUpdate(ctx context.Context, root string, manifest portableUpda
 	}
 	var identity portableReleaseIdentity
 	if json.Unmarshal(identityBytes, &identity) != nil || identity.Schema != 1 || identity.Revision != manifest.Revision || identity.Package != manifest.Package || identity.Version != "latest" {
-		err = errors.New("release identity does not match the verified update")
-		return nil, err
+		return nil, errors.New("release identity does not match the verified update")
 	}
 	plan.Phase = "staged"
 	if err = writePortableUpdatePlan(root, plan); err != nil {
