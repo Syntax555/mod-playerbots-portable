@@ -50,10 +50,10 @@ index 21563ca..d223dd2 100644
  			if featuredMeta then
 diff --git a/ZygorGuidesViewerRM/IndividualProgression.lua b/ZygorGuidesViewerRM/IndividualProgression.lua
 new file mode 100644
-index 0000000..000982e
+index 0000000..dad3a12
 --- /dev/null
 +++ b/ZygorGuidesViewerRM/IndividualProgression.lua
-@@ -0,0 +1,1112 @@
+@@ -0,0 +1,1116 @@
 +-- Individual Progression: the character's own earned tier and the server's
 +-- quest, giver and instance gates, read from the MultiBot Bridge. Guides, the
 +-- Gear Finder, the Gold Guide and the Talent Advisor ask this module before
@@ -187,7 +187,7 @@ index 0000000..000982e
 +		mode = "Individual Progression mode",
 +		mode_desc = "Automatic follows the server when it reports Individual Progression. On keeps later content locked until the server answers. Off shows every guide as on an ordinary realm.",
 +		mode_auto = "Automatic", mode_on = "On", mode_off = "Off",
-+		refresh = "Refresh from server",
++		refresh = "Refresh",
 +		status_off = "Off: guides are not limited by Individual Progression.",
 +		status_absent = "No server support found; guides behave as on an ordinary realm.",
 +		status_absent_on = "No server support found; later content stays locked while the mode is On.",
@@ -245,7 +245,7 @@ index 0000000..000982e
 +		mode = "Individual-Progression-Modus",
 +		mode_desc = "Automatisch folgt dem Server, wenn er Individual Progression meldet. An hält spätere Inhalte gesperrt, bis der Server antwortet. Aus zeigt alle Guides wie auf einem gewöhnlichen Realm.",
 +		mode_auto = "Automatisch", mode_on = "An", mode_off = "Aus",
-+		refresh = "Vom Server aktualisieren",
++		refresh = "Aktualisieren",
 +		status_off = "Aus: Guides werden nicht durch Individual Progression begrenzt.",
 +		status_absent = "Keine Serverunterstützung gefunden; Guides verhalten sich wie auf einem gewöhnlichen Realm.",
 +		status_absent_on = "Keine Serverunterstützung gefunden; spätere Inhalte bleiben gesperrt, solange der Modus An ist.",
@@ -1088,16 +1088,20 @@ index 0000000..000982e
 +
 +-- The milestone chain as a guide; each step completes from the server's tier.
 +function IP:MilestoneGuide()
-+	local lines = {"author Individual Progression", "type misc", "startlevel 1", "step",
-+		"\t.'" .. L.milestone_none .. "|condition ZGV.IP.state and ZGV.IP.state.ip",
-+		"\tonly if not (ZGV.IP.state and ZGV.IP.state.ip)"}
++	local lines = {"author Individual Progression", "type misc", "startlevel 1"}
++	local first = true
 +	for tier = 1, 18 do
-+		local milestone = self.MILESTONES[tier]
-+		if milestone then
-+			local action = milestone.quest and L.next_quest:format(milestone.name) or
-+				L.next_boss:format(milestone.name, milestone.zone)
++		if self.MILESTONES[tier] then
++			-- Guide lines use | and // as syntax; localized names must not.
++			local text = L.milestone_step:format(tier, self:MilestoneText(tier)):gsub("|", "/"):gsub("//", "/")
 +			lines[#lines + 1] = "step"
-+			lines[#lines + 1] = ("\t.'%s|condition ZGV.IP:HasTier(%d)"):format(L.milestone_step:format(tier, action), tier)
++			lines[#lines + 1] = ("\t.'%s|condition ZGV.IP:HasTier(%d)"):format(text, tier)
++			-- The viewer shows a guide's first step even when it is skipped, so
++			-- the note for a realm that has not reported a tier is a line here.
++			if first then
++				lines[#lines + 1] = "\t.'" .. L.milestone_none .. "|only if not (ZGV.IP.state and ZGV.IP.state.ip)"
++				first = false
++			end
 +			lines[#lines + 1] = ("\tonly if not (ZGV.IP.state and ZGV.IP.state.limit > 0 and ZGV.IP.state.limit < %d)"):format(tier)
 +		end
 +	end

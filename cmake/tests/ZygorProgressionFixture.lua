@@ -625,7 +625,7 @@ check(loaded[1] == northrend.title, "the chain continues once the tier is earned
 local milestones = guides[IP.L.milestone_guide]
 check(milestones, "the milestone chain is registered as a guide")
 local parsed = assert(ZGV:ParseEntry(milestones))
-check(#parsed.steps == 19, "the milestone guide has one step per milestone and two notes")
+check(#parsed.steps == 18, "the milestone guide has one step per milestone and the ceiling note")
 sendState({stored = 5, effective = 5, era = 0, next = 6})
 answerAccess({})
 local function stepFor(tier)
@@ -633,15 +633,30 @@ local function stepFor(tier)
 		if s.goals[1].text and s.goals[1].text:find("Tier " .. tier .. ":", 1, true) then return s end
 	end
 end
+check(parsed.steps[1] == stepFor(1), "the guide starts with the first milestone, which the viewer always shows")
 check(stepFor(5):IsComplete() == true and stepFor(6):IsComplete() == false, "milestone steps follow the server's tier")
 check(stepFor(11) == nil, "tier 11 has no milestone")
-check(not parsed.steps[1]:AreRequirementsMet(), "the not-reported note hides once the server reports the tier")
+local note = parsed.steps[1].goals[2]
+check(note and note.text == IP.L.milestone_none and not note:IsVisible(), "the not-reported note hides once the server reports the tier")
 sendState({stored = 7, effective = 7, limit = 7, era = 0, next = 8})
 answerAccess({})
 check(not stepFor(8):AreRequirementsMet() and parsed.steps[#parsed.steps]:AreRequirementsMet(),
 	"milestones above the ceiling are replaced by the ceiling note")
 IP.state = nil
 check(stepFor(1):IsComplete() == false, "an unknown state completes no milestone")
+check(note:IsVisible() and stepFor(1):AreRequirementsMet(), "the note explains incomplete milestones until the server reports")
+
+-- Milestone names follow the client's language without breaking the guide syntax.
+libraries["LibBabble-Zone-3.0"] = {GetUnstrictLookupTable = function() return {["Molten Core"] = "Geschmolzener Kern"} end}
+local translatedNPC, questName = ZGV.GetTranslatedNPC, ZGV.GetQuestName
+function ZGV:GetTranslatedNPC(id) if id == 11502 then return "Ragnaros der Feuerfuerst" end end
+function ZGV:GetQuestName(id) if id == 8743 then return "Gong|schlagen//jetzt" end end
+local localized = IP:MilestoneGuide()
+local reparsed = assert(ZGV:ParseEntry(localized))
+check(localized:find("Ragnaros der Feuerfuerst in Geschmolzener Kern", 1, true), "boss and zone names are localized")
+check(localized:find("Gong/schlagen/jetzt", 1, true) and #reparsed.steps == 18, "localized names cannot inject guide syntax")
+libraries["LibBabble-Zone-3.0"] = nil
+ZGV.GetTranslatedNPC, ZGV.GetQuestName = translatedNPC, questName
 
 ------------------------------------------------------------------------
 -- Quest automation
