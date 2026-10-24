@@ -151,43 +151,12 @@ foreach(index RANGE 0 ${last_addon})
     endif()
     set(stage "${staging_root}/${name}")
     set(export "${stage}/${name}")
-    set(source_archive "${stage}/source.tar")
     file(REMOVE_RECURSE "${stage}")
-    file(MAKE_DIRECTORY "${export}")
-    execute_process(COMMAND "${GIT_EXECUTABLE}" -c "core.autocrlf=false" -C "${cached_source}" archive --format=tar
-        "--output=${source_archive}" "${revision}"
-        RESULT_VARIABLE result ERROR_VARIABLE error)
-    if(NOT result EQUAL 0)
-        message(FATAL_ERROR "Cannot export pinned client addon ${name}: ${error}")
-    endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E tar xf "${source_archive}"
-        WORKING_DIRECTORY "${export}" RESULT_VARIABLE result ERROR_VARIABLE error)
-    if(NOT result EQUAL 0)
-        message(FATAL_ERROR "Cannot extract pinned client addon ${name}: ${error}")
-    endif()
-    file(REMOVE "${source_archive}")
-    foreach(addon_patch IN LISTS addon_patches)
-        file(READ "${addon_patch}" patch_contents)
-        string(REPLACE "\r\n" "\n" patch_contents "${patch_contents}")
-        string(REGEX REPLACE "\n$" "" patch_contents "${patch_contents}")
-        file(CONFIGURE OUTPUT "${stage}/addon.patch" CONTENT "@patch_contents@" @ONLY NEWLINE_STYLE LF)
-        foreach(operation "--numstat" "--check" "" "--reverse;--check")
-            execute_process(COMMAND "${CMAKE_COMMAND}" -E env "GIT_CEILING_DIRECTORIES=${staging_root}"
-                "${GIT_EXECUTABLE}" -c "core.autocrlf=false" -C "${export}" apply ${operation} "${stage}/addon.patch"
-                RESULT_VARIABLE result OUTPUT_VARIABLE patch_output ERROR_VARIABLE error)
-            if(NOT result EQUAL 0 OR (operation STREQUAL "--numstat" AND patch_output STREQUAL ""))
-                message(FATAL_ERROR "Cannot apply locked client addon patch ${addon_patch}: ${error}")
-            endif()
-        endforeach()
-    endforeach()
-    file(REMOVE "${stage}/addon.patch")
-    file(REMOVE_RECURSE "${export}/.github")
-    file(REMOVE "${export}/.gitignore" "${export}/.coderabbit.yaml" "${export}/AGENTS.md")
     execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/ExportClientAddon.py"
         --repository "${PORTABLE_SOURCE_DIR}" --addon "${name}"
-        --destination "${export}" --manifest-only RESULT_VARIABLE result ERROR_VARIABLE error)
+        --destination "${export}" --git "${GIT_EXECUTABLE}" RESULT_VARIABLE result ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
-        message(FATAL_ERROR "Cannot record client addon source provenance: ${error}")
+        message(FATAL_ERROR "Cannot reconstruct pinned client addon ${name}: ${error}")
     endif()
 
     # Verify every asset, including textures and files not listed in the TOC.

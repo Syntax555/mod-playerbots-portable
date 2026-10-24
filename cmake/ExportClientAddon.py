@@ -14,11 +14,11 @@ import tarfile
 import tempfile
 
 
-def run_git(repository: Path, *arguments: str, ceiling: Path | None = None) -> bytes:
+def run_git(git: str, repository: Path, *arguments: str, ceiling: Path | None = None) -> bytes:
     environment = os.environ.copy()
     if ceiling is not None:
         environment["GIT_CEILING_DIRECTORIES"] = str(ceiling)
-    result = subprocess.run(["git", "-c", "core.autocrlf=false", "-C", str(repository), *arguments], env=environment,
+    result = subprocess.run([git, "-c", "core.autocrlf=false", "-C", str(repository), *arguments], env=environment,
                             capture_output=True, check=False)
     if result.returncode:
         raise ValueError(f"Cannot reconstruct locked addon source: {result.stderr.decode(errors='replace').strip()}")
@@ -64,18 +64,18 @@ def write_metadata(repository: Path, name: str, destination: Path) -> None:
         (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
 
-def export_addon(repository: Path, name: str, destination: Path) -> None:
+def export_addon(repository: Path, name: str, destination: Path, git: str = "git") -> None:
     addon, patches = addon_inputs(repository, name)
     if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
         raise ValueError("Addon reconstruction destination must be empty")
     cache = repository / ".module-cache" / ("client-addon-" + name)
-    run_git(cache, "cat-file", "-e", addon["revision"] + "^{commit}")
+    run_git(git, cache, "cat-file", "-e", addon["revision"] + "^{commit}")
     with tempfile.TemporaryDirectory(prefix="locked-client-addon-") as temporary:
         stage = Path(temporary)
         raw = stage / "source"
         raw.mkdir()
         archive_path = stage / "source.tar"
-        run_git(cache, "archive", "--format=tar", "--output=" + str(archive_path), addon["revision"])
+        run_git(git, cache, "archive", "--format=tar", "--output=" + str(archive_path), addon["revision"])
         with tarfile.open(archive_path) as archive:
             if any(not entry.isfile() and not entry.isdir() for entry in archive.getmembers()):
                 raise ValueError("Linked or special file in locked addon source")
@@ -86,11 +86,11 @@ def export_addon(repository: Path, name: str, destination: Path) -> None:
         for path, file in patches:
             normalized = stage / "source.patch"
             normalized.write_bytes(file.read_bytes().replace(b"\r\n", b"\n"))
-            if not run_git(raw, "apply", "--numstat", str(normalized), ceiling=stage).strip():
+            if not run_git(git, raw, "apply", "--numstat", str(normalized), ceiling=stage).strip():
                 raise ValueError(f"Patch has no applicable files: {path}")
-            run_git(raw, "apply", "--check", str(normalized), ceiling=stage)
-            run_git(raw, "apply", str(normalized), ceiling=stage)
-            run_git(raw, "apply", "--reverse", "--check", str(normalized), ceiling=stage)
+            run_git(git, raw, "apply", "--check", str(normalized), ceiling=stage)
+            run_git(git, raw, "apply", str(normalized), ceiling=stage)
+            run_git(git, raw, "apply", "--reverse", "--check", str(normalized), ceiling=stage)
         shutil.rmtree(raw / ".github", ignore_errors=True)
         for filename in (".gitignore", ".coderabbit.yaml", "AGENTS.md"):
             (raw / filename).unlink(missing_ok=True)
@@ -104,12 +104,13 @@ def main() -> None:
     parser.add_argument("--addon", required=True)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--manifest-only", action="store_true")
+    parser.add_argument("--git", default="git")
     args = parser.parse_args()
     try:
         if args.manifest_only:
             write_metadata(args.repository, args.addon, args.destination)
         else:
-            export_addon(args.repository, args.addon, args.destination)
+            export_addon(args.repository, args.addon, args.destination, args.git)
     except (ValueError, OSError, KeyError, tarfile.TarError) as error:
         parser.exit(1, f"Cannot reconstruct client addon: {error}\n")
 

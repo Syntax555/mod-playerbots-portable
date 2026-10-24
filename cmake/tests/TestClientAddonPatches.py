@@ -214,6 +214,26 @@ class ClientAddonPatchTests(unittest.TestCase):
         self.rejected(fixture.export(self.directory / "reversed"))
         self.assertEqual(git(fixture.cached, "show", "HEAD:UI/Main.lua"), MAIN.decode().strip())
 
+    def test_packaging_uses_selected_git_without_git_on_path(self):
+        fixture = self.fixture()
+        fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
+        self.successful(fixture.prepare())
+        no_git = self.directory / "empty-path"
+        no_git.mkdir()
+        command = [CMAKE, "-DGIT_EXECUTABLE=" + GIT,
+                   "-DPython3_EXECUTABLE=" + sys.executable,
+                   "-DPACKAGE_VERSION=fixture", "-P", str(fixture.root / "cmake/PackageClientAddons.cmake")]
+        environment = {"PATH": str(no_git)}
+        self.successful(run(command, env=environment))
+        with zipfile.ZipFile(fixture.archive) as archive:
+            self.assertEqual(archive.read("MultiBot/UI/Main.lua"), MAIN.replace(b"upstream", b"release"))
+        script = fixture.root / "cmake/PackageClientAddons.cmake"
+        source = script.read_text(encoding="utf-8")
+        setting = '--git "${GIT_EXECUTABLE}"'
+        self.assertEqual(source.count(setting), 1)
+        script.write_text(source.replace(setting, ""), encoding="utf-8")
+        self.rejected(run(command, env=environment))
+
     def test_patched_exports_ignore_host_line_ending_conversion(self):
         def verify(index, mutation=None):
             fixture = AddonFixture(self.directory / f"repository-{index}")
@@ -262,7 +282,7 @@ class ClientAddonPatchTests(unittest.TestCase):
 
         verify(0)
         for index, mutation in enumerate(("ExportClientAddon.py", "PrepareModules.cmake",
-                                           "PackageClientAddons.cmake", "PackageEraClient.py"), 1):
+                                           "PackageEraClient.py"), 1):
             source = (ROOT / "cmake" / mutation).read_text(encoding="utf-8")
             setting = ('-c "core.autocrlf=false" ' if mutation.endswith(".cmake")
                        else ', "-c", "core.autocrlf=false"')
