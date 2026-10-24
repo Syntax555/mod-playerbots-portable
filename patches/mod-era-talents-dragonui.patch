@@ -1,0 +1,130 @@
+diff --git a/client-addon/EraTalents/DragonUI.lua b/client-addon/EraTalents/DragonUI.lua
+new file mode 100644
+index 0000000..5b867f7
+--- /dev/null
++++ b/client-addon/EraTalents/DragonUI.lua
+@@ -0,0 +1,103 @@
++-- DragonUI's talent module opens its own native WotLK window from the talent micro-button, the
++-- talent key bindings, PlayerTalentFrame and the inspect talent tab, so Hook.lua's PlayerTalentFrame
++-- guard and Inspect.lua's InspectTalentFrame overlay never see those openers. Era characters get
++-- their historical tree in our panel instead, and era-managed inspect targets get the stock inspect
++-- tab with our overlay. DragonUI keeps native characters, the pet tree and the glyph page.
++EraTalents = EraTalents or {}
++local ET = EraTalents
++
++-- DragonUI publishes its addon table as _G.DragonUI; the talent module's functions live on TalentModule.ns.
++local function DragonTalents()
++  local dragon = _G.DragonUI
++  local module = type(dragon) == "table" and dragon.TalentModule
++  local ns = type(module) == "table" and module.ns
++  if type(ns) ~= "table" then return nil end
++  for _, name in ipairs({ "ToggleTalents", "OpenTalents", "ShowInspect", "LeaveInspect", "Repaint",
++                          "GlyphView", "PetView", "SetGlyphPage" }) do
++    if type(ns[name]) ~= "function" then return nil end
++  end
++  return module, ns
++end
++
++local function ShowPanel()
++  if not (ET.frame and ET.frame:IsShown()) then ET.TogglePanel() end
++end
++
++-- The player's own tree (active or other spec), the view our panel replaces for an era character.
++local function OwnTreeShown(ns)
++  return ns.win ~= nil and ns.win:IsShown() and ns.inspectUnit == nil and not ns.GlyphView() and not ns.PetView()
++end
++
++local function Redirect(ns)
++  if not (ET.state and ET.state.isEraChar) or not OwnTreeShown(ns) then return false end
++  ns.win:Hide()
++  ShowPanel()
++  return true
++end
++
++-- Below the talent level DragonUI shows its own notice, as the stock micro-button stays disabled.
++local function TalentLevel()
++  return UnitLevel("player") >= (SHOW_TALENT_LEVEL or 10)
++end
++
++-- Unknown targets on a realm that serves EraTalents wait in the stock tab, where the overlay hides
++-- the native tree until ISYNC decides; a denied (native) target stays in DragonUI.
++local function UsesEraInspect(unit)
++  if not unit or not InspectFrame or not InspectFrame:IsShown() or not InspectSwitchTabs then return false end
++  local guid = UnitGUID(unit)
++  local e = guid and ET.inspect and ET.inspect.cache[guid]
++  if e then return e.managed end
++  return ET.state ~= nil and ET.state.serverGen ~= nil
++end
++
++local function AttachWindow(ns)
++  local win = ns.win
++  if not win or win._eraGuarded then return end
++  win._eraGuarded = true
++  local settled = false
++  -- DragonUI's own OnShow paints the native tree first; ours runs after it and closes it again.
++  win:HookScript("OnShow", function() settled = not Redirect(ns) end)
++  win:HookScript("OnHide", function() settled = false end)
++  -- Switching an open window from the pet tree or the glyph page to a player spec only repaints it.
++  hooksecurefunc(ns, "Repaint", function() if settled then Redirect(ns) end end)
++end
++
++function ET.InitDragonUI()
++  if ET._dragonHooked then return end
++  local module, ns = DragonTalents()
++  if not module then return end
++  ET._dragonHooked = true
++
++  local toggle, open, showInspect = ns.ToggleTalents, ns.OpenTalents, ns.ShowInspect
++  ns.ToggleTalents = function(...)
++    if not (module.applied and ET.state.isEraChar and TalentLevel()) then return toggle(...) end
++    if ns.win then ns.win:Hide() end
++    ET.TogglePanel()
++  end
++  ns.OpenTalents = function(...)
++    if not (module.applied and ET.state.isEraChar and TalentLevel()) then return open(...) end
++    if ns.win then ns.win:Hide() end
++    ShowPanel()
++  end
++  ns.ShowInspect = function(unit, ...)
++    if not (module.applied and UsesEraInspect(unit)) then return showInspect(unit, ...) end
++    ns.LeaveInspect()
++    if ns.win then ns.win:Hide() end
++    InspectSwitchTabs(3)
++  end
++
++  -- /pettalents and the panel's pet button open the stock frame, which DragonUI redirects to its
++  -- own window; open DragonUI's pet view directly instead.
++  local openStock = ET.OpenStockTalents
++  ET.OpenStockTalents = function(...)
++    if not (module.applied and ns.win and UnitExists("pet")) then return openStock(...) end
++    ns.LeaveInspect()
++    ns.SetGlyphPage(false)
++    ns.wantPet = true
++    if ns.win:IsShown() then ns.Repaint() else ns.win:Show() end
++  end
++
++  -- DragonUI builds its window on login, or later when its talent module is enabled.
++  AttachWindow(ns)
++  if type(ns.BuildWindow) == "function" then hooksecurefunc(ns, "BuildWindow", function() AttachWindow(ns) end) end
++end
+diff --git a/client-addon/EraTalents/EraTalents.lua b/client-addon/EraTalents/EraTalents.lua
+index 380338b..6a06c5b 100644
+--- a/client-addon/EraTalents/EraTalents.lua
++++ b/client-addon/EraTalents/EraTalents.lua
+@@ -15,6 +15,7 @@ function ET.Init()
+   if ET.InitHook then ET.InitHook() end
+   if ET.InitTooltips then ET.InitTooltips() end
+   if ET.InitInspect then ET.InitInspect() end
++  if ET.InitDragonUI then ET.InitDragonUI() end
+ end
+ 
+ local boot = CreateFrame("Frame")
+diff --git a/client-addon/EraTalents/EraTalents.toc b/client-addon/EraTalents/EraTalents.toc
+index 27199d0..e0eeada 100644
+--- a/client-addon/EraTalents/EraTalents.toc
++++ b/client-addon/EraTalents/EraTalents.toc
+@@ -29,3 +29,4 @@ Tooltip.lua
+ TalentUI.lua
+ Hook.lua
+ Inspect.lua
++DragonUI.lua

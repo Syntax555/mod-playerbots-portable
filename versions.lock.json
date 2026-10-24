@@ -133,7 +133,8 @@
         "patches/mod-era-talents-spell-groups.patch",
         "patches/mod-era-talents-multibot-inspect.patch",
         "patches/mod-era-talents-historical-priest-quests.patch",
-        "patches/mod-era-talents-build-warnings.patch"
+        "patches/mod-era-talents-build-warnings.patch",
+        "patches/mod-era-talents-dragonui.patch"
       ]
     }
   ],
@@ -214,6 +215,14 @@
     ]
   },
   "sourceAddons": [
+    {
+      "name": "DragonUI",
+      "url": "https://github.com/NeticSoul/DragonUI.git",
+      "revision": "82a6c52c93ad5eae8eda520c14204f9db72e868e",
+      "path": "DragonUI",
+      "interface": 30300,
+      "toc": "DragonUI.toc"
+    },
     {
       "name": "Questie-335",
       "url": "https://github.com/Aldori15/Questie.git",

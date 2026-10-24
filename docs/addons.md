@@ -57,7 +57,7 @@ requires in-game testing.
 
 | Addon | Source and installation | Progression limits |
 | --- | --- | --- |
-| DragonUI | [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI), for WoW 3.3.5a with interface `30300`. Install both `DragonUI/` and `DragonUI_Options/` in `Interface/AddOns/`; open settings with `/dui`. | UI customization does not change server progression. Compatibility with EraTalents' historical talent and inspect views requires in-game testing. |
+| DragonUI | [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI), for WoW 3.3.5a with interface `30300`. Install both `DragonUI/` and `DragonUI_Options/` in `Interface/AddOns/`; open settings with `/dui`. | UI customization does not change server progression. With the current EraTalents package, Vanilla/TBC characters open their historical tree from DragonUI's talent key, micro-button and `/talents`; see [Era Talents](era-talents.md#dragonui). |
 | GearScore2 | [cozawariat/gearscore2](https://github.com/cozawariat/gearscore2), the 3.3.5a project with interface `30300`. Install as `Interface/AddOns/GearScore2/GearScore2.toc`; open settings with `/gs2`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
 | DungeonClear | [jrad7/mod-dungeon-clear-addon](https://github.com/jrad7/mod-dungeon-clear-addon), the 3.3.5a companion interface. Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. | Controls and displays server-side runs. Party formation, travel and earned access remain server rules. Spectate is disabled in the default profile; `.dc on` in chat can expose refusal messages omitted by the UI. |
 

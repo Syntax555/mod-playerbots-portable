@@ -63,6 +63,22 @@ English fallback. Translation follows the historical effects and rank values;
 it does not substitute descriptions from a different expansion. Other game
 and module text follows the translations available in those components.
 
+### DragonUI
+
+[DragonUI](https://github.com/NeticSoul/DragonUI)'s talent module replaces the
+talent window. EraTalents works with it automatically; the module can stay
+enabled:
+
+- For a Vanilla or TBC character, the talent key, the micro-button and
+  `/talents` open the historical tree. A DragonUI spec tab opens it as well.
+- DragonUI keeps the glyph page, the pet tree (`/pettalents` opens it) and
+  characters on native Wrath trees.
+- Inspecting a character with a historical tree shows it read-only in the
+  standard inspect talent tab; other targets keep DragonUI's inspect window.
+
+Update the EraTalents addon from the current client package to get this
+behavior. Disabling DragonUI's talent module also restores the standard route.
+
 ## Points, training, respecs and glyphs
 
 The server validates talent purchases against earned era, level-earned budget,

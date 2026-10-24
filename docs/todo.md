@@ -99,6 +99,11 @@ pass.
   Gear Finder sources at tiers 7, 8 and 13, the inactive Talent Advisor for an
   EraTalents character and addon traffic in a group. The Lua fixture does not
   render frames or exercise the live bridge.
+- [ ] Validate the [DragonUI talent route](era-talents.md#dragonui) on a live
+  client with DragonUI's talent module enabled: talent key, micro-button,
+  `/talents`, spec tabs, glyph page, a hunter's pet tree, and inspecting an
+  era altbot and a Wrath character. The Lua fixture runs DragonUI's entry
+  points but does not render frames.
 - [ ] Verify complete runs in-game for each enabled Vanilla, TBC and Wrath
   dungeon: walking to the entrance, combat, loot rolls, quest objectives, wipes
   and normal recovery.
