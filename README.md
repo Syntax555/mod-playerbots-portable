@@ -93,8 +93,6 @@ contains matching server and client packages.
 | [Questie-335 installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd` with Internet access; see [installation](docs/questie-playerbots.md#installation). |
 | [SHA-256 checksums](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt) | Verify the packages and update manifest. |
 
-Optional client interface: [DragonUI](https://github.com/NeticSoul/DragonUI) for WoW 3.3.5a.
-
 ## Running the server
 
 `startup.exe` runs MySQL, authserver and worldserver in one console and restarts
