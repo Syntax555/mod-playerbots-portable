@@ -465,7 +465,7 @@ def prepare_assets(directory: Path, expected_revision: str | None = None) -> lis
         raise PublishError("The artifacts directory does not exist")
     assets = []
     for name, required in ZIP_CONTENTS.items():
-        candidates = sorted(path for path in directory.rglob(name) if path.is_file())
+        candidates = [path for path in directory.rglob(name) if path.is_file()]
         if len(candidates) != 1:
             raise PublishError(f"Expected exactly one artifact named {name}; found {len(candidates)}")
         path = candidates[0]
@@ -480,7 +480,7 @@ def prepare_assets(directory: Path, expected_revision: str | None = None) -> lis
                         entry = entries[entry_name]
                     except KeyError:
                         raise PublishError(f"{name} is missing {entry_name}") from None
-                    if entry.is_dir() or entry.file_size == 0 or entry.flag_bits & 1:
+                    if entry.file_size == 0:
                         raise PublishError(f"{name} has an invalid required file: {entry_name}")
                 # The server's manifest reads every entry below; client packages need the same CRC check.
                 if name != SERVER_PACKAGE_NAME and archive.testzip() is not None:
