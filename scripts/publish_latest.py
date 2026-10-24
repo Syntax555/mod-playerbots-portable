@@ -48,11 +48,17 @@ ZIP_CONTENTS = {
     "Questie-335-latest.zip": (
         "Install-Questie.cmd", "Install-Questie.ps1", "SOURCE_MANIFEST.json", "PATCH_DATA.json", "README.md", "LICENSE",
     ),
+    "Zygor-IP-latest.zip": (
+        "Install-Zygor.cmd", "Install-Zygor.ps1", "SOURCE_MANIFEST.json", "PATCH_DATA.json", "UPSTREAM_FILES.json",
+        "README.md", "LICENSE",
+    ),
 }
 CHECKSUM_NAME = "SHA256SUMS.txt"
 UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
 SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
 QUESTIE_INSTALLER_NAME = "Questie-335-latest.zip"
+ZYGOR_INSTALLER_NAME = "Zygor-IP-latest.zip"
+ZYGOR_ARCHIVE = "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK/archive/"
 # Seconds to wait before repeating an idempotent request after a transient failure.
 RETRY_DELAYS = (2, 5)
 # Temporary tags created by publish(): the staged replacement, and the previous
@@ -409,6 +415,50 @@ def verify_questie_installer(archive: zipfile.ZipFile, entries: dict[str, zipfil
         raise PublishError("Questie installer has invalid patch metadata")
 
 
+def verify_zygor_installer(archive: zipfile.ZipFile, entries: dict[str, zipfile.ZipInfo]) -> None:
+    """Require the installer, its pinned file list and patch metadata, without upstream assets."""
+    if set(entries) != set(ZIP_CONTENTS[ZYGOR_INSTALLER_NAME]):
+        raise PublishError("Zygor installer contains unexpected files")
+    try:
+        manifest = json.loads(archive.read("SOURCE_MANIFEST.json"))
+        patch_bytes = archive.read("PATCH_DATA.json")
+        patch_data = json.loads(patch_bytes)
+        files_bytes = archive.read("UPSTREAM_FILES.json")
+        upstream = json.loads(files_bytes)
+    except (ValueError, UnicodeError):
+        raise PublishError("Zygor installer has invalid patch metadata") from None
+    if not isinstance(manifest, dict) or not isinstance(patch_data, dict) or not isinstance(upstream, dict):
+        raise PublishError("Zygor installer has invalid patch metadata")
+
+    def sha256(value: Any) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+    revision = manifest.get("revision")
+    source = manifest.get("sourceArchive")
+    patches = manifest.get("patches")
+    listed = upstream.get("files")
+    if (type(manifest.get("schemaVersion")) is not int or manifest["schemaVersion"] != 1
+            or manifest.get("name") != "ZygorGuidesViewerRM"
+            or manifest.get("repository") != "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git"
+            or manifest.get("interface") != 30300
+            or not isinstance(revision, str) or re.fullmatch(r"[0-9a-f]{40}", revision) is None
+            or not isinstance(source, dict) or source.get("url") != f"{ZYGOR_ARCHIVE}{revision}.zip"
+            or source.get("root") != f"ZygorGuidesRemaster-3.3.5a_WOTLK-{revision}/ZygorGuidesViewerRM"
+            or not isinstance(patches, dict) or not patches
+            or any(not isinstance(path, str) or re.fullmatch(r"patches/[A-Za-z0-9_.-]+[.]patch", path) is None
+                   or not sha256(value) for path, value in patches.items())
+            or not sha256(manifest.get("patchDataSha256"))
+            or manifest["patchDataSha256"] != hashlib.sha256(patch_bytes).hexdigest()
+            or not sha256(manifest.get("upstreamFilesSha256"))
+            or manifest["upstreamFilesSha256"] != hashlib.sha256(files_bytes).hexdigest()
+            or type(patch_data.get("schemaVersion")) is not int or patch_data["schemaVersion"] != 1
+            or not isinstance(patch_data.get("files"), list) or not patch_data["files"]
+            or upstream.get("schemaVersion") != 1 or upstream.get("root") != "ZygorGuidesViewerRM"
+            or not isinstance(listed, dict) or "ZygorGuidesViewerRM.toc" not in listed
+            or any(not sha256(value) for value in listed.values())):
+        raise PublishError("Zygor installer has invalid patch metadata")
+
+
 def prepare_assets(directory: Path, expected_revision: str | None = None) -> list[Asset]:
     """Validate the required packages before creating checksums or API writes."""
     if not directory.is_dir():
@@ -437,6 +487,8 @@ def prepare_assets(directory: Path, expected_revision: str | None = None) -> lis
                     raise PublishError(f"Artifact failed file integrity verification: {name}")
                 if name == QUESTIE_INSTALLER_NAME:
                     verify_questie_installer(archive, entries)
+                if name == ZYGOR_INSTALLER_NAME:
+                    verify_zygor_installer(archive, entries)
         except (zipfile.BadZipFile, OSError, zlib.error):
             raise PublishError(f"Artifact is not a readable ZIP: {name}") from None
         assets.append(Asset(path, name, size, digest(path)))

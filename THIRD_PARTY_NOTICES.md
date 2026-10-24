@@ -20,6 +20,8 @@ combined EraTalents client pack includes dependency licenses and
 The Questie installer ZIP contains installation tooling and local patch data;
 it downloads the pinned original addon directly from upstream and preserves its
 notices. Its `LICENSE` applies to the installer tooling, not to Questie.
+The Zygor IP installer ZIP works the same way for Zygor Guides Viewer
+Remaster; its `LICENSE` does not apply to Zygor Guides Viewer.
 
 ## Included projects
 
@@ -43,6 +45,7 @@ applicable.
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | MIT upstream license; portable integration files also carry GPL-2.0-or-later notices. | Server: `licenses/mod-era-talents/LICENSE`, `licenses/GPL-2.0.txt`. Combined client pack: `Interface/AddOns/EraTalents/LICENSE`, `licenses/mod-era-talents.txt`. |
 | [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | GPL version 3 upstream license text. | `MultiBot/LICENSE` in the separate addon ZIP. |
 | [Questie-335](https://github.com/Aldori15/Questie/tree/335) | No general root license declaration at the locked revision. Libraries under `Libs/` keep their own licenses and `Icons/LICENSE.md` covers some icons; the licensing of other icons and historical contributions is unclear. | The installer downloads the upstream archive directly; the complete addon is not redistributed in the release ZIP because its maintainer cannot grant that permission for all contributors ([Aldori15/Questie#171](https://github.com/Aldori15/Questie/issues/171)). |
+| [Zygor Guides Viewer Remaster](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) | The viewer code carries the upstream `GPL` designation without a stated version. Guides, data, images and bundled libraries keep their own terms. The local integration patch adds to the viewer code it modifies. | The installer downloads the upstream archive directly; the addon is not redistributed in the release ZIP. |
 | [StormLib](https://github.com/ladislav-zezula/StormLib) | MIT; used to build and verify the client patch. | `licenses/StormLib.txt` in the combined client pack |
 | [CMaNGOS Classic DB](https://github.com/cmangos/classic-db) and [TBC DB](https://github.com/cmangos/tbc-db) | GPL version 3 project license texts; historical quest and trainer data retain their original terms. | `licenses/historical-class-data/NOTICE.txt`, `licenses/GPL-3.0.txt` in the server and combined client pack |
 | [CMaNGOS Classic core](https://github.com/cmangos/mangos-classic) and [TBC core](https://github.com/cmangos/mangos-tbc) | GPL version 2 root texts and GPL-2.0-or-later source notices; historical spell corrections retain their source notices. | `licenses/historical-class-data/NOTICE.txt`, `licenses/GPL-2.0.txt` in the server and combined client pack |

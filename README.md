@@ -91,6 +91,7 @@ contains matching server and client packages.
 | [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | **Required for every player:** historical talents, Individual Progression's Vanilla/TBC spell data, restored class-quest spells and German text. |
 | [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional interface for your bot companions. Install its `MultiBot` folder as `Interface/AddOns/MultiBot/`; see [client addons](docs/addons.md). |
 | [Questie-335 installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd` with Internet access; see [installation](docs/questie-playerbots.md#installation). |
+| [Zygor IP installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Zygor-IP-latest.zip) | Optional Zygor Guides Viewer that follows each character's Individual Progression tier. Extract and run `Install-Zygor.cmd` with Internet access; see [installation](docs/zygor-progression.md#installation). |
 | [SHA-256 checksums](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt) | Verify the packages and update manifest. |
 
 ## Running the server
@@ -230,6 +231,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [Class quests](docs/class-quests.md) | Historical priest quest rewards, race gates and paid training. |
 | [Client addons](docs/addons.md) | MultiBot, curated upstream addons and Lua diagnostics. |
 | [Questie bot progress](docs/questie-playerbots.md) | Server-controlled group bot quest counters, installation and validation. |
+| [Zygor Individual Progression](docs/zygor-progression.md) | Guides, Gear Finder and Talent Advisor by earned tier, installation and limits. |
 | [Bot dungeons and raids](docs/bot-dungeons.md) | Autonomous parties, player-led clears, raid tactics and travel. |
 | [Bot brackets and PvP](docs/earned-bot-brackets.md) | Resident levels, battleground eligibility and match rules. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |

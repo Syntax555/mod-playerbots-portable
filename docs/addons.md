@@ -14,6 +14,7 @@ packages from the server's [Latest release](https://github.com/Syntax555/mod-pla
 | [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | Required for every player: historical talents, spell data and German text. Install both `Interface/AddOns/EraTalents/` and `Data/patch-V.mpq`. |
 | [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional bot controls. Install `Interface/AddOns/MultiBot/`; open with `/mb`, and settings with `/mbopt`. |
 | [Questie-335 installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd`; Internet access is required. Choose the client's `Interface/AddOns/` folder; see [installation](questie-playerbots.md#installation). |
+| [Zygor IP installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Zygor-IP-latest.zip) | Optional guide viewer that follows each character's Individual Progression tier. Extract and run `Install-Zygor.cmd`; Internet access is required. Choose the client's `Interface/AddOns/` folder; see [installation](zygor-progression.md#installation). |
 
 Each addon folder must directly contain its matching `.toc` file. Avoid nested
 archive folders and mixed files from different versions. Back up existing addon
@@ -59,18 +60,20 @@ requires in-game testing.
 | DragonUI | [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI), for WoW 3.3.5a with interface `30300`. Install both `DragonUI/` and `DragonUI_Options/` in `Interface/AddOns/`; open settings with `/dui`. | UI customization does not change server progression. Compatibility with EraTalents' historical talent and inspect views requires in-game testing. |
 | GearScore2 | [cozawariat/gearscore2](https://github.com/cozawariat/gearscore2), the 3.3.5a project with interface `30300`. Install as `Interface/AddOns/GearScore2/GearScore2.toc`; open settings with `/gs2`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
 | DungeonClear | [jrad7/mod-dungeon-clear-addon](https://github.com/jrad7/mod-dungeon-clear-addon), the 3.3.5a companion interface. Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. | Controls and displays server-side runs. Party formation, travel and earned access remain server rules. Spectate is disabled in the default profile; `.dc on` in chat can expose refusal messages omitted by the UI. |
-| Zygor Guides Viewer Remaster | [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK). Install only its `ZygorGuidesViewerRM/` addon folder. | Guide routes and the bundled Wrath Talent Advisor do not follow each character's EraTalents trees or content gates. Prefer Questie for quest information during historical progression unless the guide's talent compatibility has been verified. |
 
 Quest addons use their own databases. Server rules and each character's
 progression determine quest availability; map markers can differ when addon
 data does not match. See [server adaptations](adaptations.md) for the
 distribution's gameplay changes.
 
-Zygor's bundled Talent Advisor replaces the global `LearnTalent` function and
-the Blizzard talent learn-button handler. Its **Enable Talent Advisor** checkbox
-hides advisor features but does not remove all these hooks. Disable the whole
-`ZygorGuidesViewerRM` addon and reload when isolating talent or protected-action
-conflicts; the checkbox alone does not provide a clean comparison.
+Install Zygor Guides Viewer Remaster with the matching Zygor IP installer; the
+ordinary upstream download does not follow Individual Progression. Its guides,
+Gear Finder and Talent Advisor then use each character's own tier; see
+[Zygor Individual Progression](zygor-progression.md). The bundled Talent
+Advisor wraps the global `LearnTalent` function and the Blizzard learn button
+only while it may advise the character, which excludes EraTalents characters.
+Disable the whole `ZygorGuidesViewerRM` addon and reload when isolating talent
+or protected-action conflicts.
 
 The addons in the upstream table are separate downloads. Their code, guides, images and
 libraries have separate licensing terms; a public repository or viewer license

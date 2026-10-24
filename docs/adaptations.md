@@ -113,6 +113,13 @@ Run the separate Questie-335 installer from the matching Latest release. It
 downloads the pinned upstream addon and applies the patch locally; the prebuilt
 server includes its MultiBot Bridge support.
 
+[Zygor Individual Progression](zygor-progression.md) adapts Zygor Guides
+Viewer Remaster the same way. The MultiBot Bridge reports the character's own
+tier, quest availability and instance access read-only; guides, the Gear
+Finder, best-in-slot lists and the Talent Advisor follow them, and an unknown
+state unlocks nothing. Run the separate Zygor IP installer from the matching
+Latest release.
+
 ## Validation and supported scope
 
 The release workflow checks patched native gameplay handlers, launcher

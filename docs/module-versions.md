@@ -129,7 +129,11 @@ Zygor Guides Viewer Remaster is pinned the same way. Its entry names the
 repository's `ZygorGuidesViewerRM/` folder, which preparation exports into
 `.module-cache/prepared-source-addons/ZygorGuidesViewerRM` with the
 [Individual Progression patch](zygor-progression.md) applied. The addon's TOC
-is checked without regard to case, as the client loads it.
+is checked without regard to case, as the client loads it. The separate
+`Zygor-IP-latest.zip` contains an installer, the pinned file list and the patch
+data, not the upstream addon. The installer downloads the pinned archive from
+upstream, checks every addon file against the pinned Git tree and applies the
+patch locally; see [installation](zygor-progression.md#installation).
 
 Dependencies keep their own license terms and per-file notices; see
 [third-party notices](../THIRD_PARTY_NOTICES.md) and each package's `licenses/`

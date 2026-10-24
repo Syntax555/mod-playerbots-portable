@@ -6,6 +6,7 @@ Prebuilt Windows x64 server for **WoW 3.3.5a (build 12340)**, with Playerbots an
 | [EraTalents client pack]({repository_url}/releases/latest/download/EraTalents-client-latest.zip) | Required. Install its `Interface/AddOns/EraTalents/` folder and `Data/patch-V.mpq` in your client, then fully restart WoW. |
 | [MultiBot addon]({repository_url}/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional bot controls. Install its `MultiBot/` folder in `Interface/AddOns/`. |
 | [Questie-335 installer]({repository_url}/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd` with Internet access; see [installation]({source_url}/docs/questie-playerbots.md#installation). |
+| [Zygor IP installer]({repository_url}/releases/latest/download/Zygor-IP-latest.zip) | Optional Zygor Guides Viewer that follows each character's Individual Progression tier. Extract and run `Install-Zygor.cmd` with Internet access; see [installation]({source_url}/docs/zygor-progression.md#installation). |
 | [SHA-256 checksums]({repository_url}/releases/latest/download/SHA256SUMS.txt) | Verify the packages and update manifest. |
 
 Set `set realmlist 127.0.0.1` in the client's `Data/<locale>/realmlist.wtf`. Create your account in the worldserver console with `account create <username> <password>`.

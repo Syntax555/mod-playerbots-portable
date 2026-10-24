@@ -6,6 +6,34 @@ availability and instance access through the MultiBot Bridge; the addon only
 reads them. It cannot award, change or bypass progression, and an unknown
 state never unlocks content.
 
+## Installation
+
+Use WoW **3.3.5a, build 12340** and the matching server and Zygor IP installer
+from the [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+The prebuilt server includes the bridge support; no server setting is needed.
+
+1. Download [Zygor-IP-latest.zip](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Zygor-IP-latest.zip)
+   and extract it to a folder outside your WoW installation.
+2. Close WoW completely. Run `Install-Zygor.cmd` and enter your client's
+   `Interface/AddOns/` folder when prompted. Internet access is required; the
+   installer uses Windows PowerShell and does not require administrator rights.
+3. Start WoW and enable Zygor Guides Viewer in the addon list. Disable a
+   separate `ZygorGuidesViewer` or `ZygorTalentAdvisor` addon; the installer
+   warns when it finds one.
+
+The installer downloads the pinned addon directly from upstream. It accepts the
+archive only when every file of its `ZygorGuidesViewerRM/` folder matches the
+pinned Git tree, applies the integration locally and checks every patched file
+and the TOC's interface and files. It backs up an existing `ZygorGuidesViewerRM/`
+folder before replacement and records the installed revision in
+`SOURCE_REVISION.txt` and `SOURCE_MANIFEST.json`. Account and character
+SavedVariables, including Zygor's settings, are preserved. The release ZIP
+contains only the installer, the file list and the patch data.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-Zygor.ps1 -AddOnsPath 'C:\Games\WoW\Interface\AddOns'
+```
+
 ## Guide behaviour
 
 The **Progress** options panel (`/zgprogress`) and `/zygorip` show the mode,
@@ -217,4 +245,10 @@ Gear Finder, best-in-slot lists and the Talent Advisor. It ties the zone,
 experience, instance, difficulty, milestone and reason tables to Individual
 Progression's, the bridge's and the core's sources, rejects every mutation of
 these gates and runs the upstream Zygor regression suite on the patched addon.
-Neither test starts a realm or a WoW client.
+
+`TestZygorInstallerPackaging.py` and `TestZygorInstaller.py` check the release
+ZIP and the PowerShell installer: file-by-file verification, rejected
+archives, patch and TOC checks, backup, rollback and preserved SavedVariables.
+The release build downloads the pinned upstream archive, installs it with the
+packaged installer and compares the result with the tested prepared addon.
+None of these tests starts a realm or a WoW client.
