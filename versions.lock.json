@@ -51,7 +51,9 @@
         "patches/mod-individual-progression-historical-class-quests.patch",
         "patches/mod-individual-progression-creature-era-modifiers.patch",
         "patches/mod-individual-progression-era-experience.patch",
-        "patches/mod-individual-progression-client-cache.patch"
+        "patches/mod-individual-progression-client-cache.patch",
+        "patches/mod-individual-progression-submerge-binding.patch",
+        "patches/mod-individual-progression-startup-data.patch"
       ]
     },
     {
@@ -99,7 +101,8 @@
       "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
       "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1",
       "patches": [
-        "patches/mod-era-events-earned-progression.patch"
+        "patches/mod-era-events-earned-progression.patch",
+        "patches/mod-era-events-startup-data.patch"
       ]
     },
     {

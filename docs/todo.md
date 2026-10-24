@@ -48,6 +48,11 @@ pass.
 
 ## Gameplay validation
 
+- [ ] Verify startup data repairs on a fresh world database and an existing
+  installation: historical priest rank chains, AQ event dragon menus, the
+  retired Mirelow pool and the native Submerge Visual binding. Confirm the
+  Mirelow patrol, AQ actors and submerge/stand transitions in-game; source
+  fixtures do not start a realm.
 - [ ] Verify MultiBot altbot vendor purchases on a live 3.3.5a client: Buy mode,
   left/right clicks, quantities, expensive and currency-item confirmations,
   bot switches and inventory closure. Confirm the bot's own gold and bag

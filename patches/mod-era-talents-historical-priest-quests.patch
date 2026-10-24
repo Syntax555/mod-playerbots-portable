@@ -849,6 +849,23 @@ index 0000000..43e3e66
 +INSERT IGNORE INTO `spell_bonus_data` (`entry`, `direct_bonus`, `dot_bonus`, `ap_bonus`, `ap_dot_bonus`, `comments`) VALUES (949373, 0.143, 0, 0, 0, 'Historical priest racial ability');
 +INSERT IGNORE INTO `spell_bonus_data` (`entry`, `direct_bonus`, `dot_bonus`, `ap_bonus`, `ap_dot_bonus`, `comments`) VALUES (949375, 0.143, 0, 0, 0, 'Historical priest racial ability');
 +INSERT IGNORE INTO `spell_bonus_data` (`entry`, `direct_bonus`, `dot_bonus`, `ap_bonus`, `ap_dot_bonus`, `comments`) VALUES (949376, 0.143, 0, 0, 0, 'Historical priest racial ability');
+diff --git a/data/sql/world/updates/2026_10_24_00_historical_priest_singletons.sql b/data/sql/world/updates/2026_10_24_00_historical_priest_singletons.sql
+new file mode 100644
+index 0000000..41fc72a
+--- /dev/null
++++ b/data/sql/world/updates/2026_10_24_00_historical_priest_singletons.sql
+@@ -0,0 +1,11 @@
++-- Unranked priest abilities need no spell_ranks chain; preserve customized chains.
++DELETE FROM `spell_ranks`
++WHERE `first_spell_id` IN (948089, 949316, 949377, 949378)
++  AND `spell_id` = `first_spell_id`
++  AND `rank` = 1
++  AND `first_spell_id` IN (
++    SELECT `first_spell_id` FROM (
++      SELECT `first_spell_id` FROM `spell_ranks`
++      GROUP BY `first_spell_id` HAVING COUNT(*) = 1
++    ) AS `singletons`
++  );
 diff --git a/era-data/band-allowlist.yaml b/era-data/band-allowlist.yaml
 index 459cacc..960ed19 100644
 --- a/era-data/band-allowlist.yaml

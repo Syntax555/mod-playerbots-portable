@@ -1,0 +1,12 @@
+diff --git a/data/sql/world/updates/naxx40_submerge_binding.sql b/data/sql/world/updates/naxx40_submerge_binding.sql
+new file mode 100644
+index 0000000..634c478
+--- /dev/null
++++ b/data/sql/world/updates/naxx40_submerge_binding.sql
+@@ -0,0 +1,6 @@
++-- Follow naxx40_spells.sql while preserving unrelated spell and script bindings.
++INSERT IGNORE INTO `spell_script_names` (`spell_id`, `ScriptName`)
++SELECT `spell_id`, 'spell_gen_submerge_visual' FROM `spell_script_names`
++WHERE `spell_id` = 28819 AND `ScriptName` = 'spell_submerge_visual_aura';
++DELETE FROM `spell_script_names`
++WHERE `spell_id` = 28819 AND `ScriptName` = 'spell_submerge_visual_aura';

@@ -32,6 +32,7 @@ GAMEPLAY = (
     "TestEarnedEraPrices", "TestEraTalents", "TestPlayerbotEraBattlegrounds", "TestEarnedEraBattlegrounds",
     "TestEarnedArenaCore", "TestBattlegroundEraRules", "TestEarnedEraPvpRules", "TestWindowsResourceIncludes",
     "TestCoreBuildWarnings", "TestCoreExperience", "TestClientCacheVersion",
+    "TestWorldStartupData", "TestSubmergeBinding",
     "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestEraEvents", "TestLfgProgression",
     "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",

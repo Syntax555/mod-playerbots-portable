@@ -91,6 +91,12 @@ def snapshot(db, tables):
     return {table: db.execute('SELECT * FROM "' + table + '" ORDER BY 1,2').fetchall() for table in tables}
 
 
+def assert_historical_rank_chains(db):
+    singletons = db.execute('SELECT first_spell_id FROM spell_ranks WHERE first_spell_id>=948081 '
+                            'GROUP BY first_spell_id HAVING COUNT(*)=1').fetchall()
+    assert not singletons, ('single-rank historical spells must not enter spell_ranks', singletons)
+
+
 def compile_run(temporary, name, source, expected=True):
     cpp, executable = temporary / (name + '.cpp'), temporary / name
     cpp.write_text(source)
@@ -132,11 +138,14 @@ historical = (ip / 'src/HistoricalClassQuests.cpp').read_text()
 progress_source = (ip / 'src/IndividualProgression.cpp').read_text()
 progress_enum = function((ip / 'src/IndividualProgression.h').read_text(), 'enum ProgressionState') + ';'
 trainer_source = core_file('src/server/game/Entities/Creature/Trainer.cpp').read_text()
+rank_loader = function(core_file('src/server/game/Spells/SpellMgr.cpp').read_text(), 'void SpellMgr::LoadSpellRanks()')
+assert 'if (rankChain.size() < 2)' in rank_loader, 'native minimum rank-chain length changed'
 condition_source = core_file('src/server/game/Conditions/ConditionMgr.cpp').read_text()
 condition_header = core_file('src/server/game/Conditions/ConditionMgr.h').read_text()
 sql = (ip / 'data/sql/world/updates/2026_10_11_00_historical_class_quests.sql').read_text().replace('INSERT IGNORE', 'INSERT OR IGNORE')
 condition_sql = (ip / 'data/sql/world/updates/2026_10_15_00_historical_class_quest_conditions.sql').read_text().replace('INSERT IGNORE', 'INSERT OR IGNORE')
 training = (era / 'data/sql/world/base/2026_10_11_00_historical_priest_training.sql').read_text().replace('INSERT IGNORE', 'INSERT OR IGNORE')
+rank_cleanup = (era / 'data/sql/world/updates/2026_10_24_00_historical_priest_singletons.sql').read_text()
 
 db = sqlite3.connect(':memory:')
 tables = ('quest_template', 'quest_template_addon', 'disables', 'creature_queststarter',
@@ -159,16 +168,58 @@ custom_conditions = [(19, 0, 5634, 0, group, 16, 0, race, 0, 0, 0, 0, 0, '', 'Cu
                      for group, race in ((7, 1), (9, 4))]
 custom_conditions.append((19, 0, 5634, 0, 11, 8, 0, 66013, 0, 0, 0, 0, 0, '', 'Custom positive marker'))
 db.executemany('INSERT INTO conditions VALUES (' + ','.join('?' for _ in range(15)) + ')', custom_conditions)
+# Replay an upgrade from the previously shipped unnecessary rank-one entries.
+single_rank_spells = (948089, 949316, 949377, 949378)
+db.executemany('INSERT INTO spell_ranks (first_spell_id,spell_id,rank) VALUES (?,?,1)',
+               ((spell, spell) for spell in single_rank_spells))
 before = snapshot(db, tables)
 db.executescript(sql)
 db.executescript(condition_sql)
 db.executescript(training)
+db.executescript(rank_cleanup)
 after = snapshot(db, tables)
 db.executescript(sql)
 db.executescript(condition_sql)
 db.executescript(training)
+db.executescript(rank_cleanup)
 assert snapshot(db, tables) == after, 'migrations are not idempotent'
 assert before['quest_template_addon'] == after['quest_template_addon'], 'native class/race/chain gates changed'
+assert_historical_rank_chains(db)
+rank_schema = db.execute("SELECT sql FROM sqlite_master WHERE name='spell_ranks'").fetchone()[0]
+
+
+def cleaned_ranks(source, records):
+    with sqlite3.connect(':memory:') as upgrade:
+        upgrade.execute(rank_schema)
+        upgrade.executemany('INSERT INTO spell_ranks VALUES (?,?,?)', records)
+        upgrade.executescript(source)
+        result = set(upgrade.execute('SELECT * FROM spell_ranks'))
+        upgrade.executescript(source)
+        assert set(upgrade.execute('SELECT * FROM spell_ranks')) == result, 'rank cleanup is not idempotent'
+        return result
+
+
+preserved_ranks = set(after['spell_ranks']) | {(1000000, 1000000, 1)}
+singletons = {(spell, spell, 1) for spell in single_rank_spells}
+assert cleaned_ranks(rank_cleanup, preserved_ranks | singletons) == preserved_ranks
+for spell in single_rank_spells:
+    removed = rank_cleanup.replace(str(spell), '0', 1)
+    assert removed != rank_cleanup
+    assert cleaned_ranks(removed, preserved_ranks | singletons) != preserved_ranks, ('missing singleton cleanup', spell)
+for description, custom, old, new in (
+    ('multiple ranks', singletons | {(spell, 1000001 + i, 2) for i, spell in enumerate(single_rank_spells)},
+     'HAVING COUNT(*) = 1', 'HAVING COUNT(*) >= 1'),
+    ('custom spell', {(spell, 1000001 + i, 1) for i, spell in enumerate(single_rank_spells)},
+     '  AND `spell_id` = `first_spell_id`\n', ''),
+    ('custom rank', {(spell, spell, 2) for spell in single_rank_spells}, '  AND `rank` = 1\n', ''),
+    ('unrelated singleton', set(), 'WHERE `first_spell_id` IN (948089, 949316, 949377, 949378)', 'WHERE 1'),
+):
+    records = preserved_ranks | custom
+    assert cleaned_ranks(rank_cleanup, records) == records, ('custom ranks changed', description)
+    removed = rank_cleanup.replace(old, new)
+    assert removed != rank_cleanup
+    assert cleaned_ranks(removed, records) != records, ('rank cleanup scope mutation undetected', description)
+print('Historical rank SQL: scoped upgrade cleanup, custom chains, idempotence and eight mutations passed')
 
 # Independently recorded historical roots. Class/race, objectives and exclusive
 # groups continue to come from the native quest dump, rather than this test.
