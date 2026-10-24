@@ -23,7 +23,8 @@ ip = args.ip or core / 'modules/mod-individual-progression'
 events = args.events or core / 'modules/mod-era-events'
 pool_path = ip / 'data/sql/world/updates/zz_2026_10_24_00_mirelow_pool.sql'
 menu_path = events / 'data/sql/db-world/updates/mod_era_events_2026_10_24_00_aq_dragon_menus.sql'
-pool_sql, menu_sql = pool_path.read_text(), menu_path.read_text()
+help_path = core / 'modules/mod-lfg-progression/data/sql/db-world/updates/mod_lfg_progression_2026_10_24_00_command_help.sql'
+pool_sql, menu_sql, help_sql = pool_path.read_text(), menu_path.read_text(), help_path.read_text()
 world = core / 'data/sql/base/db_world'
 tables = ('creature_template', 'pool_template', 'pool_creature', 'pool_gameobject',
           'pool_quest', 'pool_pool', 'game_event_pool')
@@ -163,16 +164,49 @@ def check_pool(sql):
             assert snapshot(db) == before, 'pool repair removed a custom/referenced pool'
 
 
+# A chat command without a `command` row logs a missing-help warning at startup.
+chat = (core / 'src/server/game/Chat/ChatCommands/ChatCommand.cpp').read_text()
+assert 'LOG_WARN("sql.sql", "Table `command` is missing help text for command \'{}\'.", name);' in chat
+commands = (core / 'src/server/database/Database/Implementation/WorldDatabase.cpp').read_text()
+assert '"SELECT name, security, help FROM command"' in commands
+assert re.search(r'SEC_PLAYER\s*= 0,', (core / 'src/common/Common.h').read_text())
+lfg_source = (core / 'modules/mod-lfg-progression/src/LfgProgression.cpp').read_text()
+assert '{ "lfgprogress", HandleStatus, SEC_PLAYER, Acore::ChatCommands::Console::No },' in lfg_source
+assert 'world' in help_path.parts[-3]
+command_schema = (world / 'command.sql').read_text().split('CREATE TABLE `command` (')[1].split(') ENGINE')[0]
+assert '`name` varchar(50)' in command_schema and 'PRIMARY KEY (`name`)' in command_schema
+
+
+def check_help(sql):
+    # The updater's client reads MySQL string escapes.
+    script = sql.replace('INSERT IGNORE', 'INSERT OR IGNORE').replace("\\'", "''").replace('\\n', '\n')
+    with sqlite3.connect(':memory:') as db:
+        db.execute('CREATE TABLE command (name TEXT PRIMARY KEY, security INTEGER, help TEXT)')
+        for _ in range(2):
+            db.executescript(script)
+            row = db.execute("SELECT security, help FROM command WHERE name = 'lfgprogress'").fetchone()
+            assert row and row[0] == 0 and row[1].startswith('Syntax: .lfgprogress\nShows'), row
+        db.execute("UPDATE command SET security = 1, help = 'custom' WHERE name = 'lfgprogress'")
+        db.executescript(script)
+        assert db.execute("SELECT security, help FROM command WHERE name = 'lfgprogress'").fetchone() == (1, 'custom')
+
+
 check_menus(menu_sql)
 check_pool(pool_sql)
-print('Startup SQL: native dragon copies, obsolete Mirelow pool, scope, ordering, custom data and idempotence passed')
+check_help(help_sql)
+print('Startup SQL: native dragon copies, obsolete Mirelow pool, command help, scope, ordering, custom data and '
+      'idempotence passed')
 for label, check, mutant in (
     ('missing dragon repair', check_menus, ''),
     ('missing dragon guards', check_menus, re.sub(r"`ScriptName` = 'npc_era_aq_dragon' AND `npcflag` = 0", '1', menu_sql)),
     ('missing Mirelow repair', check_pool, ''),
     ('missing pool guards', check_pool, re.sub(r'\n  AND NOT EXISTS[^;]+', '', pool_sql)),
+    ('missing command help', check_help, ''),
+    ('command help with another security level', check_help, help_sql.replace("('lfgprogress', 0,", "('lfgprogress', 2,")),
+    ('command help replacing a custom entry', check_help, help_sql.replace('INSERT IGNORE', 'REPLACE')),
 ):
-    assert mutant != (menu_sql if check is check_menus else pool_sql), label
+    original = {check_menus: menu_sql, check_pool: pool_sql, check_help: help_sql}[check]
+    assert mutant != original, label
     try:
         check(mutant)
     except AssertionError:

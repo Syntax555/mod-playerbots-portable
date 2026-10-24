@@ -66,11 +66,12 @@ pass.
   Mirelow patrol, AQ actors and submerge/stand transitions in-game; source
   fixtures do not start a realm.
 - [ ] Start the worldserver on an empty world database and on a stopped copy of
-  an existing realm: the updater must finish without errors and record the
-  Individual Progression cleanup under its new name without reapplying it. On
-  the upgraded copy, complete Drijya's escort (quest 10310) and confirm Summoner
-  Kanthin's patrol and no duplicate Sunfury Magisters. A MySQL replay of the
-  updater and the fixtures cover the data, not a running realm.
+  an existing realm: the updater must finish without errors, record the
+  Individual Progression cleanup under its new name without reapplying it, and
+  `.help lfgprogress` must show the help text. On the upgraded copy, complete
+  Drijya's escort (quest 10310) and confirm Summoner Kanthin's patrol and no
+  duplicate Sunfury Magisters. A MySQL replay of the updater and the fixtures
+  cover the data, not a running realm.
 - [ ] Verify MultiBot altbot vendor purchases on a live 3.3.5a client: Buy mode,
   left/right clicks, quantities, expensive and currency-item confirmations,
   bot switches and inventory closure. Confirm the bot's own gold and bag

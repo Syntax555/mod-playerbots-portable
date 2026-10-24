@@ -95,7 +95,8 @@
       "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
       "revision": "2615e82902cf92c0e7dd93dd6c2472d7b40fe14a",
       "patches": [
-        "patches/mod-lfg-progression-earned-era.patch"
+        "patches/mod-lfg-progression-earned-era.patch",
+        "patches/mod-lfg-progression-command-help.patch"
       ]
     },
     {
