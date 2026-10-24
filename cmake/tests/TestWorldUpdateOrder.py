@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+import hashlib
 import math
 import re
 import sqlite3
@@ -230,3 +231,28 @@ for label, rows, customize, guard in (
     before, after = customized(repair_sql.replace(guard, '', 1), rows, customize)
     assert before != after, ('guard mutation undetected', label)
     print('Netherstorm guard mutation rejected: ' + label)
+
+# One-shot repairs run once per realm. When a file they follow changes, the
+# updater reapplies it on existing realms, so the repair must change with it.
+def sha1(path):
+    return hashlib.sha1(path.read_bytes()).hexdigest()
+
+
+era_events = modules / 'mod-era-events/data/sql/db-world/updates'
+PRODUCERS = (
+    (zone, repair, '0808c731b2e5755424e24124ab31bd2393b07230'),
+    (ip / 'data/sql/world/base/zone_wetlands.sql', ip / 'data/sql/world/updates/zz_2026_10_24_00_mirelow_pool.sql',
+     '65d00a31cb7b99d5474ccfeba13d870e813dbdbd'),
+    (ip / 'data/sql/world/base/naxx40_spells.sql', ip / 'data/sql/world/updates/naxx40_submerge_binding.sql',
+     '19f5636d6c9215a49e1c8d302e3192a8e7d9ab7e'),
+    (modules / 'mod-era-talents/data/sql/world/base/2026_10_11_00_historical_priest_training.sql',
+     modules / 'mod-era-talents/data/sql/world/updates/2026_10_24_00_historical_priest_singletons.sql',
+     '4aaacd37c09cb3296cafb2f22b3a32063d67055a'),
+    (era_events / 'mod_era_events_2026_09_29_02_aq_war.sql',
+     era_events / 'mod_era_events_2026_10_24_00_aq_dragon_menus.sql', '06b10439340d609ba0bdfcc1d159c09e1ea6cc6c'),
+)
+for producer, follower, digest in PRODUCERS:
+    assert producer.name < follower.name, (producer.name, follower.name)
+    assert sha1(producer) == digest, (f'{producer.name} changed ({sha1(producer)}): check {follower.name} '
+                                      'against it and change the repair too, so existing realms rerun it')
+print(f'One-shot repairs: {len(PRODUCERS)} producers unchanged and ordered before their repairs')
