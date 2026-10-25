@@ -32,22 +32,30 @@ pass.
 
 ## Raid integration
 
-- [x] [Raid composition component](raid-composition.md): 10-, 20-, 25- and
-  40-member profiles with hard tank/healer quotas, learned abilities, native
-  subgroups and ordinary recruitment with personal access and lockout checks.
-- [ ] Connect that component to autonomous raid scheduling and real entrance
-  and return travel, including ordinary difficulty selection and the pinned
-  Vanilla Naxxramas entrance interaction. Do not schedule unsupported routes or
-  encounters; the composition API alone starts no raid run.
+- [ ] Implement autonomous raid scheduling, roster formation and real entrance
+  and return travel using native module roles, invitations, groups and raid
+  strategies. Preserve every bot's personal access and lockouts, ordinary
+  difficulty selection and the pinned Vanilla Naxxramas entrance interaction.
+  Do not schedule unsupported routes or encounters.
 - [ ] Bots earn raid attunements and keys through their own quest progress
   (Drakefire Amulet, Blackhand's Command, Naxxramas) and respect instance
   lockouts.
 - [ ] Molten Core rune dousing with Aqual Quintessence earned by a bot.
 - [ ] Raid Clear coverage for Naxxramas as upstream adds it; verify the raid
   before relying on it.
+- [ ] Integrate native Sunwell Plateau (map 580) and Trial of the Crusader
+  (map 649) strategies when available upstream, or implement their missing
+  tactics with earned-progression checks. Neither has a dedicated strategy
+  registration in the pinned Playerbots fork; verify complete runs separately.
 
 ## Gameplay validation
 
+- [ ] Verify the integrated Playerbots/Raid Clear build on Windows and a stopped
+  copy of an existing realm: migrate customized `RaidClear.*` settings into
+  `playerbots.conf`, preserve explicit destination values and the old active
+  file, then confirm the server loads the migrated switches. Validate raid
+  strategy registration, ordinary recovery and natural-progression refusals
+  in game; source fixtures do not start a realm.
 - [ ] Verify addon startup on a live 3.3.5a client with the forks' MultiBot
   package and Questie installer: the minimap button loads and all three Questie
   bindings remain available without library or duplicate-header errors. Keep

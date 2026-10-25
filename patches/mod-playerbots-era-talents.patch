@@ -558,7 +558,7 @@ index 91c51a5..e6a3fa9 100644
         }
     }
 diff --git a/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp b/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp
-index 8066d57..4027e35 100644
+index 538e0df..581fcc6 100644
 --- a/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp
 +++ b/src/Ai/Class/Shaman/Strategy/TotemsShamanStrategy.cpp
 @@ -5,6 +5,7 @@
@@ -593,19 +593,22 @@ index 8066d57..4027e35 100644
          triggers.push_back(new TriggerNode("set mana spring totem", { NextAction("set mana spring totem", 60.0f) }));
      triggers.push_back(new TriggerNode("no water totem", { NextAction("cleansing totem", 55.0f) }));
  }
-@@ -146,9 +147,9 @@ void WrathOfAirTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-     GenericShamanStrategy::InitTriggers(triggers);
-     // If the bot hasn't learned Wrath of Air Totem yet, set Grounding Totem instead.
+@@ -148,11 +149,11 @@ void WrathOfAirTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     // when cast (Windfury, then Grounding). With Grounding on the bar, Call of the Elements dropped it and
+     // the "no air totem" trigger replaced it with Windfury after every recall.
      Player* bot = botAI->GetBot();
 -    if (bot->HasSpell(SPELL_WRATH_OF_AIR_TOTEM))
 +    if (EraKnown(bot, SPELL_WRATH_OF_AIR_TOTEM))
          triggers.push_back(new TriggerNode("set wrath of air totem", { NextAction("set wrath of air totem", 60.0f) }));
+-    else if (bot->HasSpell(SPELL_WINDFURY_TOTEM))
++    else if (EraKnown(bot, SPELL_WINDFURY_TOTEM))
+         triggers.push_back(new TriggerNode("set windfury totem", { NextAction("set windfury totem", 60.0f) }));
 -    else if (bot->HasSpell(SPELL_GROUNDING_TOTEM))
 +    else if (EraKnown(bot, SPELL_GROUNDING_TOTEM))
          triggers.push_back(new TriggerNode("set grounding totem", { NextAction("set grounding totem", 60.0f) }));
      triggers.push_back( new TriggerNode("no air totem", { NextAction("wrath of air totem", 55.0f) }));
  }
-@@ -159,9 +160,9 @@ void WindfuryTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+@@ -163,9 +164,9 @@ void WindfuryTotemStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
      GenericShamanStrategy::InitTriggers(triggers);
      // If the bot hasn't learned Windfury Totem yet, set Grounding Totem instead.
      Player* bot = botAI->GetBot();
@@ -617,29 +620,6 @@ index 8066d57..4027e35 100644
          triggers.push_back(new TriggerNode("set grounding totem", { NextAction("set grounding totem", 60.0f) }));
      triggers.push_back(new TriggerNode("no air totem", { NextAction("windfury totem", 55.0f) }));
  }
-diff --git a/src/Ai/Class/Warrior/WarriorTriggers.cpp b/src/Ai/Class/Warrior/WarriorTriggers.cpp
-index 052500b..3ec327d 100644
---- a/src/Ai/Class/Warrior/WarriorTriggers.cpp
-+++ b/src/Ai/Class/Warrior/WarriorTriggers.cpp
-@@ -5,6 +5,7 @@
-  */
- 
- #include "WarriorTriggers.h"
-+#include "EraTalentBridge.h"
- #include "Playerbots.h"
- 
- namespace
-@@ -103,7 +104,9 @@ bool BattleShoutTrigger::IsActive()
-     float cpBonus = 0.0f;
-     for (int rank = 4; rank >= 0; --rank)
-     {
--        if (bot->HasAura(SPELL_COMMANDING_PRESENCE_RANKS[rank]))
-+        // Resolve each RANK id separately (stock or era clone): the bridge's rank compare means
-+        // "this rank or better", so walking high->low still lands on the bot's actual rank.
-+        if (bot->HasAura(EraKnown(bot, SPELL_COMMANDING_PRESENCE_RANKS[rank])))
-         {
-             cpBonus = commandingPresenceBonus[rank];
-             break;
 diff --git a/src/Bot/EraTalentBridge.h b/src/Bot/EraTalentBridge.h
 new file mode 100644
 index 0000000..f0b6172
@@ -743,7 +723,7 @@ index f9718ae..a921f3e 100644
              if (tab == DEATH_KNIGHT_TAB_BLOOD)
                  nonCombatEngine->addStrategiesNoInit("tank assist", "pull", nullptr);
 diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
-index 4bb5dcf..d0d5044 100644
+index d3a8694..481f3c7 100644
 --- a/src/Bot/Factory/PlayerbotFactory.cpp
 +++ b/src/Bot/Factory/PlayerbotFactory.cpp
 @@ -13,6 +13,7 @@
@@ -782,10 +762,10 @@ index 4bb5dcf..d0d5044 100644
      {
          bot->resetTalents(true);
 diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
-index dcd865d..97a4f68 100644
+index 3baaacb..2072d5f 100644
 --- a/src/Bot/PlayerbotAI.cpp
 +++ b/src/Bot/PlayerbotAI.cpp
-@@ -16,6 +16,7 @@
+@@ -18,6 +18,7 @@
  #include "DBCStores.h"
  #include "EmoteAction.h"
  #include "Engine.h"
@@ -793,7 +773,7 @@ index dcd865d..97a4f68 100644
  #include "EventProcessor.h"
  #include "ExternalEventHelper.h"
  #include "GameObjectData.h"
-@@ -2393,7 +2394,8 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
+@@ -2634,7 +2635,8 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
              break;
          case CLASS_DRUID:
              if (tab == DRUID_TAB_FERAL && (player->GetShapeshiftForm() == FORM_BEAR ||
@@ -804,7 +784,7 @@ index dcd865d..97a4f68 100644
                  return true;
              }
 diff --git a/src/Mgr/Item/StatsWeightCalculator.cpp b/src/Mgr/Item/StatsWeightCalculator.cpp
-index b940a62..30cea33 100644
+index d2c159b..4bc1e03 100644
 --- a/src/Mgr/Item/StatsWeightCalculator.cpp
 +++ b/src/Mgr/Item/StatsWeightCalculator.cpp
 @@ -7,6 +7,7 @@
@@ -812,10 +792,10 @@ index b940a62..30cea33 100644
  #include "AiFactory.h"
  #include "DBCStores.h"
 +#include "EraTalentBridge.h"
+ #include "Item.h"
  #include "ItemEnchantmentMgr.h"
  #include "ItemTemplate.h"
- #include "ObjectMgr.h"
-@@ -688,12 +689,13 @@ void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)
+@@ -772,12 +773,13 @@ void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)
              weight_ *= 1.5;
          }
  

@@ -2833,10 +2833,10 @@ index 12ebee8..b8138ce 100644
  
 diff --git a/src/EarnedDungeonParties.cpp b/src/EarnedDungeonParties.cpp
 new file mode 100644
-index 0000000..2775405
+index 0000000..77f18ce
 --- /dev/null
 +++ b/src/EarnedDungeonParties.cpp
-@@ -0,0 +1,851 @@
+@@ -0,0 +1,857 @@
 +/* GNU Affero General Public License v3.0 or later; see LICENSE. */
 +#include "EarnedDungeonParties.h"
 +#include "DcEarnedEvents.h"
@@ -3586,14 +3586,20 @@ index 0000000..2775405
 +            }
 +            for (size_t i = 1; i < picked.size(); ++i)
 +            {
-+                WorldPacket invite;
-+                invite << picked[i]->GetName() << uint32(0);
-+                tank->GetSession()->HandleGroupInviteOpcode(invite);
 +                party.invited[0] = true;
 +                party.invited[i] = true;
-+                if (!picked[i]->GetGroupInvite() ||
-+                    picked[i]->GetGroupInvite()->GetLeaderGUID() != tank->GetGUID() ||
-+                    !GET_PLAYERBOT_AI(picked[i])->DoSpecificAction("accept invitation", Event("earned dungeon party"), true))
++                bool accepted = false;
++                if (Owned(tank, nullptr) && Owned(picked[i], nullptr) &&
++                    !picked[i]->GetGroup() && !picked[i]->GetGroupInvite())
++                {
++                    WorldPacket invite;
++                    invite << picked[i]->GetName() << uint32(0);
++                    tank->GetSession()->HandleGroupInviteOpcode(invite);
++                    accepted = picked[i]->GetGroupInvite() &&
++                               picked[i]->GetGroupInvite()->GetLeaderGUID() == tank->GetGUID() &&
++                               GET_PLAYERBOT_AI(picked[i])->DoSpecificAction("accept invitation", Event("earned dungeon party"), true);
++                }
++                if (!accepted)
 +                {
 +                    party.group = tank->GetGroup() ? tank->GetGroup()->GetGUID() : ObjectGuid::Empty;
 +                    Stop(party, "normal invitation or acceptance refused; no forced grouping used");

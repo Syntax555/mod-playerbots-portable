@@ -20,6 +20,14 @@ names exist, the `Playerbots.*` value takes precedence and the old assignment
 stays visible as a comment. Configuration backups preserve the original files.
 Update external environment overrides from `AC_AI_PLAYERBOT_*` to
 `AC_PLAYERBOTS_*`; the server reads only the new names.
+
+Raid Clear is included in Playerbots and reads its `RaidClear.*` settings from
+`configs/modules/playerbots.conf`. Startup copies settings from an existing
+`configs/modules/mod_raid_clear.conf` when they are absent from the active
+Playerbots configuration. Explicit destination values take precedence; a newly
+created Playerbots configuration inherits the old Raid Clear values. Changed
+files receive backups, and the old active file is kept but is no longer loaded.
+
 Server binaries and SQL update through the launcher's normal startup check.
 See the [update guide](updating.md) for manual installation and offline startup.
 

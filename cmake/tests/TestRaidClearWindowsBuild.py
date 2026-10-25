@@ -74,10 +74,10 @@ int main()
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    source_argument(parser, help='mod-raid-clear/src to check instead of the prepared one')
+    source_argument(parser, help='mod-playerbots/src/Ai/Raid/RaidClear to check instead of the prepared one')
     args = parser.parse_args()
     core = prepared_core()
-    source = args.source or core / 'modules/mod-raid-clear/src'
+    source = args.source or core / 'modules/mod-playerbots/src/Ai/Raid/RaidClear'
     spots = (source / 'Raids/AhnQiraj/Aq40Spots.cpp').read_text()
     hounds = (source / 'Raids/MoltenCore/McRaidClear.cpp').read_text()
     constants = (source / 'Raids/MoltenCore/McRaidClear.h').read_text()

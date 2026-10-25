@@ -17,7 +17,7 @@ const automaticProfileState = ".portable-profiles.json"
 
 // Old templates can survive a manual update. Never recreate their active
 // configuration after the module has been removed from the distribution.
-var retiredModuleConfigs = []string{"AutoBalance.conf", "AutoBalance.conf.dist"}
+var retiredModuleConfigs = []string{"AutoBalance.conf", "AutoBalance.conf.dist", "mod_raid_clear.conf.dist"}
 
 func retiredModuleConfig(name string) bool {
 	return slices.ContainsFunc(retiredModuleConfigs, func(retired string) bool { return strings.EqualFold(name, retired) })
@@ -195,7 +195,7 @@ func migrateConfigProfiles(root string) ([]string, error) {
 	}
 	retiredBaseline := false
 	for name := range previous.Profiles {
-		retiredBaseline = retiredBaseline || retiredModuleConfig(name)
+		retiredBaseline = retiredBaseline || retiredModuleConfig(name) || name == "mod_raid_clear.conf"
 	}
 	next := managedProfileState{Schema: 1, Profiles: make(map[string]string)}
 	for _, name := range names {
@@ -210,7 +210,18 @@ func migrateConfigProfiles(root string) ([]string, error) {
 		if !exists {
 			continue
 		}
-		updated, err := mergeManagedProfile(string(original), previous.Profiles[name], current[name])
+		content := string(original)
+		if name == "playerbots.conf" {
+			legacy, err := legacyRaidClearProfile(root, content)
+			if err != nil {
+				return nil, err
+			}
+			content, err = mergeConfigProfile(content, legacy)
+			if err != nil {
+				return nil, err
+			}
+		}
+		updated, err := mergeManagedProfile(content, previous.Profiles[name], current[name])
 		if err != nil {
 			return nil, fmt.Errorf("migrate %s: %w", name, err)
 		}

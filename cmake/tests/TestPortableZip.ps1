@@ -98,6 +98,7 @@ try {
         core = @{ name = 'azerothcore-wotlk'; url = 'https://github.com/example/azerothcore-wotlk.git'; revision = $revision; patches = @('patches/core-fixture.patch') }
         modules = @(
             @{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') },
+            @{ name = 'mod-playerbots'; revision = $revision; patches = @() },
             @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') },
             @{ name = 'mod-era-events'; revision = $revision; patches = @() }
         )
@@ -135,6 +136,10 @@ try {
     Write-FixtureText (Join-Path $core 'modules/mod-fixture/src/fixture.cpp')
     Write-FixtureText (Join-Path $core 'modules/mod-fixture/conf/mod_fixture.conf.dist')
     Write-FixtureText (Join-Path $core 'modules/mod-fixture/LICENSE')
+    Write-FixtureText (Join-Path $core 'modules/mod-playerbots/src/Playerbots.cpp')
+    Write-FixtureText (Join-Path $core 'modules/mod-playerbots/conf/playerbots.conf.dist')
+    Write-FixtureText (Join-Path $core 'modules/mod-playerbots/LICENSE')
+    Write-FixtureText (Join-Path $core 'modules/mod-playerbots/src/Ai/Raid/RaidClear/LICENSE') "raid clear license`n"
     # A module without SQL or a root LICENSE uses its preserved README notice.
     Write-FixtureText (Join-Path $core 'modules/mod-world-buff-bots/src/WorldBuffBots.cpp')
     Write-FixtureText (Join-Path $core 'modules/mod-world-buff-bots/conf/mod_world_buff_bots.conf.dist')
@@ -159,11 +164,13 @@ try {
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons/OldAddon/OldAddon.lua',
         'defaults/worldserver.conf', 'licenses/MultiBot/LICENSE', 'licenses/mod-removed/NOTICE.txt',
         'licenses/mod-removed.txt', 'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream/README.md',
-        'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
+        'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist',
+        'configs/modules/mod_raid_clear.conf.dist', 'licenses/mod-raid-clear/LICENSE')) {
         Write-FixtureText (Join-Path $dist $name) 'obsolete export'
     }
     $preserved = @('mysql/data/user.db', 'mysql/my.cnf', 'configs/worldserver.conf',
-        'configs/modules/mod_fixture.conf', 'src/modules/mod-removed/keep.txt', 'licenses/openssl/LICENSE.txt')
+        'configs/modules/mod_fixture.conf', 'configs/modules/mod_raid_clear.conf',
+        'src/modules/mod-removed/keep.txt', 'licenses/openssl/LICENSE.txt')
     foreach ($name in $preserved) { Write-FixtureText (Join-Path $dist $name) "preserve $name" }
     $oldCoreSql = Join-Path $dist 'src/data/sql/updates/db_world/current.sql'
     $oldModuleSql = Join-Path $dist 'src/modules/mod-fixture/data/sql/db_world/current.sql'
@@ -180,7 +187,8 @@ try {
         'src/modules/mod-removed/data/sql/db_world/obsolete.sql', 'addons', 'defaults',
         'licenses/MultiBot', 'licenses/mod-removed', 'licenses/mod-removed.txt',
         'CONTRIBUTING.md', 'docs/building.md', 'docs/upstream',
-        'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist')) {
+        'patches/renamed.patch', 'docs/removed-guide.md', 'configs/modules/mod_removed.conf.dist',
+        'configs/modules/mod_raid_clear.conf.dist', 'licenses/mod-raid-clear/LICENSE')) {
         Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $dist $name))) "Assembly retained $name"
     }
     foreach ($path in @($oldCoreSql, $oldModuleSql)) {
@@ -190,6 +198,7 @@ try {
     foreach ($name in $preserved) {
         Assert-Condition ([System.IO.File]::ReadAllText((Join-Path $dist $name)) -ceq "preserve $name") "Assembly modified $name"
     }
+    Assert-Condition ([System.IO.File]::ReadAllText((Join-Path $dist 'licenses/mod-playerbots/RaidClear/LICENSE')) -ceq "raid clear license`n") 'Assembly omitted the integrated Raid Clear license'
     $packagedLicense = [System.IO.File]::ReadAllText((Join-Path $dist 'LICENSE'))
     Assert-Condition ($packagedLicense.StartsWith('This MIT License covers only the portable launcher') -and
         $packagedLicense.EndsWith("`n`nfixture`n") -and -not $packagedLicense.Contains("`r")) 'Packaged LICENSE does not state its scope'
@@ -309,6 +318,7 @@ try {
     $wrongIdentity = @{ schema = 1; revision = ('b' * 40); package = 'mod-playerbots-portable-latest.zip'; version = 'latest' } | ConvertTo-Json
     Test-NegativeZip 'release identity belongs to another commit' 'Invalid or mismatched portable release identity' -Replacements @{ 'portable-release.json' = [System.Text.Encoding]::UTF8.GetBytes($wrongIdentity) }
     Test-NegativeZip 'missing one core database while another remains' 'missing core SQL' -Omit @('src/data/sql/base/db_auth/base.sql')
+    Test-NegativeZip 'missing integrated Raid Clear license' 'Portable ZIP is missing' -Omit @('licenses/mod-playerbots/RaidClear/LICENSE')
     Test-NegativeZip 'missing module migration' 'missing module migration' -Omit @('src/modules/mod-fixture/data/sql/db_world/current.sql')
     foreach ($obsolete in @('licenses/mod-removed/NOTICE.txt', 'licenses/mod-removed.txt')) {
         Test-NegativeZip "obsolete module license $obsolete" 'Unexpected module license' -ExtraEntries @(@{ Name = $obsolete; Bytes = [byte[]]@(1) })

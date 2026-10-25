@@ -12,10 +12,9 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Component | Source repository | Locked revision | Role |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `3f2969ddb0da` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `e88cc4099e69` | Natural progression, earned auctions and era-aware bots |
+| Playerbots with Raid Clear | [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) | `d490f896d905` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `4933d455d2f6` | Earned content milestones and expansion access |
 | Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `fcb680fb279c` | Autonomous earned-era parties and player-led clears without event shortcuts |
-| Raid Clear | [buildthehomelab/wow-mod-raid-clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | `c9dbb3471e9b` | Boss and trash mechanics for Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj |
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `c3955915c76d` | Scoped party sharing of naturally dropped quest items |
 | World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Timed Vanilla events with individual earned-era and native recipient checks |
 | Era Events | [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) | `cf02786aceb5` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
@@ -60,6 +59,11 @@ CMake fetches the locked core, module and addon commits into `.module-cache/`,
 prepares a separate core copy and module/addon exports, then applies patches in
 manifest order. Preparation and packaging checks include patch hashes and
 verify addon files against the prepared source.
+
+The Playerbots fork includes Raid Clear in `src/Ai/Raid/RaidClear`; it is built
+as part of `mod-playerbots`, without a separate Raid Clear module. Its
+`RaidClear.*` settings share `configs/modules/playerbots.conf` and its MIT
+license is preserved alongside the Playerbots notices.
 
 LFG Progression follows the same preparation, build and packaging path as every
 other module; there is no separate build option. A variant without it would
@@ -149,21 +153,24 @@ directory.
 
 Changes to pins require checking patch applicability, core/module APIs, SQL
 migration behavior, server/client generation agreement and earned-play guards.
+Local adaptations use native module behavior where it is available, retaining
+only earned-progression guards and verified gaps. Remove replaced patch hunks
+after pinning and checking their native replacements.
 The build workflow checks progression fixtures, launcher behavior and package
 integrity before producing the Windows server and matched client packages.
 These checks do not certify every encounter tactic or live realm performance;
 see the [configuration reference](configuration.md#supported-scope).
 
-Pins follow the core fork's `Playerbot` branch, Playerbots `master` and the
-`main` branch of MultiBot Bridge, not its GitHub default feature branch; the
-forks follow `main`, Questie its `335` branch, and other components their
-default branch. Upstream updates are merged into a fork's branch and the merge
-commit is pinned. MultiBot Chatless and MultiBot Bridge are checked as a
-compatible pair. New bridge
+Pins follow the core fork's `Playerbot` branch, the Playerbots fork's `evermore`
+branch and the `main` branch of MultiBot Bridge, not its GitHub default feature
+branch. The Era Talents and addon forks follow `main`, Questie its `335`
+branch, and other components their default branch. Upstream updates are merged
+into a fork's branch and the merge commit is pinned. MultiBot Chatless and
+MultiBot Bridge are checked as a compatible pair. New bridge
 endpoints, such as pet creation, glyph application and maintenance, must
 preserve natural progression.
 
-The Playerbots pin `e88cc409` reads `Playerbots.*` configuration names.
+The Playerbots pin `d490f896` reads `Playerbots.*` configuration names.
 Profiles and launcher settings use that prefix. Normal startup migrates legacy
 `AiPlayerbot.*` values and their managed baselines before merging profile
 updates; existing `Playerbots.*` values take precedence. See

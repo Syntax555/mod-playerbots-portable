@@ -46,6 +46,31 @@ func migratePlayerbotsKeys(content string) string {
 	return strings.Join(lines, "\n")
 }
 
+// Raid Clear now reads playerbots.conf. Keep the former file intact, and copy
+// only keys the destination has not already chosen, using the first assignment.
+func legacyRaidClearProfile(root, content string) (string, error) {
+	path := filepath.Join(root, "configs", "modules", "mod_raid_clear.conf")
+	original, _, _, err := readConfigForUpdate(root, path)
+	if err != nil {
+		return "", err
+	}
+	seen := make(map[string]bool)
+	for key := range configAssignments(content) {
+		seen[key] = true
+	}
+	var settings []string
+	for key, value := range configAssignments(string(original)) {
+		if strings.HasPrefix(key, "RaidClear.") && !seen[key] {
+			if value == "" {
+				value = `""` // The server removes quotes, preserving the native blank value.
+			}
+			settings = append(settings, key+" = "+value)
+			seen[key] = true
+		}
+	}
+	return strings.Join(settings, "\n"), nil
+}
+
 // Port overrides are applied only while creating a missing configuration.
 // Existing credentials, hosts and databases in its template are preserved.
 func applyRuntimePorts(filename, content string, opts startupOptions) (string, error) {

@@ -198,16 +198,28 @@ yourself and the clear continues, or skip the objective with `dc skip`.
 
 ## Raids
 
-Raid Clear adds boss and trash mechanics for Onyxia's Lair, Molten Core, Blackwing Lair,
+Raid Clear, included in Playerbots, adds boss and trash mechanics for Onyxia's
+Lair, Molten Core, Blackwing Lair,
 Zul'Gurub and both Ahn'Qiraj raids: kill order, main and off-tank roles, spacing
 and positioning against the bosses' abilities. They apply on these maps whether
 you lead the raid or a player-led clear walks it from boss to boss, alongside
 Playerbots' own raid strategies. Autonomous parties do not enter raids.
 
-The [raid composition building block](raid-composition.md) provides tested
-role quotas, subgroups and ordinary recruitment with each bot's own access
-checks. No scheduler or route invokes it; raid travel, attunement acquisition
-and complete autonomous encounters remain integration work.
+`Playerbots.ApplyInstanceStrategies = 1` enables every raid strategy registered
+by Playerbots. The shipped profile keeps this enabled and adds no per-raid
+disable overrides.
+
+| Era | Registered Playerbots raid tactics |
+| --- | --- |
+| Vanilla | Onyxia's Lair, Molten Core, Blackwing Lair, Ruins of Ahn'Qiraj |
+| TBC | Karazhan, Gruul's Lair, Magtheridon's Lair, Serpentshrine Cavern, Tempest Keep, Hyjal Summit, Black Temple, Zul'Aman |
+| Wrath | Onyxia's Lair, Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavon, Ulduar, Icecrown Citadel, Ruby Sanctum |
+
+Raid Clear's six registrations add Onyxia's Lair, Molten Core, Blackwing Lair,
+Zul'Gurub, Ruins of Ahn'Qiraj and Temple of Ahn'Qiraj mechanics within the same
+Playerbots module. A registered strategy does not establish a complete verified
+raid clear. Restored Vanilla Naxxramas remains unverified; Sunwell and Trial of
+the Crusader have no dedicated Playerbots registration in this pin.
 
 Under natural progression only an equipped Onyxia Scale Cloak protects against
 Shadow Flame, and Suppression Devices are disarmed only by rogues casting
@@ -223,7 +235,7 @@ smaller raids face the same creature stats and encounter requirements.
 Onyxia's Lair has a registered Raid Clear strategy for map 249 alongside
 Playerbots' `onyxia` strategy. The implementation covers Deep Breath movement
 from the server's spell positions, Fireball spacing, tank positioning and
-threat during the restored level-60 encounter. Its whelp action selects both
+threat during the restored level-60 encounter. Playerbots' whelp action selects both
 native whelps (`11262`) and Individual Progression's Vanilla whelps (`301001`),
 retains a living, non-evading current whelp and skips evading targets.
 
@@ -282,7 +294,7 @@ Automatic parties also require Individual Progression's strict default earned
 chain. A realm with a disabled or custom progression chain does not use level
 or account progress as a substitute.
 
-Raid Clear's tactics are set in `configs/modules/mod_raid_clear.conf`:
+Raid Clear's tactics are set in `configs/modules/playerbots.conf`:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |

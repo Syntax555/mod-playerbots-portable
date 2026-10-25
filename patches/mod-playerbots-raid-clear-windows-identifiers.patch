@@ -1,7 +1,7 @@
-diff --git a/src/Common/FixedSpots.h b/src/Common/FixedSpots.h
-index 8a19a36..418b9ca 100644
---- a/src/Common/FixedSpots.h
-+++ b/src/Common/FixedSpots.h
+diff --git a/src/Ai/Raid/RaidClear/Common/FixedSpots.h b/src/Ai/Raid/RaidClear/Common/FixedSpots.h
+index e8e1b28..6abd364 100644
+--- a/src/Ai/Raid/RaidClear/Common/FixedSpots.h
++++ b/src/Ai/Raid/RaidClear/Common/FixedSpots.h
 @@ -22,11 +22,11 @@ class Unit;
  
  namespace RaidClear::Spots
@@ -16,10 +16,10 @@ index 8a19a36..418b9ca 100644
      constexpr float SCATTER = 3.0f;
      constexpr float HOLD = 8.0f;
  
-diff --git a/src/Raids/AhnQiraj/Aq40Spots.cpp b/src/Raids/AhnQiraj/Aq40Spots.cpp
-index e5623a8..e096823 100644
---- a/src/Raids/AhnQiraj/Aq40Spots.cpp
-+++ b/src/Raids/AhnQiraj/Aq40Spots.cpp
+diff --git a/src/Ai/Raid/RaidClear/Raids/AhnQiraj/Aq40Spots.cpp b/src/Ai/Raid/RaidClear/Raids/AhnQiraj/Aq40Spots.cpp
+index 6a7c38e..e97362a 100644
+--- a/src/Ai/Raid/RaidClear/Raids/AhnQiraj/Aq40Spots.cpp
++++ b/src/Ai/Raid/RaidClear/Raids/AhnQiraj/Aq40Spots.cpp
 @@ -377,7 +377,7 @@ namespace
          return BugWant(bot, want);
      }
@@ -29,10 +29,10 @@ index e5623a8..e096823 100644
  
      // Skeram himself, landed on this off-tank's platform (it is standing on it) and not on a tank:
      // the off-tank takes him before he Earth Shocks whoever he is on.
-diff --git a/src/Raids/MoltenCore/McRaidClear.cpp b/src/Raids/MoltenCore/McRaidClear.cpp
-index 026e0e5..d0b57bb 100644
---- a/src/Raids/MoltenCore/McRaidClear.cpp
-+++ b/src/Raids/MoltenCore/McRaidClear.cpp
+diff --git a/src/Ai/Raid/RaidClear/Raids/MoltenCore/McRaidClear.cpp b/src/Ai/Raid/RaidClear/Raids/MoltenCore/McRaidClear.cpp
+index 6243443..779d661 100644
+--- a/src/Ai/Raid/RaidClear/Raids/MoltenCore/McRaidClear.cpp
++++ b/src/Ai/Raid/RaidClear/Raids/MoltenCore/McRaidClear.cpp
 @@ -813,9 +813,9 @@ namespace
          Unit* best = nullptr;
          for (Unit* down : hounds.down)

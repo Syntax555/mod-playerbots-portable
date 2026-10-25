@@ -88,6 +88,10 @@ foreach(index RANGE 0 ${last_module})
     elseif(NOT IS_DIRECTORY "${PORTABLE_SOURCE_DIR}/licenses/${name}")
         message(FATAL_ERROR "Missing upstream license notice for ${name}")
     endif()
+    if(name STREQUAL "mod-playerbots")
+        file(COPY "${module}/src/Ai/Raid/RaidClear/LICENSE"
+            DESTINATION "${PORTABLE_DIST_DIR}/licenses/${name}/RaidClear")
+    endif()
 endforeach()
 
 # Dependency notices belong to the current source exports. Keep runtime notices

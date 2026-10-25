@@ -71,10 +71,11 @@ template<class T>struct HashMapHolder{static std::shared_mutex* GetLock(){static
 namespace ObjectAccessor{Player* FindConnectedPlayer(ObjectGuid g){auto it=online.find(g);return it==online.end()?nullptr:it->second;}auto const& GetPlayers(){return online;}}
 std::vector<std::unique_ptr<Group>> groups;
 struct GroupMgr{Group* GetGroupByGUID(uint32 guid){for(auto& g:groups)if(g&&g->guid.id==guid)return g.get();return nullptr;}};GroupMgr groupMgr;GroupMgr* sGroupMgr=&groupMgr;
-void Session::HandleGroupInviteOpcode(WorldPacket& packet){Player* candidate=nullptr;for(auto const& [g,p]:online)if(p->name==packet.name)candidate=p;if(!candidate||candidate->group||candidate->invite)return;Group* grp=owner->group?owner->group:owner->invite;if(!grp){groups.push_back(std::make_unique<Group>());grp=groups.back().get();grp->guid={uint32(100+groups.size())};grp->leader=owner;owner->invite=grp;}candidate->invite=grp;}
+uint32 nativeInviteCalls=0; uint8 invitationChange=0; void (*afterInvitationAcceptance)(Player*)=nullptr;
+void Session::HandleGroupInviteOpcode(WorldPacket& packet){++nativeInviteCalls;Player* candidate=nullptr;for(auto const& [g,p]:online)if(p->name==packet.name)candidate=p;if(!candidate||candidate->group||candidate->invite)return;Group* grp=owner->group?owner->group:owner->invite;if(!grp){groups.push_back(std::make_unique<Group>());grp=groups.back().get();grp->guid={uint32(100+groups.size())};grp->leader=owner;owner->invite=grp;}candidate->invite=grp;}
 bool PlayerbotAI::CanMove(){return !bot->rooted;}
 bool PlayerbotAI::IsTank(Player* p,bool bySpec){return p->role==0&&(!bySpec||!p->temporaryForm);}bool PlayerbotAI::IsHeal(Player* p,bool){return p->role==1;}
-bool PlayerbotAI::DoSpecificAction(std::string name,Event,bool){if(name=="accept invitation"){if(!accept||!bot->invite)return false;Group* g=bot->invite;if(g->players.empty()){g->players.push_back(g->leader);g->leader->group=g;g->leader->invite=nullptr;}g->players.push_back(bot);bot->group=g;bot->invite=nullptr;master=g->leader;strategies={"follow","new rpg","grind","bg"};return true;}if(name=="dc on"){++started;if(!start)return false;run.enabled=true;return true;}return false;}
+bool PlayerbotAI::DoSpecificAction(std::string name,Event,bool){if(name=="accept invitation"){if(!accept||!bot->invite)return false;Group* g=bot->invite;if(g->players.empty()){g->players.push_back(g->leader);g->leader->group=g;g->leader->invite=nullptr;}g->players.push_back(bot);bot->group=g;bot->invite=nullptr;master=g->leader;strategies={"follow","new rpg","grind","bg"};if(afterInvitationAcceptance)afterInvitationAcceptance(bot);return true;}if(name=="dc on"){++started;if(!start)return false;run.enabled=true;return true;}return false;}
 struct ObjectMgr{std::map<uint32,AreaTrigger> triggers;AreaTrigger const* GetAreaTrigger(uint32 id){auto it=triggers.find(id);return it==triggers.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> targets;AreaTriggerTeleport const* GetAreaTriggerTeleport(uint32 id){auto it=targets.find(id);return it==targets.end()?nullptr:&it->second;}std::map<uint32,AreaTriggerTeleport> const& GetAllAreaTriggerTeleports(){return targets;}};
 ObjectMgr objectMgr;ObjectMgr* sObjectMgr=&objectMgr;
 bool IsContinentMap(uint32 map);
@@ -150,7 +151,7 @@ std::vector<std::unique_ptr<Player>> actors;
 // One coordinator tick's corridor budget, then a direct walk of member 0.
 std::array<WalkState,5> walks;
 bool walkOnce(Player* p,uint32 trigger){buildBudget=buildsPerTick;return Walk(p,trigger,walks,0)==Travel::Moving;}
-void reset(){parties.clear();retryAfter.clear();refusals.clear();walks={};fakeWaterX=std::numeric_limits<float>::infinity();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;fakeDiagonalWall=false;fakeWallX=fakeMissingTileX=std::numeric_limits<float>::infinity();fakeChunkedCustom=false;fakeChunkedResult={};fakeChunkedCalls=0;sPlayerbotAIConfig.SightDistance=45.0f;ip.enabled=true;ip.strict=true;ip.progressionLimit=0;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
+void reset(){nativeInviteCalls=0;invitationChange=0;afterInvitationAcceptance=nullptr;parties.clear();retryAfter.clear();refusals.clear();walks={};fakeWaterX=std::numeric_limits<float>::infinity();online.clear();groups.clear();actors.clear();maps.clear();fakeNow=0;accumulator=0;recruitAccumulator=0;fakePathType=PATHFIND_NORMAL;fakePathBuild=true;fakeRaycastBlocked=false;fakeDiagonalWall=false;fakeWallX=fakeMissingTileX=std::numeric_limits<float>::infinity();fakeChunkedCustom=false;fakeChunkedResult={};fakeChunkedCalls=0;sPlayerbotAIConfig.SightDistance=45.0f;ip.enabled=true;ip.strict=true;ip.progressionLimit=0;sPlayerbotAIConfig.naturalProgression=true;config.settings["DungeonClear.AutonomousParties.Enable"]=1;config.settings["DungeonClear.AutonomousParties.MaxConcurrent"]=2;config.settings.erase("DungeonClear.AutonomousParties.LevelSpread");config.strings["DungeonClear.AutonomousParties.Dungeons"]="4,12";objectMgr.triggers={{101,{101,0,0,0,0,2}},{503,{503,34,10,0,0,2}},{2230,{2230,1,0,0,0,2}},{2226,{2226,389,10,0,0,2}}};objectMgr.targets={{101,{34,10,0,0}},{503,{0}},{2230,{389,10,0,0}},{2226,{1}}};
  // Dungeon Finder rows: Ragefire Chasm 15-21 (target 15-16), Stockade 20-30 (target 22-25).
  sLFGDungeonStore.rows={{4,{4,15,21,16,15,16,389,0,3,1,0}},{12,{12,20,30,24,22,25,34,0,3,1,0}}};lfgManager.starts={{4,{10,0,0}},{12,{10,0,0}}};
  sMapStore.rows={{0,{0,false,true}},{1,{1,false,true}},{34,{34,true,false}},{389,{389,true,false}}};
@@ -185,6 +186,13 @@ int main(){
  for(int bad=0;bad<22;++bad){reset();five();Player* p=actors[4].get();switch(bad){case 0:p->session.headless=false;break;case 1:p->ai.humanMaster=true;break;case 2:p->ai.master=actors[3].get();break;case 3:p->tier=8;break;case 4:p->alive=false;break;case 5:p->gm=true;break;case 6:p->level=21;break;case 7:p->level=29;break;case 8:p->position.x=200;break;case 9:p->combat=true;break;case 10:p->session.account=900;break;case 11:p->rdf=2;break;case 12:p->team=TEAM_HORDE;break;case 13:p->role=1;break;case 14:p->world=false;break;case 15:p->vehicle=true;break;case 16:p->transport=true;break;case 17:p->transfer=true;break;case 18:p->flying=true;break;case 19:p->queue=true;break;case 20:p->session.loading=true;break;case 21:p->bg=true;break;}tick(30);assert(parties.empty());unchanged();}
  // Normal invitation security remains authoritative, and failed setup does not force add members.
  reset();five();actors[2]->ai.accept=false;tick(30);assert(parties.empty());for(auto& p:actors)assert(!p->group&&!p->invite);unchanged();
+ // Native group-add hooks can change control or availability between acceptances.
+ for(uint8 gate=0;gate<4;++gate){reset();five();invitationChange=gate;afterInvitationAcceptance=[](Player* accepted){
+  if(accepted->guid.id!=2)return;
+  Player* next=actors[2].get();
+  switch(invitationChange){case 0:actors[0]->ai.humanMaster=true;break;case 1:next->ai.humanMaster=true;break;
+   case 2:next->group=accepted->group;next->group->players.push_back(next);break;case 3:next->invite=accepted->group;break;}
+ };tick(30);assert(parties.empty()&&nativeInviteCalls==1);unchanged();}
  // No navigation data/straight shortcut/snap across missing mesh can transport a party.
  for(uint32 path:{uint32(PATHFIND_NOPATH),uint32(PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH),uint32(PATHFIND_SHORTCUT),uint32(PATHFIND_FARFROMPOLY),uint32(PATHFIND_BLANK)}){reset();five();tick(30);fakePathType=path;tick();assert(parties.empty());for(auto& p:actors)assert(p->motion.splines==0&&p->doorCalls==0);unchanged();}
  reset();five();tick(30);fakePathBuild=false;tick();assert(parties.empty());unchanged();
@@ -444,6 +452,10 @@ def native_contracts(core, source):
     body=function(accept, 'bool AcceptInvitationAction::Execute(')
     assert 'CheckLevelFor(PLAYERBOT_SECURITY_INVITE' in body and 'HandleGroupAcceptOpcode' in body
     assert 'botAI->ResetStrategies()' in body
+    group_handler=(core/'src/server/game/Handlers/GroupHandler.cpp').read_text()
+    assert 'group->AddMember(GetPlayer())' in function(group_handler, 'void WorldSession::HandleGroupAcceptOpcode(')
+    assert 'sScriptMgr->OnGroupAddMember(this, player->GetGUID());' in function(
+        (core/'src/server/game/Groups/Group.cpp').read_text(), 'bool Group::AddMember(')
     summon=(core/'modules/mod-playerbots/src/Ai/Base/Actions/UseMeetingStoneAction.cpp').read_text()
     assert re.search(r'if \(sPlayerbotAIConfig.naturalProgression\)\s*return false;',function(summon,'bool SummonAction::Teleport('))
     path=(core/'src/server/game/Movement/MovementGenerators/PathGenerator.cpp').read_text()
@@ -532,7 +544,7 @@ def main():
         for name in headers:
             path=work/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('#include "NativeStubs.h"\n')
         path=work/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h';shutil.copyfile(source/'Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h',path)
-        for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedRecruitment.h','DcEarnedPlay.h','DcEarnedEvents.h','DcEarnedProgression.h','DcEarnedProgression.cpp'):
+        for name in ('EarnedDungeonParties.cpp','EarnedDungeonParties.h','DcEarnedPlay.h','DcEarnedEvents.h','DcEarnedProgression.h','DcEarnedProgression.cpp'):
             shutil.copyfile(source/name,work/name)
         methods=function((source/'Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.cpp').read_text(),'void DcLeaderSignal::SetLeaderDazeImmunity(')+'\n'+function((source/'Ai/Dungeon/DungeonClear/Action/BetterLootRollAction.cpp').read_text(),'bool DungeonClearBetterLootRollAction::isUseful(')
         follow=function((source/'Ai/Dungeon/DungeonClear/Action/DcFollowerActions.cpp').read_text(),'bool DungeonClearFollowTankAction::Execute(')
@@ -549,6 +561,10 @@ def main():
         subprocess.run([compiler,*flags,str(work/'fixture.cpp'),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True,timeout=TIMEOUT)
         mutations=[
+            ('leader claimed before next invitation','EarnedDungeonParties.cpp','Owned(tank, nullptr) && Owned(picked[i], nullptr)','true && Owned(picked[i], nullptr)'),
+            ('member claimed before its invitation','EarnedDungeonParties.cpp','Owned(tank, nullptr) && Owned(picked[i], nullptr)','Owned(tank, nullptr) && true'),
+            ('grouped candidate invited again','EarnedDungeonParties.cpp','!picked[i]->GetGroup() && !picked[i]->GetGroupInvite()','true && !picked[i]->GetGroupInvite()'),
+            ('pending invitation overwritten','EarnedDungeonParties.cpp','!picked[i]->GetGroup() && !picked[i]->GetGroupInvite()','!picked[i]->GetGroup() && true'),
             ('unloaded tile probe accepts shortcut','NativeProductionMethods.h','if (DcEarnedPlay::Active() && !DcEarnedPlay::UsesRealPath(gen))','if (false)'),
             ('raw planner fallback spline','EarnedDungeonParties.cpp','if (DcEarnedPlay::RealSpline(player, points))','if (true)'),
             ('flatten segment endpoints into chords','EarnedDungeonParties.cpp','corridor.insert(corridor.end(), segment.polyline.begin(), segment.polyline.end());','corridor.push_back(G3D::Vector3(segment.ex, segment.ey, segment.ez));'),

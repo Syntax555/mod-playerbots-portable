@@ -1,0 +1,83 @@
+diff --git a/src/Ai/Raid/Ony/OnyActions.cpp b/src/Ai/Raid/Ony/OnyActions.cpp
+index 96f9117..a6a4dd0 100644
+--- a/src/Ai/Raid/Ony/OnyActions.cpp
++++ b/src/Ai/Raid/Ony/OnyActions.cpp
+@@ -125,14 +125,15 @@ bool RaidOnyxiaMoveToSafeZoneAction::Execute(Event /*event*/)
+ 
+ bool RaidOnyxiaKillWhelpsAction::Execute(Event /*event*/)
+ {
+-    static constexpr uint32 NPC_ONYXIAN_WHELP = 11262;
++    using namespace RaidClear::OnyxiasLair;
+ 
+     // A whelp that can't find a way to its victim evades every attack but goes on biting: leave it
+     // for one that can be hurt.
+     auto const hittable = [](Unit const* unit)
+     {
+         Creature const* whelp = unit ? unit->ToCreature() : nullptr;
+-        return whelp && whelp->IsAlive() && whelp->GetEntry() == NPC_ONYXIAN_WHELP && !whelp->IsEvadingAttacks();
++        return whelp && whelp->IsAlive() && (whelp->GetEntry() == NPC_ONYXIAN_WHELP || whelp->GetEntry() == NPC_ONYXIAN_WHELP_40) &&
++               !whelp->IsEvadingAttacks();
+     };
+ 
+     // If already attacking a whelp, don't swap targets
+diff --git a/src/Ai/Raid/RaidClear/Common/Charmed.cpp b/src/Ai/Raid/RaidClear/Common/Charmed.cpp
+index 0c14fee..e2e76ce 100644
+--- a/src/Ai/Raid/RaidClear/Common/Charmed.cpp
++++ b/src/Ai/Raid/RaidClear/Common/Charmed.cpp
+@@ -178,6 +178,8 @@ namespace
+     std::vector<std::pair<Player*, uint32>> ControlsToLetGo(Player* bot)
+     {
+         std::vector<std::pair<Player*, uint32>> spells;
++        if (sPlayerbotAIConfig.naturalProgression)
++            return spells;
+         Group* group = bot->GetGroup();
+         if (!group)
+             return spells;
+diff --git a/src/Ai/Raid/RaidClear/Common/RaidDiscipline.cpp b/src/Ai/Raid/RaidClear/Common/RaidDiscipline.cpp
+index ef87a7b..8d96dcf 100644
+--- a/src/Ai/Raid/RaidClear/Common/RaidDiscipline.cpp
++++ b/src/Ai/Raid/RaidClear/Common/RaidDiscipline.cpp
+@@ -136,6 +136,8 @@ namespace RaidClear::Discipline
+ 
+     void TeachRaidSpells(Player* bot)
+     {
++        if (sPlayerbotAIConfig.naturalProgression)
++            return;
+         if (!GetConfig().teachTranquilizingShot || !bot->IsClass(CLASS_HUNTER) ||
+             bot->GetLevel() < TRANQUILIZING_SHOT_LEVEL || bot->HasSpell(SPELL_TRANQUILIZING_SHOT))
+             return;
+diff --git a/src/Ai/Raid/RaidClear/Raids/BlackwingLair/BwlRaidClear.cpp b/src/Ai/Raid/RaidClear/Raids/BlackwingLair/BwlRaidClear.cpp
+index 1e4111d..7b391c6 100644
+--- a/src/Ai/Raid/RaidClear/Raids/BlackwingLair/BwlRaidClear.cpp
++++ b/src/Ai/Raid/RaidClear/Raids/BlackwingLair/BwlRaidClear.cpp
+@@ -305,8 +305,11 @@ namespace
+     }
+ 
+     // Same rule as mod-playerbots' own disarm: rogues always, everyone else with the "raid" cheat.
++    // Natural progression uses playerbots' own Disarm Trap cast instead.
+     bool MayDisarm(PlayerbotAI* botAI, Player* bot)
+     {
++        if (sPlayerbotAIConfig.naturalProgression)
++            return false;
+         return bot->IsClass(CLASS_ROGUE) || botAI->HasCheat(BotCheatMask::raid);
+     }
+ 
+@@ -336,6 +339,8 @@ bool RcBwlSuppressionDeviceTrigger::IsActive()
+ 
+ bool RcBwlDisarmSuppressionAction::Execute(Event /*event*/)
+ {
++    if (sPlayerbotAIConfig.naturalProgression)
++        return false;
+     std::list<GameObject*> armed;
+     ArmedDevicesInReach(bot, armed);
+ 
+@@ -1078,6 +1083,9 @@ public:
+     // Shadow Flame without it. Death strips it; this puts it back the moment the bot stands up.
+     void OnPlayerResurrect(Player* player, float /*restorePercent*/, bool& /*applySickness*/) override
+     {
++        // Only an equipped Onyxia Scale Cloak protects a bot under natural progression.
++        if (sPlayerbotAIConfig.naturalProgression)
++            return;
+         using namespace RaidClear::BlackwingLair;
+         if (player->GetMapId() != MAP_ID || !RaidClear::GetConfig().IsRaidEnabled(MAP_ID) || !GET_PLAYERBOT_AI(player))
+             return;

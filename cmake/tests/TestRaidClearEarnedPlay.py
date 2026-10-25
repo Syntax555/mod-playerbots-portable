@@ -13,6 +13,7 @@ from FixtureSupport import (
     reject_mutants,
     run_fixture,
     source_argument,
+    sql_rows,
 )
 
 
@@ -20,20 +21,23 @@ from FixtureSupport import (
 # forced object states, relocation, items, health, immunity and cheat masks.
 SHORTCUTS = re.compile(r'\b(AddAura|SetGoState|TeleportTo|NearTeleportTo|AddItem|StoreNewItem|ModifyMoney|SetHealth|'
                        r'SetFullHealth|ResurrectPlayer|ApplySpellImmune|HasCheat|SetSpeed|DealDamage|Kill|'
-                       r'learnSpell|RemoveAurasDueToSpell)\s*\(')
+                       r'learnSpell|RemoveAurasDueToSpell)\s*\(|\b(CastSpell)\s*\([^;]*,\s*true\s*\)')
 # The refusal leaves the function before the shortcut can run.
 GATE = re.compile(r'if \(sPlayerbotAIConfig\.naturalProgression\)\s*return\b')
 BWL = 'Raids/BlackwingLair/BwlRaidClear.cpp'
 ZG = 'Raids/ZulGurub/ZgRaidClear.cpp'
 CHARMED = 'Common/Charmed.cpp'
 DISCIPLINE = 'Common/RaidDiscipline.cpp'
+POTION_TRIGGER = 'bool RcBwlWyrmguardFreeActionTrigger::IsActive()'
+POTION_ACTION = 'bool RcBwlFreeActionAction::Execute('
 # Each reviewed shortcut and the function that must refuse it under natural progression.
 REVIEWED = {
-    (BWL, 'HasCheat'): 'bool MayDisarm(PlayerbotAI* botAI, Player* bot)',
-    (BWL, 'SetGoState'): 'bool RcBwlDisarmSuppressionAction::Execute(',
-    (BWL, 'AddAura'): 'void OnPlayerResurrect(',
-    (DISCIPLINE, 'learnSpell'): 'void TeachRaidSpells(Player* bot)',
-    (CHARMED, 'RemoveAurasDueToSpell'): 'bool RcControlCharmedAction::Execute(',
+    (BWL, 'HasCheat'): ('bool MayDisarm(PlayerbotAI* botAI, Player* bot)', POTION_TRIGGER, POTION_ACTION),
+    (BWL, 'SetGoState'): ('bool RcBwlDisarmSuppressionAction::Execute(',),
+    (BWL, 'AddAura'): ('void OnPlayerResurrect(',),
+    (BWL, 'CastSpell'): (POTION_ACTION,),
+    (DISCIPLINE, 'learnSpell'): ('void TeachRaidSpells(Player* bot)',),
+    (CHARMED, 'RemoveAurasDueToSpell'): ('bool RcControlCharmedAction::Execute(',),
 }
 # Each mutation adds an unreviewed shortcut or turns a refusal into a no-op.
 MUTATIONS = (
@@ -44,6 +48,8 @@ MUTATIONS = (
     ('device state change without a refusal', BWL,
      '    if (sPlayerbotAIConfig.naturalProgression)\n        return false;\n    std::list<GameObject*> armed;',
      '    std::list<GameObject*> armed;'),
+    ('unreviewed triggered cast', BWL, 'bool RcBwlSuppressionDeviceTrigger::IsActive()\n{\n',
+     'bool RcBwlSuppressionDeviceTrigger::IsActive()\n{\n    bot->CastSpell(bot, 6615, true);\n'),
 )
 
 
@@ -53,16 +59,25 @@ def audit(sources):
     for relative, text in sorted(sources.items()):
         text = re.sub(r'//[^\n]*', '', text)
         for match in SHORTCUTS.finditer(text):
-            call = match.group(1)
-            signature = REVIEWED.get((relative, call))
-            start = text.find(signature) if signature else -1
-            if start < 0 or not start <= match.start() < start + len(function(text, signature)):
+            call = match.group(1) or match.group(2)
+            signatures = REVIEWED.get((relative, call), ())
+            signature = next((signature for signature in signatures if signature in text and
+                              text.index(signature) <= match.start() <
+                              text.index(signature) + len(function(text, signature))), None)
+            if signature is None:
                 return f'Unreviewed Raid Clear shortcut {call} in {relative}'
-            found.add((relative, call))
-    for (relative, call), signature in REVIEWED.items():
-        if (relative, call) not in found:
-            return f'Reviewed Raid Clear shortcut disappeared; update this audit: {call} in {relative}'
+            if call == 'CastSpell' and match.group(0) != 'CastSpell(bot, SPELL_FREE_ACTION, true)':
+                return f'Unreviewed Raid Clear triggered cast in {relative}'
+            found.add((relative, call, signature))
+    for relative, call, signature in ((relative, call, signature)
+                                      for (relative, call), signatures in REVIEWED.items()
+                                      for signature in signatures):
+        if (relative, call, signature) not in found:
+            return f'Reviewed Raid Clear shortcut disappeared; update this audit: {call} in {signature}'
         body = function(re.sub(r'//[^\n]*', '', sources[relative]), signature)
+        if signature in (POTION_TRIGGER, POTION_ACTION):
+            # These use the native HasCheat refusal, compiled and mutated below.
+            continue
         if call == 'RemoveAurasDueToSpell':
             # Both the trigger and action use this selection; run it below to
             # check the refusal and the core's caster ownership contract.
@@ -145,12 +160,139 @@ int main() {
  // Every raid danger hook wakes the pinned AI scheduler after requesting the
  // ordinary spell interruption; it does not advance time or clear a spell/GCD.
  uint32 requests=ai.interruptRequests;
- for(auto wake:{WakeRaidBot0,WakeRaidBot1,WakeRaidBot2,WakeRaidBot3,WakeRaidBot4,WakeRaidBot5,WakeRaidBot6}) {
+ for(auto wake:{@WAKEUPS@}) {
   ai.SetNextCheckDelay(5000);assert(!ai.CanUpdateAI());wake(&ai);
   assert(ai.CanUpdateAI()&&ai.interruptRequests==++requests);
  }
 }
 '''
+
+
+POTION_HARNESS = r'''
+#include <cassert>
+#include <cstdint>
+#include <vector>
+using uint32=uint32_t;
+enum class BotCheatMask : uint32 { none=0, raid=1, other=2 };
+struct { bool naturalProgression=true; ::BotCheatMask BotCheatMask=::BotCheatMask::raid; } sPlayerbotAIConfig;
+constexpr uint32 SPELL_FREE_ACTION=6615, ITEM_FREE_ACTION_POTION=5634, NPC_DEATH_TALON_WYRMGUARD=12468;
+struct Item { uint32 entry=ITEM_FREE_ACTION_POTION, count=1; };
+struct Unit { bool alive=true; uint32 entry=NPC_DEATH_TALON_WYRMGUARD;
+ bool IsAlive()const{return alive;} uint32 GetEntry()const{return entry;} };
+struct Player {
+ bool alive=true,combat=true,tank=true,aura=false,cooldown=false,canUse=true; Item* item=nullptr;
+ uint32 triggeredCasts=0,itemsUsed=0; std::vector<Unit*> attackers;
+ bool IsAlive()const{return alive;} bool IsInCombat()const{return combat;}
+ bool HasAura(uint32 id)const{assert(id==SPELL_FREE_ACTION);return aura;}
+ bool HasSpellCooldown(uint32 id)const{assert(id==SPELL_FREE_ACTION);return cooldown;}
+ Item* GetItemByEntry(uint32 id){return item&&item->entry==id&&item->count?item:nullptr;}
+ auto const& getAttackers()const{return attackers;}
+ void CastSpell(Player* target,uint32 id,bool triggered){assert(target==this&&id==SPELL_FREE_ACTION&&triggered);++triggeredCasts;aura=true;}
+};
+struct PlayerbotAI {
+ BotCheatMask cheatMask=BotCheatMask::raid;
+ static bool IsTank(Player* bot){return bot->tank;}
+ @HAS_CHEAT@
+};
+struct ObjectGuid { static constexpr uint32 Empty=0; };
+struct UseItemAction {
+ Player* bot; PlayerbotAI* botAI;
+ bool UseItemAuto(Item* item);
+ // Native UseItemAuto routes the owned consumable through CMSG_USE_ITEM;
+ // the successful core cast consumes one charge and starts its cooldown.
+ bool UseItem(Item* item,uint32 go,Item* target){
+  assert(go==ObjectGuid::Empty&&target==nullptr&&item==bot->item&&item->count>0);
+  if(!bot->canUse||bot->cooldown)return false;
+  --item->count;++bot->itemsUsed;bot->aura=true;bot->cooldown=true;return true;
+ }
+};
+struct Event {};
+struct RcBwlWyrmguardFreeActionTrigger { Player* bot; PlayerbotAI* botAI; bool IsActive(); };
+struct RcBwlFreeActionAction : UseItemAction { bool Execute(Event); };
+#include "production.inc"
+int main(){
+ Player bot;PlayerbotAI ai;Unit wyrmguard;bot.attackers={&wyrmguard};
+ RcBwlWyrmguardFreeActionTrigger trigger{&bot,&ai};RcBwlFreeActionAction action{{&bot,&ai}};
+ // Both global and per-bot cheat masks are refused in natural mode, even if called directly.
+ assert(!ai.HasCheat(BotCheatMask::raid)&&!trigger.IsActive()&&!action.Execute({}));
+ assert(bot.triggeredCasts==0&&!bot.aura);
+ Item potion{ITEM_FREE_ACTION_POTION,2};bot.item=&potion;
+ assert(FreeActionPotion(&bot)==&potion&&trigger.IsActive());
+ assert(action.Execute({})&&potion.count==1&&bot.itemsUsed==1&&bot.aura&&bot.cooldown&&bot.triggeredCasts==0);
+ bot.aura=false;assert(!trigger.IsActive()&&!action.Execute({}));assert(potion.count==1&&bot.itemsUsed==1);
+ bot.cooldown=false;bot.canUse=false;assert(trigger.IsActive()&&!action.Execute({}));assert(potion.count==1&&bot.itemsUsed==1);
+ bot.canUse=true;assert(action.Execute({})&&potion.count==0&&bot.itemsUsed==2);
+ bot.aura=false;bot.cooldown=false;assert(FreeActionPotion(&bot)==nullptr&&!trigger.IsActive()&&!action.Execute({}));
+ assert(bot.triggeredCasts==0);
+ // Outside natural mode, either configured cheat mask permits the upstream fallback.
+ sPlayerbotAIConfig.naturalProgression=false;ai.cheatMask=BotCheatMask::none;
+ assert(trigger.IsActive()&&action.Execute({})&&bot.triggeredCasts==1&&bot.itemsUsed==2);
+ bot.aura=false;sPlayerbotAIConfig.BotCheatMask=BotCheatMask::none;ai.cheatMask=BotCheatMask::raid;
+ assert(trigger.IsActive()&&action.Execute({})&&bot.triggeredCasts==2);
+ bot.aura=false;ai.cheatMask=BotCheatMask::other;
+ assert(!trigger.IsActive()&&!action.Execute({})&&bot.triggeredCasts==2);
+ ai.cheatMask=BotCheatMask::raid;
+ for(int gate=0;gate<5;++gate){
+  bot.alive=bot.combat=bot.tank=true;bot.aura=false;wyrmguard.alive=true;
+  if(gate==0)bot.alive=false;
+  if(gate==1)bot.combat=false;
+  if(gate==2)bot.tank=false;
+  if(gate==3)bot.aura=true;
+  if(gate==4)wyrmguard.alive=false;
+  assert(!trigger.IsActive());
+ }
+ bot.alive=bot.combat=bot.tank=true;bot.aura=false;wyrmguard.alive=true;wyrmguard.entry=1;
+ assert(!trigger.IsActive());bot.attackers.clear();assert(!trigger.IsActive());
+}
+'''
+
+
+def potion_checks(core, playerbots, source):
+    # Anchor the inventory double to the native producer, packet handler and
+    # consumable data rather than assuming that a spell cast spends an item.
+    use_item = (playerbots / 'Ai/Base/Actions/UseItemAction.cpp').read_text()
+    use = function(use_item, 'bool UseItemAction::UseItem(')
+    assert 'bot->CanUseItem(item) != EQUIP_ERR_OK' in use
+    assert 'WorldPacket packet(CMSG_USE_ITEM);' in use
+    assert 'bot->GetSession()->HandleUseItemOpcode(packet);' in use
+    handler = function((core / 'src/server/game/Handlers/SpellHandler.cpp').read_text(),
+                       'void WorldSession::HandleUseItemOpcode(')
+    assert 'pUser->CastItemUseSpell(pItem, targets, castCount, glyphIndex);' in handler
+    consume = function((core / 'src/server/game/Spells/Spell.cpp').read_text(), 'void Spell::TakeCastItem()')
+    assert 'if (expendable && withoutCharges)' in consume
+    assert 'DestroyItemCount(m_CastItem, count, true);' in consume and 'uint32 count = 1;' in consume
+    potion = sql_rows(core, 'item_template', {5634})[0]
+    assert (potion['spellid_1'], potion['spelltrigger_1'], potion['spellcharges_1'],
+            potion['spellcategorycooldown_1']) == ('6615', '0', '-1', '60000')
+    has_cheat = function((playerbots / 'Bot/PlayerbotAI.h').read_text(), 'bool HasCheat(BotCheatMask mask)')
+    production = '\n'.join(function(text, signature) for text, signature in (
+        (use_item, 'bool UseItemAction::UseItemAuto('),
+        (source, 'bool WyrmguardOn(Player* bot)'), (source, 'Item* FreeActionPotion(Player* bot)'),
+        (source, POTION_TRIGGER), (source, POTION_ACTION),
+    ))
+    with tempfile.TemporaryDirectory(prefix='raid-clear-potions-') as directory:
+        work = Path(directory)
+        (work / 'fixture.cpp').write_text(POTION_HARNESS.replace('@HAS_CHEAT@', has_cheat))
+        (work / 'production.inc').write_text(production)
+
+        def build(tree, output):
+            return [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror',
+                    str(tree / 'fixture.cpp'), '-o', str(output)]
+
+        executable = work / 'fixture'
+        subprocess.run(build(work, executable), check=True)
+        result = run_fixture([str(executable)])
+        if result.returncode:
+            raise SystemExit(result.stdout + result.stderr)
+        reject_mutants(work, (
+            ('native cheat gate', 'fixture.cpp',
+             'if (sPlayerbotAIConfig.naturalProgression)\n            return false;', ''),
+            ('free potion cast without cheat permission', 'production.inc',
+             'if (!botAI->HasCheat(BotCheatMask::raid))\n        return false;', ''),
+            ('free potion trigger without cheat permission', 'production.inc',
+             'return botAI->HasCheat(BotCheatMask::raid);', 'return true;'),
+            ('potion cooldown bypass', 'production.inc', '!bot->HasSpellCooldown(SPELL_FREE_ACTION)', 'true'),
+        ), build, 'Raid Clear potions')
 
 
 def native_checks(sources):
@@ -161,6 +303,7 @@ def native_checks(sources):
                       'void Unit::RemoveAurasDueToSpell(')
     assert '(!casterGUID || aura->GetCasterGUID() == casterGUID)' in remove
     playerbots = core / 'modules/mod-playerbots/src'
+    potion_checks(core, playerbots, sources[BWL])
     base = (playerbots / 'Bot/Engine/PlayerbotAIBase.cpp').read_text()
     ai = (playerbots / 'Bot/PlayerbotAI.cpp').read_text()
     interrupt = function(ai, 'void PlayerbotAI::RequestSpellInterrupt()')
@@ -170,16 +313,18 @@ def native_checks(sources):
     assert update.index('if (!CanUpdateAI())') < update.index('if (spellInterruptRequested)')
     assert 'bot->InterruptSpell(currentSpell->GetCurrentContainer());' in update
     wakeups = []
-    for index, relative in enumerate(('Raids/BlackwingLair/BwlPositions.cpp', 'Raids/MoltenCore/McRaidClear.cpp',
-                                      'Raids/OnyxiasLair/OnyRaidClear.cpp', ZG,
-                                      'Raids/AhnQiraj/AqRaidClear.cpp', 'Raids/AhnQiraj/Aq40TwinEmperors.cpp',
-                                      'Raids/AhnQiraj/Aq40Skeram.cpp')):
+    for relative in ('Raids/BlackwingLair/BwlPositions.cpp', 'Raids/MoltenCore/McRaidClear.cpp',
+                     'Raids/OnyxiasLair/OnyRaidClear.cpp', ZG,
+                     'Raids/AhnQiraj/AqRaidClear.cpp', 'Raids/AhnQiraj/Aq40TwinEmperors.cpp',
+                     'Raids/AhnQiraj/Aq40Skeram.cpp'):
         text = sources[relative]
-        calls = re.findall(r'(?:botAI|nearestCasting)->RequestSpellInterrupt\(\);\s*'
-                           r'(?:botAI|nearestCasting)->ResetActionDuration\(\);', text)
-        assert len(calls) == 1, f'{relative} must wake the pinned AI scheduler after requesting interruption'
-        wake = calls[0].replace('nearestCasting->', 'botAI->')
-        wakeups.append(f'void WakeRaidBot{index}(PlayerbotAI* botAI) {{ {wake} }}')
+        calls = list(re.finditer(r'(?P<ai>botAI|nearestCasting)->RequestSpellInterrupt\(\);\s*'
+                                 r'(?P=ai)->ResetActionDuration\(\);', text))
+        assert calls and len(calls) == len(re.findall(r'\bRequestSpellInterrupt\s*\(', text)), (
+            f'{relative} must wake the same pinned AI scheduler after every interruption request')
+        for call in calls:
+            wake = call.group(0).replace('nearestCasting->', 'botAI->')
+            wakeups.append(f'void WakeRaidBot{len(wakeups)}(PlayerbotAI* botAI) {{ {wake} }}')
     charmed = sources[CHARMED]
     # Compile the changed functions and their real trigger, action and member
     # selection. Aura-effect ownership and removal match the native contract.
@@ -195,7 +340,8 @@ def native_checks(sources):
     )) + '\n' + '\n'.join(wakeups)
     with tempfile.TemporaryDirectory(prefix='raid-clear-earned-') as directory:
         work = Path(directory)
-        (work / 'fixture.cpp').write_text(HARNESS)
+        (work / 'fixture.cpp').write_text(HARNESS.replace(
+            '@WAKEUPS@', ','.join(f'WakeRaidBot{index}' for index in range(len(wakeups)))))
         (work / 'production.inc').write_text(production)
 
         def build(tree, output):
@@ -223,11 +369,11 @@ def native_checks(sources):
 
 def main():
     parser = argparse.ArgumentParser()
-    source_argument(parser, help='mod-raid-clear/src to check instead of the prepared one')
+    source_argument(parser, help='Playerbots src/Ai/Raid/RaidClear to check instead of the prepared one')
     args = parser.parse_args()
-    source = args.source or prepared_core() / 'modules/mod-raid-clear/src'
+    source = args.source or prepared_core() / 'modules/mod-playerbots/src/Ai/Raid/RaidClear'
     if not source.is_dir():
-        raise SystemExit('PrepareModules.cmake must prepare mod-raid-clear first')
+        raise SystemExit('PrepareModules.cmake must prepare Playerbots Raid Clear first')
     sources = {path.relative_to(source).as_posix(): path.read_text() for path in source.rglob('*.[ch]*')}
     problem = audit(sources)
     if problem:
@@ -241,10 +387,10 @@ def main():
     profile = (REPOSITORY / 'cmd/startup/profiles/playerbots.conf').read_text()
     if not re.search(r'^Playerbots\.ApplyInstanceStrategies\s*=\s*1\s*$', profile, re.MULTILINE):
         raise SystemExit('Raid Clear needs playerbots instance strategies enabled in the portable profile')
-    profile = (REPOSITORY / 'cmd/startup/profiles/mod_raid_clear.conf').read_text()
     assert re.search(r'^RaidClear\.Bots\.TeachTranquilizingShot\s*=\s*0\s*$', profile, re.MULTILINE)
     print('Raid Clear earned play: disarm cheats, forced device states, free cloak auras, spell grants and '
-          'free CC release refused; native casts preserved and every audit/behaviour mutation rejected')
+          'free CC release refused; owned potions consumed with cooldowns, free potion cheats gated; '
+          'native casts preserved and every audit/behaviour mutation rejected')
 
 
 if __name__ == '__main__':

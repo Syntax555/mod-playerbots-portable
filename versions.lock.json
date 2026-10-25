@@ -25,8 +25,8 @@
   "modules": [
     {
       "name": "mod-playerbots",
-      "url": "https://github.com/mod-playerbots/mod-playerbots.git",
-      "revision": "e88cc4099e69f35126b28942a412ca702d20453b",
+      "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
+      "revision": "d490f896d905900d62f1621c923132bd3bdd1075",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
@@ -35,7 +35,9 @@
         "patches/mod-playerbots-earned-era-battlegrounds.patch",
         "patches/mod-playerbots-master-flight-learning.patch",
         "patches/mod-playerbots-quest-area-triggers.patch",
-        "patches/mod-playerbots-loot-roll-policy.patch"
+        "patches/mod-playerbots-loot-roll-policy.patch",
+        "patches/mod-playerbots-raid-clear-natural-progression.patch",
+        "patches/mod-playerbots-raid-clear-windows-identifiers.patch"
       ]
     },
     {
@@ -64,17 +66,7 @@
       "revision": "fcb680fb279cd25696e7f848fad72c5d41282032",
       "patches": [
         "patches/mod-dungeon-clear-earned-parties.patch",
-        "patches/mod-dungeon-clear-build-warnings.patch",
-        "patches/mod-dungeon-clear-earned-raid-composition.patch"
-      ]
-    },
-    {
-      "name": "mod-raid-clear",
-      "url": "https://github.com/buildthehomelab/wow-mod-raid-clear.git",
-      "revision": "c9dbb3471e9b1d164007b3fca2773c47f5ae2cc1",
-      "patches": [
-        "patches/mod-raid-clear-natural-progression.patch",
-        "patches/mod-raid-clear-windows-identifiers.patch"
+        "patches/mod-dungeon-clear-build-warnings.patch"
       ]
     },
     {

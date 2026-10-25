@@ -291,3 +291,99 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-progression-') as tempo
         ('empty bot-account filter queries login', 'regression.cpp',
          'if (!_botAccountsEnabled)', 'if (false)'),
     ), build, 'Earned progression')
+
+# Compile the native level-up action and identity predicates together: a custom
+# upstream opt-in must not spend a player's or controlled companion's points.
+ai_source = (pb / 'Bot/PlayerbotAI.cpp').read_text()
+random_source = (pb / 'Bot/RandomPlayerbotMgr.cpp').read_text()
+autopick = function((pb / 'Ai/Base/Actions/AutoMaintenanceOnLevelupAction.cpp').read_text(),
+                    'void AutoMaintenanceOnLevelupAction::AutoPickTalents()')
+random_identity = function(random_source, 'bool RandomPlayerbotMgr::IsRandomBot(ObjectGuid::LowType bot)')
+assert 'IsInRandomAccountList' in random_identity and 'currentBots.contains(bot)' in random_identity
+talent_fixture = r'''
+#include <cassert>
+#include <cstdint>
+#include <initializer_list>
+using uint32=uint32_t;
+struct Session { bool headless=true; bool IsHeadless()const{return headless;} };
+struct PlayerbotAI;
+struct Guid { uint32 id; uint32 GetCounter()const{return id;} };
+struct Player {
+ uint32 id=7,freeTalents=1,level=20,builds=0,petCalls=0,resets=0;
+ Session session;PlayerbotAI* ai=nullptr;
+ Guid GetGUID()const{return {id};}Session* GetSession(){return &session;}
+ uint32 GetFreeTalentPoints()const{return freeTalents;}uint32 GetLevel()const{return level;}
+ void resetTalents(bool){++resets;}
+};
+struct PlayerbotAI {
+ Player* master=nullptr;Player* GetMaster(){return master;}bool HasGameClientMaster();
+};
+#define GET_PLAYERBOT_AI(player) ((player)?(player)->ai:nullptr)
+struct RandomPlayerbotMgr {
+ bool IsRandomBot(Player* bot);
+ // GUID 7 represents a current character on a configured random-bot account.
+ bool IsRandomBot(uint32 id){return id==7;}
+} sRandomPlayerbotMgr;
+struct Config {
+ bool naturalProgression=true,AutoPickTalents=true,AutoPickTalentsForPlayerControlledBots=true;
+} sPlayerbotAIConfig;
+struct PlayerbotFactory {
+ Player* bot;PlayerbotFactory(Player* player,uint32 level):bot(player){assert(level==bot->level);}
+ void InitTalentsTree(bool increment,bool useTemplate,bool reset){
+  assert(increment&&useTemplate);++bot->builds;
+  @RESET@
+ }
+ void InitPetTalents(){++bot->petCalls;}
+};
+struct AutoMaintenanceOnLevelupAction {Player* bot;PlayerbotAI* botAI;void AutoPickTalents();};
+@PRODUCTION@
+int main(){
+ Player human;human.id=1;human.session.headless=false;
+ PlayerbotAI selfAI,ownedAI{&human},autonomousAI;
+ Player self;self.session.headless=false;self.ai=&selfAI;selfAI.master=&self;
+ Player alt;alt.id=8;alt.ai=&ownedAI;
+ Player controlled;controlled.ai=&ownedAI;
+ Player clientRandom;clientRandom.session.headless=false;
+ Player random;random.ai=&autonomousAI;
+ for(Player* player:{&human,&self,&alt,&controlled,&clientRandom}){
+  AutoMaintenanceOnLevelupAction action{player,player->ai?player->ai:&autonomousAI};
+  action.AutoPickTalents();assert(player->builds==0&&player->petCalls==0&&player->resets==0);
+ }
+ AutoMaintenanceOnLevelupAction action{&random,&autonomousAI};
+ action.AutoPickTalents();assert(random.builds==1&&random.petCalls==1&&random.resets==0);
+ random.freeTalents=0;action.AutoPickTalents();assert(random.builds==1);
+ random.freeTalents=1;sPlayerbotAIConfig.AutoPickTalents=false;action.AutoPickTalents();assert(random.builds==1);
+ sPlayerbotAIConfig.naturalProgression=false;
+ AutoMaintenanceOnLevelupAction ownerAction{&alt,&ownedAI};
+ ownerAction.AutoPickTalents();assert(alt.builds==1&&alt.petCalls==1&&alt.resets==0);
+ sPlayerbotAIConfig.AutoPickTalentsForPlayerControlledBots=false;
+ ownerAction.AutoPickTalents();assert(alt.builds==1);
+ sPlayerbotAIConfig.AutoPickTalents=true;action.AutoPickTalents();assert(random.builds==2&&random.resets==1);
+}
+'''
+talent_functions = '\n'.join(function(text, signature) for text, signature in (
+    (ai_source, 'bool IsRealPlayer(Player* player)'), (ai_source, 'bool IsSelfBot(Player* player)'),
+    (ai_source, 'bool PlayerbotAI::HasGameClientMaster()'),
+    (random_source, 'bool RandomPlayerbotMgr::IsRandomBot(Player* bot)'),
+)) + '\n' + autopick
+talent_fixture = talent_fixture.replace('@RESET@', resets[0]).replace('@PRODUCTION@', talent_functions)
+with tempfile.TemporaryDirectory(prefix='portable-earned-talents-') as temporary:
+    work = Path(temporary)
+    (work / 'regression.cpp').write_text(talent_fixture)
+
+    def build(tree, output):
+        return [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-g',
+                *SANITIZER_FLAGS, str(tree / 'regression.cpp'), '-o', str(output)]
+
+    executable = work / 'regression'
+    subprocess.run(build(work, executable), check=True)
+    subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
+    reject_mutants(work, (
+        ('controlled character auto talents', 'regression.cpp',
+         ('if (sPlayerbotAIConfig.naturalProgression &&\n'
+         '        (!isRandomBot || !bot->GetSession()->IsHeadless() || botAI->HasGameClientMaster()))\n'
+         '        return;'), ''),
+        ('player on a random account auto talents', 'regression.cpp', '!bot->GetSession()->IsHeadless() || ', ''),
+        ('random companion with a player master auto talents', 'regression.cpp',
+         ' || botAI->HasGameClientMaster()', ''),
+    ), build, 'Earned talent ownership')

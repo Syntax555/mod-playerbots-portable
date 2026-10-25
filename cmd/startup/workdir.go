@@ -226,6 +226,17 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startu
 				if err != nil {
 					return err
 				}
+				if filepath.ToSlash(relTargetName) == "modules/playerbots.conf" {
+					// Fresh template defaults must not hide the realm's existing raid settings.
+					legacy, err := legacyRaidClearProfile(workDir, "")
+					if err != nil {
+						return err
+					}
+					content, err = mergeConfigProfile(content, legacy)
+					if err != nil {
+						return err
+					}
+				}
 				content, err = applyRuntimePorts(info.Name(), content, opts)
 				if err != nil {
 					return err

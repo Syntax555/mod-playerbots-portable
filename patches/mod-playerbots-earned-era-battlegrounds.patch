@@ -1,8 +1,8 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 14408de..a3741f2 100644
+index 26783a7..de9f642 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
-@@ -1671,6 +1671,13 @@ Playerbots.AllowBattlegroundCommands = 0
+@@ -1717,6 +1717,13 @@ Playerbots.AllowBattlegroundCommands = 0
  # Existing matches may finish. Disable when opening later-expansion PvP.
  Playerbots.VanillaBattlegroundsOnly = 0
  
@@ -17,10 +17,10 @@ index 14408de..a3741f2 100644
  Playerbots.RandomBotAutoJoinBG = 0
  
 diff --git a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
-index 4ceb421..8d9bcf5 100644
+index 4053f5a..1177822 100644
 --- a/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
 +++ b/src/Ai/Base/Actions/BattleGroundJoinAction.cpp
-@@ -24,7 +24,8 @@ bool BGJoinAction::Execute(Event /*event*/)
+@@ -27,7 +27,8 @@ bool BGJoinAction::Execute(Event /*event*/)
              return false;
  
          BattlegroundQueueTypeId queueTypeId = (BattlegroundQueueTypeId)bgList[urand(0, bgList.size() - 1)];
@@ -30,7 +30,7 @@ index 4ceb421..8d9bcf5 100644
              return false;
  
          BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
-@@ -62,7 +63,8 @@ bool BGJoinAction::Execute(Event /*event*/)
+@@ -65,7 +66,8 @@ bool BGJoinAction::Execute(Event /*event*/)
  
  bool BGJoinAction::gatherArenaTeam(ArenaType type)
  {
@@ -40,7 +40,7 @@ index 4ceb421..8d9bcf5 100644
          return false;
  
      ArenaTeam* arenateam = sArenaTeamMgr->GetArenaTeamByCaptain(bot->GetGUID(), type);
-@@ -201,7 +203,8 @@ bool BGJoinAction::gatherArenaTeam(ArenaType type)
+@@ -209,7 +211,8 @@ bool BGJoinAction::gatherArenaTeam(ArenaType type)
  
  bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
  {
@@ -50,7 +50,7 @@ index 4ceb421..8d9bcf5 100644
          return false;
  
      // check if bot can join this bracket for the specific Battleground/Arena type
-@@ -235,7 +238,8 @@ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBr
+@@ -243,7 +246,8 @@ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBr
  
  bool BGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
  {
@@ -60,7 +60,7 @@ index 4ceb421..8d9bcf5 100644
          return false;
  
      BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
-@@ -302,6 +306,9 @@ bool BGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, Battlegroun
+@@ -310,6 +314,9 @@ bool BGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, Battlegroun
          return false;
      }
  
@@ -70,7 +70,7 @@ index 4ceb421..8d9bcf5 100644
      // Check if bots should join Battleground
      uint32 bgAllianceBotCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAllianceBotCount;
      uint32 bgAlliancePlayerCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAlliancePlayerCount;
-@@ -404,7 +411,8 @@ bool BGJoinAction::JoinQueue(uint32 type)
+@@ -412,7 +419,8 @@ bool BGJoinAction::JoinQueue(uint32 type)
  
      // get BG TypeId
      BattlegroundQueueTypeId queueTypeId = BattlegroundQueueTypeId(type);
@@ -80,7 +80,7 @@ index 4ceb421..8d9bcf5 100644
      {
          botAI->GetAiObjectContext()->GetValue<uint32>("bg type")->Set(0);
          botAI->GetAiObjectContext()->GetValue<uint32>("arena type")->Set(0);
-@@ -467,6 +475,24 @@ bool BGJoinAction::JoinQueue(uint32 type)
+@@ -475,6 +483,24 @@ bool BGJoinAction::JoinQueue(uint32 type)
      // sRandomPlayerbotMgr.Refresh(bot);
  
      bool joinAsGroup = bot->GetGroup() && bot->GetGroup()->GetLeaderGUID() == bot->GetGUID();
@@ -105,7 +105,7 @@ index 4ceb421..8d9bcf5 100644
  
      // in wotlk only arena requires battlemaster guid
      // ObjectGuid guid = isArena ? unit->GetGUID() : bot->GetGUID(); //not used, line marked for removal.
-@@ -525,6 +551,14 @@ bool BGJoinAction::JoinQueue(uint32 type)
+@@ -533,6 +559,14 @@ bool BGJoinAction::JoinQueue(uint32 type)
          }
      }
  
@@ -120,7 +120,7 @@ index 4ceb421..8d9bcf5 100644
      LOG_INFO("playerbots", "Bot {} {}:{} <{}> queued {} {}", bot->GetGUID().ToString().c_str(),
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName().c_str(), _bgType.c_str(),
               isRated   ? "Rated Arena"
-@@ -575,7 +609,8 @@ bool BGJoinAction::JoinQueue(uint32 type)
+@@ -583,7 +617,8 @@ bool BGJoinAction::JoinQueue(uint32 type)
  // Not sure if this has ever worked, but it should be similar to BGJoinAction::shouldJoinBg
  bool FreeBGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBracketId bracketId)
  {
@@ -130,7 +130,7 @@ index 4ceb421..8d9bcf5 100644
          return false;
  
      BattlegroundTypeId bgTypeId = BattlegroundMgr::BGTemplateId(queueTypeId);
-@@ -643,6 +678,9 @@ bool FreeBGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, Battleg
+@@ -651,6 +686,9 @@ bool FreeBGJoinAction::shouldJoinBg(BattlegroundQueueTypeId queueTypeId, Battleg
          return false;
      }
  
@@ -140,7 +140,7 @@ index 4ceb421..8d9bcf5 100644
      // Check if bots should join Battleground
      uint32 bgAllianceBotCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAllianceBotCount;
      uint32 bgAlliancePlayerCount = sRandomPlayerbotMgr.BattlegroundData[queueTypeId][bracketId].bgAlliancePlayerCount;
-@@ -827,7 +865,8 @@ bool BGStatusAction::Execute(Event event)
+@@ -835,7 +873,8 @@ bool BGStatusAction::Execute(Event event)
          return false;
  
      if ((statusid == STATUS_WAIT_QUEUE || statusid == STATUS_WAIT_JOIN) &&
@@ -322,10 +322,10 @@ index 0000000..fc6e281
 +
 +#endif
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index c7dfe51..40092f9 100644
+index 2377761..ab409c0 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
-@@ -933,6 +933,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
+@@ -937,6 +937,53 @@ std::vector<uint32> parseBrackets(std::string const& str)
      return brackets;
  }
  
@@ -379,7 +379,7 @@ index c7dfe51..40092f9 100644
  void RandomPlayerbotMgr::CheckBgQueue()
  {
      if (!BgCheckTimer)
-@@ -951,6 +998,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -955,6 +1002,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
  
      LOG_DEBUG("playerbots", "Checking BG Queue...");
  
@@ -389,7 +389,7 @@ index c7dfe51..40092f9 100644
      // Initialize Battleground Data (do not clear here)
  
      for (int bracket = BG_BRACKET_ID_FIRST; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
-@@ -996,7 +1046,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1000,7 +1050,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
              if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
                  continue;
  
@@ -399,7 +399,7 @@ index c7dfe51..40092f9 100644
                  continue;
  
              // Check if real player is able to create/join this queue
-@@ -1015,6 +1066,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1019,6 +1070,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
              BattlegroundData[queueTypeId][bracketId].minLevel = pvpDiff->minLevel;
              BattlegroundData[queueTypeId][bracketId].maxLevel = pvpDiff->maxLevel;
  
@@ -409,7 +409,7 @@ index c7dfe51..40092f9 100644
              // Arena logic
              bool isRated = false;
              if (BattlegroundMgr::BGArenaType(queueTypeId))
-@@ -1094,7 +1148,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1104,7 +1158,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
              if (queueTypeId == BATTLEGROUND_QUEUE_NONE)
                  continue;
  
@@ -419,7 +419,7 @@ index c7dfe51..40092f9 100644
                  continue;
  
              BattlegroundTypeId bgTypeId = sBattlegroundMgr->BGTemplateId(queueTypeId);
-@@ -1111,6 +1166,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1121,6 +1176,9 @@ void RandomPlayerbotMgr::CheckBgQueue()
              BattlegroundData[queueTypeId][bracketId].minLevel = pvpDiff->minLevel;
              BattlegroundData[queueTypeId][bracketId].maxLevel = pvpDiff->maxLevel;
  
@@ -429,7 +429,7 @@ index c7dfe51..40092f9 100644
              if (BattlegroundMgr::BGArenaType(queueTypeId))
              {
                  bool isRated = false;
-@@ -1209,6 +1267,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1222,6 +1280,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
          auto updateRatedArenaInstanceCount = [&](uint32 queueType, uint32 bracket, uint32 minCount)
          {
              if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
@@ -437,7 +437,7 @@ index c7dfe51..40092f9 100644
                                                       BattlegroundQueueTypeId(queueType)))
                  return;
  
-@@ -1221,6 +1280,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1234,6 +1293,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
          auto updateBGInstanceCount = [&](uint32 queueType, std::vector<uint32> brackets, uint32 minCount)
          {
              if (!IsPlayerbotBattlegroundQueueAllowed(sPlayerbotAIConfig.vanillaBattlegroundsOnly,
@@ -445,7 +445,7 @@ index c7dfe51..40092f9 100644
                                                       BattlegroundQueueTypeId(queueType)))
                  return;
  
-@@ -1249,6 +1309,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
+@@ -1263,6 +1323,8 @@ void RandomPlayerbotMgr::CheckBgQueue()
          updateBGInstanceCount(BATTLEGROUND_QUEUE_WS, wsBrackets, randomBotAutoJoinBGWSCount);
      }
  
@@ -455,7 +455,7 @@ index c7dfe51..40092f9 100644
  }
  
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index d673b7f..66843be 100644
+index 4ff4e73..f19cc1a 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
 @@ -7,6 +7,7 @@
@@ -466,7 +466,7 @@ index d673b7f..66843be 100644
  #include "GameTime.h"
  #include "NewRpgInfo.h"
  #include "ObjectGuid.h"
-@@ -154,6 +155,10 @@ public:
+@@ -187,6 +188,10 @@ public:
      std::map<uint32, std::map<uint32, std::map<uint32, uint32>>> Supporters;
      std::map<TeamId, std::vector<uint32>> LfgDungeons;
      void CheckBgQueue();
@@ -477,7 +477,7 @@ index d673b7f..66843be 100644
      void CheckLfgQueue();
      void CheckPlayers();
      void LogBattlegroundInfo();
-@@ -181,6 +186,9 @@ protected:
+@@ -214,6 +219,9 @@ protected:
      void OnBotLoginInternal(Player* const bot) override;
  
  private:
@@ -488,10 +488,10 @@ index d673b7f..66843be 100644
      {
          this->playersLevel = sPlayerbotAIConfig.RandomBotStartingLevel;
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index f5eebe0..b90fea3 100644
+index 0e50695..166957a 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
-@@ -86,6 +86,7 @@ bool PlayerbotAIConfig::Initialize()
+@@ -87,6 +87,7 @@ bool PlayerbotAIConfig::Initialize()
      earnedAuctionInterval =
          std::clamp(sConfigMgr->GetOption<uint32>("Playerbots.EarnedAuctionInterval", 300), uint32(60), uint32(3600));
      vanillaBattlegroundsOnly = sConfigMgr->GetOption<bool>("Playerbots.VanillaBattlegroundsOnly", false);
@@ -500,7 +500,7 @@ index f5eebe0..b90fea3 100644
      {
          LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 4e97ad8..af23b8f 100644
+index fee57fb..38c7ea7 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
 @@ -114,6 +114,7 @@ public:
@@ -512,7 +512,7 @@ index 4e97ad8..af23b8f 100644
      bool EnableICCBuffs;
      bool AllowAccountBots, AllowGuildBots, AllowTrustedAccountBots;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index 0bbeb2a..29477f9 100644
+index dc66109..96849c2 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -7,6 +7,8 @@
@@ -524,7 +524,7 @@ index 0bbeb2a..29477f9 100644
  #include "Channel.h"
  #include "CheckMountStateAction.h"
  #include "Config.h"
-@@ -141,9 +143,53 @@ public:
+@@ -142,9 +144,53 @@ public:
          PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
          PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
          PLAYERHOOK_ON_GIVE_EXP,

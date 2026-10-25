@@ -39,6 +39,9 @@ Sources, licenses and update instructions are in
 - Prefer existing AzerothCore, Playerbots and module functions, data and
   configuration over new logic. Check the pinned sources before writing a
   replacement. Do not call hooks with side effects to probe a decision.
+- Use upstream raid tactics wherever they exist. When pinned upstream code
+  covers a local implementation, remove the superseded code, patches and
+  fixtures; retain only missing functionality and earned-progression integration.
 - Core and module changes are ordered patches listed in `versions.lock.json`.
   Never edit a `.patch` file by hand. Use `python3 scripts/patchwork.py open
   patches/<name>.patch`, edit the printed work tree, then run

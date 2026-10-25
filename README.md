@@ -9,7 +9,7 @@ An independently maintained **Windows x64 distribution** for World of Warcraft
 3.3.5a, integrating character-specific progression through Vanilla, The Burning
 Crusade and Wrath of the Lich King with
 [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk),
-[Playerbots](https://github.com/mod-playerbots/mod-playerbots) and community modules.
+[Playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) and community modules.
 
 This project continues [Onur Aslan's portable server project](https://github.com/onur/mod-playerbots-portable)
 with earned-play integrations, historical client packages and automatic server
@@ -39,8 +39,7 @@ database, configuration and first-run setup.
   [routes and requirements](docs/bot-dungeons.md#autonomous-parties).
 - **Player-led raids:** Dungeon Clear, Playerbots and Raid Clear provide group
   control and encounter tactics, including Onyxia's Lair, Molten Core, Blackwing Lair,
-  Zul'Gurub and Ahn'Qiraj. A [raid composition component](docs/raid-composition.md)
-  supplies role quotas and subgroups; autonomous raid runs remain unavailable.
+  Zul'Gurub and Ahn'Qiraj. Autonomous raid runs remain unavailable.
   See [raid support](docs/bot-dungeons.md#raids).
 - **Earned bot economy:** bots train, repair and buy supplies and bags with
   their own gold, and trade owned items through normal auctions and mailbox
@@ -218,7 +217,7 @@ include this distribution's local integration and defaults; see
 
 | Module | Default role |
 | --- | --- |
-| [Playerbots](https://github.com/mod-playerbots/mod-playerbots) | Bot companions, natural progression and earned auction trading. |
+| [Playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) | Bot companions, natural progression, earned auction trading and integrated Raid Clear tactics. |
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Character-specific content milestones and expansion unlocks. |
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | Earned-era talents and selected class spell variants for players and bots. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
@@ -227,7 +226,6 @@ include this distribution's local integration and defaults; see
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Always included earned-era access guards for the [optional Dungeon Finder](docs/bot-dungeons.md#optional-dungeon-finder), which is disabled by default. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
 | [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
-| [Raid Clear](https://github.com/buildthehomelab/wow-mod-raid-clear) | Boss and trash mechanics for bot raids in Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj. |
 
 Bot commands are documented in the
 [Playerbots wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands).

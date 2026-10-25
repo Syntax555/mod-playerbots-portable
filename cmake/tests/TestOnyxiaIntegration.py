@@ -34,7 +34,8 @@ HARNESS = r'''
 using uint32 = uint32_t;
 using ObjectGuid = uint32;
 using GuidVector = std::vector<ObjectGuid>;
-@CREATURES@;
+namespace RaidClear::OnyxiasLair { @CREATURES@; }
+using namespace RaidClear::OnyxiasLair;
 
 struct Creature;
 struct Unit
@@ -89,7 +90,7 @@ struct PlayerbotAI
 };
 #define AI_VALUE(type, name) botAI->Value<type>(name)
 struct Event {};
-struct RcOnyKillWhelpsAction
+struct RaidOnyxiaKillWhelpsAction
 {
     Player* bot;
     PlayerbotAI* botAI;
@@ -126,14 +127,17 @@ int main()
     auto const* raid = RaidClear::FindRaid(249);
     assert(raid && std::string(raid->strategy) == "rc ony" && std::string(raid->confKey) == "OnyxiasLair");
     RaidClear::LoadConfig();
-    assert(RaidClear::sConfig.IsRaidEnabled(249) && !RaidClear::sConfig.IsRaidEnabled(0));
+    assert(RaidClear::Raids.size() == 6 && !RaidClear::sConfig.IsRaidEnabled(0));
+    for (auto const& entry : RaidClear::Raids)
+        assert(RaidClear::sConfig.IsRaidEnabled(entry.mapId));
     configManager.flags["RaidClear.OnyxiasLair.Enable"] = false;
     RaidClear::LoadConfig();
     assert(!RaidClear::sConfig.IsRaidEnabled(249) && RaidClear::sConfig.IsRaidEnabled(409));
     configManager.flags["RaidClear.OnyxiasLair.Enable"] = true;
     configManager.flags["RaidClear.Enable"] = false;
     RaidClear::LoadConfig();
-    assert(!RaidClear::sConfig.IsRaidEnabled(249));
+    for (auto const& entry : RaidClear::Raids)
+        assert(!RaidClear::sConfig.IsRaidEnabled(entry.mapId));
 
     Player bot;
     PlayerbotAI ai;
@@ -146,30 +150,33 @@ int main()
     ai.units = {{1, &vanilla}, {2, &wrath}, {3, &other}, {4, &boss}, {5, &vanillaBoss}};
     vanilla.distance = 3; wrath.distance = 8; other.distance = 1;
     GuidVector const all = {0, 3, 4, 5, 2, 1};
-    assert(NearestHittable(&ai, &bot, all, true) == &vanilla);
-    assert(NearestHittable(&ai, &bot, all, false) == &other);
-    assert(!NearestHittable(&ai, &bot, {0, 3, 4, 5}, true));
-    assert(!NearestHittable(&ai, &bot, {0, 4, 5}, false));
+    assert(NearestHittable(&ai, &bot, all) == &other);
+    assert(!NearestHittable(&ai, &bot, {0, 4, 5}));
 
+    RaidOnyxiaKillWhelpsAction action{&bot, &ai};
     // Both native evade causes and ordinary attack refusals exclude each version.
     for (Creature* whelp : {&vanilla, &wrath})
     {
         ai.units[6] = whelp;
+        ai.possible = {6}; action.attacked = nullptr;
         whelp->evade = true;
-        assert(IsEvadingMob(whelp) && !NearestHittable(&ai, &bot, {6}, true));
+        assert(IsEvadingMob(whelp) && !NearestHittable(&ai, &bot, {6}));
+        assert(!action.Execute({}) && !action.attacked);
         whelp->evade = false; whelp->unreachable = true;
-        assert(IsEvadingMob(whelp) && !NearestHittable(&ai, &bot, {6}, true));
+        assert(IsEvadingMob(whelp) && !NearestHittable(&ai, &bot, {6}));
+        assert(!action.Execute({}) && !action.attacked);
         whelp->unreachable = false;
         for (bool* gate : {&whelp->alive, &whelp->inWorld, &whelp->visible, &whelp->valid})
         {
             *gate = false;
-            assert(!NearestHittable(&ai, &bot, {6}, true));
+            assert(!NearestHittable(&ai, &bot, {6}));
+            assert(!action.Execute({}) && !action.attacked);
             *gate = true;
         }
-        assert(NearestHittable(&ai, &bot, {6}, true) == whelp);
+        assert(NearestHittable(&ai, &bot, {6}) == whelp);
+        assert(action.Execute({}) && action.attacked == whelp);
     }
 
-    RcOnyKillWhelpsAction action{&bot, &ai};
     ai.possible = {0, 3, 4, 5, 2, 1};
     assert(action.Execute({}) && action.attacked == &vanilla);
     // Keep either current whelp even when another is nearer.
@@ -205,10 +212,11 @@ int main()
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    source_argument(parser, help='mod-raid-clear/src directory')
+    source_argument(parser, help='mod-playerbots/src directory')
     args = parser.parse_args()
     core = prepared_core()
-    src = args.source or core / 'modules/mod-raid-clear/src'
+    playerbots = args.source or core / 'modules/mod-playerbots/src'
+    src = playerbots / 'Ai/Raid/RaidClear'
     ony = src / 'Raids/OnyxiasLair'
     header = (ony / 'OnyRaidClear.h').read_text()
     source = (ony / 'OnyRaidClear.cpp').read_text()
@@ -223,8 +231,9 @@ def main():
         assert re.search(pattern, natives) and re.search(pattern, header), name
     assert 'me->SummonCreature(NPC_ONYXIAN_WHELP_40,' in (ip / 'vanillaScripts/boss_onyxia.cpp').read_text()
     assert re.search(r'\bONYXIA_40\s*=\s*301000\b', (ip / 'IndividualProgression.h').read_text())
-    assert 'class RcOnyKillWhelpsAction : public AttackAction' in header
-    playerbots = core / 'modules/mod-playerbots/src'
+    native_header = (playerbots / 'Ai/Raid/Ony/OnyActions.h').read_text()
+    native_source = (playerbots / 'Ai/Raid/Ony/OnyActions.cpp').read_text()
+    assert 'class RaidOnyxiaKillWhelpsAction : public AttackAction' in native_header
     attack = function((playerbots / 'Ai/Base/Actions/AttackAction.cpp').read_text(), 'bool AttackAction::Attack(')
     for gate in ('!target->IsInWorld()', 'target->isDead()', '!bot->IsWithinLOSInMap(target)',
                  '!bot->IsValidAttackTarget(target)'):
@@ -237,11 +246,20 @@ def main():
                                          'Creature const* ToCreature() const')
     assert 'creators["rc ony"] = &RaidClearStrategyContext::ony;' in contexts
     assert 'new RaidClearOnyxiasLairStrategy(botAI)' in function(contexts, 'static Strategy* ony(')
-    assert 'creators["rc ony kill whelps"] = &RaidClearActionContext::ony_kill_whelps;' in contexts
-    assert 'new RcOnyKillWhelpsAction(botAI)' in function(contexts, 'static Action* ony_kill_whelps(')
+    native_context = (playerbots / 'Ai/Raid/Ony/OnyActionContext.h').read_text()
+    assert 'creators["ony kill whelps"] = &RaidOnyxiaActionContext::kill_whelps;' in native_context
+    assert 'new RaidOnyxiaKillWhelpsAction(botAI)' in function(native_context, 'static Action* kill_whelps(')
+    assert 'NextAction("ony kill whelps",' in (playerbots / 'Ai/Raid/Ony/OnyStrategy.cpp').read_text()
+    for kind in ('Action', 'Strategy', 'Trigger'):
+        shared = (playerbots / f'Bot/Engine/BuildShared{kind}Contexts.cpp').read_text()
+        assert f'new RaidClear{kind}Context()' in function(shared, f'void AiObjectContext::BuildShared{kind}Contexts(')
+    assert 'new RaidOnyxiaActionContext()' in (
+        playerbots / 'Bot/Engine/BuildSharedActionContexts.cpp').read_text()
+    assert 'AddRaidClearScripts();' in function((playerbots / 'Script/Playerbots.cpp').read_text(),
+                                              'void AddPlayerbotsScripts()')
     assert 'OnyxiasLair::AddScripts();' in function(module, 'void AddRaidClearScripts()')
     assert re.search(r'^RaidClear\.OnyxiasLair\.Enable\s*=\s*1\s*$',
-                     (src.parent / 'conf/mod_raid_clear.conf.dist').read_text(), re.MULTILINE)
+                     (playerbots.parent / 'conf/playerbots.conf.dist').read_text(), re.MULTILINE)
 
     replacements = {
         '@CREATURES@': function(header, 'enum Creatures : uint32'),
@@ -258,8 +276,8 @@ def main():
     for key, value in replacements.items():
         harness = harness.replace(key, value)
     production = '\n\n'.join(function(source, signature) for signature in (
-        'bool IsWhelp(', 'bool IsEvadingMob(', 'Unit* NearestHittable(', 'bool RcOnyKillWhelpsAction::Execute(',
-    ))
+        'bool IsWhelp(', 'bool IsEvadingMob(', 'Unit* NearestHittable(',
+    )) + '\n\n' + function(native_source, 'bool RaidOnyxiaKillWhelpsAction::Execute(')
     with tempfile.TemporaryDirectory(prefix='onyxia-integration-') as directory:
         work = Path(directory)
         (work / 'fixture.cpp').write_text(harness)
@@ -274,10 +292,12 @@ def main():
         assert result.returncode == 0, result.stdout + result.stderr
         reject_mutants(work, (
             ('Vanilla whelps omitted from selection', 'production.inc',
-             'whelpsOnly ? !IsWhelp(unit)', 'whelpsOnly ? unit->GetEntry() != NPC_ONYXIAN_WHELP'),
+             '(whelp->GetEntry() == NPC_ONYXIAN_WHELP || whelp->GetEntry() == NPC_ONYXIAN_WHELP_40)',
+             'whelp->GetEntry() == NPC_ONYXIAN_WHELP'),
             ('current Vanilla whelp discarded', 'production.inc',
-             'current->IsAlive() && IsWhelp(current)',
-             'current->IsAlive() && current->GetEntry() == NPC_ONYXIAN_WHELP'),
+             'if (hittable(AI_VALUE(Unit*, "current target")))',
+             ('if (hittable(AI_VALUE(Unit*, "current target")) && '
+              'AI_VALUE(Unit*, "current target")->GetEntry() == NPC_ONYXIAN_WHELP)')),
         ), build, 'Onyxia integration')
     print('Onyxia integration: configuration, registration and native Vanilla/core whelp selection verified')
 

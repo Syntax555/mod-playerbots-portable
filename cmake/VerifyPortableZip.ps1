@@ -143,10 +143,9 @@ try {
         }
         $textSources['docs/bot-dungeons.md'] = 'docs/bot-dungeons.md'
     }
-    if (@($lock.modules | Where-Object { $_.name -eq 'mod-raid-clear' }).Count -gt 0) {
-        foreach ($name in @('configs/modules/mod_raid_clear.conf.dist', 'licenses/mod-raid-clear/LICENSE')) {
-            if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
-        }
+    if (@($lock.modules | Where-Object { $_.name -eq 'mod-playerbots' }).Count -gt 0) {
+        $name = 'licenses/mod-playerbots/RaidClear/LICENSE'
+        if (-not $files.Contains($name)) { throw "Portable ZIP is missing $name" }
     }
     if (@($lock.modules | Where-Object { $_.name -eq 'mod-era-events' }).Count -gt 0) {
         foreach ($name in @('docs/world-events.md', 'configs/modules/mod_era_events.conf.dist', 'licenses/mod-era-events/LICENSE')) {
