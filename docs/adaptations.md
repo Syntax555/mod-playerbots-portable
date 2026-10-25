@@ -103,8 +103,9 @@ character's own trainer list and the glyph page opens once Wrath is earned.
 The MultiBot fork displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
 retained. In its inventory's Buy mode, merchant clicks buy for the selected bot
-with that bot's own gold. Its spellbook lists the bot's spells from the Bridge,
-with the ignore boxes set from the bot's skip list; with DragonUI, EraTalents
+with that bot's own gold. Its spellbook lists the bot's spells from the Bridge
+as the client's own spellbook would, without hidden helper spells and trade
+skill recipes, with the ignore boxes set from the bot's skip list; with DragonUI, EraTalents
 shows it in [DragonUI's book](era-talents.md#dragonui) with the trainer spells
 the bot can still learn. Its talent button uses native inspection with
 EraTalents: historical trees and ranks belong to the inspected bot, and Wrath

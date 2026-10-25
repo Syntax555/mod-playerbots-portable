@@ -110,7 +110,8 @@
         "patches/mod-multibot-bridge-trainer-money.patch",
         "patches/mod-multibot-bridge-optional-presets.patch",
         "patches/mod-multibot-bridge-quest-progress.patch",
-        "patches/mod-multibot-bridge-progression-state.patch"
+        "patches/mod-multibot-bridge-progression-state.patch",
+        "patches/mod-multibot-bridge-spellbook-display.patch"
       ]
     },
     {
