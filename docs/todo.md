@@ -178,7 +178,8 @@ pass.
   collection.
 - [ ] Verify era experience in game: quest values per era, battleground
   objective XP, heirloom and holiday bonuses, and rest and quest money at the
-  60/70 era caps.
+  60/70 era caps. Check Thrallmar's and Honor Hold's Favor on kills, quests and
+  exploration, including stacking with other XP bonuses and pet XP.
 
 ## Dependency updates
 
@@ -210,9 +211,10 @@ pass.
 - [x] [Core experience rules](changing-expansions.md#experience-by-era) shared
   by every era: raid groups receive no party XP bonus outside raid maps, and
   online rest accrues at the ordinary inn rate.
-- [ ] Thrallmar's and Honor Hold's Favor raise kill XP twice in the core: once
-  through their aura effect in `KillRewarder` and once in `Player::GiveXP`. Era
-  experience removes the duplicate for TBC-era characters only.
+- [x] Thrallmar's and Honor Hold's Favor grant their 5% XP bonus once per
+  award: kills use the linked aura in `KillRewarder`, while quest and
+  exploration rewards keep the zone bonus in `Player::GiveXP`. The TBC era
+  policy retains the kill aura.
 - [ ] Recruit-a-Friend started after the 2.4.3 release; decide whether TBC and
   Wrath characters should regain it.
 

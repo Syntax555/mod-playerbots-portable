@@ -113,9 +113,9 @@ assert sum(source.count('XPSOURCE_EXPLORE)') for source in (player_cpp, quest_cp
 quest_give = between(reward, 'sScriptMgr->OnPlayerQuestComputeXP(this, quest, XP);', 'GiveXP(XP, nullptr, 1.0f, isLFGReward);')
 assert ('OnPlayerGiveXP(this, XP, nullptr, isLFGReward ? PlayerXPSource::XPSOURCE_QUEST_DF : '
         'PlayerXPSource::XPSOURCE_QUEST);') in quest_give
-# Thrallmar's and Honor Hold's Favor: GiveXP adds their 5% to every gain in the zones where
-# spell_area keeps them, and they are the only source of the aura 200 effect the policy leaves out.
-assert ('if ((zone == AREA_HELLFIRE_PENINSULA || zone == AREA_HELLFIRE_RAMPARTS || zone == AREA_MAGTHERIDONS_LAIR || '
+# Thrallmar's and Honor Hold's Favor: GiveXP adds their 5% to non-kill gains in the zones where
+# spell_area keeps them, and they are the only source of the aura 200 effect the general-XP policy leaves out.
+assert ('if (!victim && (zone == AREA_HELLFIRE_PENINSULA || zone == AREA_HELLFIRE_RAMPARTS || zone == AREA_MAGTHERIDONS_LAIR || '
         'zone == AREA_THE_BLOOD_FURNACE || zone == AREA_THE_SHATTERED_HALLS) && '
         "HasAnyAuras(32096 /*Thrallmar's Favor*/, 32098 /*Honor Hold's Favor*/))\n"
         '        favored_exp_mult = 0.05f;') in give_xp
@@ -365,6 +365,9 @@ heirloom = spells[57353]
 assert [spell_field(heirloom, EFFECT + i) for i in range(3)] == [6, 6, 0]
 assert [spell_field(heirloom, AURA + i) for i in range(3)] == [200, 291, 0]
 assert [spell_field(heirloom, BASE_POINTS + i, True) for i in range(3)] == [9, 9, 0]
+favor = spells[32172]
+assert [(spell_field(favor, EFFECT + i), spell_field(favor, AURA + i), spell_field(favor, BASE_POINTS + i, True) + 1)
+        for i in range(3) if spell_field(favor, AURA + i) == 200] == [(6, 200, 5)]
 xp_auras = {spell for spell, raw in spells.items() for i in range(3)
             if spell_field(raw, AURA + i) in (200, 291) and spell_field(raw, BASE_POINTS + i, True) + 1 > 0}
 wrath_only = {int(spell) for spell in re.findall(r'case (\d+):', function(policy, 'constexpr bool WrathOnlyXPBonus('))}
@@ -979,11 +982,11 @@ void KillCases() {
         Player stacked=Character(stage,level);
         stacked.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&auchindoun,&wickerman};
         assert(GiveXP(stacked,200,XPSOURCE_EXPLORE)==(stage==8 ? 229u : 200u));
-        // GiveXP adds the Hellfire favor itself; in TBC its aura counts on no gain, as in 2.4.3.
+        // KillRewarder supplies the favor on kills; GiveXP supplies it on other gains.
         // KillRewarder truncates 200 * 1.05f to 209.
         Player favored=Character(stage,level);
         favored.m_modAuras[SPELL_AURA_MOD_XP_PCT]={&favor};
-        assert(KillXP(&favored,200)==(stage==13 ? 209u : 199u) && GiveXP(favored,500,XPSOURCE_EXPLORE)==500);
+        assert(KillXP(&favored,200)==(stage>=8 ? 209u : 199u) && GiveXP(favored,500,XPSOURCE_EXPLORE)==500);
     }
 }
 
@@ -1225,8 +1228,8 @@ MUTATIONS = (
      'if (!sIndividualProgression->questXpFix)'),
     ('battleground source', 'EraExperience.cpp', 'if (xpSource == XPSOURCE_BATTLEGROUND)\n        {', 'if (true)\n        {'),
     ('TBC battleground XP', 'EraExperiencePolicy.h', 'return era >= Wrath;', 'return era >= TBC;'),
-    ('Vanilla experience auras', 'EraExperiencePolicy.h', 'return era == TBC && !WrathOnlyXPBonus(spellId) &&',
-     'return !WrathOnlyXPBonus(spellId) &&'),
+    ('Vanilla experience auras', 'EraExperiencePolicy.h', 'return era == TBC && !WrathOnlyXPBonus(spellId);',
+     'return !WrathOnlyXPBonus(spellId);'),
     ('TBC bonus on quests', 'EraExperience.cpp', 'xpValue = WithGeneralXPBonus(player, era, xp);', 'xpValue = xp;'),
     ('TBC bonus on exploration', 'EraExperience.cpp', '            amount = WithGeneralXPBonus(player, era, amount);\n', ''),
     ('bonus product', 'EraExperience.cpp',
@@ -1244,9 +1247,9 @@ MUTATIONS = (
     ('favor on quests and exploration', 'EraExperiencePolicy.h',
      'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);',
      'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId);'),
-    ('favor on TBC kills', 'EraExperiencePolicy.h',
-     'return era == TBC && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);',
-     'return era == TBC && !WrathOnlyXPBonus(spellId);'),
+    ('missing favor on TBC kills', 'EraExperiencePolicy.h',
+     'return era == TBC && !WrathOnlyXPBonus(spellId);',
+     'return era == TBC && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);'),
     ('exploration not hooked', 'EraExperience.cpp', '(xpSource != XPSOURCE_KILL && xpSource != XPSOURCE_EXPLORE)',
      '(xpSource != XPSOURCE_KILL)'),
     ('general penalties', 'EraExperiencePolicy.h', 'return era == TBC && amount > 0 && !WrathOnlyXPBonus(spellId)',

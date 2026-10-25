@@ -9422,7 +9422,7 @@ index 0000000..6d6e7af
 +}
 diff --git a/src/EraExperiencePolicy.h b/src/EraExperiencePolicy.h
 new file mode 100644
-index 0000000..5e578f3
+index 0000000..995a856
 --- /dev/null
 +++ b/src/EraExperiencePolicy.h
 @@ -0,0 +1,114 @@
@@ -9481,7 +9481,7 @@ index 0000000..5e578f3
 +}
 +
 +// Thrallmar's and Honor Hold's Favor cast this effect, and Player::GiveXP
-+// already adds their 5% to every gain in Hellfire Peninsula.
++// already adds their 5% to non-kill gains in Hellfire Peninsula.
 +constexpr bool CoreAppliedXPBonus(std::uint32_t spellId)
 +{
 +    return spellId == 32172; // [PH] Buffbot Buff Effect
@@ -9494,7 +9494,7 @@ index 0000000..5e578f3
 +    if (amount <= 0 || era > TBC)
 +        return true;
 +
-+    return era == TBC && !WrathOnlyXPBonus(spellId) && !CoreAppliedXPBonus(spellId);
++    return era == TBC && !WrathOnlyXPBonus(spellId);
 +}
 +
 +// mangos-tbc applies the experience bonus auras to every gain, quests and
@@ -9541,10 +9541,10 @@ index 0000000..5e578f3
 +
 +#endif
 diff --git a/src/IndividualProgression.cpp b/src/IndividualProgression.cpp
-index 2b7481c..4eba88a 100644
+index 96e8a78..0f6e882 100644
 --- a/src/IndividualProgression.cpp
 +++ b/src/IndividualProgression.cpp
-@@ -1211,6 +1211,7 @@ private:
+@@ -1279,6 +1279,7 @@ private:
          sIndividualProgression->tbcPowerAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.TBCPowerAdjustment", 1);
          sIndividualProgression->tbcHealingAdjustment = sConfigMgr->GetOption<float>("IndividualProgression.TBCHealingAdjustment", 1);
          sIndividualProgression->questXpFix = sConfigMgr->GetOption<bool>("IndividualProgression.QuestXPFix", true);
@@ -9552,7 +9552,7 @@ index 2b7481c..4eba88a 100644
          sIndividualProgression->requireNaxxStrath = sConfigMgr->GetOption<bool>("IndividualProgression.RequireNaxxStrathEntrance", false);
          sIndividualProgression->doableNaxx40Bosses_4H = sConfigMgr->GetOption<bool>("IndividualProgression.doableNaxx40Bosses_4H", false);
          sIndividualProgression->doableNaxx40Bosses_Gluth = sConfigMgr->GetOption<bool>("IndividualProgression.doableNaxx40Bosses_Gluth", false);
-@@ -1285,6 +1286,33 @@ private:
+@@ -1354,6 +1355,33 @@ private:
              }
              LOG_INFO("module", "Loaded {} quest XP values into cache", questXpAmount);
          }
@@ -9587,10 +9587,10 @@ index 2b7481c..4eba88a 100644
  
  public:
 diff --git a/src/IndividualProgression.h b/src/IndividualProgression.h
-index d332073..2d5e3ee 100644
+index e6b8293..17ba172 100644
 --- a/src/IndividualProgression.h
 +++ b/src/IndividualProgression.h
-@@ -23,6 +23,8 @@ typedef std::unordered_map<uint32, uint32> questXpMapType;
+@@ -25,6 +25,8 @@ typedef std::unordered_map<uint32, uint32> questXpMapType;
  
  // 0: Vanilla, 1: TBC, 2: Wrath; 255: unavailable or unrestricted policy.
  uint8 IndividualProgression_GetEarnedEra(Player* player);
@@ -9599,7 +9599,7 @@ index d332073..2d5e3ee 100644
  
  enum ProgressionBossIDs
  {
-@@ -409,11 +411,18 @@ public:
+@@ -411,11 +413,18 @@ public:
  
      bool strictEarnedProgression = false;
      bool IsStrictDefaultProgression() const;
@@ -9619,7 +9619,7 @@ index d332073..2d5e3ee 100644
      bool enabled, questXpFix, enforceGroupRules, EnableSetRepCommand, EnableAllSpellRanks, LimitedSetRepCommand, fishingFix, simpleConfigOverride, MaxMonsterSight, questMoneyAtLevelCap, repeatableVanillaQuestsXp, disableDefaultProgression, earlyDungeonSet2, earlyScourgeBosses, requireNaxxStrath, doableNaxx40Bosses_4H, doableNaxx40Bosses_Gluth, doableNaxx40Bosses_Patchwerk, doableNaxx40Bosses_Razuvious, DisableQuestMarkers, DisableRDF, VanillaPvpTitlesKeepPostVanilla, VanillaPvpTitlesEarnPostVanilla, VanillaPvpKeepAllEarnedTitles, BotAccountsEarnPvPTitles, BotOnlyAdjustments;
      int progressionLimit, startingProgression, tbcRacesProgressionLevel, tbcRacesStartingProgression, deathKnightProgressionLevel, deathKnightStartingProgression, RequiredZulGurubProgression, RequiredZulAmanProgression, tbcArenaSeason, wotlkArenaSeason, BotAccountsMaxLevel;
 diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
-index be57806..a0ca948 100644
+index 05ff4c9..89d8411 100644
 --- a/src/IndividualProgressionPlayer.cpp
 +++ b/src/IndividualProgressionPlayer.cpp
 @@ -122,7 +122,8 @@ public:
@@ -9645,7 +9645,7 @@ index be57806..a0ca948 100644
              if (moneyRew > 0)
              {
 diff --git a/src/IndividualProgression_loader.cpp b/src/IndividualProgression_loader.cpp
-index 36bd46e..d5ff874 100644
+index 69e8399..4ceb438 100644
 --- a/src/IndividualProgression_loader.cpp
 +++ b/src/IndividualProgression_loader.cpp
 @@ -7,6 +7,7 @@ void AddSC_mod_individual_progression();
@@ -9656,7 +9656,7 @@ index 36bd46e..d5ff874 100644
  void AddSC_boss_onyxia_40();
  void AddSC_instance_onyxias_lair_40();
  void AddSC_instance_blackrock_spire_50_59_B();
-@@ -62,6 +63,8 @@ void Addmod_individual_progressionScripts()
+@@ -63,6 +64,8 @@ void Addmod_individual_progressionScripts()
      AddSC_individual_progression_historical_class_quests();
      AddSC_individual_progression_era_riding_prices();
      AddSC_individual_progression_earned_battlegrounds();

@@ -11,6 +11,20 @@ index c840379..c1bcdfc 100644
                  _groupRate = Acore::XP::xp_in_group_rate(_count, isRaid);
              }
  
+diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
+index 5324e53..16f3b95 100644
+--- a/src/server/game/Entities/Player/Player.cpp
++++ b/src/server/game/Entities/Player/Player.cpp
+@@ -2418,7 +2418,8 @@ void Player::GiveXP(uint32 xp, Unit* victim, float group_rate, bool isLFGReward)
+     // Favored experience increase START
+     uint32 zone = GetZoneId();
+     float favored_exp_mult = 0;
+-    if ((zone == AREA_HELLFIRE_PENINSULA || zone == AREA_HELLFIRE_RAMPARTS || zone == AREA_MAGTHERIDONS_LAIR || zone == AREA_THE_BLOOD_FURNACE || zone == AREA_THE_SHATTERED_HALLS) && HasAnyAuras(32096 /*Thrallmar's Favor*/, 32098 /*Honor Hold's Favor*/))
++    // KillRewarder already applies the linked experience aura to kill XP.
++    if (!victim && (zone == AREA_HELLFIRE_PENINSULA || zone == AREA_HELLFIRE_RAMPARTS || zone == AREA_MAGTHERIDONS_LAIR || zone == AREA_THE_BLOOD_FURNACE || zone == AREA_THE_SHATTERED_HALLS) && HasAnyAuras(32096 /*Thrallmar's Favor*/, 32098 /*Honor Hold's Favor*/))
+         favored_exp_mult = 0.05f; // Thrallmar's Favor and Honor Hold's Favor
+ 
+     xp = uint32(xp * (1 + favored_exp_mult));
 diff --git a/src/server/game/Entities/Player/PlayerUpdates.cpp b/src/server/game/Entities/Player/PlayerUpdates.cpp
 index 0f6e266..13d49e3 100644
 --- a/src/server/game/Entities/Player/PlayerUpdates.cpp

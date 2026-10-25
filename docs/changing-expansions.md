@@ -94,6 +94,10 @@ Individual Progression re-arms four Vanilla turn-ins
 each turn-in pays the character's era value. Recruit-a-Friend triple XP, level
 grants, summons and reputation bonus are off realm-wide.
 
+Thrallmar's and Honor Hold's Favor grant their 5% experience bonus once per
+award in Hellfire Peninsula and its instances. Kill XP uses the linked aura;
+quest and exploration XP use the core's zone bonus.
+
 Limits:
 
 - Characters outside their era's level band, such as existing death knights
