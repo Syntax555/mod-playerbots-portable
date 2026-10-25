@@ -1,0 +1,33 @@
+diff --git a/client-addon/EraTalents/Inspect.lua b/client-addon/EraTalents/Inspect.lua
+index 51c81d2..5b043fc 100644
+--- a/client-addon/EraTalents/Inspect.lua
++++ b/client-addon/EraTalents/Inspect.lua
+@@ -32,10 +32,27 @@ local function SetStockSuppressed(on)
+   end
+ end
+ 
++-- The Inspect frame is a toplevel window; raising it re-levels its descendants unevenly, which left
++-- the tree's scroll frame below the view's own background. The view therefore hangs off UIParent one
++-- strata above the Inspect talent tab and only follows that tab's position.
++local STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
++
++local function PlaceInspectView(frame)
++  local strata = InspectTalentFrame:GetFrameStrata()
++  for i = 1, #STRATA - 1 do
++    if STRATA[i] == strata then strata = STRATA[i + 1]; break end
++  end
++  frame:SetFrameStrata(strata)
++  frame:ClearAllPoints()
++  frame:SetAllPoints(InspectTalentFrame)
++end
++
+ local function EnsureView()
+   if not ET.inspectView then
+-    ET.inspectView = ET.NewTreeView({ name = "EraInspectTalentFrame", parent = InspectTalentFrame,
++    ET.inspectView = ET.NewTreeView({ name = "EraInspectTalentFrame", parent = UIParent,
+                                       chrome = false, tabStyle = "top", readOnly = true, defaultTab = 1 })
++    PlaceInspectView(ET.inspectView.frame)
++    ET.inspectView.frame:HookScript("OnShow", PlaceInspectView)
+   end
+   return ET.inspectView
+ end

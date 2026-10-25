@@ -59,6 +59,8 @@ for _,name in ipairs({"SetFrameStrata","SetPoint","EnableMouse","SetMovable","Re
 end
 function methods:RegisterEvent(event) events[event]=events[event] or {}; table.insert(events[event],self) end
 function methods:GetName() return self.name end
+function methods:SetFrameStrata(strata) self.strata = strata end
+function methods:GetFrameStrata() return self.strata or "MEDIUM" end
 function methods:GetParent() return self.parent end
 function methods:GetFrameLevel() return 0 end
 function methods:GetWidth() return self.width or 100 end
@@ -317,6 +319,7 @@ assert(InspectTalentFrame:IsShown() and not win:IsShown() and ns.inspectUnit==ni
 assert(suppressed() and ET.inspectStatus:IsShown(),"the native tree stays hidden until ISYNC decides")
 ET.OnAddonMsg("ERATAL","ISYNC "..units.party1.." 0 1 1 "..warrior..":1")
 assert(ET.inspectView.frame:IsShown() and ET.inspectView.readOnly,"the era tree of an inspected era character is shown read-only")
+assert(ET.inspectView.frame.strata=="HIGH" and ET.inspectView.frame.parent==UIParent,"the era tree sits above the Inspect frame with DragonUI")
 InspectFrame_UnitChanged()
 assert(not win:IsShown(),"a target change keeps an era inspect in the stock tab")
 reset()

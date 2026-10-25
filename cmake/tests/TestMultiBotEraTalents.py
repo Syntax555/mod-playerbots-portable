@@ -188,6 +188,8 @@ for _,name in ipairs({"SetFrameStrata","SetPoint","EnableMouse","SetMovable","Re
 end
 function methods:GetName() return self.name end
 function methods:GetFrameLevel() return 0 end
+function methods:SetFrameStrata(strata) self.strata = strata end
+function methods:GetFrameStrata() return self.strata or "MEDIUM" end
 function methods:SetWidth(n) self.width=n end
 function methods:SetHeight(n) self.height=n end
 function methods:SetText(s) self.text=s end
@@ -287,6 +289,13 @@ assert(suppressed() and ET.inspectStatus:IsShown(),"a bot request before the fir
 for _,record in ipairs(packets) do if record[1]=="0" and record[2]=="5" then ET.OnAddonMsg("ERATAL",record[3]) end end
 assert(suppressed() and (not ET.inspectView or not ET.inspectView.frame:IsShown()),"a historical reply waits for generation validation")
 ET.CheckGeneration("a1b2c3d4"); assert(ET.inspectView.frame:IsShown())
+local view=ET.inspectView.frame
+assert(view.parent==UIParent and view.strata=="HIGH" and view.SetAllPointsArgs[1]==InspectTalentFrame,"the era tree sits above the toplevel Inspect frame")
+close()
+InspectTalentFrame.strata="DIALOG"; button.doLeft(button)
+for _,record in ipairs(packets) do if record[1]=="0" and record[2]=="5" then ET.OnAddonMsg("ERATAL",record[3]) end end
+assert(view:IsShown() and view.strata=="FULLSCREEN","the era tree follows the Inspect frame's strata on every show")
+InspectTalentFrame.strata=nil
 close()
 for _,record in ipairs(packets) do
   local era,cls,message=tonumber(record[1]),tonumber(record[2]),record[3]
@@ -463,7 +472,9 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
                                'read-only bot view cannot learn talents',
                                "MultiBot's talent button must open the talent tab",
                                'the native talent tab remains disabled',
-                               "a realm without EraTalents renders MultiBot's talent window")
+                               "a realm without EraTalents renders MultiBot's talent window",
+                               'the era tree sits above the toplevel Inspect frame',
+                               "the era tree follows the Inspect frame's strata on every show")
             if not any(message in result.stderr for message in expected_errors):
                 raise AssertionError('Mutation failed for an unrelated fixture error: ' + result.stderr)
         else:
@@ -524,6 +535,9 @@ def main() -> None:
                 ('Inspect.lua', 'if level <= 0 or level >= 10 then InspectSwitchTabs(3) end', 'InspectSwitchTabs(3)'),
                 ('Inspect.lua', 'InspectSwitchTabs(3)', 'InspectSwitchTabs(1)'),
                 ('Inspect.lua', '    v.readOnly = not e.editable\n', ''),
+                ('Inspect.lua', 'name = "EraInspectTalentFrame", parent = UIParent,',
+                 'name = "EraInspectTalentFrame", parent = InspectTalentFrame,'),
+                ('Inspect.lua', '    ET.inspectView.frame:HookScript("OnShow", PlaceInspectView)\n', ''),
                 ('Inspect.lua', '      ET.inspectView.readOnly = true\n', ''),
                 ('Comms.lua', '  e.editable = false\n', ''),
                 ('TalentUI.lua', 'if v.guid then ET.LearnInspect(v.guid, node.id) else ET.Learn(node.id) end', 'ET.Learn(node.id)')):

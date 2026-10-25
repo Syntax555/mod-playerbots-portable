@@ -134,7 +134,8 @@
         "patches/mod-era-talents-multibot-inspect.patch",
         "patches/mod-era-talents-historical-priest-quests.patch",
         "patches/mod-era-talents-build-warnings.patch",
-        "patches/mod-era-talents-dragonui.patch"
+        "patches/mod-era-talents-dragonui.patch",
+        "patches/mod-era-talents-inspect-layer.patch"
       ]
     }
   ],
