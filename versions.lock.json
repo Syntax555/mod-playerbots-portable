@@ -116,7 +116,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "edd758ddf3e034649a8ac8a27ef5224e2d26cbcc",
+      "revision": "4ab8d9ca1da8829ccbda5c959d27eb9842938d9a",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"

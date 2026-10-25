@@ -94,10 +94,12 @@ enabled:
   character's earned era. Raid progression and attunements still apply on
   entry. DragonUI's own fixed lines remain: Dungeon Finder and glyphs at 15,
   dual specialization at 40 and glyph slots at 30, 50, 70 and 80.
-- With MultiBot, a bot's spellbook opens as a DragonUI-style book: the bot's
-  spells by talent tree and the trainer spells it can still learn on this
-  server, with their level and cost. Left-click casts, right-click creates a
-  macro and the box keeps MultiBot's skip list.
+- With MultiBot, a bot's spellbook opens in DragonUI's book while DragonUI's
+  spellbook module is enabled: the same window, General and class tabs,
+  two-page spreads, talent-tree sections, search and paging, filled with the
+  bot's spells and the trainer spells it can still learn on this server, with
+  their level and cost. Left-click casts, right-click creates a macro and
+  shift-click adds the spell to MultiBot's skip list or removes it.
 
 Update the EraTalents addon from the current client package to get this
 behavior. Disabling DragonUI's talent module also restores the standard route.
@@ -123,6 +125,10 @@ MultiBot so the bot's rotation matches the build.
 
 Historical trainer spells require ordinary paid purchases with gold, level and
 prerequisite checks. Talent and class-quest spells require their earned sources.
+Class lessons that TBC or Wrath introduced, such as Victory Rush, Shiv or Wind
+Shear, stay unavailable until the character has earned that expansion; the
+trainer window, bot training and the spellbook's trainer list follow the same
+rule. Lessons a character already knows stay known.
 Known spell variants transfer on an era conversion; ambiguous collapsed ranks
 are mapped conservatively without awarding every rank allowed at that level.
 

@@ -30,9 +30,10 @@ database, configuration and first-run setup.
   [historical talents](docs/era-talents.md).
 - **Client addons for earned play:** DragonUI's talent window, spellbook and
   level-up notice follow each character's era and trainer list; MultiBot opens
-  and trains controlled altbots' historical trees; Questie shows group bots'
-  quest progress; Zygor guides, Gear Finder and Talent Advisor follow each
-  character's tier. These addons are published by their
+  and trains controlled altbots' historical trees and shows bot spellbooks in
+  DragonUI's book; Questie shows group bots' quest progress; Zygor guides, Gear
+  Finder and Talent Advisor follow each character's tier. These addons are
+  published by their
   [forks](docs/addons.md#addon-forks), each with its own Latest download.
 - **Autonomous dungeon parties:** nearby random bots form five-member groups for
   audited normal dungeons in their own era and walk to the entrance. See

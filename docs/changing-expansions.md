@@ -162,7 +162,8 @@ server data only.
 
 Bots add earned points to their existing build. Ordinary respecs use a paid
 trainer. A genuine era crossing refunds the departing tree's points once,
-out of combat. Training requires the paid lesson or earned talent/quest source.
+out of combat. Training requires the paid lesson or earned talent/quest source,
+and class lessons introduced by TBC or Wrath wait until that expansion is earned.
 Glyph ownership is retained, with effects and new use blocked before Wrath.
 
 Riding lesson prices follow the purchasing character's earned era. Normal

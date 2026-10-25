@@ -221,6 +221,23 @@ jobs:
       - name: Test historical spell groups against native stacking rules
         run: python3 cmake/tests/TestEraSpellGroups.py
 
+      - name: Check each class trainer lesson's introducing expansion
+        run: |
+          set -euo pipefail
+          revision() {
+            python3 -c "import json, sys; print(next(source['revision'] for source in json.load(open('versions.lock.json'))['historicalClassData']['sources'] if source['name'] == sys.argv[1]))" "$1"
+          }
+          dumps="$RUNNER_TEMP/cmangos"
+          mkdir -p "$dumps"
+          curl --fail --location --retry 3 --output "$dumps/classic-db.sql.gz" \
+            "https://raw.githubusercontent.com/cmangos/classic-db/$(revision cmangos-classic-db)/Full_DB/ClassicDB_1_12_1_z2815.sql.gz"
+          curl --fail --location --retry 3 --output "$dumps/tbc-db.sql.gz" \
+            "https://raw.githubusercontent.com/cmangos/tbc-db/$(revision cmangos-tbc-db)/Full_DB/TBCDB_1.11.0_Vengeance_One_A_Cmangos_Story.sql.gz"
+          python3 .module-cache/prepared-core/modules/mod-era-talents/tools/generate-trainer-eras.py --check \
+            --core-world .module-cache/prepared-core/data/sql/base/db_world \
+            --classic-db "$dumps/classic-db.sql.gz" --tbc-db "$dumps/tbc-db.sql.gz" \
+            --spell-dbc ".module-cache/client-locales/$LOCALE_REVISION/deDE/Spell.enUS.dbc"
+
       - name: Verify world buff spell contracts in the packaged client
         run: |
           curl --fail --location --retry 3 --output output/SpellDuration.dbc "$LOCALE_RAW_URL/dbc/SpellDuration.dbc"

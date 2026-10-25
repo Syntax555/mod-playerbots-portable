@@ -522,6 +522,7 @@ int main() {
 #include <unordered_set>
 #include <vector>
 #include "EraEarnedTrainingData.gen.h"
+#include "EraTrainerEraData.gen.h"
 constexpr uint8 CLASS_SHAMAN=7, TEAM_HORDE=1, TEAM_ALLIANCE=0;
 enum EraId : uint8 { ERA_VANILLA=0, ERA_TBC=1, ERA_WOTLK=2 };
 struct Player {
@@ -646,6 +647,41 @@ int main() {
     mage.talents[18046]=1;
     assert(EraEarnedTraining::CanTrain(&mage,ERA_VANILLA,45438));
     assert(EraEarnedTraining::CanTrain(&mage,ERA_TBC,45438));
+
+    // Stock lessons without a variant wait for the expansion whose trainers, quests or books
+    // first taught them; the generated table names them by trainer spell and class.
+    auto const& later=EraTrainerEraData::kLaterLessons;
+    for (size_t i=0; i<std::size(later); ++i) {
+        assert(later[i].era==ERA_TBC || later[i].era==ERA_WOTLK);
+        assert(later[i].classId!=6); // death knights keep native training
+        assert(i==0 || later[i-1].spellId<later[i].spellId ||
+               (later[i-1].spellId==later[i].spellId && later[i-1].classId!=later[i].classId));
+    }
+    auto lesson=[&](uint32 id,uint8 cls) {
+        for (auto const& entry : later) if (entry.spellId==id && entry.classId==cls) return int(entry.era);
+        return -1;
+    };
+    assert(lesson(34428,1)==ERA_TBC && lesson(51722,4)==ERA_WOTLK && lesson(57994,7)==ERA_WOTLK);
+    assert(lesson(1757,4)==-1 && lesson(21562,5)==-1); // trained and book-taught Vanilla lessons
+    Player warrior; warrior.cls=1;
+    assert(!EraEarnedTraining::CanTrain(&warrior,ERA_VANILLA,34428)); // Victory Rush
+    assert(EraEarnedTraining::CanTrain(&warrior,ERA_TBC,34428));
+    assert(EraEarnedTraining::CanTrain(&warrior,ERA_WOTLK,34428));
+    assert(EraEarnedTraining::CanTrain(&warrior,ERA_VANILLA,772)); // Rend stays a Vanilla lesson
+    Player rogue; rogue.cls=4;
+    assert(!EraEarnedTraining::CanTrain(&rogue,ERA_VANILLA,51722) && !EraEarnedTraining::CanTrain(&rogue,ERA_TBC,51722));
+    assert(EraEarnedTraining::CanTrain(&rogue,ERA_WOTLK,51722)); // Dismantle
+    assert(!EraEarnedTraining::CanTrain(&rogue,ERA_VANILLA,5938) && EraEarnedTraining::CanTrain(&rogue,ERA_TBC,5938));
+    assert(EraEarnedTraining::CanTrain(&rogue,ERA_VANILLA,1757));
+    for (auto const& entry : later) {
+        Player owner; owner.cls=entry.classId;
+        bool mapped=false;
+        for (auto const& variant : EraEarnedTrainingData::kVariants)
+            for (uint32 id : variant.spell) mapped=mapped || (variant.classId==entry.classId && id==entry.spellId);
+        if (mapped) continue; // variants keep their own era rules
+        for (EraId era : {ERA_VANILLA,ERA_TBC,ERA_WOTLK})
+            assert(EraEarnedTraining::CanTrain(&owner,era,entry.spellId)==(uint8(era)>=entry.era));
+    }
     Trainer::SpellState state=Trainer::SpellState::Available;
     p.combat=true; hook.OnPlayerGetTrainerSpellState(&p,1,123,state);
     assert(state==Trainer::SpellState::Unavailable);
@@ -666,10 +702,15 @@ int main() {
     assert(p.invalidates==invalidates+2 && EraTalents::reconciles==1);
     config.enabled=false; learned.OnPlayerLearnSpell(&p,947513);
     assert(p.invalidates==invalidates+2 && EraTalents::reconciles==1);
-    std::cout << "Era training: no level grants, lowest owned conversion, prerequisites, factions, quests and pending/combat buy denial passed\n";
+    std::cout << "Era training: no level grants, lowest owned conversion, prerequisites, factions, quests, later-expansion lessons and pending/combat buy denial passed\n";
 }
 '''
     compile_run(directory, 'era-training', training_fixture, (fake, src))
+    gate = 'IntroducedEra(player->getClass(), spellId) <= uint8(era)'
+    if training_fixture.count(gate) != 1:
+        raise SystemExit('later-expansion lesson gate mutation was not applied')
+    rejects(directory, 'era-training-later-lessons', training_fixture.replace(gate, 'true'),
+            'later-expansion lessons trainable in an earlier era', (fake, src))
 
     learn_code = function((src / 'EraTalents.cpp').read_text(), '    bool TryLearn(')
     learn_fixture = r'''
