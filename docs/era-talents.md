@@ -71,8 +71,10 @@ enabled:
 
 - For a Vanilla or TBC character, the talent key, the micro-button and
   `/talents` open the historical tree. A DragonUI spec tab opens it as well.
-- DragonUI keeps the glyph page, the pet tree (`/pettalents` opens it) and
-  characters on native Wrath trees.
+- DragonUI keeps the pet tree (`/pettalents` opens it) and characters on
+  native Wrath trees. Its glyph page opens once the character has earned
+  Wrath; before that the glyph key, the glyph tab and using a glyph show a
+  notice instead.
 - Inspecting a character with a historical tree shows it read-only in the
   standard inspect talent tab; other targets keep DragonUI's inspect window.
 - DragonUI's spellbook shows the spells still to learn, and its level-up

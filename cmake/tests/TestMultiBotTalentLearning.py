@@ -81,9 +81,10 @@ struct PlayerbotsMgr {
 struct RandomPlayerbotMgr { bool IsRandomBot(Player* player) { return player->random; } } sRandomPlayerbotMgr;
 // CLASSIFICATION
 struct Config {
-    bool enabled = true, bots = true;
+    bool enabled = true, bots = true, glyphGate = true;
     bool Enabled() const { return enabled; }
     bool BotTalents() const { return bots; }
+    bool GlyphGate() const { return glyphGate; }
 } config;
 auto* sEraTalentsConfig = &config;
 EraId EraFromIP(Player* player) { return player->era; }
@@ -91,6 +92,10 @@ bool EraHasTalentTrees(Player* player, EraId era) { return player && player->cls
 namespace EraTransition { EraId StoredEra(Player* player) { return player->stored; } }
 namespace EraTalentBots {
 // ERA_GATES
+}
+constexpr uint8 CLASS_DEATH_KNIGHT = 6;
+namespace EraGlyphGate {
+// GLYPH_GATE
 }
 struct EraTalentNode { uint32 id; uint8 era, cls; };
 struct Content {
@@ -216,6 +221,16 @@ int main() {
     { Scenario s; config.bots = false; s.Denied(); }
     { Scenario s; config.enabled = false; s.Denied(); }
     {
+        // Every SYNC is followed by the glyph gate's own answer for the requester.
+        Scenario s;
+        s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 1");
+        s.owner.era = s.owner.stored = ERA_TBC; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 0");
+        s.owner.era = ERA_WOTLK; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 0");
+        s.owner.cls = 6; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 1");
+        s.owner.cls = 1; config.glyphGate = false; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 1");
+        config.glyphGate = true; s.Send("LEARN 1"); assert(s.owner.messages.back() == "GLYPHS 0");
+    }
+    {
         // BOOK answers with the subject's trainer book and sends no SYNC; riding only for the requester.
         Scenario s;
         s.Send("BOOK 0x1");
@@ -301,8 +316,9 @@ def production(module: Path, core: Path) -> tuple[str, str]:
         ids.append(int(node[1]))
     authored = f'constexpr uint32 kVanillaTalentId = {ids[0]}, kTbcTalentId = {ids[1]};'
     entry = re.search(r'struct Entry\n\{.*?\n\};', (module / 'src/EraTrainerBook.h').read_text(), re.DOTALL).group(0)
+    glyph_gate = function((module / 'src/EraGlyphGate.cpp').read_text(), 'bool Allowed(Player* player)')
     adapters = ADAPTERS.replace('// AUTHORED_IDS', authored).replace('// CLASSIFICATION', classification).replace(
-        '// ERA_GATES', gates).replace('// BOOK_ENTRY', entry)
+        '// ERA_GATES', gates).replace('// BOOK_ENTRY', entry).replace('// GLYPH_GATE', glyph_gate)
     source = (module / 'src/EraTalentsComms.cpp').read_text()
     # Keep the complete hook and its helpers; only external include dependencies use adapters.
     source = re.sub(r'^\s*#include[^\n]*\n', '', source, flags=re.MULTILINE)
@@ -347,6 +363,7 @@ def main() -> None:
             ('unsigned-id-only', 'std::isdigit(iss.peek()) &&', ''),
             ('exact-learn-payload', '&& !(iss >> extra)', ''),
             ('book-dispatch', 'else if (verb == "BOOK")', 'else if (false)'),
+            ('glyph-state', 'EraGlyphGate::Allowed(p) ? "1" : "0"', '"1"'),
         )
         for name, before, after in mutations:
             if before not in source:

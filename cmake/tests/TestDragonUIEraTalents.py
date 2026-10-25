@@ -37,8 +37,9 @@ def dragon_chunks(source: Path) -> dict[str, str]:
         + section(shell, 'local function onShow()', 'local function onDragStart(win)') + 'return onShow, onHide\n'
     inspect = header + section((talents / 'live_view.lua').read_text(), 'function ns.ShowInspect(unit)',
                                '-- Live repaint triggers')
-    tabs = header + section((talents / 'tab_strip.lua').read_text(), 'local function tabClicked(button)',
-                            'local function tabEnter(button)') + 'return tabClicked\n'
+    # The tab strip from its tab helpers through RefreshTabs, so the glyph tab is DragonUI's own.
+    tabs = header + 'local L = addon.L\n' + section((talents / 'tab_strip.lua').read_text(), 'local TAB_PREFIX',
+                                                     '-- Spec rename cog') + 'return tabClicked\n'
     return {'window': window, 'inspect': inspect, 'tabs': tabs,
             'namespace': str(talents / 'namespace.lua'), 'entry': str(talents / 'entry_points.lua')}
 
@@ -76,6 +77,8 @@ function methods:HookScript(name,fn) self.hooks[name]=self.hooks[name] or {}; ta
 function methods:IsShown() return self.shown end
 function methods:IsVisible() return self.shown end
 function methods:GetID() return self.id or 0 end
+function methods:SetID(id) self.id=id end
+function methods:SetShownCompat(show) if show then self:Show() else self:Hide() end end
 -- Native order: a frame's own script runs before the post-hooks added by HookScript.
 function methods:Hide()
   if not self.shown then return end
@@ -251,6 +254,7 @@ if not moduleEnabled then
   return
 end
 assert(win and TM.applied,"DragonUI applies its talent module on login")
+ns.BuildTabs(win)
 
 -- A native WotLK character keeps DragonUI's window.
 ET.OnAddonMsg("ERATAL","SYNC 2 0 0")
@@ -285,6 +289,27 @@ press("K")
 assert(win:IsShown() and ns.GlyphView() and not panel(),"the glyph page stays in DragonUI")
 tabClicked({GetID=function() return 1 end})
 assert(panel() and not nativeOwnTree(),"a spec tab of an open DragonUI window opens the era tree")
+reset()
+
+-- Before earned Wrath the server's glyph gate closes the glyph page and hides its tab.
+local gate=ET.L["Glyphs become available once this character has earned Wrath of the Lich King."]
+ET.OnAddonMsg("ERATAL","GLYPHS 0")
+assert(ET.state.glyphsAllowed==false)
+press("K")
+assert(not win:IsShown() and not panel() and not ns.GlyphView() and notices[#notices]==gate,
+  "the glyph key explains the gate before Wrath and opens nothing")
+fire("USE_GLYPH")
+assert(not win:IsShown() and not panel() and #notices==2,"using a glyph explains the gate before Wrath")
+tabClicked({GetID=function() return 4 end})
+assert(not ns.GlyphView() and #notices==3,"the glyph tab cannot open the page before Wrath")
+ns.RefreshTabs()
+assert(DragonUI_TalentFrameTab1:IsShown() and not DragonUI_TalentFrameTab4:IsShown(),"the glyph tab is hidden before Wrath")
+reset()
+ET.OnAddonMsg("ERATAL","GLYPHS 1")
+ns.RefreshTabs()
+assert(DragonUI_TalentFrameTab4:IsShown(),"the glyph tab returns with earned Wrath")
+press("K")
+assert(win:IsShown() and ns.GlyphView() and #notices==0,"the glyph page opens with earned Wrath")
 reset()
 
 -- The pet tree stays in DragonUI: /pettalents opens DragonUI's pet view instead of the stock frame.
@@ -334,7 +359,7 @@ inspect("party1")
 InspectFrameTab3:Click()
 assert(win:IsShown() and ns.inspectUnit=="party1","a realm without EraTalents keeps DragonUI's inspect window")
 reset()
-print("DragonUI talents: era panel, glyphs, pet tree, level gate and era/native inspect passed")
+print("DragonUI talents: era panel, glyph gate, pet tree, level gate and era/native inspect passed")
 '''
 
 
@@ -403,6 +428,20 @@ def main() -> None:
             compat.write_text(safe.replace(before, after, 1))
             run(addon, chunks, directory, enabled=True, expect_failure=True)
         compat.write_text(safe)
+        for relative, before, after in (
+                ('DragonUIGlyphs.lua', '      if Blocked() then return Refuse() end\n', ''),
+                ('DragonUIGlyphs.lua', 'if on and Blocked() then', 'if false then'),
+                ('DragonUIGlyphs.lua', 'if glyphTab and Blocked() then glyphTab:Hide() end', ''),
+                ('DragonUIGlyphs.lua', 'ET.state.glyphsAllowed == false', 'ET.state.glyphsAllowed ~= true'),
+                ('Comms.lua', 'ET.state.glyphsAllowed = glyphs == "1"', 'ET.state.glyphsAllowed = true'),
+                ('EraTalents.lua', '  if ET.InitDragonUIGlyphs then ET.InitDragonUIGlyphs() end\n', '')):
+            path = addon / relative
+            original = path.read_text()
+            if before not in original:
+                raise AssertionError('Expected production glyph gate: ' + before)
+            path.write_text(original.replace(before, after, 1))
+            run(addon, chunks, directory, enabled=True, expect_failure=True)
+            path.write_text(original)
         init = addon / 'EraTalents.lua'
         wired = init.read_text()
         call = '  if ET.InitDragonUI then ET.InitDragonUI() end\n'
