@@ -34,7 +34,10 @@ using uint64 = std::uint64_t;
 constexpr uint32 INSPECT_DISTANCE = 28, CONFIG_TALENTS_INSPECTING = 0, LANG_ADDON = 0xFFFFFFFF;
 enum EraId : uint8 { ERA_VANILLA, ERA_TBC, ERA_WOTLK };
 // AUTHORED_IDS
-struct ObjectGuid { uint64 raw = 0; ObjectGuid() = default; explicit ObjectGuid(uint64 value) : raw(value) {} };
+struct ObjectGuid {
+    uint64 raw = 0; ObjectGuid() = default; explicit ObjectGuid(uint64 value) : raw(value) {}
+    bool operator==(ObjectGuid const&) const = default;
+};
 struct Group {};
 struct Session { bool headless = false; bool IsHeadless() const { return headless; } };
 class PlayerbotAI;
@@ -50,6 +53,7 @@ struct Player {
     std::unordered_map<uint32, uint8> ranks;
     std::vector<std::string> messages;
     uint8 getClass() const { return cls; }
+    ObjectGuid GetGUID() const { return ObjectGuid(guid); }
     Group* GetGroup() const { return group; }
     Session* GetSession() { return &session; }
     bool IsWithinDistInMap(Player* target, uint32 distance, bool) const {
@@ -114,6 +118,15 @@ std::map<uint64, Player*> players;
 Player* GetPlayer(Player const&, ObjectGuid const& guid) {
     auto found = players.find(guid.raw); return found == players.end() ? nullptr : found->second;
 }
+Player* FindPlayer(ObjectGuid const& guid) {
+    auto found = players.find(guid.raw); return found == players.end() ? nullptr : found->second;
+}
+}
+// The trainer book's own fixture runs its producer; the handler only relays a subject's book.
+namespace EraTrainerBook {
+// BOOK_ENTRY
+std::vector<Entry> ClassBook(Player* player) { return {{1, 6673, 10, 0, 0, 0, uint8(player->cls)}}; }
+std::vector<Entry> RidingBook(Player*) { return {{40, 33388, 40000, 0, 0, 0, 0}}; }
 }
 struct World { bool inspect = true; bool getBoolConfig(uint32) const { return inspect; } } world;
 auto* sWorld = &world;
@@ -203,6 +216,19 @@ int main() {
     { Scenario s; config.bots = false; s.Denied(); }
     { Scenario s; config.enabled = false; s.Denied(); }
     {
+        // BOOK answers with the subject's trainer book and sends no SYNC; riding only for the requester.
+        Scenario s;
+        s.Send("BOOK 0x1");
+        assert(s.owner.messages == std::vector<std::string>({"BOOK 0x1 1 1:6673:10:0:0:0:1", "RIDING 0x1 40:33388:40000:0:0:0:0"}));
+        s.Send("BOOK 0x2");
+        assert(s.owner.messages == std::vector<std::string>({"BOOK 0x2 1 1:6673:10:0:0:0:1"}));
+        s.Send("BOOK 0x3");
+        assert(s.owner.messages == std::vector<std::string>({"BOOK 0x3 0"}));
+        s.bot.group = &s.otherGroup; s.Send("BOOK 0x2");
+        assert(s.owner.messages == std::vector<std::string>({"BOOK 0x2 0"}));
+        config.enabled = false; s.Send("BOOK 0x1"); assert(s.owner.messages.empty());
+    }
+    {
         Scenario s;
         s.bot.era = s.bot.stored = ERA_TBC;
         s.bot.points = 61;
@@ -274,7 +300,9 @@ def production(module: Path, core: Path) -> tuple[str, str]:
         assert node is not None, f'{era} needs a real first-row warrior talent for the dispatch adapter'
         ids.append(int(node[1]))
     authored = f'constexpr uint32 kVanillaTalentId = {ids[0]}, kTbcTalentId = {ids[1]};'
-    adapters = ADAPTERS.replace('// AUTHORED_IDS', authored).replace('// CLASSIFICATION', classification).replace('// ERA_GATES', gates)
+    entry = re.search(r'struct Entry\n\{.*?\n\};', (module / 'src/EraTrainerBook.h').read_text(), re.DOTALL).group(0)
+    adapters = ADAPTERS.replace('// AUTHORED_IDS', authored).replace('// CLASSIFICATION', classification).replace(
+        '// ERA_GATES', gates).replace('// BOOK_ENTRY', entry)
     source = (module / 'src/EraTalentsComms.cpp').read_text()
     # Keep the complete hook and its helpers; only external include dependencies use adapters.
     source = re.sub(r'^\s*#include[^\n]*\n', '', source, flags=re.MULTILINE)
@@ -318,6 +346,7 @@ def main() -> None:
             ('historical-target', '!EraTalentBots::IsEraManaged(t)', 'false'),
             ('unsigned-id-only', 'std::isdigit(iss.peek()) &&', ''),
             ('exact-learn-payload', '&& !(iss >> extra)', ''),
+            ('book-dispatch', 'else if (verb == "BOOK")', 'else if (false)'),
         )
         for name, before, after in mutations:
             if before not in source:

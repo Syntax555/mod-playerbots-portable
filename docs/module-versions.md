@@ -21,7 +21,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
 | Questie-335 (source only) | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335) | `d695e9048e6d` | Prepared bot quest progress integration; installer downloads upstream files separately |
 | Zygor Guides Viewer Remaster (source only) | [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) | `9087c457e20f` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
-| DragonUI (source only) | [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) | `82a6c52c93ad` | Talent window entry points checked against the EraTalents integration; not redistributed |
+| DragonUI (source only) | [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) | `82a6c52c93ad` | Talent window entry points and spellbook catalogue checked against the EraTalents integration; not redistributed |
 | Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
 | CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
@@ -137,7 +137,7 @@ upstream, checks every addon file against the pinned Git tree and applies the
 patch locally; see [installation](zygor-progression.md#installation).
 
 DragonUI is pinned only so the fixtures run its talent window entry points
-with the EraTalents client files; no package contains it.
+and spellbook catalogue with the EraTalents client files; no package contains it.
 
 Dependencies keep their own license terms and per-file notices; see
 [third-party notices](../THIRD_PARTY_NOTICES.md) and each package's `licenses/`

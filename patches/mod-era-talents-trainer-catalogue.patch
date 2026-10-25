@@ -1,0 +1,498 @@
+diff --git a/client-addon/EraTalents/Comms.lua b/client-addon/EraTalents/Comms.lua
+index 34d4d74..1e8cc5c 100644
+--- a/client-addon/EraTalents/Comms.lua
++++ b/client-addon/EraTalents/Comms.lua
+@@ -66,6 +66,45 @@ function ET.ParseInspectSync(cache, message)
+   return guid
+ end
+ 
++-- Trainer books by GUID: `class[guid]` = { classId, records, partial } from BOOK (a denial has
++-- classId 0) and `riding[guid]` = { records, partial } from RIDING. A record has DragonUI's trainer
++-- shape {level, spellID, cost, previousRank, talent, raceMask, required, tree}; the server already
++-- applied the character's race, so raceMask is 0. Chunks follow the ISYNC rules.
++ET.books = ET.books or { class = {}, riding = {} }
++ET.bookHandlers = ET.bookHandlers or {}
++ET.syncHandlers = ET.syncHandlers or {}
++
++local function ParseBookChunk(store, guid, rest, entry)
++  local seq, total, tail = string.match(rest, "^(%d+)/(%d+)%s*(.*)$")
++  if seq then rest = tail end
++  if seq and tonumber(seq) > 1 then
++    entry = store[guid]
++    if not (entry and entry.partial) then return false end   -- orphan continuation: ignore
++  else
++    entry.records = {}
++    store[guid] = entry
++  end
++  entry.partial = seq ~= nil and tonumber(seq) < tonumber(total)
++  for level, spell, cost, previous, talent, required, tree in
++      string.gmatch(rest, "(%d+):(%d+):(%d+):(%d+):(%d+):(%d+):(%d+)") do
++    entry.records[#entry.records + 1] = { tonumber(level), tonumber(spell), tonumber(cost), tonumber(previous),
++                                          tonumber(talent), 0, tonumber(required), tonumber(tree) }
++  end
++  return not entry.partial
++end
++
++-- Returns the guid, "class" or "riding", and whether that book is complete; nil for other messages.
++function ET.ParseBook(books, message)
++  local guid, classId, rest = string.match(message, "^BOOK%s+(%S+)%s+(%d+)%s*(.*)$")
++  if guid then
++    return guid, "class", ParseBookChunk(books.class, guid, rest, { classId = tonumber(classId) })
++  end
++  guid, rest = string.match(message, "^RIDING%s+(%S+)%s*(.*)$")
++  if guid then return guid, "riding", ParseBookChunk(books.riding, guid, rest, {}) end
++  return nil
++end
++function ET.RequestBook(guid) ET.Send("BOOK " .. guid) end
++
+ -- Generation canary. The server sends "GEN <stamp>" (from era_talent_meta) after every SYNC;
+ -- the installed client patch carries the same stamp in sentinel spell 932999's NAME
+ -- ("EraTalents Gen <stamp>"). A mismatch means the player's Data/patch-V.mpq is a different
+@@ -114,8 +153,16 @@ function ET.OnAddonMsg(prefix, message)
+     end
+     return
+   end
++  local bguid, kind, complete = ET.ParseBook(ET.books, message)
++  if bguid then
++    if complete then
++      for _, handler in ipairs(ET.bookHandlers) do handler(bguid, kind) end
++    end
++    return
++  end
+   if ET.ParseSync(ET.state, message) then
+     if ET.Refresh then ET.Refresh() end   -- TalentUI hook (may be absent in tests)
++    for _, handler in ipairs(ET.syncHandlers) do handler() end
+   end
+ end
+ 
+diff --git a/client-addon/EraTalents/DragonUIBook.lua b/client-addon/EraTalents/DragonUIBook.lua
+new file mode 100644
+index 0000000..969457a
+--- /dev/null
++++ b/client-addon/EraTalents/DragonUIBook.lua
+@@ -0,0 +1,75 @@
++-- DragonUI's spellbook and level-up notice list the class spells still to learn from a fixed WotLK
++-- trainer table. The server sends the character's own trainer list instead (BOOK), filtered like
++-- the trainer window by earned era, talents and class quests, and it replaces that table for the
++-- player's class. Without a reply DragonUI keeps its own table.
++EraTalents = EraTalents or {}
++local ET = EraTalents
++
++-- Learning and talent changes arrive in bursts; one request follows the last of them.
++local BOOK_DELAY = 1
++
++local function DragonBook()
++  local dragon = _G.DragonUI
++  local book = type(dragon) == "table" and dragon.SpellbookModule
++  if type(book) ~= "table" or type(book.TrainerIndex) ~= "function" then return nil end
++  return book
++end
++
++-- The shape Book.TrainerIndex returns: the records, their next ranks by previous rank, and by spell.
++function ET.TrainerIndex(records)
++  local after, byID = {}, {}
++  for _, record in ipairs(records) do
++    byID[record[2]] = record
++    local previous = record[4]
++    if previous ~= 0 then
++      after[previous] = after[previous] or {}
++      table.insert(after[previous], record)
++    end
++  end
++  return { list = records, after = after, byID = byID }
++end
++
++local ownIndex
++
++local function OnOwnBook(guid, kind)
++  if kind ~= "class" or guid ~= UnitGUID("player") then return end
++  local entry = ET.books.class[guid]
++  if entry.classId == 0 then return end
++  ownIndex = ET.TrainerIndex(entry.records)
++  local book = DragonBook()
++  if book and type(book.MarkAllDirty) == "function" then book.MarkAllDirty() end
++end
++
++function ET.InitDragonUIBook()
++  local book = DragonBook()
++  if not book or book._eraTrainerBook then return end
++  book._eraTrainerBook = true
++
++  local trainerIndex = book.TrainerIndex
++  book.TrainerIndex = function(classToken, ...)
++    if ownIndex and classToken == select(2, UnitClass("player")) then return ownIndex end
++    return trainerIndex(classToken, ...)
++  end
++  table.insert(ET.bookHandlers, OnOwnBook)
++
++  local waited = 0
++  local timer = CreateFrame("Frame")
++  timer:Hide()
++  timer:SetScript("OnUpdate", function(self, elapsed)
++    waited = waited + elapsed
++    if waited < BOOK_DELAY then return end
++    self:Hide()
++    ET.RequestBook(UnitGUID("player"))
++  end)
++  ET.RefreshOwnBook = function()
++    waited = 0
++    timer:Show()
++  end
++
++  -- Talent ranks (SYNC), class quests and purchases change what the trainer lists.
++  local events = CreateFrame("Frame")
++  events:RegisterEvent("LEARNED_SPELL_IN_TAB")
++  events:SetScript("OnEvent", ET.RefreshOwnBook)
++  table.insert(ET.syncHandlers, ET.RefreshOwnBook)
++  ET.RefreshOwnBook()
++end
+diff --git a/client-addon/EraTalents/EraTalents.lua b/client-addon/EraTalents/EraTalents.lua
+index 6a06c5b..417e24a 100644
+--- a/client-addon/EraTalents/EraTalents.lua
++++ b/client-addon/EraTalents/EraTalents.lua
+@@ -10,6 +10,7 @@ ET.state = { era = nil, availPts = 0, ranks = {}, isEraChar = false }
+ function ET.Init()
+   if ET._inited then return end
+   ET._inited = true
++  if ET.InitDragonUIBook then ET.InitDragonUIBook() end
+   if ET.InitComms then ET.InitComms() end
+   if ET.InitUI then ET.InitUI() end
+   if ET.InitHook then ET.InitHook() end
+diff --git a/client-addon/EraTalents/EraTalents.toc b/client-addon/EraTalents/EraTalents.toc
+index e0eeada..9228da6 100644
+--- a/client-addon/EraTalents/EraTalents.toc
++++ b/client-addon/EraTalents/EraTalents.toc
+@@ -25,6 +25,7 @@ data\generated\MageTBC.lua
+ Locales.lua
+ EraTalents.lua
+ Comms.lua
++DragonUIBook.lua
+ Tooltip.lua
+ TalentUI.lua
+ Hook.lua
+diff --git a/src/EraTalentsComms.cpp b/src/EraTalentsComms.cpp
+index 10fb1b0..dae10b4 100644
+--- a/src/EraTalentsComms.cpp
++++ b/src/EraTalentsComms.cpp
+@@ -11,6 +11,7 @@
+ #include "EraTalentIP.h"
+ #include "EraTalents.h"
+ #include "EraTalentsConfig.h"
++#include "EraTrainerBook.h"
+ #include "EraTransition.h"
+ #include "ObjectAccessor.h"
+ #include "ObjectDefines.h"  // INSPECT_DISTANCE
+@@ -244,6 +245,57 @@ namespace EraTalentsComms
+     }
+ }
+ 
++// BOOK <guidHex> asks for the trainer spells of the requester or of a bot in its group. The reply is
++// "BOOK <guidHex> <classId> [<seq>/<total>] <record,...>", for the requester followed by "RIDING
++// <guidHex> [<seq>/<total>] <record,...>"; a denial is "BOOK <guidHex> 0", so the client never waits.
++// A record is "level:spellId:cost:previousRank:talent:required:tree" as EraTrainerBook::Entry holds it.
++namespace
++{
++    // The requester, or a bot in its group whose spellbook MultiBot shows. A book holds only what
++    // that character's own trainers would list for it.
++    Player* BookSubject(Player* requester, ObjectGuid const& guid)
++    {
++        if (guid == requester->GetGUID())
++            return requester;
++#ifdef MOD_PLAYERBOTS
++        Player* target = ObjectAccessor::FindPlayer(guid);
++        if (target && GET_PLAYERBOT_AI(target) && requester->GetGroup() && target->GetGroup() == requester->GetGroup())
++            return target;
++#endif
++        return nullptr;
++    }
++
++    std::string BookList(std::vector<EraTrainerBook::Entry> const& book)
++    {
++        std::string list;
++        for (EraTrainerBook::Entry const& entry : book)
++            list += std::to_string(entry.level) + ":" + std::to_string(entry.spellId) + ":" + std::to_string(entry.cost) +
++                    ":" + std::to_string(entry.previousRank) + ":" + std::to_string(entry.talent) + ":" +
++                    std::to_string(entry.required) + ":" + std::to_string(uint32(entry.tree)) + ",";
++        if (!list.empty())
++            list.pop_back();
++        return list;
++    }
++
++    std::vector<std::string> BuildBook(Player* requester, std::string const& token)
++    {
++        std::string const echo = token.substr(0, kMaxGuidToken);
++        ObjectGuid guid;
++        Player* subject = ParseGuidToken(token, guid) ? BookSubject(requester, guid) : nullptr;
++        if (!subject)
++            return { "BOOK " + echo + " 0" };
++
++        std::vector<std::string> bodies =
++            ChunkRankList("BOOK " + echo + " " + std::to_string(uint32(subject->getClass())) + " ",
++                          BookList(EraTrainerBook::ClassBook(subject)));
++        // Riding levels are the level-up notice's; a bot's spellbook has no use for them.
++        if (subject == requester)
++            for (std::string& body : ChunkRankList("RIDING " + echo + " ", BookList(EraTrainerBook::RidingBook(subject))))
++                bodies.push_back(std::move(body));
++        return bodies;
++    }
++}
++
+ class era_talents_comms : public PlayerScript
+ {
+ public:
+@@ -276,6 +328,14 @@ public:
+         {
+             // no-op: just resync below -- the addon sends HELLO on login/reload to pull state.
+         }
++        else if (verb == "BOOK")
++        {
++            std::string token;
++            iss >> token;
++            for (std::string const& body : BuildBook(p, token))
++                p->Whisper(std::string("ERATAL\t") + body, LANG_ADDON, p);
++            return;
++        }
+         else if (verb == "INSPECT")
+         {
+             std::string token;
+diff --git a/src/EraTrainerBook.cpp b/src/EraTrainerBook.cpp
+new file mode 100644
+index 0000000..f873704
+--- /dev/null
++++ b/src/EraTrainerBook.cpp
+@@ -0,0 +1,199 @@
++/*
++ * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation; either version 2 of the License, or (at your
++ * option) any later version.
++ */
++
++#include "EraTrainerBook.h"
++
++#include <algorithm>
++#include <array>
++#include <stdexcept>
++#include <unordered_map>
++#include <unordered_set>
++
++#include "DBCStores.h"
++#include "EraTalentBots.h"
++#include "EraTalentContent.h"
++#include "EraTalentIP.h"
++#include "NPCPackets.h"
++#include "ObjectMgr.h"
++#include "Player.h"
++#include "ScriptMgr.h"
++#include "SpellInfo.h"
++#include "SpellMgr.h"
++#include "Trainer.h"
++
++namespace
++{
++// Talent tabs in TalentTab.dbc order, so a book tree matches GetTalentTabInfo on the client.
++constexpr std::array<std::array<uint32, 3>, MAX_CLASSES> kTreeSkills = {{
++    {},
++    { SKILL_ARMS, SKILL_FURY, SKILL_PROTECTION },
++    { SKILL_HOLY2, SKILL_PROTECTION2, SKILL_RETRIBUTION },
++    { SKILL_BEAST_MASTERY, SKILL_MARKSMANSHIP, SKILL_SURVIVAL },
++    { SKILL_ASSASSINATION, SKILL_COMBAT, SKILL_SUBTLETY },
++    { SKILL_DISCIPLINE, SKILL_HOLY, SKILL_SHADOW },
++    { SKILL_DK_BLOOD, SKILL_DK_FROST, SKILL_DK_UNHOLY },
++    { SKILL_ELEMENTAL_COMBAT, SKILL_ENHANCEMENT, SKILL_RESTORATION },
++    { SKILL_ARCANE, SKILL_FIRE, SKILL_FROST },
++    { SKILL_AFFLICTION, SKILL_DEMONOLOGY, SKILL_DESTRUCTION },
++    {},
++    { SKILL_BALANCE, SKILL_FERAL_COMBAT, SKILL_RESTORATION2 },
++}};
++
++uint8 BookTree(uint8 classId, uint32 spellId)
++{
++    if (classId >= MAX_CLASSES)
++        return 0;
++    SkillLineAbilityMapBounds abilities = sSpellMgr->GetSkillLineAbilityMapBounds(spellId);
++    for (auto ability = abilities.first; ability != abilities.second; ++ability)
++        for (uint8 tree = 0; tree < 3; ++tree)
++            if (kTreeSkills[classId][tree] && ability->second->SkillLine == kTreeSkills[classId][tree])
++                return tree + 1;
++    return 0;
++}
++
++// Stock talents come from Talent.dbc; historical ones are the era tree's own rank spells.
++bool IsTalentSpell(Player* player, EraId era, uint32 spellId)
++{
++    if (GetTalentSpellCost(spellId) || sSpellMgr->IsAdditionalTalentSpell(spellId))
++        return true;
++    for (EraTalentNode const* node : sEraTalentContent->NodesFor(uint8(era), player->getClass()))
++        for (uint32 rankSpell : node->rankSpell)
++            if (rankSpell && rankSpell == spellId)
++                return true;
++    return false;
++}
++
++// A trainer's quote before its creature's reputation discount; the cost hook ignores the trainer.
++uint32 BaseCost(Player* player, Trainer::Spell const& spell)
++{
++    uint32 cost = spell.MoneyCost;
++    sScriptMgr->OnPlayerGetTrainerSpellCost(player, nullptr, spell.SpellId, cost);
++    return cost;
++}
++
++// The trainer window's list for these trainers: its packet entries go through the same list hook,
++// which judges the character and not the creature, and the survivors map back to their rows.
++std::vector<Trainer::Spell const*> ListedSpells(Player* player, std::vector<Trainer::Trainer const*> const& trainers)
++{
++    // One row per spell, the lowest level any of these trainers asks for, in trainer order.
++    std::vector<std::pair<Trainer::Trainer const*, Trainer::Spell const*>> rows;
++    std::unordered_map<uint32, size_t> placed;
++    for (Trainer::Trainer const* trainer : trainers)
++    {
++        if (!trainer->IsTrainerValidForPlayer(player))
++            continue;
++        for (Trainer::Spell const& spell : trainer->GetSpells())
++        {
++            if (!player->IsSpellFitByClassAndRace(spell.SpellId))
++                continue;
++            auto [slot, fresh] = placed.emplace(spell.SpellId, rows.size());
++            if (fresh)
++                rows.emplace_back(trainer, &spell);
++            else if (spell.ReqLevel < rows[slot->second].second->ReqLevel)
++                rows[slot->second] = { trainer, &spell };
++        }
++    }
++    WorldPackets::NPC::TrainerList list;
++    for (auto const& [trainer, spell] : rows)
++    {
++        WorldPackets::NPC::TrainerListSpell& entry = list.Spells.emplace_back();
++        entry.SpellID = spell->SpellId;
++        // The state itself is private to the trainer; this is what its public checks show.
++        entry.Usable = AsUnderlyingType(trainer->CanTeachSpell(player, spell) ? Trainer::SpellState::Available
++                                        : player->HasSpell(spell->SpellId)    ? Trainer::SpellState::Known
++                                                                              : Trainer::SpellState::Unavailable);
++        entry.MoneyCost = int32(BaseCost(player, *spell));
++        entry.ReqLevel = spell->ReqLevel;
++        entry.ReqSkillLine = spell->ReqSkillLine;
++        entry.ReqSkillRank = spell->ReqSkillRank;
++        std::copy(spell->ReqAbility.begin(), spell->ReqAbility.end(), entry.ReqAbility.begin());
++    }
++    sScriptMgr->OnPlayerBeforeReceiveSpellListFromTrainer(player, nullptr, list);
++    std::vector<Trainer::Spell const*> listed;
++    for (WorldPackets::NPC::TrainerListSpell const& entry : list.Spells)
++        if (auto slot = placed.find(uint32(entry.SpellID)); slot != placed.end())
++            listed.push_back(rows[slot->second].second);
++    return listed;
++}
++
++std::vector<EraTrainerBook::Entry> Book(Player* player, std::vector<Trainer::Trainer const*> const& trainers)
++{
++    std::vector<EraTrainerBook::Entry> book;
++    EraId era = EraTalentBots::EraFor(player);
++    std::unordered_map<uint32, size_t> placed;
++    for (Trainer::Spell const* spell : ListedSpells(player, trainers))
++    {
++        uint32 cost = BaseCost(player, *spell);
++        std::vector<uint32> taught;
++        for (SpellEffectInfo const& effect : sSpellMgr->AssertSpellInfo(spell->SpellId)->GetEffects())
++            if (effect.IsEffect(SPELL_EFFECT_LEARN_SPELL) && effect.TriggerSpell)
++                taught.push_back(effect.TriggerSpell);
++        if (taught.empty())
++            taught.push_back(spell->SpellId);
++        for (uint32 spellId : taught)
++        {
++            EraTrainerBook::Entry entry;
++            entry.level = spell->ReqLevel;
++            entry.spellId = spellId;
++            entry.cost = cost;
++            entry.previousRank = sSpellMgr->GetPrevSpellInChain(spellId);
++            uint32 root = sSpellMgr->GetFirstSpellInChain(spellId);
++            if (root && root != spellId && IsTalentSpell(player, era, root))
++                entry.talent = root;
++            for (uint32 ability : spell->ReqAbility)
++                if (!entry.required && ability && ability != entry.previousRank && ability != entry.talent)
++                    entry.required = ability;
++            for (auto const& [learned, required] : sSpellMgr->GetSpellsRequiredForSpellBounds(spell->SpellId))
++                if (!entry.required && required != entry.previousRank && required != entry.talent)
++                    entry.required = required;
++            entry.tree = BookTree(player->getClass(), spellId);
++            auto [slot, fresh] = placed.emplace(spellId, book.size());
++            if (fresh)
++                book.push_back(entry);
++            else if (entry.level < book[slot->second].level)
++                book[slot->second] = entry;
++        }
++    }
++    std::sort(book.begin(), book.end(), [](EraTrainerBook::Entry const& a, EraTrainerBook::Entry const& b)
++              { return a.level != b.level ? a.level < b.level : a.spellId < b.spellId; });
++    return book;
++}
++}  // namespace
++
++namespace EraTrainerBook
++{
++std::vector<Entry> ClassBook(Player* player)
++{
++    if (!player)
++        return {};
++    try
++    {
++        return Book(player, sObjectMgr->GetClassTrainers(player->getClass()));
++    }
++    catch (std::out_of_range const&)
++    {
++        return {};  // A world database without trainers for this class.
++    }
++}
++
++std::vector<Entry> RidingBook(Player* player)
++{
++    if (!player)
++        return {};
++    std::vector<Trainer::Trainer const*> trainers;
++    std::unordered_set<Trainer::Trainer const*> seen;
++    for (auto const& [entry, creature] : *sObjectMgr->GetCreatureTemplates())
++    {
++        Trainer::Trainer const* trainer = sObjectMgr->GetTrainer(entry);
++        if (trainer && trainer->GetTrainerType() == Trainer::Type::Mount && seen.insert(trainer).second)
++            trainers.push_back(trainer);
++    }
++    return Book(player, trainers);
++}
++}  // namespace EraTrainerBook
+diff --git a/src/EraTrainerBook.h b/src/EraTrainerBook.h
+new file mode 100644
+index 0000000..617b18a
+--- /dev/null
++++ b/src/EraTrainerBook.h
+@@ -0,0 +1,30 @@
++#ifndef MOD_ERA_TRAINER_BOOK_H
++#define MOD_ERA_TRAINER_BOOK_H
++
++#include <vector>
++
++#include "Define.h"
++
++class Player;
++
++namespace EraTrainerBook
++{
++// A spell a trainer lists for the character, as a spellbook shows it before it is learned.
++struct Entry
++{
++    uint32 level = 0;
++    uint32 spellId = 0;       // The spell learned, not a trainer's teaching wrapper.
++    uint32 cost = 0;          // Before the trainer's reputation discount.
++    uint32 previousRank = 0;
++    uint32 talent = 0;        // The talent the rank chain starts from.
++    uint32 required = 0;      // Another spell that must be known first.
++    uint8 tree = 0;           // Talent tab 1-3; 0 for the general book.
++};
++
++// What the character's class trainers list for it, filtered exactly as the trainer window is.
++std::vector<Entry> ClassBook(Player* player);
++// The same for riding trainers, which only creatures reach.
++std::vector<Entry> RidingBook(Player* player);
++}  // namespace EraTrainerBook
++
++#endif

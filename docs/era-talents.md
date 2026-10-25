@@ -75,6 +75,10 @@ enabled:
   characters on native Wrath trees.
 - Inspecting a character with a historical tree shows it read-only in the
   standard inspect talent tab; other targets keep DragonUI's inspect window.
+- DragonUI's spellbook shows the spells still to learn, and its level-up
+  notice the new class spells, from the character's own class trainer list on
+  this server. The list follows the earned era, talents and class quests and
+  shows level, base cost and any required talent or spell.
 
 Update the EraTalents addon from the current client package to get this
 behavior. Disabling DragonUI's talent module also restores the standard route.

@@ -102,8 +102,10 @@ pass.
 - [ ] Validate the [DragonUI talent route](era-talents.md#dragonui) on a live
   client with DragonUI's talent module enabled: talent key, micro-button,
   `/talents`, spec tabs, glyph page, a hunter's pet tree, and inspecting an
-  era altbot and a Wrath character. The Lua fixture runs DragonUI's entry
-  points but does not render frames.
+  era altbot and a Wrath character. Check that the spellbook's unlearned spells
+  match a class trainer for a Vanilla, TBC and Wrath character. The Lua
+  fixtures run DragonUI's entry points and spellbook catalogue but do not
+  render frames.
 - [ ] Verify complete runs in-game for each enabled Vanilla, TBC and Wrath
   dungeon: walking to the entrance, combat, loot rolls, quest objectives, wipes
   and normal recovery.
