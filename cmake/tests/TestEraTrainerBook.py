@@ -34,6 +34,7 @@ parser.add_argument('--module-source', type=Path,
 parser.add_argument('--core-source', type=Path, default=prepared_core(repo))
 args = parser.parse_args()
 DRAGONUI = repo / '.module-cache/prepared-source-addons/DragonUI'
+MULTIBOT = repo / '.module-cache/prepared-addons/MultiBot'
 module, core = args.module_source, args.core_source
 training = (module / 'src/EraTrainerBook.cpp').read_text()
 comms = (module / 'src/EraTalentsComms.cpp').read_text()
@@ -606,6 +607,229 @@ assert(unlocks(20, 20)[33388] == nil and unlocks(40, 40)[33388] == "feature" and
 print("EraTalents trainer book: DragonUI level-up notice follows the era and the realm's riding")
 '''
 
+BOT_FIXTURE = r'''
+local multibotDir, eraDir, packets, withDragon = ...
+-- Widgets: a recording object whose scripts run like the client's.
+local methods = {}
+local function Object(name, kind)
+  local object = setmetatable({ name = name, kind = kind, scripts = {}, shown = true, enabled = true }, {
+    __index = function(self, key)
+      if methods[key] then return methods[key] end
+      return function() end
+    end })
+  return object
+end
+function methods:SetScript(name, handler) self.scripts[name] = handler end
+function methods:GetScript(name) return self.scripts[name] end
+function methods:Show()
+  if self.shown then return end
+  self.shown = true
+  if self.scripts.OnShow then self.scripts.OnShow(self) end
+end
+function methods:Hide()
+  if not self.shown then return end
+  self.shown = false
+  if self.scripts.OnHide then self.scripts.OnHide(self) end
+end
+function methods:IsShown() return self.shown end
+function methods:SetText(text) self.text = text end
+function methods:GetText() return self.text end
+function methods:SetFormattedText(format, ...) self.text = string.format(format, ...) end
+function methods:SetChecked(value) self.checked = value and true or false end
+function methods:GetChecked() return self.checked end
+function methods:SetTexture(path) self.texture = path end
+function methods:SetDesaturated(value) self.desaturated = value and true or false end
+function methods:Enable() self.enabled = true end
+function methods:Disable() self.enabled = false end
+function methods:SetID(id) self.id = id end
+function methods:GetID() return self.id end
+function methods:GetFrameLevel() return 1 end
+function methods:CreateTexture() return Object(nil, "Texture") end
+function methods:CreateFontString() return Object(nil, "FontString") end
+function methods:Click(button)
+  if self.scripts.OnClick then self.scripts.OnClick(self, button or "LeftButton") end
+end
+CreateFrame = function(kind, name)
+  local frame = Object(name, kind)
+  frame.shown = false
+  if kind == "Frame" and not name then frame.shown = true end
+  if name then _G[name] = frame end
+  return frame
+end
+UIParent = Object("UIParent")
+UISpecialFrames = {}
+GENERAL = "Allgemein"
+PlaySound = function() end
+PanelTemplates_TabResize = function() end
+PanelTemplates_SetNumTabs = function() end
+PanelTemplates_SetTab = function(frame, id) frame.selectedTab = id end
+GameTooltip_Hide = function() end
+GetCoinTextureString = function(copper) return copper .. "c" end
+local tooltip = {}
+GameTooltip = { SetOwner = function() tooltip = {} end, SetHyperlink = function(_, link) tooltip.link = link end,
+                AddLine = function(_, text) table.insert(tooltip, text) end, Show = function() end }
+local whispers, macros, actions, sent = {}, {}, {}, {}
+SendChatMessage = function(text, kind, _, target) table.insert(whispers, { text, kind, target }) end
+SendAddonMessage = function(prefix, message, channel, target)
+  assert(prefix == "ERATAL" and channel == "WHISPER" and target == "Master")
+  table.insert(sent, message)
+end
+UnitName = function(unit) return unit == "player" and "Master" or "Botty" end
+UnitGUID = function(unit) return ({ player = "0x1", party1 = "0x2" })[unit] end
+UnitLevel = function(unit) return unit == "party1" and 30 or 60 end
+UnitClass = function() return "Krieger", "WARRIOR" end
+GetLocale = function() return "deDE" end
+GetTime = function() return 0 end
+SlashCmdList = {}
+local spellNames = { [6673] = "Schlachtruf", [12294] = "Tödlicher Stoß", [900002] = "Wrapper", [3127] = "Parieren" }
+GetSpellInfo = function(id) return spellNames[id] or ("Spell " .. id), "Rang 1", "Spell_Icon_" .. id end
+GetSpellLink = function(id) return "|Hspell:" .. id .. "|h[" .. (spellNames[id] or id) .. "]|h" end
+
+-- MultiBot: its real spellbook collection and payload methods on a recording overlay.
+MultiBot = { spells = {}, SpellBookUISettings = {} }
+MultiBot.L = function(key) return key == "info.spellbook" and "Zauberbuch von NAME" or key end
+MultiBot.IF = function(condition, yes, no) if condition then return yes end return no end
+MultiBot.doReplace = function(text, key, value) return (text:gsub(key, value)) end
+MultiBot.TimerAfter = function() end
+MultiBot.toUnit = function(name) return name == "Botty" and "party1" or nil end
+MultiBot.SpellToMacro = function(name, spell, icon) table.insert(macros, { name, spell, icon }) end
+MultiBot.ActionToTarget = function(action, name) table.insert(actions, { action, name }) end
+local disabled = 0
+local unitButton = { setDisable = function() disabled = disabled + 1 end }
+MultiBot.frames = { MultiBar = { frames = { Units = { frames = { Botty = { getButton = function(name)
+  assert(name == "Spellbook")
+  return unitButton
+end } } } } } }
+SPELLBOOK = "Zauberbuch"
+local overlay = { buttons = {}, texts = {} }
+for _, key in ipairs({ "<", ">" }) do overlay.buttons[key] = Object() end
+for i = 1, 18 do
+  local index = (i < 10 and "0" or "") .. i
+  for _, prefix in ipairs({ "S", "C" }) do
+    local button = Object()
+    button.doShow, button.doHide = function() button.shown = true end, function() button.shown = false end
+    overlay.buttons[prefix .. index] = button
+  end
+  overlay.texts["T" .. index], overlay.texts["R" .. index] = Object(), Object()
+end
+for _, key in ipairs({ "<", ">" }) do
+  local button = overlay.buttons[key]
+  button.doShow, button.doHide = function() button.shown = true end, function() button.shown = false end
+end
+overlay.setButton = function(key, texture) overlay.buttons[key].texture = texture end
+overlay.setText = function(key, text) overlay.texts[key] = overlay.texts[key] or Object(); overlay.texts[key].text = text end
+local multibotShown = 0
+MultiBot.spellbook = { spells = {}, index = 0, frames = { Overlay = overlay }, name = "",
+  Show = function(self) multibotShown = multibotShown + 1 end,
+  Hide = function(self) self.hidden = true end,
+  IsVisible = function() return false end,
+  setTitle = function(self, title) self.title = title end }
+assert(loadfile(multibotDir .. "/UI/MultiBotSpell.lua"))()
+assert(loadstring(PAYLOAD_METHODS))()
+
+if withDragon then
+  DragonUI = { _dir = "Interface\\AddOns\\DragonUI\\" }
+  DragonUI_NineSlice = { ApplyLayout = function() end, GetLayout = function() return {} end }
+end
+for _, file in ipairs({ "Locales.lua", "EraTalents.lua", "Comms.lua", "DragonUIBook.lua", "BotBook.lua" }) do
+  assert(loadfile(eraDir .. "/" .. file))()
+end
+local ET = EraTalents
+ET.state = { ranks = {} }
+ET.InitBotBook()
+
+local function collect(ids)
+  local book = MultiBot.spellbook
+  book.name = "Botty"
+  book:beginPayload("Botty")
+  for _, id in ipairs(ids) do book:appendSpellId(id, "Botty") end
+  book:finishPayload()
+end
+
+collect({ 6673, 12294, 900002 })
+if not withDragon then
+  assert(multibotShown == 1 and EraTalentsBotBookFrame == nil, "without DragonUI MultiBot keeps its own spellbook")
+  print("EraTalents bot spellbook: MultiBot's own window without DragonUI")
+  return
+end
+local book = EraTalentsBotBookFrame
+assert(multibotShown == 0 and book:IsShown(), "with DragonUI the bot's spellbook opens as a book")
+assert(book.title.text == "Zauberbuch von Botty", "the book names the bot")
+assert(sent[#sent] == "BOOK 0x2", "the bot's trainer book is requested by its GUID")
+
+local function cards()
+  local shown = {}
+  for _, card in ipairs(book.cards) do
+    if card.shown and card.entry then
+      table.insert(shown, { id = card.entry.spellID, sub = card.sub.text, grey = card.entry.grey,
+                            desaturated = card.icon.desaturated, card = card })
+    end
+  end
+  return shown
+end
+local function tab(index) book.tabs[index]:Click() end
+
+local early = cards()
+assert(#early == 3 and early[1].id == 6673 and not early[1].grey and book.selectedTab == 1,
+  "before the bot's book its learned spells open in the general book")
+local arms
+for _, packet in ipairs(packets) do
+  if packet[1] == "bot" then ET.OnAddonMsg("ERATAL", packet[2]) end
+end
+arms = cards()
+assert(book.selectedTab == 2 and #arms == 1 and arms[1].id == 12294,
+  "with the book the first tree opens, and a talent's trainer ranks stay on its card")
+tab(3)
+local fury = cards()
+assert(fury[1].id == 6673 and not fury[1].grey and fury[1].sub == "Rang 1", "a learned spell keeps its rank")
+local byID = {}
+for _, entry in ipairs(fury) do byID[entry.id] = entry end
+assert(byID[5242] == nil, "a started chain shows no grey first rank")
+assert(byID[900030].grey and byID[900030].sub == "Erlernbar" and byID[900030].desaturated, "a ready trainer spell is grey")
+assert(byID[900050].sub == "Benötigt Spell 900051", "a trainer spell names what it needs")
+tab(4)
+local protection = cards()
+assert(protection[1].id == 900002 and protection[2].id == 900040 and protection[2].sub == "Benötigt Talent",
+  "an era talent rank waits for its talent")
+tab(1)
+local general = cards()
+assert(general[1].id == 3127 and general[1].sub == "Erlernbar", "general trainer spells have their own tab")
+
+-- MultiBot's actions: cast, macro and the skip list; grey cards stay inert.
+tab(3)
+fury = cards()
+fury[1].card:Click("LeftButton")
+assert(whispers[#whispers][1] == "cast 6673" and whispers[#whispers][3] == "Botty", "left-click casts through MultiBot's whisper")
+fury[1].card:Click("RightButton")
+assert(macros[#macros][1] == "Botty" and macros[#macros][2] == 6673, "right-click creates MultiBot's macro")
+local before = #whispers
+byID[900030].card:Click("LeftButton")
+assert(#whispers == before and #macros == 1, "a spell not learned yet cannot be cast")
+fury[1].card.skip:Click()
+assert(MultiBot.spells.Botty[6673] == false and actions[#actions][1] == "ss +6673", "the box puts the spell on the skip list")
+assert(cards()[1].sub == "|cffff2020Vom Bot übersprungen|r" and cards()[1].desaturated, "a skipped spell is marked")
+cards()[1].card.skip:Click()
+assert(MultiBot.spells.Botty[6673] == true and actions[#actions][1] == "ss -6673", "the box takes it off again")
+
+-- A higher rank learned without the lower one still counts as the started chain.
+collect({ 5242, 12294 })
+tab(3)
+local ranks = cards()
+assert(ranks[1].id == 5242 and not ranks[1].grey and ranks[2].id ~= 6673, "a known higher rank hides its chain's first rank")
+
+-- A long book pages; closing hands MultiBot's button back.
+local many = { 6673, 12294, 900002 }
+for id = 960000, 960030 do table.insert(many, id) end
+collect(many)
+tab(1)
+assert(#cards() == 12 and book.next.enabled and not book.prev.enabled, "the general tab pages by twelve")
+book.next:Click()
+assert(book.pageText.text == "Seite 2/3" and book.prev.enabled, "the pager moves to the next page")
+MultiBot.spellbook:Hide()
+assert(not book:IsShown() and disabled == 1, "MultiBot's hide closes the book and releases its button")
+print("EraTalents bot spellbook: DragonUI-style book with trainer spells and MultiBot's actions")
+'''
+
 # (label, part, old, new): each removes one rule the book must keep.
 MUTATIONS = [
     ('trainer list hook', 'book', '    sScriptMgr->OnPlayerBeforeReceiveSpellListFromTrainer(player, nullptr, list);\n', ''),
@@ -622,6 +846,19 @@ MUTATIONS = [
     ('requester group', 'comms', 'requester->GetGroup() && target->GetGroup() == requester->GetGroup()', 'true'),
     ('bots only', 'comms', 'target && GET_PLAYERBOT_AI(target) && ', 'target && '),
     ('riding for the requester', 'comms', '        if (subject == requester)\n', ''),
+]
+
+# (label, file, old, new, with DragonUI) in the bot spellbook.
+BOT_MUTATIONS = [
+    ('DragonUI only', 'BotBook.lua', 'if type(spellbook) ~= "table" or not DragonArt() or', 'if type(spellbook) ~= "table" or', False),
+    ('bot book request', 'BotBook.lua', '  if guid then ET.RequestBook(guid) end\n', '', True),
+    ('started chains', 'BotBook.lua', '      answer = answer or knownInChain(record[2])\n', '', True),
+    ('learned spell tree', 'BotBook.lua', '    return record and record[8] or 0', '    return 0', True),
+    ('grey cards inert', 'BotBook.lua', '  if not entry or entry.grey then return end', '  if not entry then return end', True),
+    ('skip list', 'BotBook.lua', '  spells[spellID] = not spells[spellID]\n', '', True),
+    ('book refresh', 'BotBook.lua', '  if unit and UnitGUID(unit) == guid then Render() end', '', True),
+    ('first tree with cards', 'BotBook.lua', '        view.tree = tree\n', '', True),
+    ('button release', 'BotBook.lua', '    if button and button.setDisable then button.setDisable() end\n', '', True),
 ]
 
 # (label, file, old, new) in the EraTalents client.
@@ -652,6 +889,19 @@ def build(directory, name, source, warnings=('-Wall', '-Wextra', '-Werror')):
                '-I', str(core / 'src/common/Utilities'), str(path), '-o', str(directory / name)]
     subprocess.run(command, check=True)
     return run_fixture([str(directory / name)], name)
+
+
+def run_bot_client(directory, era_dir, packets, with_dragon):
+    lua = shutil.which('lua5.1') or shutil.which('lua')
+    frame = (MULTIBOT / 'UI/MultiBotSpellBookFrame.lua').read_text()
+    start = frame.index('\tMultiBot.spellbook.beginPayload = function(self, botName)')
+    payload = frame[start:frame.index('\tfor i = 1, GetNumMacroIcons() do', start)]
+    rows = ',\n'.join(f'{{{json.dumps(label)},{json.dumps(body)}}}' for label, body in packets)
+    script = directory / 'bot-client.lua'
+    script.write_text('local function fixture(...)\n' + BOT_FIXTURE.replace('assert(loadstring(PAYLOAD_METHODS))()', payload)
+                      + '\nend\n' + f'fixture({json.dumps(str(MULTIBOT))}, {json.dumps(str(era_dir))}, {{{rows}}}, '
+                      + ('true' if with_dragon else 'false') + ')\n')
+    return run_fixture([lua, str(script)], 'era trainer book bot client')
 
 
 def run_client(directory, era_dir, packets):
@@ -703,6 +953,25 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
         if not re.search(r'client\.lua:\d+: ', mutated.stderr):
             raise SystemExit(f'{label} mutant failed outside the fixture assertions:\n{mutated.stderr}')
         print(f'Era trainer book client mutation rejected: {label}')
+
+    for with_dragon in (True, False):
+        outcome = run_bot_client(directory, client, packets, with_dragon)
+        if outcome.returncode:
+            raise SystemExit(outcome.stdout + outcome.stderr)
+        print(outcome.stdout, end='')
+    for index, (label, file, old, new, with_dragon) in enumerate(BOT_MUTATIONS):
+        copy = directory / f'bot-client-{index}'
+        shutil.copytree(client, copy)
+        text = (copy / file).read_text()
+        if text.count(old) != 1:
+            raise SystemExit(f'{label} mutation was not applied')
+        (copy / file).write_text(text.replace(old, new))
+        mutated = run_bot_client(directory, copy, packets, with_dragon)
+        if mutated.returncode == 0:
+            raise SystemExit(f'The era trainer book bot client fixture did not reject {label}')
+        if not re.search(r'bot-client\.lua:\d+: ', mutated.stderr):
+            raise SystemExit(f'{label} mutant failed outside the fixture assertions:\n{mutated.stderr}')
+        print(f'Era trainer book bot client mutation rejected: {label}')
     for (label, *_), outcome in zip(MUTATIONS, in_parallel(mutant, enumerate(MUTATIONS))):
         if outcome.returncode == 0:
             raise SystemExit(f'The era trainer book fixture did not reject {label}')

@@ -86,6 +86,10 @@ enabled:
   character's earned era. Raid progression and attunements still apply on
   entry. DragonUI's own fixed lines remain: Dungeon Finder and glyphs at 15,
   dual specialization at 40 and glyph slots at 30, 50, 70 and 80.
+- With MultiBot, a bot's spellbook opens as a DragonUI-style book: the bot's
+  spells by talent tree and the trainer spells it can still learn on this
+  server, with their level and cost. Left-click casts, right-click creates a
+  macro and the box keeps MultiBot's skip list.
 
 Update the EraTalents addon from the current client package to get this
 behavior. Disabling DragonUI's talent module also restores the standard route.

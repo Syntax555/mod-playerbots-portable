@@ -1,0 +1,428 @@
+diff --git a/client-addon/EraTalents/BotBook.lua b/client-addon/EraTalents/BotBook.lua
+new file mode 100644
+index 0000000..f05b08f
+--- /dev/null
++++ b/client-addon/EraTalents/BotBook.lua
+@@ -0,0 +1,376 @@
++-- MultiBot's bot spellbook as a DragonUI-style book. It shows the bot's learned spells and, from the
++-- server's trainer list for that bot (BOOK), the spells it can still learn, by talent tree like
++-- DragonUI's own spellbook. The cards keep MultiBot's actions: cast, macro and the skip list. Only
++-- with DragonUI loaded, whose art it uses; MultiBot keeps its own window otherwise.
++EraTalents = EraTalents or {}
++local ET = EraTalents
++local L = ET.L
++
++local CARDS, COLUMNS = 12, 2
++local CARD_W, CARD_H = 186, 52
++local CLASS_IDS = {
++  WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, DEATHKNIGHT = 6,
++  SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11,
++}
++-- Talent tabs in TalentTab.dbc order, as the server's tree index counts them.
++local TREES = {
++  [1] = { "Arms", "Fury", "Protection" }, [2] = { "Holy", "Protection", "Retribution" },
++  [3] = { "Beast Mastery", "Marksmanship", "Survival" }, [4] = { "Assassination", "Combat", "Subtlety" },
++  [5] = { "Discipline", "Holy", "Shadow" }, [6] = { "Blood", "Frost", "Unholy" },
++  [7] = { "Elemental", "Enhancement", "Restoration" }, [8] = { "Arcane", "Fire", "Frost" },
++  [9] = { "Affliction", "Demonology", "Destruction" }, [11] = { "Balance", "Feral Combat", "Restoration" },
++}
++
++local function DragonArt()
++  local dragon = _G.DragonUI
++  return type(dragon) == "table" and type(_G.DragonUI_NineSlice) == "table" and dragon or nil
++end
++
++local function ByLevelThenName(a, b)
++  if a.level ~= b.level then return a.level < b.level end
++  if a.name ~= b.name then return a.name < b.name end
++  return a.spellID < b.spellID
++end
++
++-- Pages by tree (0 is the general book): the bot's learned spells in MultiBot's order, then the
++-- first rank of every trainer chain it has not started, by level. `spells` are MultiBot's
++-- {id, name, rank, icon, link}; `book` is the bot's BOOK entry; `level` may be unknown.
++function ET.BotBookModel(spells, book, level)
++  local index = book and book.classId ~= 0 and ET.TrainerIndex(book.records) or nil
++  local known, memo = {}, {}
++  for _, spell in ipairs(spells) do known[spell[1]] = true end
++  -- A bot that learned a higher rank may no longer list the lower one.
++  local function knownInChain(id)
++    if memo[id] ~= nil then return memo[id] end
++    memo[id] = false
++    local answer = known[id] == true
++    for _, record in ipairs(index and index.after[id] or {}) do
++      answer = answer or knownInChain(record[2])
++    end
++    memo[id] = answer
++    return answer
++  end
++  local function treeOf(id)
++    local record = index and (index.byID[id] or (index.after[id] or {})[1])
++    return record and record[8] or 0
++  end
++  local trees = { [0] = {}, {}, {}, {} }
++  for _, spell in ipairs(spells) do
++    table.insert(trees[treeOf(spell[1])], { spellID = spell[1], name = spell[2], rank = spell[3], icon = spell[4],
++                                             link = spell[5] })
++  end
++  if not index then return trees end
++  local greys = { [0] = {}, {}, {}, {} }
++  for _, record in ipairs(index.list) do
++    local root = record[4] ~= 0 and record[4] or record[2]
++    local first = record[4] == 0 or not index.byID[record[4]]
++    local name, rank, icon = GetSpellInfo(record[2])
++    if first and name and not knownInChain(root) and greys[record[8]] then
++      local state = "later"
++      if record[5] ~= 0 and not knownInChain(record[5]) then
++        state = "talent"
++      elseif record[7] ~= 0 and not knownInChain(record[7]) then
++        state = "spell"
++      elseif level and record[1] <= level then
++        state = "ready"
++      end
++      table.insert(greys[record[8]], { grey = true, spellID = record[2], name = name, rank = rank, icon = icon,
++                                       level = record[1], cost = record[3], state = state, needs = record[7] })
++    end
++  end
++  for tree = 0, 3 do
++    table.sort(greys[tree], ByLevelThenName)
++    for _, entry in ipairs(greys[tree]) do table.insert(trees[tree], entry) end
++  end
++  return trees
++end
++
++function ET.BotBookSubtitle(entry, active)
++  if not entry.grey then
++    if not active then return "|cffff2020" .. L["Skipped by the bot"] .. "|r" end
++    return entry.rank or ""
++  end
++  if entry.state == "talent" then return L["Requires talent"] end
++  if entry.state == "spell" then return string.format(L["Requires %s"], GetSpellInfo(entry.needs) or "") end
++  if entry.state == "ready" then return L["Trainable"] end
++  return string.format(L["Available at level %d"], entry.level)
++end
++
++-- Until a tab is clicked the book opens on the first tree with cards: without the bot's trainer
++-- book no spell has a tree yet, so all of them start in the general book.
++local view = { name = nil, tree = 1, page = 1, picked = false }
++local FIRST_TREES = { 1, 2, 3, 0 }
++local frame
++
++local function Atlas(texture, name, fallback)
++  if DragonArt() and texture.SetAtlasTexture then
++    texture:SetAtlasTexture(name)
++  else
++    texture:SetTexture(fallback)
++  end
++end
++
++-- The skip list is MultiBot's: false marks a spell the bot leaves out, "ss" sends the whole list.
++local function ToggleSkip(name, spellID)
++  local spells = MultiBot.spells[name]
++  spells[spellID] = not spells[spellID]
++  local action = ""
++  for id, state in pairs(spells) do
++    if state == false then action = action .. (action == "" and "ss +" or ", +") .. id end
++  end
++  MultiBot.ActionToTarget(action == "" and "ss -" .. spellID or action, name)
++end
++
++local function BotUnit(name)
++  return MultiBot.toUnit and MultiBot.toUnit(name) or nil
++end
++
++local function CurrentModel()
++  local name = view.name
++  local unit = BotUnit(name)
++  local guid = unit and UnitGUID(unit)
++  local book = guid and ET.books.class[guid]
++  if book and book.partial then book = nil end
++  local level = unit and UnitLevel(unit) or nil
++  local classId = book and book.classId ~= 0 and book.classId or (unit and CLASS_IDS[select(2, UnitClass(unit))])
++  return ET.BotBookModel(MultiBot.spellbook.spells, book, level), classId
++end
++
++local function Render()
++  if not frame or not frame:IsShown() then return end
++  local trees, classId = CurrentModel()
++  if not view.picked then
++    for _, tree in ipairs(FIRST_TREES) do
++      if #trees[tree] > 0 then
++        view.tree = tree
++        break
++      end
++    end
++  end
++  local names = TREES[classId or 0] or {}
++  for tree = 0, 3 do
++    local tab = frame.tabs[tree + 1]
++    tab:SetText(tree == 0 and GENERAL or L[names[tree] or "Talents"])
++    PanelTemplates_TabResize(tab, 0)
++  end
++  PanelTemplates_SetTab(frame, view.tree + 1)
++  local entries = trees[view.tree] or {}
++  local pages = math.max(1, math.ceil(#entries / CARDS))
++  view.page = math.min(view.page, pages)
++  frame.pageText:SetFormattedText(L["Page %d/%d"], view.page, pages)
++  if view.page > 1 then frame.prev:Enable() else frame.prev:Disable() end
++  if view.page < pages then frame.next:Enable() else frame.next:Disable() end
++  local skips = MultiBot.spells[view.name] or {}
++  for slot = 1, CARDS do
++    local card = frame.cards[slot]
++    local entry = entries[(view.page - 1) * CARDS + slot]
++    card.entry = entry
++    if entry then
++      local active = entry.grey or skips[entry.spellID] ~= false
++      local icon = entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark"
++      if not string.find(icon, "[/\\]") then icon = "Interface\\Icons\\" .. icon end
++      card.icon:SetTexture(icon)
++      card.icon:SetDesaturated(entry.grey or not active)
++      card.name:SetText(entry.name)
++      card.sub:SetText(ET.BotBookSubtitle(entry, active))
++      if entry.grey then card.skip:Hide() else card.skip:Show() end
++      card.skip:SetChecked(active)
++      card:Show()
++    else
++      card:Hide()
++    end
++  end
++end
++ET.RenderBotBook = Render
++
++local function CardEnter(card)
++  local entry = card.entry
++  if not entry then return end
++  GameTooltip:SetOwner(card, "ANCHOR_RIGHT")
++  GameTooltip:SetHyperlink("spell:" .. entry.spellID)
++  if entry.grey then
++    GameTooltip:AddLine(string.format(L["Available at level %d"], entry.level), 1, 0.82, 0)
++    GameTooltip:AddLine(string.format(L["Training cost: %s"], GetCoinTextureString(entry.cost)), 1, 1, 1)
++  else
++    GameTooltip:AddLine(L["Left-click: cast. Right-click: macro."], 0.6, 0.6, 0.6)
++    GameTooltip:AddLine(L["Clear the box to make the bot skip it."], 0.6, 0.6, 0.6)
++  end
++  GameTooltip:Show()
++end
++
++local function CardClick(card, button)
++  local entry = card.entry
++  if not entry or entry.grey then return end
++  if button == "RightButton" then
++    MultiBot.SpellToMacro(view.name, entry.spellID, entry.icon)
++  else
++    SendChatMessage("cast " .. entry.spellID, "WHISPER", nil, view.name)
++  end
++end
++
++local function BuildCard(parent, slot)
++  local card = CreateFrame("Button", nil, parent)
++  card:SetSize(CARD_W, CARD_H)
++  local column, row = (slot - 1) % COLUMNS, math.floor((slot - 1) / COLUMNS)
++  card:SetPoint("TOPLEFT", parent, "TOPLEFT", 28 + column * (CARD_W + 12), -92 - row * (CARD_H + 10))
++  card:RegisterForClicks("LeftButtonUp", "RightButtonUp")
++  card.plate = card:CreateTexture(nil, "BACKGROUND")
++  card.plate:SetPoint("LEFT", card, "LEFT", -4, 0)
++  card.plate:SetSize(CARD_H + 8, CARD_H + 8)
++  Atlas(card.plate, "spellbook-item-iconframe", "Interface\\Buttons\\UI-Quickslot2")
++  card.icon = card:CreateTexture(nil, "ARTWORK")
++  card.icon:SetSize(40, 40)
++  card.icon:SetPoint("LEFT", card, "LEFT", 6, 0)
++  card.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
++  card.name = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
++  card.name:SetPoint("TOPLEFT", card.icon, "TOPRIGHT", 8, -2)
++  card.name:SetWidth(CARD_W - 56)
++  card.name:SetJustifyH("LEFT")
++  card.sub = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
++  card.sub:SetPoint("TOPLEFT", card.name, "BOTTOMLEFT", 0, -3)
++  card.sub:SetWidth(CARD_W - 56)
++  card.sub:SetJustifyH("LEFT")
++  card.skip = CreateFrame("CheckButton", nil, card, "UICheckButtonTemplate")
++  card.skip:SetSize(18, 18)
++  card.skip:SetPoint("BOTTOMLEFT", card.icon, "BOTTOMRIGHT", -10, -6)
++  card.skip:SetScript("OnClick", function()
++    if card.entry and not card.entry.grey then
++      ToggleSkip(view.name, card.entry.spellID)
++      Render()
++    end
++  end)
++  card:SetScript("OnEnter", CardEnter)
++  card:SetScript("OnLeave", GameTooltip_Hide)
++  card:SetScript("OnClick", CardClick)
++  return card
++end
++
++local function BuildFrame()
++  frame = CreateFrame("Frame", "EraTalentsBotBookFrame", UIParent)
++  frame:SetSize(440, 560)
++  frame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
++  frame:SetFrameStrata("HIGH")
++  frame:SetToplevel(true)
++  frame:EnableMouse(true)
++  frame:SetMovable(true)
++  frame:SetClampedToScreen(true)
++  frame:RegisterForDrag("LeftButton")
++  frame:SetScript("OnDragStart", frame.StartMoving)
++  frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
++  frame:Hide()
++  table.insert(UISpecialFrames, "EraTalentsBotBookFrame")
++
++  frame.paper = frame:CreateTexture(nil, "BACKGROUND")
++  frame.paper:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -60)
++  frame.paper:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
++  Atlas(frame.paper, "spellbook-background-evergreen-right", "Interface\\Spellbook\\Spellbook-Page-1")
++  frame.header = frame:CreateTexture(nil, "BORDER")
++  frame.header:SetHeight(40)
++  frame.header:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -22)
++  frame.header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -22)
++  Atlas(frame.header, "spellbook-header-left-half", "Interface\\Spellbook\\UI-SpellbookPanel-Tab-Unselected")
++  local chrome = CreateFrame("Frame", nil, frame)
++  chrome:SetAllPoints(frame)
++  chrome:SetFrameLevel(frame:GetFrameLevel() + 5)
++  if DragonArt() then
++    DragonUI_NineSlice.ApplyLayout(chrome, DragonUI_NineSlice.GetLayout("PortraitFrameTemplateMinimizable"))
++  else
++    chrome:SetBackdrop({ edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 32,
++                         insets = { left = 11, right = 12, top = 12, bottom = 11 } })
++  end
++  frame.portrait = chrome:CreateTexture(nil, "ARTWORK")
++  frame.portrait:SetSize(57, 57)
++  frame.portrait:SetPoint("TOPLEFT", frame, "TOPLEFT", -3, 6)
++  frame.title = chrome:CreateFontString(nil, "OVERLAY", "GameFontNormal")
++  frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 58, -6)
++  frame.title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -24, -6)
++  local close = CreateFrame("Button", nil, chrome, "UIPanelCloseButton")
++  close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 4, 5)
++
++  frame.cards = {}
++  for slot = 1, CARDS do frame.cards[slot] = BuildCard(frame, slot) end
++  frame.pageText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
++  frame.pageText:SetPoint("BOTTOM", frame, "BOTTOM", 0, 22)
++  frame.prev = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
++  frame.prev:SetSize(24, 22)
++  frame.prev:SetText("<")
++  frame.prev:SetPoint("RIGHT", frame.pageText, "LEFT", -10, 0)
++  frame.prev:SetScript("OnClick", function() view.page = view.page - 1; Render() end)
++  frame.next = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
++  frame.next:SetSize(24, 22)
++  frame.next:SetText(">")
++  frame.next:SetPoint("LEFT", frame.pageText, "RIGHT", 10, 0)
++  frame.next:SetScript("OnClick", function() view.page = view.page + 1; Render() end)
++  frame:EnableMouseWheel(true)
++  frame:SetScript("OnMouseWheel", function(_, delta)
++    view.page = view.page - delta
++    if view.page < 1 then view.page = 1 end
++    Render()
++  end)
++
++  frame.tabs = {}
++  for index = 1, 4 do
++    local tab = CreateFrame("Button", "EraTalentsBotBookFrameTab" .. index, frame, "CharacterFrameTabButtonTemplate")
++    tab:SetID(index)
++    if index == 1 then
++      tab:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 11, 2)
++    else
++      tab:SetPoint("TOPLEFT", frame.tabs[index - 1], "TOPRIGHT", -14, 0)
++    end
++    tab:SetScript("OnClick", function(self)
++      view.tree, view.page, view.picked = self:GetID() - 1, 1, true
++      PlaySound("igCharacterInfoTab")
++      Render()
++    end)
++    frame.tabs[index] = tab
++  end
++  PanelTemplates_SetNumTabs(frame, 4)
++  frame:SetScript("OnShow", Render)
++  -- MultiBot shows a bot's spellbook button pressed while its book is open.
++  frame:SetScript("OnHide", function()
++    local units = MultiBot.frames and MultiBot.frames["MultiBar"] and MultiBot.frames["MultiBar"].frames["Units"]
++    local unit = units and units.frames and units.frames[view.name or ""]
++    local button = unit and unit.getButton and unit.getButton("Spellbook")
++    if button and button.setDisable then button.setDisable() end
++  end)
++end
++
++function ET.ShowBotBook(name)
++  if not frame then BuildFrame() end
++  local changed = name ~= view.name
++  view.name = name
++  if changed then view.tree, view.page, view.picked = 1, 1, false end
++  frame.title:SetText(string.format(L["%s's Spellbook"], name))
++  local unit = BotUnit(name)
++  local token = unit and select(2, UnitClass(unit))
++  local dragon = DragonArt()
++  if dragon and token then frame.portrait:SetTexture(dragon._dir .. "ClassIcons\\" .. token) end
++  local guid = unit and UnitGUID(unit)
++  if guid then ET.RequestBook(guid) end
++  frame:Show()
++  Render()
++end
++
++local function OnBotBook(guid, kind)
++  if kind ~= "class" or not (frame and frame:IsShown()) then return end
++  local unit = BotUnit(view.name)
++  if unit and UnitGUID(unit) == guid then Render() end
++end
++
++function ET.InitBotBook()
++  local spellbook = type(MultiBot) == "table" and MultiBot.spellbook
++  if type(spellbook) ~= "table" or not DragonArt() or spellbook._eraBotBook then return end
++  spellbook._eraBotBook = true
++  local hide, visible = spellbook.Hide, spellbook.IsVisible
++  spellbook.Show = function(self)
++    ET.ShowBotBook(self.name)
++  end
++  spellbook.Hide = function(self, ...)
++    if frame then frame:Hide() end
++    return hide(self, ...)
++  end
++  spellbook.IsVisible = function(self, ...)
++    return (frame ~= nil and frame:IsShown()) or visible(self, ...)
++  end
++  table.insert(ET.bookHandlers, OnBotBook)
++end
+diff --git a/client-addon/EraTalents/EraTalents.lua b/client-addon/EraTalents/EraTalents.lua
+index a29f37c..038db8d 100644
+--- a/client-addon/EraTalents/EraTalents.lua
++++ b/client-addon/EraTalents/EraTalents.lua
+@@ -12,6 +12,7 @@ function ET.Init()
+   ET._inited = true
+   if ET.InitDragonUIBook then ET.InitDragonUIBook() end
+   if ET.InitDragonUIGlyphs then ET.InitDragonUIGlyphs() end
++  if ET.InitBotBook then ET.InitBotBook() end
+   if ET.InitComms then ET.InitComms() end
+   if ET.InitUI then ET.InitUI() end
+   if ET.InitHook then ET.InitHook() end
+diff --git a/client-addon/EraTalents/EraTalents.toc b/client-addon/EraTalents/EraTalents.toc
+index efea1e1..8bcf903 100644
+--- a/client-addon/EraTalents/EraTalents.toc
++++ b/client-addon/EraTalents/EraTalents.toc
+@@ -27,6 +27,7 @@ EraTalents.lua
+ Comms.lua
+ DragonUIBook.lua
+ DragonUIGlyphs.lua
++BotBook.lua
+ Tooltip.lua
+ TalentUI.lua
+ Hook.lua
+diff --git a/client-addon/EraTalents/Locales.lua b/client-addon/EraTalents/Locales.lua
+index 428d951..3ffab79 100644
+--- a/client-addon/EraTalents/Locales.lua
++++ b/client-addon/EraTalents/Locales.lua
+@@ -37,6 +37,17 @@ local deDE = {
+   ["Subtlety"] = "Täuschung", ["Survival"] = "Überleben",
+   ["Glyphs become available once this character has earned Wrath of the Lich King."] =
+     "Glyphen stehen zur Verfügung, sobald dieser Charakter Wrath of the Lich King erspielt hat.",
++  ["%s's Spellbook"] = "Zauberbuch von %s",
++  ["Trainable"] = "Erlernbar",
++  ["Available at level %d"] = "Verfügbar ab Stufe %d",
++  ["Requires talent"] = "Benötigt Talent",
++  ["Requires %s"] = "Benötigt %s",
++  ["Skipped by the bot"] = "Vom Bot übersprungen",
++  ["Left-click: cast. Right-click: macro."] = "Linksklick: wirken. Rechtsklick: Makro.",
++  ["Clear the box to make the bot skip it."] = "Entfernt das Häkchen, damit der Bot ihn auslässt.",
++  ["Training cost: %s"] = "Trainingskosten: %s",
++  ["Page %d/%d"] = "Seite %d/%d",
++  ["Blood"] = "Blut", ["Unholy"] = "Unheilig",
+ }
+ ET.L = setmetatable(ET.locale == "deDE" and deDE or {}, {
+   __index = function(_, key) return key end,

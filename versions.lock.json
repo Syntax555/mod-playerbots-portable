@@ -137,7 +137,8 @@
         "patches/mod-era-talents-dragonui.patch",
         "patches/mod-era-talents-inspect-layer.patch",
         "patches/mod-era-talents-trainer-catalogue.patch",
-        "patches/mod-era-talents-glyph-page.patch"
+        "patches/mod-era-talents-glyph-page.patch",
+        "patches/mod-era-talents-bot-spellbook.patch"
       ]
     }
   ],

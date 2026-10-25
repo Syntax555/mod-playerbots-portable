@@ -106,6 +106,9 @@ pass.
   match a class trainer for a Vanilla, TBC and Wrath character. The Lua
   fixtures run DragonUI's entry points, spellbook catalogue and level-up
   builder but do not render frames.
+- [ ] Check the DragonUI-style MultiBot bot spellbook on a live client with
+  DragonUI: art, tabs, paging, cast, macro and skip box for an era altbot. The
+  Lua fixture runs MultiBot's spellbook collection but does not render frames.
 - [ ] DragonUI's level-up notice hard-codes its Dungeon Finder, glyph and dual
   specialization lines in local tables. Hiding them before a character can use
   them needs a data hook in upstream DragonUI.
