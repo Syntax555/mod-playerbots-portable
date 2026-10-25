@@ -97,8 +97,9 @@ and English text. German locale merging preserves numeric gameplay fields and
 other locale slots. Historical TBC trees use Classic 2.5.4 data; the client and
 core remain Wrath 3.3.5a. See [EraTalents](era-talents.md) for installation and
 supported historical rules. With [DragonUI](era-talents.md#dragonui), its talent
-key opens the historical tree, the spellbook and level-up notice follow the
-character's own trainer list and the glyph page opens once Wrath is earned.
+window renders historical trees for the player and inspected bots; its
+spellbook and level-up notice follow the character's own trainer list and the
+glyph page opens once Wrath is earned.
 
 The MultiBot fork displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
@@ -109,7 +110,8 @@ skill recipes, with the ignore boxes set from the bot's skip list; with DragonUI
 shows it in [DragonUI's book](era-talents.md#dragonui) with the trainer spells
 the bot can still learn. Its talent button uses native inspection with
 EraTalents: historical trees and ranks belong to the inspected bot, and Wrath
-retains Blizzard's view.
+uses native talents. With DragonUI's talent module enabled, these historical
+trees use the same DragonUI window as the player's talents.
 Controlled group altbots can spend their earned Vanilla/TBC points there;
 other characters remain read-only. Optional quest, gear and guide addons and
 their installation sources are listed in [client addons](addons.md).

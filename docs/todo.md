@@ -110,10 +110,13 @@ pass.
 - [ ] Validate the [DragonUI talent route](era-talents.md#dragonui) on a live
   client with DragonUI's talent module enabled: talent key, micro-button,
   `/talents`, spec tabs, glyph page, a hunter's pet tree, and inspecting an
-  era altbot and a Wrath character. Check that the spellbook's unlearned spells
+  era altbot and a Wrath character. Check the historical talent nodes, seven-row
+  Vanilla and nine-row TBC layout, connections, search and tooltips in the
+  DragonUI window, plus manual learning through MultiBot and target switching.
+  Check that the spellbook's unlearned spells
   match a class trainer for a Vanilla, TBC and Wrath character. The Lua
-  fixtures run DragonUI's entry points, spellbook catalogue and level-up
-  builder but do not render frames.
+  fixtures run DragonUI's talent renderer and controls, entry points,
+  spellbook catalogue and level-up builder but do not render game graphics.
 - [ ] Check the MultiBot bot spellbook in DragonUI's book on a live client:
   art, tabs, tree sections, search, paging, single-page mode, cast, macro and
   shift-click skip for an era altbot, next to the player's own book. The Lua

@@ -78,13 +78,18 @@ talent window; install it from its
 enabled:
 
 - For a Vanilla or TBC character, the talent key, the micro-button and
-  `/talents` open the historical tree. A DragonUI spec tab opens it as well.
+  `/talents` open the historical trees inside DragonUI's talent window, with
+  its talent nodes, prerequisite connections and search. Vanilla uses seven
+  rows and TBC nine; ranks, remaining points and learning use EraTalents data.
 - DragonUI keeps the pet tree (`/pettalents` opens it) and characters on
   native Wrath trees. Its glyph page opens once the character has earned
   Wrath; before that the glyph key, the glyph tab and using a glyph show a
   notice instead.
 - Inspecting a character with a historical tree shows it read-only in the
-  standard inspect talent tab; other targets keep DragonUI's inspect window.
+  same DragonUI talent window. MultiBot's talent button opens that window for
+  the selected bot; controlled group altbots can spend their earned points
+  there. Other targets keep DragonUI's native inspect view. Without DragonUI,
+  historical trees use EraTalents' own window and the standard inspect tab.
 - DragonUI's spellbook shows the spells still to learn, and its level-up
   notice the new class spells, from the character's own class trainer list on
   this server. The list follows the earned era, talents and class quests and
@@ -101,8 +106,9 @@ enabled:
   their level and cost. Left-click casts, right-click creates a macro and
   shift-click adds the spell to MultiBot's skip list or removes it.
 
-Update the EraTalents addon from the current client package to get this
-behavior. Disabling DragonUI's talent module also restores the standard route.
+Update DragonUI and the EraTalents addon together from their forks' Latest
+releases. Keep the MPQ from the client package matching your server's data
+generation. Disabling DragonUI's talent module also restores the standard route.
 
 ## Points, training, respecs and glyphs
 

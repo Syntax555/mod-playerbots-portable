@@ -28,7 +28,6 @@ from FixtureSupport import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ERA_PATCH = fork_change('mod-era-talents', 'mod-era-talents-multibot-inspect')
 BOT_PATCH = fork_change('MultiBot', 'multibot-era-talent-inspect')
 
 
@@ -475,7 +474,9 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
                                'the native talent tab remains disabled',
                                "a realm without EraTalents renders MultiBot's talent window",
                                'the era tree sits above the toplevel Inspect frame',
-                               "the era tree follows the Inspect frame's strata on every show")
+                               "the era tree follows the Inspect frame's strata on every show",
+                               'partial ranks are not presented as a complete tree',
+                               'rank limits validate matching client structure')
             if not any(message in result.stderr for message in expected_errors):
                 raise AssertionError('Mutation failed for an unrelated fixture error: ' + result.stderr)
         else:
@@ -507,23 +508,24 @@ def main() -> None:
         (bot / 'Core').mkdir()
         for file in ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'):
             shutil.copyfile(args.addon_source / file, bot / file)
-        for directory_, patch in ((era, ERA_PATCH), (bot, BOT_PATCH)):
-            unpatched(directory_, patch)
-            git_apply(directory_, patch)
+        unpatched(bot, BOT_PATCH)
+        git_apply(bot, BOT_PATCH)
         packets = native_fixture(args.module_source, directory)
         print('Native ISYNC: all authored classes, 19 earned tiers, mixed leader stages/levels, inspect gates and transition state passed')
         client_fixture(era, bot, packets, directory)
         inspect = era / 'client-addon/EraTalents/Inspect.lua'
         safe_inspect = inspect.read_text()
-        guard = '''    if ET.state.clientGen ~= ET.state.serverGen then
-      ShowStatus(L["Install the matching EraTalents client patch and restart the game."])
-      return
-    end
+        talents = era / 'client-addon/EraTalents/TalentUI.lua'
+        safe_talents = talents.read_text()
+        guard = '''  if ET.state.clientGen ~= ET.state.serverGen then
+    return nil, L["Install the matching EraTalents client patch and restart the game."]
+  end
 '''
-        if guard not in safe_inspect:
+        if guard not in safe_talents:
             raise AssertionError('Expected production generation guard')
-        inspect.write_text(safe_inspect.replace(guard, '', 1))
+        talents.write_text(safe_talents.replace(guard, '', 1))
         client_fixture(era, bot, packets, directory, expect_failure=True)
+        talents.write_text(safe_talents)
         for silent_guard, replacement in (
                 ('(ET.inspect.botTarget == guid and ET.ServesBotInspect())', 'ET.inspect.botTarget == guid'),
                 ('  if not ET.ServesBotInspect() then return false end\n', '')):
@@ -533,7 +535,9 @@ def main() -> None:
             client_fixture(era, bot, packets, directory, expect_failure=True)
         inspect.write_text(safe_inspect)
         for relative, before, after in (
-                ('Inspect.lua', 'if level <= 0 or level >= 10 then InspectSwitchTabs(3) end', 'InspectSwitchTabs(3)'),
+                ('TalentUI.lua', 'if not state or state.partial then', 'if not state then'),
+                ('TalentUI.lua', ' or rank > byId[id].maxRank', ''),
+                ('Inspect.lua', 'if level <= 0 or level >= 10 then', 'if true then'),
                 ('Inspect.lua', 'InspectSwitchTabs(3)', 'InspectSwitchTabs(1)'),
                 ('Inspect.lua', '    v.readOnly = not e.editable\n', ''),
                 ('Inspect.lua', 'name = "EraInspectTalentFrame", parent = UIParent,',
@@ -565,9 +569,7 @@ def main() -> None:
         git_apply(bot, BOT_PATCH, '--reverse')
         client_fixture(era, bot, packets, directory, expect_failure=True)
         git_apply(bot, BOT_PATCH)
-        git_apply(era, ERA_PATCH, '--reverse')
-        client_fixture(era, bot, packets, directory, expect_failure=True)
-        print('Reverted MultiBot/EraTalents and unsafe generation/retry mutations all fail the regression fixture')
+        print('Reverted MultiBot and unsafe EraTalents generation/retry mutations all fail the regression fixture')
 
 
 if __name__ == '__main__':

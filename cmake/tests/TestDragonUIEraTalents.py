@@ -1,13 +1,12 @@
-"""Run EraTalents against DragonUI's pinned talent window entry points.
+"""Exercise DragonUI's real talent canvas with authoritative EraTalents data.
 
-DragonUI's talent module replaces the talent micro-button, the talent key
-bindings, the PlayerTalentFrame redirect and the inspect talent tab. Its real
-entry, show/hide, inspect and tab code runs here with the real EraTalents
-client files, so an era character can never be left on DragonUI's native
-WotLK tree while native characters, pets and glyphs keep DragonUI.
+The fixture loads the real window entry points, live renderer, node canvas,
+footer, tabs, EraTalents client and MultiBot talent opener. Frame doubles retain
+layout and visibility; no realm or graphical client is required.
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 import re
@@ -15,12 +14,10 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import fork_change, git_apply, prepared_core, run_fixture, unpatched
+from FixtureSupport import fork_change, git_apply, prepared_core, run_fixture
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ERA_PATCH = fork_change('mod-era-talents', 'mod-era-talents-dragonui')
-DRAGONUI = ROOT / '.module-cache/prepared-source-addons/DragonUI'
 
 
 def section(text: str, start: str, end: str) -> str:
@@ -28,28 +25,37 @@ def section(text: str, start: str, end: str) -> str:
     return text[begin:text.index(end, begin)]
 
 
-def dragon_chunks(source: Path) -> dict[str, str]:
+def dragon_chunks(source: Path, multibot: Path) -> dict[str, str]:
     talents = source / 'modules/talents'
     shell = (talents / 'window_shell.lua').read_text()
     header = 'local addon = select(2, ...)\nlocal TM = addon.TalentModule\nlocal ns = TM.ns\n'
     window = header + section(shell, 'function ns.SetTitle(text)', '-- Ambient clouds and dust') \
-        + section(shell, 'function ns.SetGlyphPage(on)', '-- Show and hide') \
+        + section(shell, 'function ns.SetDepth(depth)', '-- Show and hide') \
         + section(shell, 'local function onShow()', 'local function onDragStart(win)') + 'return onShow, onHide\n'
-    inspect = header + section((talents / 'live_view.lua').read_text(), 'function ns.ShowInspect(unit)',
-                               '-- Live repaint triggers')
-    # The tab strip from its tab helpers through RefreshTabs, so the glyph tab is DragonUI's own.
     tabs = header + 'local L = addon.L\n' + section((talents / 'tab_strip.lua').read_text(), 'local TAB_PREFIX',
                                                      '-- Spec rename cog') + 'return tabClicked\n'
-    return {'window': window, 'inspect': inspect, 'tabs': tabs,
-            'namespace': str(talents / 'namespace.lua'), 'entry': str(talents / 'entry_points.lua')}
+    bot = section((multibot / 'UI/MultiBotTalentFrame.lua').read_text(),
+                  'function MultiBot.OpenEraTalentInspect(', 'local function getTalentFrameAceGUI(')
+    return {'window': window, 'tabs': tabs, 'bot': bot,
+            **{name: str(talents / filename) for name, filename in (
+                ('namespace', 'namespace.lua'), ('entry', 'entry_points.lua'),
+                ('live', 'live_view.lua'), ('canvas', 'tree_canvas.lua'), ('footer', 'footer_bar.lua'),
+                ('editor', 'build_editor.lua'))}}
 
 
 LUA_FIXTURE = r'''
 local addonDir, chunks, moduleEnabled = ...
+local objects={}
+local ownClass="WARRIOR"
+local canInspect=true
+local now=100
 GetLocale=function() return "deDE" end
 local events={}
 local methods={}
-local function Object(name,parent) return setmetatable({name=name,parent=parent,scripts={},hooks={},shown=false},{__index=methods}) end
+local function Object(name,parent)
+  local o=setmetatable({name=name,parent=parent,scripts={},hooks={},shown=false},{__index=methods})
+  objects[#objects+1]=o; return o
+end
 for _,name in ipairs({"SetFrameStrata","SetPoint","EnableMouse","SetMovable","RegisterForDrag","SetAllPoints","SetFrameLevel",
   "SetTexture","SetTexCoord","SetTextColor","SetAlpha","EnableMouseWheel","SetScrollChild","SetDesaturated","ClearAllPoints",
   "SetSize","SetVertexColor","SetBackdrop","SetBackdropColor","SetBackdropBorderColor","SetJustifyH","SetJustifyV","SetFont",
@@ -123,7 +129,13 @@ local notices={}
 UIErrorsFrame=Object("UIErrorsFrame"); UIErrorsFrame.AddMessage=function(_,text) table.insert(notices,text) end
 local warnings={}
 DEFAULT_CHAT_FRAME={AddMessage=function(_,s) table.insert(warnings,s) end}
-GameTooltip={SetOwner=function() end,SetText=function() end,AddLine=function() end,Show=function() end,Hide=function() end,
+local tooltipLines={}
+GameTooltip={SetOwner=function(self,o) self.owner=o; wipe(tooltipLines) end,
+  GetOwner=function(self) return self.owner end, IsOwned=function(self,o) return self.owner==o end,
+  SetText=function(_,s) tooltipLines[#tooltipLines+1]=s end,
+  AddLine=function(_,s) tooltipLines[#tooltipLines+1]=s end,
+  SetHyperlink=function(_,s) tooltipLines[#tooltipLines+1]=s end,
+  Show=function() end,Hide=function(self) self.owner=nil end,SetTalent=function() error("native tooltip used for historical node") end,
   SetSpell=function() end,SetAction=function() end,HookScript=function() end}
 GameTooltip_Hide=function() end
 local cvars={previewTalents="0"}
@@ -145,9 +157,9 @@ UnitExists=function(unit) return units[unit]~=nil end
 UnitName=function(unit) return unit=="player" and "Testi" or (unit=="party1" and "Mey" or "Godric") end
 GetUnitName=function(unit) return UnitName(unit) end
 UnitLevel=function(unit) return unit=="player" and playerLevel or 20 end
-UnitClass=function() return "Krieger","WARRIOR" end
-CanInspect=function(unit) return UnitExists(unit) end
-GetTime=function() return 100 end
+UnitClass=function(unit) return "Class",unit=="player" and ownClass or "WARRIOR" end
+CanInspect=function(unit) return canInspect and UnitExists(unit) end
+GetTime=function() return now end
 SetPortraitTexture=function() end
 PanelTemplates_TabResize=function() end
 PanelTemplates_SetNumTabs=function() end
@@ -188,178 +200,360 @@ SetOverrideBindingClick=function(_,_,key,button,mouse) bindings[key]={button=but
 local function press(key) local b=assert(bindings[key],"DragonUI binds "..key); _G[b.button]:Click(b.mouse) end
 SlashCmdList={}
 
--- DragonUI: real namespace, entry points, window show/hide, inspect and tab code.
+
+InspectUnit=inspect
+StaticPopupDialogs={}
+GetCVarBool=function(name) return GetCVar(name)=="1" end
+GetNumTalentTabs=function(_,pet) return pet and 1 or 3 end
+GetNumTalents=function() return 1 end
+GetTalentInfo=function(tab,index,inspect,pet) return "Native talent","native-icon",pet and 6 or 11,2,0,1,false,true,0,true end
+GetTalentTabInfo=function(tab) return "Native "..tab,nil,0,"NativeBackground",0 end
+GetTalentPrereqs=function() end
+GetUnspentTalentPoints=function() return 4 end
+GetGroupPreviewTalentPointsSpent=function() return 0 end
+local nativeLearns=0
+LearnPreviewTalents=function() nativeLearns=nativeLearns+1 end
+AddPreviewTalentPoints=function() error("native preview used for historical node") end
+IsModifiedClick=function() return false end
+SetPortraitToTexture=function() end
+DrawRouteLine=function() end
+STANDARD_TEXT_FONT="font"
+TALENT_SPEC_PRIMARY="Primary"; TALENT_SPEC_SECONDARY="Secondary"; PET="Pet"; GLYPHS="Glyphs"
+local nativeResets=0
+ResetGroupPreviewTalentPoints=function() nativeResets=nativeResets+1 end
+for _,name in ipairs({"SetAtlasTexture","SetShadowOffset","SetAutoFocus","SetTextInsets","SetOrder","SetDuration",
+  "SetChange","SetSmoothing","SetLooping","Stop","ClearFocus","HighlightText","SetFocus","SetValueStep"}) do
+  methods[name]=function(self,...) self[name.."Args"]={...} end
+end
+function methods:SetScale(n) self.scale=n end
+function methods:GetScale() return self.scale or 1 end
+function methods:GetEffectiveScale() return self:GetScale() end
+function methods:GetLeft() return 100 end
+function methods:GetTop() return 700 end
+function methods:GetTextWidth() return 40 end
+function methods:CreateAnimationGroup() return Object() end
+function methods:CreateAnimation() return Object() end
+function methods:IsPlaying() return self.playing end
+function methods:Play() self.playing=true end
+function methods:Enable() self.enabled=true end
+function methods:Disable() self.enabled=false end
+function methods:SetPoint(...) self.point={...} end
+function methods:SetSize(w,h) self.width=w; self.height=h end
+function methods:SetAlpha(a) self.alpha=a end
+
 local timers={}
 local addon={L=setmetatable({},{__index=function(_,k) return k end}),_dir=""}
 function addon:SafeExecute(_,_,fn,...) return fn(...) end
-function addon:After(_,fn) table.insert(timers,fn) end
+function addon:After(_,fn) timers[#timers+1]=fn end
 function addon:IsModuleEnabled(name) return name=="talents" and moduleEnabled end
 DragonUI=addon
 local function runTimers() local list=timers; timers={}; for _,fn in ipairs(list) do fn() end end
 assert(loadfile(chunks.namespace))("DragonUI",addon)
-local TM=addon.TalentModule
-local ns=TM.ns
+local TM,ns=addon.TalentModule,addon.TalentModule.ns
 local onShow,onHide=assert(loadstring(chunks.window))("DragonUI",addon)
-assert(loadstring(chunks.inspect))("DragonUI",addon)
+for _,key in ipairs({"live","canvas","footer","editor"}) do assert(loadfile(chunks[key]))("DragonUI",addon) end
 local tabClicked=assert(loadstring(chunks.tabs))("DragonUI",addon)
-local painted={}
-local function paint() table.insert(painted,{inspect=ns.inspectUnit,pet=ns.PetView(),glyph=ns.GlyphView()}) end
-ns.PaintLive=paint
-ns.PaintGlyphs=paint
+ns.SetClassArt=function(token,tree) ns.artClass=token; ns.artTree=tree end
+ns.SetPetArt=function() end
+ns.SetPortraitClass=function(token) ns.portraitClass=token end
+ns.SetPortraitUnit=function() end
+ns.DominantTree=function(points,count)
+  local best=1
+  for i=2,count or 0 do if (points[i] or 0)>(points[best] or 0) then best=i end end
+  return best
+end
+local nativeBuildReads=0
+ns.TreeData=function() nativeBuildReads=nativeBuildReads+1 end
+ns.BuildBucket=function() nativeBuildReads=nativeBuildReads+1; return {} end
+ns.CommittedRanks=function() return {} end
 ns.ApplyScale=function() end
-for _,name in ipairs({"InstallLiveEvents","InstallGlyphEvents","InstallOrbEvents","InstallSharing","PlaceCatcher"}) do ns[name]=function() end end
--- BuildWindow's art is presentation only; the window keeps DragonUI's real show and hide handlers.
+ns.BuildDropdown=function(parent) return CreateFrame("Button","FixtureBuildDropdown",parent) end
+ns.PaintGlyphs=function() end
+for _,name in ipairs({"InstallGlyphEvents","InstallOrbEvents","InstallSharing","PlaceCatcher"}) do ns[name]=function() end end
+-- Art creation is omitted; show/hide, depth, canvas, footer and tabs are production code.
 ns.BuildWindow=function()
   if ns.win then return ns.win end
   local win=CreateFrame("Frame","DragonUI_TalentFrame",UIParent)
   ns.win=win
   ns.title,ns.classArt,ns.petArt,ns.glyphArt,ns.fx=Object(),Object(),Object(),Object(),Object()
-  win:SetScript("OnShow",onShow)
-  win:SetScript("OnHide",onHide)
+  ns.BuildTrees(win,1); ns.BuildTabs(win)
+  ns.BuildFooterControls(CreateFrame("Frame",nil,win))
+  win:SetScript("OnShow",onShow); win:SetScript("OnHide",onHide)
   return win
 end
+local painted
+hooksecurefunc(ns,"PaintTrees",function(view) painted=view end)
 assert(loadfile(chunks.entry))("DragonUI",addon)
-
--- EraTalents: the real client files in TOC order.
 EraTalents=nil
 for line in io.lines(addonDir.."EraTalents.toc") do
   local file=line:match("^([^#%s][^\r]*%.lua)")
   if file then dofile(addonDir..file:gsub("\\","/")) end
 end
 local ET=EraTalents
-local warrior=EraTalentsData[0][1].talents[1].id
-
-fire("PLAYER_LOGIN")
-fire("PLAYER_ENTERING_WORLD")
+MultiBot={auto={},talent=Object(),toUnit=function(name) return name=="Mey" and "party1" or "party2" end}
+assert(loadstring(chunks.bot))()
+fire("PLAYER_LOGIN"); fire("PLAYER_ENTERING_WORLD")
 assert(sent[#sent]=="HELLO")
 local win=DragonUI_TalentFrame
-local function panel() return ET.frame~=nil and ET.frame:IsShown() end
-local function nativeOwnTree() return win~=nil and win:IsShown() and ns.inspectUnit==nil and not ns.GlyphView() and not ns.PetView() end
+local function panel() return ET.frame and ET.frame:IsShown() end
 local function reset()
+  GameTooltip:Hide()
   if win then win:Hide() end
   if panel() then ET.frame:Hide() end
   HideUIPanel(InspectFrame)
-  wipe(painted); wipe(notices)
+  wipe(notices)
 end
-
+local function reply(s) ET.OnAddonMsg("ERATAL",s) end
+local function nodes()
+  local list={}; ns.EachNode(function(node) list[node.index]=node end); return list
+end
+local function nodeCount()
+  local n=0; ns.EachNode(function() n=n+1 end); return n
+end
+local warrior=EraTalentsData[0][1].talents[1].id
 if not moduleEnabled then
-  -- A disabled talent module leaves the stock openers, which EraTalents already guards.
-  assert(win==nil and next(bindings)==nil,"a disabled DragonUI talent module installs no window or bindings")
-  ET.OnAddonMsg("ERATAL","SYNC 0 1 5 "..warrior..":1")
+  assert(not win and next(bindings)==nil,"disabled module installs no window or bindings")
+  reply("SYNC 0 1 5 "..warrior..":1")
   ns.ToggleTalents(); ns.OpenTalents()
-  assert(not panel(),"the disabled module's own functions stay inert")
+  assert(not panel(),"disabled DragonUI openers stay inert")
   ShowUIPanel(PlayerTalentFrame)
-  assert(panel() and not PlayerTalentFrame:IsShown(),"the stock talent frame still opens the era panel")
-  print("DragonUI talent module disabled: stock EraTalents route kept")
+  assert(panel() and not PlayerTalentFrame:IsShown(),"disabled module preserves standalone Era window")
+  print("Disabled DragonUI module preserves standalone talents")
   return
 end
-assert(win and TM.applied,"DragonUI applies its talent module on login")
-ns.BuildTabs(win)
-
--- A native WotLK character keeps DragonUI's window.
-ET.OnAddonMsg("ERATAL","SYNC 2 0 0")
-ET.OnAddonMsg("ERATAL","GEN a1b2c3d4")
+assert(win and TM.applied,"DragonUI applies on login")
+reply("GEN a1b2c3d4"); reply("SYNC 2 0 0")
 press("N")
-assert(nativeOwnTree() and not panel(),"native characters keep DragonUI's talent window")
+assert(win:IsShown() and not panel() and not painted.external and ns.depth==11,"native Wrath keeps the native DragonUI tree")
+reset()
+reply("SYNC 0 1 5 "..warrior..":1")
+for _,open in ipairs({function() press("N") end,function() TalentMicroButton:Click() end,
+  function() SlashCmdList.DRAGONUI_TALENTS("") end,function() ShowUIPanel(PlayerTalentFrame); runTimers() end,
+  function() ET.TogglePanel() end,function() win:Show() end}) do
+  open()
+  assert(win:IsShown() and not panel() and painted.external,"every opener uses DragonUI's historical canvas")
+  assert(not PlayerTalentFrame:IsShown(),"stock talent frame stays hidden")
+  reset()
+end
+press("N"); press("N")
+assert(not win:IsShown() and not panel(),"talent key closes the same window")
+
+-- Every generated historical class tree reaches the real canvas with native grid coordinates.
+local classes={[1]="WARRIOR",[2]="PALADIN",[3]="HUNTER",[4]="ROGUE",[5]="PRIEST",
+  [7]="SHAMAN",[8]="MAGE",[9]="WARLOCK",[11]="DRUID"}
+for era=0,1 do
+  for classId,token in pairs(classes) do
+    ownClass=token; ET._classId=classId
+    local tree=EraTalentsData[era][classId]
+    local first=tree.talents[1]
+    reply("SYNC "..era.." 1 5 "..first.id..":1")
+    ns.OpenTalents()
+    assert(win:IsShown() and not panel() and painted.external,"historical tree remains in DragonUI")
+    assert(ns.depth==(era==0 and 7 or 9),"historical tree uses its own depth")
+    assert(win:GetHeight()==ns.WindowHeight(ns.depth),"window height follows historical depth")
+    assert(ns.artClass==token and ns.portraitClass==token,"historical class selects matching artwork")
+    local byId=nodes()
+    assert(nodeCount()==#tree.talents,"every historical talent is rendered exactly once")
+    for _,talent in ipairs(tree.talents) do
+      local node=assert(byId[talent.id],"historical ID reaches real canvas")
+      assert(node.tree==talent.tab and node.tier==talent.tier+1,"historical tab/tier maps to canvas")
+      assert(node.talentName==ET.LocalizedField(talent,"name"),"historical localized talent name reaches canvas")
+      local x,y=node.point[4]*node:GetScale(),node.point[5]*node:GetScale()
+      local tier=talent.tier+1
+      assert(math.abs(x-(18+64*talent.col))<0.001 and math.abs(y+(46+46*talent.tier+(tier>=ns.depth and 28 or 0)))<0.001,
+        "historical column/tier uses DragonUI's real placement")
+      assert(node.rank:GetText()==(talent.id==first.id and 1 or ""),"rank text follows server allocation")
+    end
+    assert(not DragonUI_TalentApplyButton:IsShown() and not DragonUI_TalentActivateButton:IsShown()
+      and not DragonUI_TalentInspectImport:IsShown() and not FixtureBuildDropdown:IsShown(),"native purchase/profile actions are hidden")
+    assert(DragonUI_TalentSearchBox:IsShown(),"historical tree keeps search")
+    ns.query="this talent does not exist"; ns.ApplySearch()
+    for _,node in pairs(byId) do assert(node.alpha==0.25,"real search dims nonmatching historical nodes") end
+    ns.query=""; ns.ApplySearch()
+    reset()
+  end
+end
+ownClass="WARRIOR"; ET._classId=1
+reply("SYNC 0 1 5 "..warrior..":1"); ns.OpenTalents()
+local originalNode=assert(nodes()[warrior])
+originalNode:Click()
+assert(sent[#sent]=="LEARN "..warrior and ET.state.ranks[warrior]==1,"own learning sends LEARN without optimistic rank changes")
+local beforeRight=#sent
+originalNode:Click("RightButton")
+assert(#sent==beforeRight,"right-click does not spend or reset talents")
+reply("SYNC 0 1 4 "..warrior..":2")
+assert(nodes()[warrior].rank:GetText()==2,"server SYNC repaints ranks inside the open window")
+ns.NodeTooltip(nodes()[warrior])
+assert(tooltipLines[1]==ET.LocalizedField(EraTalentsData[0][1].talents[1],"name"),"tooltip uses authored historical localized prose")
+assert(table.concat(tooltipLines," "):find(ET.L["Next rank:"],1,true),"editable historical tooltip has next-rank prose")
+GameTooltip:Hide()
+local before=nativeResets
+ns.ResetView(); ns.UndoLast()
+assert(nativeResets==before,"historical reset/undo cannot call native APIs")
+ns.EnterEditor({}); ns.LoadOntoCharacter({}); StaticPopupDialogs.DUI_TALENTS_LEARN.OnAccept()
+assert(nativeBuildReads==0 and nativeLearns==0,"historical characters cannot enter native editor, load or apply builds")
+local retiredNode
+ns.EachNode(function(node) if node.index~=warrior then retiredNode=node end end)
+
+local locked
+for _,talent in ipairs(EraTalentsData[0][1].talents) do
+  if talent.prereqTalent~=0 then locked=talent; break end
+end
+assert(locked,"fixture needs a real prerequisite talent")
+local lockedNode=nodes()[locked.id]
+local beforeClick=#sent; lockedNode:Click()
+assert(#sent==beforeClick and lockedNode.state=="locked","locked prerequisites refuse talent purchases")
+local parent
+for _,talent in ipairs(EraTalentsData[0][1].talents) do if talent.id==locked.prereqTalent then parent=talent end end
+local allocation={}
+for _,talent in ipairs(EraTalentsData[0][1].talents) do
+  if talent.tab==locked.tab and talent.tier<locked.tier then allocation[#allocation+1]=talent.id..":"..talent.maxRank end
+end
+reply("SYNC 0 1 5 "..table.concat(allocation,","))
+lockedNode=nodes()[locked.id]
+assert(lockedNode.state=="green","real historical prerequisites unlock talent state")
+assert(lockedNode.parent.used.lines>0,"real canvas draws prerequisite connections")
+lockedNode:Click()
+assert(sent[#sent]=="LEARN "..locked.id,"unlocked historical prerequisite permits purchase")
+reply("SYNC 0 1 4 "..warrior..":2")
+
+-- Generation mismatch, missing data and partial replies clear real nodes rather than leaking native data.
+ET.state.serverGen=nil; ET.RefreshDragonTalents()
+assert(nodeCount()==0,"own historical view waits for authoritative generation")
+reply("GEN deadbeef")
+assert(nodeCount()==0 and painted.count==0,"generation mismatch hides all historical nodes")
+reply("GEN a1b2c3d4")
+assert(nodeCount()>0,"matching generation restores historical canvas")
+ET._classId=6; ET.RefreshDragonTalents()
+assert(nodeCount()==0,"missing historical class data cannot show native talents")
+ET._classId=1
+reply("SYNC 0 1 0 "..warrior..":2")
+local n=#sent; nodes()[warrior]:Click()
+assert(#sent==n,"zero available points cannot buy a rank")
+assert(nodes()[warrior].state=="green","learned partial ranks keep their color with zero unspent points")
+assert(nodes()[EraTalentsData[0][1].talents[2].id].state=="gray","empty unavailable talents stay gray")
+reply("SYNC 0 1 4 "..warrior..":"..EraTalentsData[0][1].talents[1].maxRank)
+n=#sent; nodes()[warrior]:Click()
+assert(#sent==n,"maxed historical talent cannot buy another rank")
+assert(nodes()[warrior].state=="yellow","maxed historical ranks stay yellow")
+reply("SYNC 0 1 4 999999:1")
+assert(nodeCount()==0,"unknown historical talent IDs cannot render or buy")
+reply("SYNC 0 1 4 "..warrior..":999")
+assert(nodeCount()==0,"invalid historical ranks cannot render or buy")
+reply("SYNC 0 1 4 1/2 "..warrior..":1")
+assert(nodeCount()==0,"partial own replies wait for all ranks")
+reply("SYNC 0 1 4 2/2")
+assert(nodeCount()>0,"final own rank chunk repaints historical nodes")
+local completeNodes=nodeCount()
+reply("SYNC 1 1 99 2/2 "..warrior..":3")
+assert(ET.state.era==0 and ET.state.availPts==4 and ET.state.ranks[warrior]==1 and not ET.state.partial,
+  "orphan continuation preserves the completed authoritative allocation")
+assert(nodeCount()==completeNodes and ns.depth==7 and nodes()[warrior].rank:GetText()==1,
+  "orphan continuation cannot replace the completed historical canvas")
 reset()
 
--- An era character's own tree opens in the era panel from every DragonUI opener.
-ET.OnAddonMsg("ERATAL","SYNC 0 1 5 "..warrior..":1")
-assert(ET.state.isEraChar)
-press("N")
-assert(panel() and not nativeOwnTree(),"the talent key opens the era tree, not DragonUI's native tree")
-press("N")
-assert(not panel() and not nativeOwnTree(),"the talent key toggles the era panel closed")
-TalentMicroButton:Click()
-assert(panel() and not nativeOwnTree(),"the micro-button opens the era tree")
-TalentMicroButton:Click()
-assert(not panel(),"the micro-button toggles the era panel closed")
-SlashCmdList.DRAGONUI_TALENTS("")
-assert(panel() and not nativeOwnTree(),"/talents opens the era tree")
-reset()
-ShowUIPanel(PlayerTalentFrame); runTimers()
-assert(panel() and not PlayerTalentFrame:IsShown() and not nativeOwnTree(),"the stock talent frame opens the era tree")
-reset()
-win:Show()
-assert(panel() and not nativeOwnTree(),"any other show of DragonUI's player tree opens the era tree")
-reset()
-
--- Glyphs stay in DragonUI; switching that open window to a player spec tab opens the era tree.
+-- Glyph and pet routes retain DragonUI's existing behavior and depth restoration.
+reply("GLYPHS 0")
 press("K")
-assert(win:IsShown() and ns.GlyphView() and not panel(),"the glyph page stays in DragonUI")
-tabClicked({GetID=function() return 1 end})
-assert(panel() and not nativeOwnTree(),"a spec tab of an open DragonUI window opens the era tree")
-reset()
-
--- Before earned Wrath the server's glyph gate closes the glyph page and hides its tab.
 local gate=ET.L["Glyphs become available once this character has earned Wrath of the Lich King."]
-ET.OnAddonMsg("ERATAL","GLYPHS 0")
-assert(ET.state.glyphsAllowed==false)
-press("K")
-assert(not win:IsShown() and not panel() and not ns.GlyphView() and notices[#notices]==gate,
-  "the glyph key explains the gate before Wrath and opens nothing")
+assert(not win:IsShown() and notices[#notices]==gate,"glyph key explains earned-era gate")
 fire("USE_GLYPH")
-assert(not win:IsShown() and not panel() and #notices==2,"using a glyph explains the gate before Wrath")
+assert(not win:IsShown() and #notices==2,"using a glyph keeps earned-era gate")
 tabClicked({GetID=function() return 4 end})
-assert(not ns.GlyphView() and #notices==3,"the glyph tab cannot open the page before Wrath")
+assert(not ns.GlyphView() and #notices==3,"glyph tab keeps earned-era gate")
 ns.RefreshTabs()
-assert(DragonUI_TalentFrameTab1:IsShown() and not DragonUI_TalentFrameTab4:IsShown(),"the glyph tab is hidden before Wrath")
+assert(not DragonUI_TalentFrameTab4:IsShown(),"historical glyph tab is hidden")
 reset()
-ET.OnAddonMsg("ERATAL","GLYPHS 1")
-ns.RefreshTabs()
-assert(DragonUI_TalentFrameTab4:IsShown(),"the glyph tab returns with earned Wrath")
-press("K")
-assert(win:IsShown() and ns.GlyphView() and #notices==0,"the glyph page opens with earned Wrath")
-reset()
-
--- The pet tree stays in DragonUI: /pettalents opens DragonUI's pet view instead of the stock frame.
-local chatLines=#warnings
+reply("SYNC 2 0 0"); ns.RefreshTabs()
+assert(not DragonUI_TalentFrameTab4:IsShown(),"server glyph gate also hides tab while native data is selected")
+reply("SYNC 0 1 4 "..warrior..":2")
+local chats=#warnings
 ET.OpenStockTalents()
-assert(not win:IsShown() and #warnings==chatLines+1,"without a pet the era addon's notice remains")
+assert(not win:IsShown() and #warnings==chats+1,"pet opener without a pet preserves notice")
 units.pet="0x0000000000000009"; petTalents=true
 ET.OpenStockTalents(); runTimers()
-assert(win:IsShown() and ns.PetView() and not panel() and painted[#painted].pet,"/pettalents opens DragonUI's pet tree")
+assert(win:IsShown() and ns.PetView() and not painted.external and ns.depth==11,"pet tree remains native and restores native depth")
+StaticPopupDialogs.DUI_TALENTS_LEARN.OnAccept()
+assert(nativeLearns==1,"native pet preview can still be applied")
 tabClicked({GetID=function() return 1 end})
-assert(panel() and not nativeOwnTree(),"leaving the pet tree for the player's spec opens the era tree")
-reset()
-petTalents=false
-ET.OpenStockTalents()
-assert(panel() and not nativeOwnTree(),"a pet without talents leaves the player tree to the era panel")
-reset()
-units.pet=nil
+assert(painted.external and ns.depth==7,"returning from pet tree restores historical tree")
+reset(); units.pet=nil; petTalents=false
+playerLevel=9; press("N")
+assert(not win:IsShown() and notices[1]==FEATURE_BECOMES_AVAILABLE_AT_LEVEL:format(10),"talents remain level-gated")
+playerLevel=15; reset()
 
--- Below the talent level DragonUI's notice stays and nothing opens.
-playerLevel=9
-press("N")
-assert(not panel() and not win:IsShown() and notices[1]==FEATURE_BECOMES_AVAILABLE_AT_LEVEL:format(10),"below level 10 the talent window stays closed")
-playerLevel=15
+-- MultiBot's unchanged opener uses DragonUI and consumes server permission one rank at a time.
+assert(MultiBot.OpenEraTalentInspect("Mey",true),"MultiBot accepts historical bot inspect")
+assert(win:IsShown() and ns.inspectUnit=="party1" and not panel(),"bot opens the same DragonUI window")
+assert(nodeCount()==0,"bot waits without showing native ranks")
+reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":1")
+local botNode=assert(nodes()[warrior])
+assert(botNode.state=="green","read-only learned partial ranks retain their color")
+local count=#sent
+botNode:Click()
+assert(#sent==count,"inspected player remains read-only before IEDIT")
+reply("IEDIT "..units.party1.." 1 5")
+botNode=nodes()[warrior]; botNode:Click()
+assert(sent[#sent]=="ILEARN "..units.party1.." "..warrior,"controlled altbot spends through ILEARN")
+assert(ET.inspect.cache[units.party1].ranks[warrior]==1,"bot ranks remain authoritative")
+count=#sent; botNode:Click()
+assert(#sent==count,"permission is consumed until a fresh server reply")
+reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":2")
+reply("IEDIT "..units.party1.." 1 4")
+assert(nodes()[warrior].rank:GetText()==2,"bot server reply repaints the same canvas")
+ns.NodeTooltip(nodes()[warrior]); GameTooltip:Hide()
+ns.ImportFromInspect()
+assert(nativeBuildReads==0,"historical inspected talents cannot be saved as native profiles")
+assert(DragonUI_TalentSearchBox:IsShown() and not DragonUI_TalentInspectImport:IsShown(),"bot inspect retains search without native import")
+reply("ISYNC "..units.party1.." 0 1 1 1/2 "..warrior..":2")
+assert(nodeCount()==0,"partial bot reply cannot show incomplete ranks")
+reply("ISYNC "..units.party1.." 0 1 1 2/2")
+reply("IEDIT "..units.party1.." 0 0")
+count=#sent; nodes()[warrior]:Click()
+assert(#sent==count,"revoked permission stops bot learning")
+ns.NodeTooltip(nodes()[warrior])
+assert(not table.concat(tooltipLines," "):find(ET.L["Next rank:"],1,true),"read-only inspected tooltip omits next-rank actions")
+GameTooltip:Hide()
+local retiredBot={index=botNode.index,tree=botNode.tree,externalView=botNode.externalView}
+local mage=EraTalentsData[1][8].talents[1].id
+reply("ISYNC "..units.party1.." 1 1 8 "..mage..":1")
+reply("IEDIT "..units.party1.." 1 4")
+assert(ns.depth==9 and ns.artClass=="MAGE" and nodeCount()==#EraTalentsData[1][8].talents,
+  "bot TBC class and era select their own complete tree independent of the player")
+count=#sent; ns.NodeClicked(retiredBot,"LeftButton")
+assert(#sent==count,"stale painted bot class/era cannot send a purchase")
+nodes()[mage]:Click()
+assert(sent[#sent]=="ILEARN "..units.party1.." "..mage,"TBC bot purchase uses its own historical talent ID")
+assert(MultiBot.OpenEraTalentInspect("Mey",true) and not win:IsShown(),"same bot talent button closes DragonUI")
+reply("IEDIT "..units.party1.." 1 99")
+assert(not win:IsShown(),"late replies do not reopen the window")
+assert(MultiBot.OpenEraTalentInspect("Mey",true) and win:IsShown() and nodeCount()==0,"reopening waits for fresh bot state")
+assert(not ET.inspect.cache[units.party1],"closing inspect drops cached bot permissions")
+assert(MultiBot.OpenEraTalentInspect("Godric",true),"switching bot retargets existing window")
+reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":3")
+assert(nodeCount()==0,"late previous-target replies do not populate new bot")
+reply("ISYNC "..units.party2.." 0 0 0")
+assert(win:IsShown() and not painted.external and nodeCount()==3,"native inspect target keeps DragonUI's native renderer")
+ns.EnterEditor({}); ns.LoadOntoCharacter({})
+assert(nativeBuildReads==0,"native inspected target cannot bypass own historical profile guards")
+local staleCount=#sent
+ns.NodeClicked(botNode,"LeftButton")
+assert(#sent==staleCount,"retired historical nodes do not fall through to native actions")
 reset()
-
--- Inspect: era-managed or still unknown targets use the stock tab under EraTalents' overlay.
-local function suppressed() return not InspectTalentFrameScrollFrame:IsShown() end
-inspect("party1")
-assert(sent[#sent]=="INSPECT "..units.party1)
-InspectFrameTab3:Click()
-assert(InspectTalentFrame:IsShown() and not win:IsShown() and ns.inspectUnit==nil,"an unanswered inspect waits in the stock tab")
-assert(suppressed() and ET.inspectStatus:IsShown(),"the native tree stays hidden until ISYNC decides")
-ET.OnAddonMsg("ERATAL","ISYNC "..units.party1.." 0 1 1 "..warrior..":1")
-assert(ET.inspectView.frame:IsShown() and ET.inspectView.readOnly,"the era tree of an inspected era character is shown read-only")
-assert(ET.inspectView.frame.strata=="HIGH" and ET.inspectView.frame.parent==UIParent,"the era tree sits above the Inspect frame with DragonUI")
-InspectFrame_UnitChanged()
-assert(not win:IsShown(),"a target change keeps an era inspect in the stock tab")
-reset()
-inspect("party2")
-ET.OnAddonMsg("ERATAL","ISYNC "..units.party2.." 0 0 0")
-InspectFrameTab3:Click()
-assert(win:IsShown() and ns.inspectUnit=="party2" and painted[#painted].inspect=="party2" and not InspectTalentFrame:IsShown(),
-  "a native inspect target keeps DragonUI's inspect window")
-reset()
-ET.state.serverGen=nil
-inspect("party1")
-InspectFrameTab3:Click()
-assert(win:IsShown() and ns.inspectUnit=="party1","a realm without EraTalents keeps DragonUI's inspect window")
-reset()
-print("DragonUI talents: era panel, glyph gate, pet tree, level gate and era/native inspect passed")
+canInspect=false
+assert(not MultiBot.OpenEraTalentInspect("Mey",true) and not win:IsShown(),"normal inspect refusal is preserved")
+canInspect=true
+ET.state.serverGen=nil; ET.helloSentAt=0; now=100
+assert(not MultiBot.OpenEraTalentInspect("Mey",true),"native realms preserve MultiBot fallback")
+reply("SYNC 2 0 0"); reply("GEN a1b2c3d4"); reply("GLYPHS 1")
+press("K")
+assert(win:IsShown() and ns.GlyphView(),"earned Wrath restores DragonUI glyph page")
+reset(); press("N")
+assert(not painted.external and ns.depth==11 and FixtureBuildDropdown:IsShown(),"Wrath restores native depth and profile controls")
+local sentBefore=#sent
+ns.NodeClicked(retiredNode,"LeftButton")
+assert(#sent==sentBefore,"retired hidden historical node cannot call native learn after Wrath transition")
+print("DragonUI canvas: all historical classes, authoritative self/bot learning, guards and native routes passed")
 '''
 
 
@@ -375,10 +569,9 @@ def run(era_addon: Path, chunks: dict[str, str], directory: Path, *, enabled: bo
     result = run_fixture([lua, str(script)])
     if expect_failure:
         if result.returncode == 0:
-            raise AssertionError('Reverted production behavior unexpectedly passed')
-        # Only an assertion of the fixture itself counts, not a broken production file.
-        if not re.search(r'dragonui-(?:enabled|disabled)\.lua:\d+: ', result.stderr):
-            raise AssertionError('Mutation failed for an unrelated fixture error: ' + result.stderr)
+            raise AssertionError('Unsafe production mutation unexpectedly passed')
+        if not re.search(r'dragonui-(?:enabled|disabled)\.lua:\d+: ', result.stderr.splitlines()[0]):
+            raise AssertionError('Mutation failed outside fixture assertions: ' + result.stderr)
         return
     if result.returncode:
         raise RuntimeError(result.stdout + result.stderr)
@@ -386,73 +579,61 @@ def run(era_addon: Path, chunks: dict[str, str], directory: Path, *, enabled: bo
 
 
 def main() -> None:
-    if not (DRAGONUI / 'DragonUI.toc').is_file():
-        raise RuntimeError('Run cmake -P cmake/PrepareModules.cmake to prepare the pinned DragonUI source')
-    chunks = dragon_chunks(DRAGONUI)
-    entry = Path(chunks['entry']).read_text()
-    # The openers EraTalents wraps are looked up on the shared table at call time.
-    for opener in ('TalentMicroButton:SetScript("OnClick", function() ns.ToggleTalents() end)',
-                   'ns.ShowInspect(InspectFrame.unit)', 'ns.OpenTalents()', 'ns.ToggleTalents()'):
-        if opener not in entry:
-            raise AssertionError('DragonUI talent opener changed: ' + opener)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--era-source', type=Path, default=prepared_core(ROOT) / 'modules/mod-era-talents')
+    parser.add_argument('--dragon-source', type=Path, default=ROOT / '.module-cache/prepared-source-addons/DragonUI')
+    parser.add_argument('--multibot-source', type=Path, default=ROOT / '.module-cache/prepared-addons/MultiBot')
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='dragonui-era-talents-') as temporary:
         directory = Path(temporary)
-        era = directory / 'era'
-        shutil.copytree(prepared_core(ROOT) / 'modules/mod-era-talents/client-addon', era / 'client-addon')
+        era, dragon = directory / 'era', directory / 'dragon'
+        dragon_addon = dragon / 'DragonUI'
+        shutil.copytree(args.era_source / 'client-addon', era / 'client-addon')
+        shutil.copytree(args.dragon_source / 'modules/talents', dragon_addon / 'modules/talents')
         subprocess.run(['git', 'init', '-q', str(era)], check=True)
-        unpatched(era, ERA_PATCH)
-        git_apply(era, ERA_PATCH)
+        subprocess.run(['git', 'init', '-q', str(dragon)], check=True)
+        chunks = dragon_chunks(dragon_addon, args.multibot_source)
         addon = era / 'client-addon/EraTalents'
         for enabled in (True, False):
             run(addon, chunks, directory, enabled=enabled)
-        compat = addon / 'DragonUI.lua'
-        safe = compat.read_text()
-        for before, after in (
-                ('if not (module.applied and ET.state.isEraChar and TalentLevel()) then return toggle(...) end',
-                 'if true then return toggle(...) end'),
-                ('and TalentLevel()) then return toggle(...) end', ') then return toggle(...) end'),
-                ('win:HookScript("OnShow", function() settled = not Redirect(ns) end)',
-                 'win:HookScript("OnShow", function() settled = true end)'),
-                ('hooksecurefunc(ns, "Repaint", function() if settled then Redirect(ns) end end)', ''),
-                ('if not (ET.state and ET.state.isEraChar) or not OwnTreeShown(ns) then return false end',
-                 'if not OwnTreeShown(ns) then return false end'),
-                ('if not (module.applied and UsesEraInspect(unit)) then return showInspect(unit, ...) end',
-                 'do return showInspect(unit, ...) end'),
-                ('  if e then return e.managed end\n', ''),
-                ('return ET.state ~= nil and ET.state.serverGen ~= nil', 'return true'),
-                ('if not (module.applied and ns.win and UnitExists("pet")) then return openStock(...) end',
-                 'do return openStock(...) end'),
-                ('and not ns.GlyphView() and not ns.PetView()', '')):
-            if before not in safe:
-                raise AssertionError('Expected production DragonUI guard: ' + before)
-            compat.write_text(safe.replace(before, after, 1))
-            run(addon, chunks, directory, enabled=True, expect_failure=True)
-        compat.write_text(safe)
-        for relative, before, after in (
-                ('DragonUIGlyphs.lua', '      if Blocked() then return Refuse() end\n', ''),
-                ('DragonUIGlyphs.lua', 'if on and Blocked() then', 'if false then'),
-                ('DragonUIGlyphs.lua', 'if glyphTab and Blocked() then glyphTab:Hide() end', ''),
-                ('DragonUIGlyphs.lua', 'ET.state.glyphsAllowed == false', 'ET.state.glyphsAllowed ~= true'),
-                ('Comms.lua', 'ET.state.glyphsAllowed = glyphs == "1"', 'ET.state.glyphsAllowed = true'),
-                ('EraTalents.lua', '  if ET.InitDragonUIGlyphs then ET.InitDragonUIGlyphs() end\n', '')):
-            path = addon / relative
+        mutations = (
+            (addon / 'EraTalents.lua', '  if ET.InitDragonUI then ET.InitDragonUI() end\n', ''),
+            (addon / 'DragonUIGlyphs.lua', '      if Blocked() then return Refuse() end\n', ''),
+            (addon / 'DragonUIGlyphs.lua', 'if on and Blocked() then', 'if false then'),
+            (addon / 'DragonUIGlyphs.lua', 'if glyphTab and Blocked() then glyphTab:Hide() end', ''),
+            (addon / 'Comms.lua', '  e.editable = false\n', ''),
+            (addon / 'Comms.lua', '  if not isFirst and not state.partial then return true end\n', ''),
+            (addon / 'TalentUI.lua', 'if not state or state.partial then', 'if not state then'),
+            (addon / 'TalentUI.lua', 'if ET.state.clientGen ~= ET.state.serverGen then', 'if false then'),
+            (addon / 'TalentUI.lua', 'if not byId[id] or rank < 0 or rank > byId[id].maxRank then',
+             'if not byId[id] or rank < 0 then'),
+            (addon / 'DragonUI.lua', 'if rank == 0 and reachable and (view.available < 1 or view.readOnly) then',
+             'if rank < node.maxRank and (view.available < 1 or view.readOnly) then'),
+            (addon / 'DragonUI.lua', '      if button ~= "LeftButton" then return end\n', ''),
+            (addon / 'DragonUI.lua', '      if not ET.IsReachable(talent, fresh.trees[talent.tab].points, fresh.state.ranks, fresh.byId) then return end\n', ''),
+            (dragon_addon / 'modules/talents/build_editor.lua', '    if ns.Call("ExternalTalents", true) then return end\n', ''),
+            (dragon_addon / 'modules/talents/build_editor.lua',
+             'function ns.LoadOntoCharacter(build)\n    if ns.Call("ExternalTalents", true) then return end',
+             'function ns.LoadOntoCharacter(build)'),
+            (dragon_addon / 'modules/talents/build_editor.lua', '    if ns.ExternalTalentView() then return end\n', ''),
+        )
+        for path, before, after in mutations:
+            print(f'Checking mutation {path.name}: {before.strip()}', flush=True)
             original = path.read_text()
             if before not in original:
-                raise AssertionError('Expected production glyph gate: ' + before)
+                raise AssertionError('Expected production guard: ' + before)
             path.write_text(original.replace(before, after, 1))
             run(addon, chunks, directory, enabled=True, expect_failure=True)
             path.write_text(original)
-        init = addon / 'EraTalents.lua'
-        wired = init.read_text()
-        call = '  if ET.InitDragonUI then ET.InitDragonUI() end\n'
-        if call not in wired:
-            raise AssertionError('Expected the DragonUI initialization call')
-        init.write_text(wired.replace(call, '', 1))
-        run(addon, chunks, directory, enabled=True, expect_failure=True)
-        init.write_text(wired)
-        git_apply(era, ERA_PATCH, '--reverse')
-        run(addon, chunks, directory, enabled=True, expect_failure=True)
-        print('Reverted EraTalents DragonUI integration and each guard mutation fail the fixture')
+        for component, change, path in (
+                ('mod-era-talents', 'mod-era-talents-dragonui-view', era),
+                ('DragonUI', 'dragonui-era-talents', dragon)):
+            patch = fork_change(component, change, paths=('client-addon/',) if component == 'mod-era-talents' else ())
+            print(f'Checking reverted {change}', flush=True)
+            git_apply(path, patch, '--reverse')
+            run(addon, dragon_chunks(dragon_addon, args.multibot_source), directory, enabled=True, expect_failure=True)
+            git_apply(path, patch)
+        print('Removed integration, glyph and bot-authority guards all fail the regression fixture')
 
 
 if __name__ == '__main__':

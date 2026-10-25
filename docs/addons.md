@@ -25,9 +25,10 @@ folders before replacement; keep account and character `SavedVariables`.
 See [EraTalents installation](era-talents.md#install-the-matching-client-files)
 for the matching addon/MPQ generation and locale checks.
 
-With both matching addons loaded, MultiBot's talent button opens the selected
-bot in the Blizzard inspect window. EraTalents displays its own Vanilla or TBC
-tree and allocated ranks there; Wrath uses the native inspect view. For an altbot
+With the matching addons loaded, MultiBot's talent button opens the selected
+bot's Vanilla or TBC trees and allocated ranks in DragonUI's talent window
+when its talent module is enabled, or in the Blizzard inspect window with
+EraTalents otherwise. Wrath uses the native inspect view. For an altbot
 you control in your group, click historical talents to spend its earned points.
 The server validates each purchase against that bot's own era and prerequisites.
 Other characters remain read-only; normal inspect access and range still apply.
