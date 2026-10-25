@@ -1,18 +1,21 @@
 # Zygor Individual Progression
 
 Zygor Guides Viewer Remaster follows each character's own Individual
-Progression tier with a pinned local patch. The server reports the tier, quest
+Progression tier through the changes of its
+[fork](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK). The server reports the tier, quest
 availability and instance access through the MultiBot Bridge; the addon only
 reads them. It cannot award, change or bypass progression, and an unknown
 state never unlocks content.
 
 ## Installation
 
-Use WoW **3.3.5a, build 12340** and the matching server and Zygor IP installer
-from the [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+Use WoW **3.3.5a, build 12340**, the server from the
+[Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
+and the Zygor IP installer from the
+[Zygor fork's Latest release](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest).
 The prebuilt server includes the bridge support; no server setting is needed.
 
-1. Download [Zygor-IP-latest.zip](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Zygor-IP-latest.zip)
+1. Download [Zygor-IP-latest.zip](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest/download/Zygor-IP-latest.zip)
    and extract it to a folder outside your WoW installation.
 2. Close WoW completely. Run `Install-Zygor.cmd` and enter your client's
    `Interface/AddOns/` folder when prompted. Internet access is required; the
@@ -21,14 +24,14 @@ The prebuilt server includes the bridge support; no server setting is needed.
    separate `ZygorGuidesViewer` or `ZygorTalentAdvisor` addon; the installer
    warns when it finds one.
 
-The installer downloads the pinned addon directly from upstream. It accepts the
-archive only when every file of its `ZygorGuidesViewerRM/` folder matches the
-pinned Git tree, applies the integration locally and checks every patched file
-and the TOC's interface and files. It backs up an existing `ZygorGuidesViewerRM/`
+The installer downloads the commit of the fork's `main` branch it was built
+from directly from GitHub. It accepts the archive only when every file of its
+`ZygorGuidesViewerRM/` folder matches the SHA-256 hash of that commit and checks
+the TOC's interface and files. It backs up an existing `ZygorGuidesViewerRM/`
 folder before replacement and records the installed revision in
 `SOURCE_REVISION.txt` and `SOURCE_MANIFEST.json`. Account and character
 SavedVariables, including Zygor's settings, are preserved. The release ZIP
-contains only the installer, the file list and the patch data.
+contains only the installer and the file list.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-Zygor.ps1 -AddOnsPath 'C:\Games\WoW\Interface\AddOns'
@@ -123,7 +126,7 @@ teleport or purchase.
 
 ### Upstream revision
 
-The patch is pinned to `ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK`; see
+The fork is based on `ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK`; see
 [dependencies](module-versions.md). The fell-lucas fork adds party goal sync
 (`Sync.lua`, AceComm and LibDeflate) on an older base. It is not included: it
 shares goal progress between party members and does not concern progression.
@@ -243,17 +246,17 @@ that the native checks it calls send no messages, and rejects 27 mutations of
 its gates.
 
 `python3 cmake/tests/TestZygorProgression.py` loads the
-[patched addon files](../patches/zygor-individual-progression.patch) with Lua
+[fork's addon files](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/commit/1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea) with Lua
 5.1 and the bridge's wire format: discovery, state validation, quest batching,
 step and goal gating, guide chains, the milestone guide, quest automation, the
 Gear Finder, best-in-slot lists and the Talent Advisor. It ties the zone,
 experience, instance, difficulty, milestone and reason tables to Individual
 Progression's, the bridge's and the core's sources, rejects every mutation of
-these gates and runs the upstream Zygor regression suite on the patched addon.
+these gates and runs the upstream Zygor regression suite on the fork's addon.
 
-`TestZygorInstallerPackaging.py` and `TestZygorInstaller.py` check the release
-ZIP and the PowerShell installer: file-by-file verification, rejected
-archives, patch and TOC checks, backup, rollback and preserved SavedVariables.
-The release build downloads the pinned upstream archive, installs it with the
-packaged installer and compares the result with the tested prepared addon.
-None of these tests starts a realm or a WoW client.
+The fork's Latest workflow tests the PowerShell installer with Windows
+PowerShell 5.1 and pwsh: file-by-file verification, rejected archives, TOC
+checks, backup, rollback and preserved SavedVariables. Before publishing, it
+installs the commit from GitHub with the packaged installer and compares every
+installed file with that commit's file list. None of these tests starts a realm
+or a WoW client.

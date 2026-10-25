@@ -83,15 +83,18 @@ database, configuration and first-run setup.
 ## Downloads
 
 The [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
-contains matching server and client packages.
+contains the server and the matching EraTalents client pack. The optional
+addons are published by their forks, each as a rolling Latest release of the
+branch the server pins; see [addon forks](docs/addons.md#addon-forks).
 
 | Package | Use |
 | --- | --- |
 | [Server bundle](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip) | Portable server, launcher, MySQL and configuration templates. |
 | [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | **Required for every player:** historical talents, Individual Progression's Vanilla/TBC spell data, restored class-quest spells and German text. |
-| [MultiBot Chatless](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional interface for your bot companions. Install its `MultiBot` folder as `Interface/AddOns/MultiBot/`; see [client addons](docs/addons.md). |
-| [Questie-335 installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd` with Internet access; see [installation](docs/questie-playerbots.md#installation). |
-| [Zygor IP installer](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Zygor-IP-latest.zip) | Optional Zygor Guides Viewer that follows each character's Individual Progression tier. Extract and run `Install-Zygor.cmd` with Internet access; see [installation](docs/zygor-progression.md#installation). |
+| [MultiBot Chatless](https://github.com/Syntax555/MultiBot-Chatless/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional interface for your bot companions. Install its `MultiBot` folder as `Interface/AddOns/MultiBot/`; see [client addons](docs/addons.md). |
+| [DragonUI](https://github.com/Syntax555/DragonUI/releases/latest/download/DragonUI-latest.zip) | Optional interface. Install its `DragonUI` and `DragonUI_Options` folders in `Interface/AddOns/`; EraTalents adapts it to each character's era. |
+| [Questie-335 installer](https://github.com/Syntax555/Questie/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd` with Internet access; see [installation](docs/questie-playerbots.md#installation). |
+| [Zygor IP installer](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest/download/Zygor-IP-latest.zip) | Optional Zygor Guides Viewer that follows each character's Individual Progression tier. Extract and run `Install-Zygor.cmd` with Internet access; see [installation](docs/zygor-progression.md#installation). |
 | [SHA-256 checksums](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/SHA256SUMS.txt) | Verify the packages and update manifest. |
 
 ## Running the server

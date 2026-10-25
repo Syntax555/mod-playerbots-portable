@@ -7,11 +7,11 @@ import subprocess
 import tempfile
 import unittest
 
-from FixtureSupport import git_apply, multibot_sources, unpatched
+from FixtureSupport import fork_change, git_apply, multibot_sources, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "patches/multibot-options-initialization.patch"
+PATCH = fork_change("MultiBot", "multibot-options-initialization")
 SOURCE = None
 LUA = None
 FILE = "UI/MultiBotOptions.lua"

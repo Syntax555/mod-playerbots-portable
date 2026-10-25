@@ -3,10 +3,13 @@
 [versions.lock.json](../versions.lock.json) records immutable source revisions
 and ordered local patches. The release packages include this manifest and
 component source/license notices. An upstream commit alone does not identify
-the adapted build; local patch hashes are also part of its identity.
+the adapted build; local patch hashes are also part of its identity. Era
+Talents and the MultiBot, DragonUI, Questie and Zygor addons are built from
+forks instead: their pinned fork commit contains the local changes, and
+`upstream` records the original project and the revision the fork is based on.
 See [server adaptations](adaptations.md) for the behavior of the local changes.
 
-| Component | Upstream repository | Locked revision | Role |
+| Component | Source repository | Locked revision | Role |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `3f2969ddb0da` | Core server, historical spell/accounting hooks and earned-era PvP rules |
 | Playerbots | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | `e88cc4099e69` | Natural progression, earned auctions and era-aware bots |
@@ -18,11 +21,11 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Era Events | [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) | `cf02786aceb5` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
 | LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `2615e82902cf` | Always included access guards for optional Dungeon Finder use |
 | MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `ebfa01a129dd` | Server support for the MultiBot controls |
-| MultiBot Chatless | [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | `80148dff3f3a` | Client bot-control addon |
-| Questie-335 (source only) | [Aldori15/Questie, branch `335`](https://github.com/Aldori15/Questie/tree/335) | `d695e9048e6d` | Prepared bot quest progress integration; installer downloads upstream files separately |
-| Zygor Guides Viewer Remaster (source only) | [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) | `9087c457e20f` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
-| DragonUI (source only) | [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) | `82a6c52c93ad` | Talent window entry points and spellbook catalogue checked against the EraTalents integration; not redistributed |
-| Era Talents | [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) | `0dac15c4a71d` | Historical server trees and client addon |
+| MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), fork of [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) at `80148dff3f3a` | `8fedc426fbdf` | Client bot-control addon |
+| Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `d695e9048e6d` | `776a0da07946` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
+| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `9087c457e20f` | `8c10beb35fc2` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
+| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `82a6c52c93ad` | `9b73a7b0249f` | Talent window entry points and spellbook catalogue checked against the EraTalents integration |
+| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `edd758ddf3e0` | Historical server trees and client addon |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
 | CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
 | CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records and 2.4.3 quest experience values |
@@ -101,43 +104,42 @@ The natural-progression, earned-auctions, earned-bags and era-talents patches
 target this pin. Natural progression uses the upstream ammunition checks and
 preserves queue-assigned battleground brackets. The era bridge resolves
 historical Tree of Life spells when deciding whether a healer should keep
-blanketing instead of attacking. The MultiBot role patch uses the canonical
-class strategy names for commands and status display: Warrior `prot`, Priest
-`disc`, and Paladin `holy`, `ret` and `prot`.
+blanketing instead of attacking. The MultiBot fork's role change uses the
+canonical class strategy names for commands and status display: Warrior
+`prot`, Priest `disc`, and Paladin `holy`, `ret` and `prot`.
 
 The client packager uses IP's locked base archive, merges generated spell and
 skill rows and German text, and preserves other entries byte for byte.
 `SOURCE_MANIFEST.json` records sources, patches, artifact hashes and the
 server/client generation. See [client setup](era-talents.md#install-the-matching-client-files).
 
-The MultiBot Chatless addon ZIP contains the prepared addon at
-`MultiBot/MultiBot.toc`; the server package contains no client addons. Its
-`SOURCE_MANIFEST.json` records the upstream revision and local patch hashes.
-See [client integration](adaptations.md#client-integration) and
-[client addons](addons.md) for its behavior.
+The addons are not part of the server's packages. Each fork publishes its
+own rolling Latest release from the branch the server pins, so an addon can be
+tried without a server build; the server's fixtures check the pinned commit:
 
-The `sourceAddons` manifest section pins Questie separately from redistributed
-client addons. Preparation applies its ordered patch into
-`.module-cache/prepared-source-addons/Questie-335`. The separate
-`Questie-335-latest.zip` contains an installer and integration metadata, not
-the upstream addon. The installer downloads the pinned archive directly from
-upstream, verifies it and applies the patch locally; see
-[installation](questie-playerbots.md#installation). The MultiBot
-Bridge reads the bots' native quest state and supplies the existing Questie
+| Fork | Latest asset | Contents |
+| --- | --- | --- |
+| [MultiBot Chatless](https://github.com/Syntax555/MultiBot-Chatless/releases/latest) | `MultiBot-Chatless-latest.zip` | The addon at `MultiBot/MultiBot.toc` with `SOURCE_REVISION.txt` |
+| [DragonUI](https://github.com/Syntax555/DragonUI/releases/latest) | `DragonUI-latest.zip` | `DragonUI/` and `DragonUI_Options/` with `SOURCE_REVISION.txt` |
+| [Era Talents](https://github.com/Syntax555/azerothcore-mod-era-talents/releases/latest) | `EraTalents-addon-latest.zip` | The client addon only, for quick tests; players install the server's `EraTalents-client-latest.zip` with the matching MPQ |
+| [Questie](https://github.com/Syntax555/Questie/releases/latest) | `Questie-335-latest.zip` | An installer with the file list of its commit, not the addon |
+| [Zygor](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest) | `Zygor-IP-latest.zip` | An installer with the file list of its commit, not the addon |
+
+The Questie and Zygor installers download GitHub's source archive of the commit
+they were built from and install `Questie-335/` or `ZygorGuidesViewerRM/` only
+when every file matches the SHA-256 hash of that commit's Git tree; see
+[Questie installation](questie-playerbots.md#installation) and
+[Zygor installation](zygor-progression.md#installation). The MultiBot Bridge
+reads the bots' native quest state and supplies the existing Questie
 communication path. No additional quest bridge module is required.
 
-Zygor Guides Viewer Remaster is pinned the same way. Its entry names the
-repository's `ZygorGuidesViewerRM/` folder, which preparation exports into
-`.module-cache/prepared-source-addons/ZygorGuidesViewerRM` with the
-[Individual Progression patch](zygor-progression.md) applied. The addon's TOC
-is checked without regard to case, as the client loads it. The separate
-`Zygor-IP-latest.zip` contains an installer, the pinned file list and the patch
-data, not the upstream addon. The installer downloads the pinned archive from
-upstream, checks every addon file against the pinned Git tree and applies the
-patch locally; see [installation](zygor-progression.md#installation).
-
-DragonUI is pinned only so the fixtures run its talent window entry points
-and spellbook catalogue with the EraTalents client files; no package contains it.
+Preparation exports the pinned addons into `.module-cache/prepared-addons/` and
+`.module-cache/prepared-source-addons/` for the fixtures. Zygor's entry names
+the repository's `ZygorGuidesViewerRM/` folder and DragonUI's its `DragonUI/`
+folder; the TOCs are checked without regard to case, as the client loads them.
+`forkChanges` names the fork commit of each fixture-covered change: the
+fixtures revert and reapply its diff, so they fail when a pinned commit loses
+the change.
 
 Dependencies keep their own license terms and per-file notices; see
 [third-party notices](../THIRD_PARTY_NOTICES.md) and each package's `licenses/`
@@ -153,9 +155,11 @@ These checks do not certify every encounter tactic or live realm performance;
 see the [configuration reference](configuration.md#supported-scope).
 
 Pins follow the core fork's `Playerbot` branch, Playerbots `master` and the
-`main` branch of MultiBot Chatless and MultiBot Bridge, not their GitHub
-default feature branch; other components follow their default branch. MultiBot
-Chatless and MultiBot Bridge are checked as a compatible pair. New bridge
+`main` branch of MultiBot Bridge, not its GitHub default feature branch; the
+forks follow `main`, Questie its `335` branch, and other components their
+default branch. Upstream updates are merged into a fork's branch and the merge
+commit is pinned. MultiBot Chatless and MultiBot Bridge are checked as a
+compatible pair. New bridge
 endpoints, such as pet creation, glyph application and maintenance, must
 preserve natural progression.
 

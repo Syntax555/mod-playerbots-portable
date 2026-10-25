@@ -18,6 +18,7 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     TIMEOUT,
     cxx,
+    fork_change,
     function,
     git_apply,
     prepared_core,
@@ -27,8 +28,8 @@ from FixtureSupport import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ERA_PATCH = ROOT / 'patches/mod-era-talents-multibot-inspect.patch'
-BOT_PATCH = ROOT / 'patches/multibot-era-talent-inspect.patch'
+ERA_PATCH = fork_change('mod-era-talents', 'mod-era-talents-multibot-inspect')
+BOT_PATCH = fork_change('MultiBot', 'multibot-era-talent-inspect')
 
 
 def native_fixture(module: Path, directory: Path) -> list[list[str]]:

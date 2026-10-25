@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-from FixtureSupport import git_apply, multibot_sources
+from FixtureSupport import fork_change, git_apply, multibot_sources, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,8 +47,10 @@ class ClientAddonLoadingTests(unittest.TestCase):
         cls.multibot = Path(cls.temporary.name) / "MultiBot"
         cls.multibot.mkdir()
         multibot_sources(cls.multibot, ("MultiBot.toc", *LIBRARIES))
+        # The pinned fork carries the change; revert it for the upstream baseline.
+        patch = fork_change("MultiBot", "multibot-library-load-order")
+        unpatched(cls.multibot, patch)
         cls.original_toc = (cls.multibot / "MultiBot.toc").read_text()
-        patch = ROOT / "patches/multibot-library-load-order.patch"
         git_apply(cls.multibot, patch)
         cls.toc = (cls.multibot / "MultiBot.toc").read_text()
 
@@ -60,8 +62,9 @@ class ClientAddonLoadingTests(unittest.TestCase):
             ["git", "-C", str(ROOT / ".module-cache/client-addon-Questie-335"),
              "show", f"{addon['revision']}:Bindings.xml"], check=True, capture_output=True).stdout
         (cls.questie / "Bindings.xml").write_bytes(source)
-        cls.original_bindings = source.decode()
-        patch = ROOT / "patches/questie-binding-header.patch"
+        patch = fork_change("Questie-335", "questie-binding-header")
+        unpatched(cls.questie, patch)
+        cls.original_bindings = (cls.questie / "Bindings.xml").read_text()
         git_apply(cls.questie, patch)
         cls.bindings = (cls.questie / "Bindings.xml").read_text()
 

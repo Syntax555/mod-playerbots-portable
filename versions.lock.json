@@ -123,43 +123,51 @@
     },
     {
       "name": "mod-era-talents",
-      "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
-      "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8",
-      "patches": [
-        "patches/mod-era-talents-earned-progression.patch",
-        "patches/mod-era-talents-client-locales.patch",
-        "patches/mod-era-talents-german-addon.patch",
-        "patches/mod-era-talents-german-text.patch",
-        "patches/mod-era-talents-spell-groups.patch",
-        "patches/mod-era-talents-multibot-inspect.patch",
-        "patches/mod-era-talents-historical-priest-quests.patch",
-        "patches/mod-era-talents-build-warnings.patch",
-        "patches/mod-era-talents-dragonui.patch",
-        "patches/mod-era-talents-inspect-layer.patch",
-        "patches/mod-era-talents-trainer-catalogue.patch",
-        "patches/mod-era-talents-glyph-page.patch",
-        "patches/mod-era-talents-bot-spellbook.patch"
-      ]
+      "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
+      "revision": "edd758ddf3e034649a8ac8a27ef5224e2d26cbcc",
+      "upstream": {
+        "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
+        "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
+      },
+      "forkChanges": {
+        "mod-era-talents-earned-progression": "ed081d90b50ea54a4eb550859287c2bf9aea9064",
+        "mod-era-talents-client-locales": "154fc3bf2663ee1c2f7aeeca19e8899cb85dc6f6",
+        "mod-era-talents-german-addon": "046ad195a65637629d89762ca5dbabd1831ad53e",
+        "mod-era-talents-german-text": "77d16c0a0f77760c397e39fd57b710dc893ada55",
+        "mod-era-talents-spell-groups": "908c9d8a78deed185ebfdad1f5b783a135a0d51e",
+        "mod-era-talents-multibot-inspect": "7ec6a7e621668ad28539ad3baaeed4843e6f0898",
+        "mod-era-talents-historical-priest-quests": "a538f2e1c2b93623f8b886337666c03bb611b4e9",
+        "mod-era-talents-build-warnings": "eefa2812af5059562c55b3eac928692ff5033b8e",
+        "mod-era-talents-dragonui": "7472733a77d8f3628a8406636698783c749f994e",
+        "mod-era-talents-inspect-layer": "0608c2515798e22c3578e1bdc8a67da33a2529e3",
+        "mod-era-talents-trainer-catalogue": "a72660759d23a4b15c0018ee38d31ed56e75d9cf",
+        "mod-era-talents-glyph-page": "8b1bbc7cdf12bcd1ae561fc0ed2d0ab64a26b8a5",
+        "mod-era-talents-bot-spellbook": "264554b352d8c1cbb5754896bea24378521ce51f"
+      }
     }
   ],
   "clientAddons": [
     {
       "name": "MultiBot",
-      "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
-      "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f",
+      "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
+      "revision": "8fedc426fbdf7f4c3b7b13c5feaf9e569fa8b8c8",
+      "upstream": {
+        "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
+        "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f"
+      },
       "archiveName": "MultiBot-Chatless",
       "interface": 30300,
       "toc": "MultiBot.toc",
       "license": "LICENSE",
-      "patches": [
-        "patches/multibot-inventory-money.patch",
-        "patches/multibot-options-initialization.patch",
-        "patches/multibot-era-talent-inspect.patch",
-        "patches/multibot-role-strategies.patch",
-        "patches/multibot-vendor-purchases.patch",
-        "patches/multibot-library-load-order.patch",
-        "patches/multibot-spellbook-items.patch"
-      ]
+      "forkChanges": {
+        "multibot-inventory-money": "ee6016d27ecc3e2486f1d0e02a7deef2eb97154d",
+        "multibot-options-initialization": "3762b59f692c2e67ad8bd525d04f7c97b7580ea1",
+        "multibot-era-talent-inspect": "01a26dacb53dd6a9a76c888eb23c35ea443b809f",
+        "multibot-role-strategies": "58ea73b503cac3fd3a8ca840e53b06e847cf07e2",
+        "multibot-vendor-purchases": "5ab9f9b92695c32eeb0b137ed43d53e5b15bcdcf",
+        "multibot-library-load-order": "4ce9a460ca9637af2a6ebf057c9b16b165dd7e6f",
+        "multibot-spellbook-items": "03e291a36e1f368abf54ca0bbc756d8d47847410"
+      }
     }
   ],
   "clientPatch": {
@@ -222,34 +230,45 @@
   "sourceAddons": [
     {
       "name": "DragonUI",
-      "url": "https://github.com/NeticSoul/DragonUI.git",
-      "revision": "82a6c52c93ad5eae8eda520c14204f9db72e868e",
+      "url": "https://github.com/Syntax555/DragonUI.git",
+      "revision": "9b73a7b0249ffb7af7164d8dfa76799a6bccd397",
+      "upstream": {
+        "url": "https://github.com/NeticSoul/DragonUI.git",
+        "revision": "82a6c52c93ad5eae8eda520c14204f9db72e868e"
+      },
       "path": "DragonUI",
       "interface": 30300,
       "toc": "DragonUI.toc"
     },
     {
       "name": "Questie-335",
-      "url": "https://github.com/Aldori15/Questie.git",
-      "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87",
-      "archiveSha256": "3301082d34fffd618ac92b736f0ca148540560e767e9defafdf9395cb20710d4",
+      "url": "https://github.com/Syntax555/Questie.git",
+      "revision": "776a0da0794690189842e65aa227926bd841c587",
+      "upstream": {
+        "url": "https://github.com/Aldori15/Questie.git",
+        "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87"
+      },
       "interface": 30300,
       "toc": "Questie-335.toc",
-      "patches": [
-        "patches/questie-playerbots-progress.patch",
-        "patches/questie-binding-header.patch"
-      ]
+      "forkChanges": {
+        "questie-playerbots-progress": "438000dba6352b2123f882e74ded745889b890d6",
+        "questie-binding-header": "ff1b8fdf21e587da377bfd7e224ea1d1821e2480"
+      }
     },
     {
       "name": "ZygorGuidesViewerRM",
-      "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718",
+      "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
+      "revision": "8c10beb35fc25ccff6e34d2efce6a94e90169540",
+      "upstream": {
+        "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
+        "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718"
+      },
       "path": "ZygorGuidesViewerRM",
       "interface": 30300,
       "toc": "ZygorGuidesViewerRM.toc",
-      "patches": [
-        "patches/zygor-individual-progression.patch"
-      ]
+      "forkChanges": {
+        "zygor-individual-progression": "1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea"
+      }
     }
   ]
 }

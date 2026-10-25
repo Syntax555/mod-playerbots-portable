@@ -377,33 +377,6 @@ jobs:
               }
           }
 
-      - name: Create standalone client addon ZIPs
-        run: |
-          . ./scripts/WriteActionsError.ps1
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
-          Invoke-ActionsStep 'Create standalone client addon ZIPs' {
-              cmake "-DPACKAGE_VERSION=$env:PACKAGE_VERSION" -P cmake/PackageClientAddons.cmake 2>&1 | Tee-Object -Variable addonPackageLog
-              $packageExitCode = $LASTEXITCODE
-              if ($packageExitCode -ne 0) {
-                  $details = ($addonPackageLog | Select-Object -Last 30) -join "`n"
-                  throw "Client addon ZIP packaging failed (exit code $packageExitCode).`n$details"
-              }
-              python cmake/PackageQuestieInstaller.py --output "output/Questie-335-$env:PACKAGE_VERSION.zip" 2>&1 | Tee-Object -Variable questiePackageLog
-              $packageExitCode = $LASTEXITCODE
-              if ($packageExitCode -ne 0) {
-                  $details = ($questiePackageLog | Select-Object -Last 30) -join "`n"
-                  throw "Questie installer ZIP packaging failed (exit code $packageExitCode).`n$details"
-              }
-              # Downloads the pinned upstream archive and checks every addon file against the Git tree.
-              python cmake/PackageZygorInstaller.py --output "output/Zygor-IP-$env:PACKAGE_VERSION.zip" 2>&1 | Tee-Object -Variable zygorPackageLog
-              $packageExitCode = $LASTEXITCODE
-              if ($packageExitCode -ne 0) {
-                  $details = ($zygorPackageLog | Select-Object -Last 30) -join "`n"
-                  throw "Zygor installer ZIP packaging failed (exit code $packageExitCode).`n$details"
-              }
-          }
-
       - name: Verify server ZIP contents
         run: |
           . ./scripts/WriteActionsError.ps1
@@ -413,54 +386,6 @@ jobs:
               ./cmake/VerifyPortableZip.ps1 -ZipPath $zipPath -ExpectedRevision '${{ github.sha }}'
               $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
               Write-Host "SHA-256: $hash"
-          }
-
-      - name: Verify standalone client addon ZIP contents
-        run: |
-          . ./scripts/WriteActionsError.ps1
-          $ErrorActionPreference = 'Stop'
-          Invoke-ActionsStep 'Verify standalone client addon ZIP contents' {
-              $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
-              foreach ($addon in @($lock.clientAddons)) {
-                  $archiveName = if ($null -ne $addon.archiveName) { $addon.archiveName } else { $addon.name }
-                  $zipPath = "output/$archiveName-$env:PACKAGE_VERSION.zip"
-                  ./cmake/VerifyClientAddonZip.ps1 -ZipPath $zipPath -AddonName $addon.name
-                  $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
-                  Write-Host "SHA-256 ($zipPath): $hash"
-              }
-          }
-
-      - name: Verify Zygor installer against the upstream archive
-        run: |
-          . ./scripts/WriteActionsError.ps1
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
-          Invoke-ActionsStep 'Verify Zygor installer against the upstream archive' {
-              $lock = Get-Content 'versions.lock.json' -Raw | ConvertFrom-Json
-              $revision = @($lock.sourceAddons | Where-Object { $_.name -eq 'ZygorGuidesViewerRM' })[0].revision
-              $installer = Join-Path $env:RUNNER_TEMP 'zygor-installer'
-              $addons = Join-Path $env:RUNNER_TEMP 'zygor-addons'
-              Expand-Archive -LiteralPath "output/Zygor-IP-$env:PACKAGE_VERSION.zip" -DestinationPath $installer -Force
-              [void](New-Item -ItemType Directory -Path $addons -Force)
-              # The packager downloaded this archive; the user's installer downloads the same URL.
-              powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installer 'Install-Zygor.ps1') -AddOnsPath $addons -SourceArchive ".module-cache/Zygor-$revision.zip"
-              if ($LASTEXITCODE -ne 0) { throw 'The Zygor installer failed on the pinned upstream archive.' }
-              $installed = Join-Path $addons 'ZygorGuidesViewerRM'
-              $prepared = (Resolve-Path '.module-cache/prepared-source-addons/ZygorGuidesViewerRM').Path
-              $stamps = @('SOURCE_REVISION.txt', 'SOURCE_MANIFEST.json', '.portable-source')
-              function Get-Tree([string]$Root) {
-                  $result = @{}
-                  foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File -Force) {
-                      $relative = $file.FullName.Substring($Root.Length + 1).Replace('\', '/')
-                      if ($stamps -notcontains $relative) { $result[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash }
-                  }
-                  return $result
-              }
-              $left = Get-Tree $installed
-              $right = Get-Tree $prepared
-              $different = @($left.Keys + $right.Keys | Sort-Object -Unique | Where-Object { $left[$_] -ne $right[$_] })
-              if ($different.Count -gt 0) { throw "The installed Zygor addon differs from the prepared addon: $($different -join ', ')" }
-              Write-Host "Installed Zygor addon matches the prepared addon ($($left.Count) files)."
           }
 
       - name: Upload compiled ZIP for review

@@ -48,7 +48,7 @@ pass.
 
 ## Gameplay validation
 
-- [ ] Verify addon startup on a live 3.3.5a client with the matching MultiBot
+- [ ] Verify addon startup on a live 3.3.5a client with the forks' MultiBot
   package and Questie installer: the minimap button loads and all three Questie
   bindings remain available without library or duplicate-header errors. Keep
   existing account and character settings; fixtures cover the library load
@@ -83,16 +83,16 @@ pass.
   characters, out-of-range bots and bots that leave your group or control stay
   read-only.
 - [ ] Validate the [Questie Playerbots integration](questie-playerbots.md) on a
-  live 3.3.5a client using the release installer and matching server ZIP.
+  live 3.3.5a client using the fork's installer and matching server ZIP.
   Creature, item and map tooltips for a shared item quest with an Individual
   Progression item mismatch, and party map icons for a bot-only kill quest,
-  are confirmed with one altbot and the patched addon. Still check
+  are confirmed with one altbot and the adapted addon. Still check
   simultaneous bot progress, kill-credit and event objectives,
   turn-in/abandonment, mixed human groups and logout/reconnect. Measure tick
   time and addon traffic with several watched groups; standalone C++/Lua
   fixtures do not exercise rendering or sustained realm load.
 - [ ] Validate the [Zygor Individual Progression integration](zygor-progression.md)
-  on a live 3.3.5a client using the release installer and matching server ZIP:
+  on a live 3.3.5a client using the fork's installer and matching server ZIP:
   status after login and
   reconnect, step skipping for a tier-gated quest and a hidden giver, the hold
   before Outland at level 60 and before Northrend at 70, the guide browser,
@@ -200,9 +200,9 @@ pass.
   only their corresponding local hunks.
 - [ ] Follow the Questie Playerbots integration upstream in
   [Aldori15/Questie#172](https://github.com/Aldori15/Questie/pull/172), which
-  carries the current patch and its regression test. After an accepted
-  revision is pinned, remove the merged hunks of
-  `patches/questie-playerbots-progress.patch` and rerun the Questie fixtures.
+  carries the fork's change and its regression test. After it is accepted,
+  merge upstream into the fork's `335` branch, pin the merge and point
+  `forkChanges` at the accepted commit before rerunning the Questie fixtures.
 
 ## Core and module patches
 

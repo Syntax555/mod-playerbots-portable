@@ -9,14 +9,15 @@ import subprocess
 import tempfile
 import unittest
 
-from FixtureSupport import git_apply, unpatched
+from FixtureSupport import fork_change, git_apply, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "patches/questie-playerbots-progress.patch"
 FILES = ("Modules/Network/QuestiePlayerbots.lua", "Modules/Network/QuestieComms.lua",
          "Modules/Network/QuestieCommsData.lua", "Modules/Network/QuestiePartyObjectives.lua",
          "Modules/Quest/QuestieQuest.lua", "Modules/Quest/QuestieQuestPrivates.lua")
+# The fork commit also adds an upstream-style regression test outside the addon files.
+PATCH = fork_change("Questie-335", "questie-playerbots-progress", FILES)
 SOURCE = None
 LUA = None
 

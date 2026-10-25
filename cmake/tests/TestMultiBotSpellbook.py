@@ -8,11 +8,17 @@ import subprocess
 import tempfile
 import unittest
 
-from FixtureSupport import git_apply, multibot_sources, prepared_core, unpatched
+from FixtureSupport import (
+    fork_change,
+    git_apply,
+    multibot_sources,
+    prepared_core,
+    unpatched,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "patches/multibot-spellbook-items.patch"
+PATCH = fork_change("MultiBot", "multibot-spellbook-items")
 SOURCE = None
 LUA = None
 FILES = ("Core/MultiBotComm.lua", "UI/MultiBotSpell.lua", "UI/MultiBotSpellBookFrame.lua")

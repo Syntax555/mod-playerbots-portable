@@ -45,6 +45,11 @@ Sources, licenses and update instructions are in
   `python3 scripts/patchwork.py save <work tree>`; it checks the whole chain.
   Keep patches functional: no reformatting, include reordering or unrelated
   hunks.
+- Era Talents and the MultiBot, DragonUI, Questie and Zygor addons come from
+  forks listed in `CONTRIBUTING.md`. Change them by commits on the fork's
+  branch (Questie: `335`, otherwise `main`), then pin the commit in
+  `versions.lock.json` and name each fixture-covered commit under
+  `forkChanges`. Never rewrite fork history the server pins.
 - Do not bump a pinned revision blindly. Compare the upstream history, check
   config key renames and removed APIs, refresh every affected patch and keep
   the shipped profile keys effective.
@@ -65,6 +70,8 @@ Run what applies before every commit; all of it must pass:
   C++ file against the prepared sources, then
   `python3 cmake/tests/run_fixtures.py check` and
   `python3 cmake/tests/run_fixtures.py gameplay`.
+- Fork changes: the fork's own checks and its Latest workflow, then the
+  server fixtures against the newly pinned commit.
 - Packaging and release: `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`,
   the PowerShell checks in `cmake/tests`, `ruff check cmake scripts` and
   actionlint for workflow edits.

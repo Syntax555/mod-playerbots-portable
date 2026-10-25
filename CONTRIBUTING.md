@@ -21,7 +21,7 @@ pass, for people and coding agents alike. Progression changes keep normal XP,
 inventory, gold and per-character eligibility. The [build guide](docs/building.md)
 covers the Windows build and the local checks.
 
-Core, module and addon changes are ordered patches listed in
+Core and module changes are ordered patches listed in
 [versions.lock.json](versions.lock.json). Change a patch through its work tree:
 
 ```bash
@@ -39,6 +39,27 @@ regenerates the patch from the work tree and checks that the whole chain still
 applies to the pinned revision; if a later patch of the chain stops applying,
 open and save that one too. Delete the work trees under
 `.module-cache/patchwork/` afterwards.
+
+Era Talents and the MultiBot, DragonUI, Questie and Zygor addons are built from
+forks instead of patches, so an addon can be changed and tried without a server
+build:
+
+| Component | Fork and branch | Latest asset |
+| --- | --- | --- |
+| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), `main` | `EraTalents-addon-latest.zip` (addon only) |
+| MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), `main` | `MultiBot-Chatless-latest.zip` |
+| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), `main` | `DragonUI-latest.zip` |
+| Questie-335 | [Syntax555/Questie](https://github.com/Syntax555/Questie), `335` | `Questie-335-latest.zip` (installer) |
+| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | `Zygor-IP-latest.zip` (installer) |
+
+Commit to the fork's branch; each push checks the addon and replaces the asset
+in the fork's Latest release. To take a fork commit into the server, set the
+component's `revision` in `versions.lock.json` to it. `upstream` records the
+original project and the revision merged last. `forkChanges` names the commit
+of each fixture-covered change; the fixtures revert and reapply that commit's
+diff, so add a new change there together with its fixture, and update a commit
+that is amended or replaced. Then prepare the sources and run the fixtures as
+below.
 
 Compile each changed C++ file against `.module-cache/prepared-core`, then run
 the fixtures and the other checks the change touches, as the

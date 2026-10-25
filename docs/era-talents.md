@@ -1,6 +1,7 @@
 # Historical talents with earned progression
 
-[Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) provides
+[Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents), built from
+[its fork](https://github.com/Syntax555/azerothcore-mod-era-talents), provides
 historical trees for players and bots according to their own earned progression.
 Level, group leadership and another character's account progress cannot select
 a later era.
@@ -51,6 +52,12 @@ The result should contain `EraTalents Gen` and the package generation in every
 client locale. If the addon reports a stale generation, install the matching
 addon/MPQ pair and fully restart the client.
 
+To try an addon change without a server build, the fork's
+[Latest release](https://github.com/Syntax555/azerothcore-mod-era-talents/releases/latest)
+offers `EraTalents-addon-latest.zip` with the `EraTalents/` folder of its
+`main` branch. It contains no MPQ; keep the MPQ of the client pack that matches
+the server.
+
 ### Client language
 
 German (`deDE`) clients automatically use German talent names, rank descriptions,
@@ -66,7 +73,8 @@ and module text follows the translations available in those components.
 ### DragonUI
 
 [DragonUI](https://github.com/NeticSoul/DragonUI)'s talent module replaces the
-talent window. EraTalents works with it automatically; the module can stay
+talent window; install it from its
+[fork's Latest release](https://github.com/Syntax555/DragonUI/releases/latest). EraTalents works with it automatically; the module can stay
 enabled:
 
 - For a Vanilla or TBC character, the talent key, the micro-button and
@@ -171,8 +179,10 @@ online character. Administrative learn/reset commands require GM privileges.
 ## Building the client package
 
 Sources, the IP base client archive and StormLib are pinned in
-[the dependency manifest](../versions.lock.json). Preparation and packaging
-include ordered local patch hashes as part of build identity.
+[the dependency manifest](../versions.lock.json). Era Talents is pinned as a
+commit of [its fork](https://github.com/Syntax555/azerothcore-mod-era-talents);
+preparation and packaging include the hashes of the remaining ordered local
+patches as part of build identity.
 
 From a source checkout on Linux with Git, CMake 3.25 or newer, a C/C++ toolchain,
 Python 3/PyYAML, 7z, zlib and bzip2 development libraries:

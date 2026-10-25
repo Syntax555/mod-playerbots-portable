@@ -82,7 +82,7 @@ Source: [era creature modifiers](../patches/mod-individual-progression-creature-
 [quest availability](../patches/mod-individual-progression-frostmane-hold.patch),
 [world database setup](../patches/mod-individual-progression-cleanup-order.patch),
 [Netherstorm core updates](../patches/mod-individual-progression-netherstorm-updates.patch),
-[spell-group contracts](../patches/mod-era-talents-spell-groups.patch) and
+[spell-group contracts](https://github.com/Syntax555/azerothcore-mod-era-talents/commit/908c9d8a78deed185ebfdad1f5b783a135a0d51e) and
 [formation movement](../patches/azerothcore-formation-minimum-velocity.patch).
 SQL updates run through the ordinary database updater.
 
@@ -114,11 +114,11 @@ their installation sources are listed in [client addons](addons.md).
 
 The [Questie Playerbots integration](questie-playerbots.md) sends authorized
 group bots' native quest counters through the MultiBot Bridge. Questie uses
-its existing group tooltips and optional party map objectives. A small pinned
-addon patch handles special objectives, WATCH renewal and stale-data cleanup.
-Run the separate Questie-335 installer from the matching Latest release. It
-downloads the pinned upstream addon and applies the patch locally; the prebuilt
-server includes its MultiBot Bridge support.
+its existing group tooltips and optional party map objectives. A small change
+in the Questie fork handles special objectives, WATCH renewal and stale-data
+cleanup. Run the Questie-335 installer from the fork's Latest release. It
+downloads that commit of the fork from GitHub and verifies every file; the
+prebuilt server includes its MultiBot Bridge support.
 
 [Zygor Individual Progression](zygor-progression.md) adapts Zygor Guides
 Viewer Remaster the same way. The MultiBot Bridge reports the character's own

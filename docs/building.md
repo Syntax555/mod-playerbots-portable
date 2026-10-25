@@ -38,7 +38,6 @@ pwsh -File scripts/CopyDependencyLicenses.ps1 -DistDir dist `
   -BoostRootDir "C:/local/boost_1_92_0"
 cmake --build build --config Release --target package_zip
 cmake -DPACKAGE_VERSION="dev" -P cmake/PackageClientAddons.cmake
-python cmake/PackageQuestieInstaller.py --output output/Questie-335-dev.zip
 ```
 
 Run each command only after the previous command succeeds.
@@ -51,8 +50,11 @@ upstream license of that release.
 Outputs:
 
 - `output/mod-playerbots-portable-dev.zip`: portable server bundle.
-- `output/MultiBot-Chatless-dev.zip`: optional client interface.
-- `output/Questie-335-dev.zip`: optional Questie installer with bot progress integration.
+- `output/MultiBot-Chatless-dev.zip`: the pinned MultiBot fork commit as an
+  addon ZIP, for testing it with a local server build.
+
+Published addon packages and the Questie and Zygor installers come from the
+[addon forks](addons.md#addon-forks).
 
 The complete `EraTalents-client-dev.zip` also requires the merged client MPQ. It
 is built separately on Linux; see

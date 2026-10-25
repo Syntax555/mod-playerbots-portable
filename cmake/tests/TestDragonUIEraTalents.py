@@ -15,11 +15,11 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import git_apply, prepared_core, run_fixture, unpatched
+from FixtureSupport import fork_change, git_apply, prepared_core, run_fixture, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ERA_PATCH = ROOT / 'patches/mod-era-talents-dragonui.patch'
+ERA_PATCH = fork_change('mod-era-talents', 'mod-era-talents-dragonui')
 DRAGONUI = ROOT / '.module-cache/prepared-source-addons/DragonUI'
 
 

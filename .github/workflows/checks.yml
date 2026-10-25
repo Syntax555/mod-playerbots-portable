@@ -101,18 +101,6 @@ jobs:
       - name: Test patched client addon packaging
         run: python3 cmake/tests/TestClientAddonPatches.py
 
-      - name: Test Questie installer packaging
-        run: python3 cmake/tests/TestQuestieInstallerPackaging.py
-
-      - name: Test Questie installation and settings preservation
-        run: python3 cmake/tests/TestQuestieInstaller.py
-
-      - name: Test Zygor installer packaging
-        run: python3 cmake/tests/TestZygorInstallerPackaging.py
-
-      - name: Test Zygor installation and settings preservation
-        run: python3 cmake/tests/TestZygorInstaller.py
-
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py
 
@@ -142,20 +130,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Launcher tests failed.' }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { throw 'Launcher vet failed.' }
-
-      - name: Test Questie installer on Windows PowerShell
-        run: |
-          python cmake/tests/TestQuestieInstaller.py
-          if ($LASTEXITCODE -ne 0) { throw 'Questie installation tests failed.' }
-          python cmake/tests/TestQuestieInstallerPackaging.py
-          if ($LASTEXITCODE -ne 0) { throw 'Questie installer packaging tests failed.' }
-
-      - name: Test Zygor installer on Windows PowerShell
-        run: |
-          python cmake/tests/TestZygorInstaller.py
-          if ($LASTEXITCODE -ne 0) { throw 'Zygor installation tests failed.' }
-          python cmake/tests/TestZygorInstallerPackaging.py
-          if ($LASTEXITCODE -ne 0) { throw 'Zygor installer packaging tests failed.' }
 
   # Every shard must pass before a manual build compiles and Publish Latest
   # can select its artifacts.

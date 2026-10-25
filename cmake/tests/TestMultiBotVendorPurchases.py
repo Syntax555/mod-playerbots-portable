@@ -8,11 +8,11 @@ import subprocess
 import tempfile
 import unittest
 
-from FixtureSupport import git_apply, multibot_sources, unpatched
+from FixtureSupport import fork_change, git_apply, multibot_sources, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "patches/multibot-vendor-purchases.patch"
+PATCH = fork_change("MultiBot", "multibot-vendor-purchases")
 FILES = ("Core/MultiBotComm.lua", "UI/MultiBotInventoryFrame.lua", "UI/MultiBotInventoryItem.lua")
 SOURCE = None
 LUA = None

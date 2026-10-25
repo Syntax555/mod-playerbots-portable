@@ -8,24 +8,26 @@ bot and ordinary player data.
 
 ## Installation
 
-Use WoW **3.3.5a, build 12340** and the matching server and Questie installer
-from the [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+Use WoW **3.3.5a, build 12340**, the server from the
+[Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
+and the Questie installer from the
+[Questie fork's Latest release](https://github.com/Syntax555/Questie/releases/latest).
 The prebuilt server includes the MultiBot Bridge integration. You need no
 compiler, Git, Python, additional server module or new server setting.
 
 1. Install or update the [server package](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip)
    using the normal [update guide](updating.md), then restart the server.
-2. Download [Questie-335-latest.zip](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/Questie-335-latest.zip)
-   from the same release and extract it to a folder outside your WoW installation.
+2. Download [Questie-335-latest.zip](https://github.com/Syntax555/Questie/releases/latest/download/Questie-335-latest.zip)
+   and extract it to a folder outside your WoW installation.
 3. Close WoW completely. Run `Install-Questie.cmd` and enter your client's
    `Interface/AddOns/` folder when prompted. Internet access is required; the
    installer uses Windows PowerShell and does not require administrator rights.
 4. After installation succeeds, start WoW and enable Questie-335 in the addon list.
 
-The installer downloads the pinned `335` addon directly from upstream, verifies
-the archive and applies the matching integration locally. It backs up an existing
-`Questie-335/` folder before replacement and preserves account and character
-SavedVariables. The installed TOC must be
+The installer downloads the commit of the fork's `335` branch it was built
+from directly from GitHub and installs it only when every file matches the
+SHA-256 hash of that commit. It backs up an existing `Questie-335/` folder
+before replacement and preserves account and character SavedVariables. The installed TOC must be
 `Interface/AddOns/Questie-335/Questie-335.toc`; do not rename it or nest another
 folder. The ordinary upstream download does not contain the complete adaptation.
 
@@ -35,8 +37,8 @@ To select the addon directory from a PowerShell prompt in the extracted folder:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-Questie.ps1 -AddOnsPath 'C:\Games\WoW\Interface\AddOns'
 ```
 
-The release ZIP contains the installer and integration metadata; upstream addon
-files are downloaded separately and retain their existing terms and notices.
+The release ZIP contains the installer and the file list; the addon files are
+downloaded separately and retain their existing terms and notices.
 
 MultiBot Chatless may remain installed for bot controls. Its code and protocol
 requests are unchanged. `mod-questie-bridge` provides separate optional server
@@ -142,15 +144,15 @@ at 30-second intervals, and the addon probes again only when the group
 changes; realms without the bridge therefore see no further addon traffic,
 and Questie works as usual. Cleanup preserves tables subsequently
 written by ordinary QuestieComms, including when a character gains a real
-client. Older unpatched Questie can read ordinary snapshots, but needs the
-supplied addon patch for lease renewal, robust cleanup and special objectives.
+client. Unmodified upstream Questie can read ordinary snapshots, but needs the
+fork's change for lease renewal, robust cleanup and special objectives.
 
 ## Source builds
 
 For development, [versions.lock.json](../versions.lock.json) pins the
-AzerothCore/Playerbots and Questie sources. The integration patches are
-[MultiBot Bridge](../patches/mod-multibot-bridge-quest-progress.patch) and
-[Questie](../patches/questie-playerbots-progress.patch). From the source checkout:
+AzerothCore/Playerbots sources and the Questie fork. The integration is the
+[MultiBot Bridge patch](../patches/mod-multibot-bridge-quest-progress.patch) and
+the [Questie fork commit](https://github.com/Syntax555/Questie/commit/438000dba6352b2123f882e74ded745889b890d6). From the source checkout:
 
 ```bash
 cmake -P cmake/PrepareModules.cmake
@@ -166,7 +168,9 @@ With WoW closed, back up the old addon folder outside `Interface/AddOns/` and
 replace `Interface/AddOns/Questie-335/` with
 `.module-cache/prepared-source-addons/Questie-335/`. Keep SavedVariables and the
 `Questie-335.toc` filename. This prepared export is for local installation;
-published installer ZIPs fetch their upstream files directly instead.
+the fork's installer downloads its commit from GitHub instead. Addon changes are
+committed to the fork's `335` branch, whose Latest installer then installs
+them; see [contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md#changing-the-server).
 
 ## Verification
 
@@ -179,15 +183,15 @@ behavior. Run after source preparation:
 python3 cmake/tests/TestQuestProgressBridge.py
 python3 cmake/tests/TestQuestiePlayerbots.py
 python3 cmake/tests/TestClientAddonPatches.py
-python3 cmake/tests/TestQuestieInstallerPackaging.py
-python3 cmake/tests/TestQuestieInstaller.py
 python3 cmake/tests/run_fixtures.py check
 python3 cmake/tests/run_fixtures.py gameplay
 ```
 
-The Lua fixture requires Lua 5.1, the C++ fixture requires a C++20 compiler,
-and installation tests require PowerShell. CI also runs the installer with
-Windows PowerShell 5.1.
+The Lua fixture requires Lua 5.1 and the C++ fixture a C++20 compiler. The
+fork's Latest workflow tests the installer with Windows PowerShell 5.1 and
+pwsh, including its integrity checks, rollback and preservation of existing
+client files, and installs each published commit from GitHub before releasing
+it.
 Fixture coverage does not replace a live realm test. Check these cases with
 the matching server and addon:
 
@@ -213,12 +217,11 @@ from the standalone fixtures.
 | Files | Responsibility |
 | --- | --- |
 | `patches/mod-multibot-bridge-quest-progress.patch` | Updates upstream `src/MultiBotBridge.cpp`: native snapshots, MBOT capabilities, access checks and WATCH lifecycle. |
-| `patches/questie-playerbots-progress.patch` | Updates `QuestiePlayerbots.lua`, `QuestieCommsData.lua` and `QuestiePartyObjectives.lua`: native comms ingestion, lifecycle, credit aliases and existing map rendering. |
-| `versions.lock.json`, `scripts/patchwork.py`, `cmake/PrepareModules.cmake` | Pin Questie and reproducibly prepare the ordered server and source-only addon patches. |
-| `cmake/PackageQuestieInstaller.py`, `client-addon/questie-installer/` | Package the installer and verified local changes; download the pinned upstream addon and install it with backup and rollback. |
-| `cmake/tests/TestQuestieInstallerPackaging.py`, `cmake/tests/TestQuestieInstaller.py` | Verify package provenance, installation, integrity checks and preservation of existing client files. |
+| [Questie fork commit](https://github.com/Syntax555/Questie/commit/438000dba6352b2123f882e74ded745889b890d6) | Updates `QuestiePlayerbots.lua`, `QuestieCommsData.lua` and `QuestiePartyObjectives.lua`: native comms ingestion, lifecycle, credit aliases and existing map rendering. |
+| `versions.lock.json`, `scripts/patchwork.py`, `cmake/PrepareModules.cmake` | Pin the Questie fork and reproducibly prepare the server patches and source-only addons. |
+| [`.github/` of the Questie fork](https://github.com/Syntax555/Questie/tree/335/.github) | Package and test the installer, which downloads the fork's commit and installs it with backup and rollback, and publish it as the fork's Latest release. |
 | `cmake/tests/TestQuestProgressBridge.py`, `cmake/tests/QuestProgressBridgeFixture.cpp` | Compile and exercise production server logic and mutation checks. |
 | `cmake/tests/TestQuestiePlayerbots.py`, `cmake/tests/QuestiePlayerbotsFixture.lua` | Run production Questie comms and map logic under Lua 5.1 with client API doubles and mutation checks. |
 | `cmake/tests/TestClientAddonPatches.py`, `cmake/tests/TestDocumentation.py` | Verify source-only preparation, package separation and pinned documentation. |
 | `cmake/tests/run_fixtures.py`, `.github/workflows/checks.yml` | Run server and client regression fixtures in CI. |
-| `README.md`, `docs/addons.md`, `docs/adaptations.md`, `docs/module-versions.md`, `docs/todo.md`, `docs/questie-playerbots.md` | Release installer, installation, behavior, protocol, source inventory and remaining live validation. |
+| `README.md`, `docs/addons.md`, `docs/adaptations.md`, `docs/module-versions.md`, `docs/todo.md`, `docs/questie-playerbots.md` | Downloads, installation, behavior, protocol, source inventory and remaining live validation. |

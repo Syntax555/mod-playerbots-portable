@@ -10,6 +10,7 @@ import tempfile
 
 from FixtureSupport import (
     cxx,
+    fork_change,
     function,
     git_apply,
     multibot_sources,
@@ -20,7 +21,7 @@ from FixtureSupport import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / 'patches/multibot-role-strategies.patch'
+PATCH = fork_change('MultiBot', 'multibot-role-strategies')
 # Class, button, native strategy class, canonical name, previous alias.
 ROLES = (
     ('Paladin', 'Heal', 'HealPaladinStrategy', 'holy', 'heal'),

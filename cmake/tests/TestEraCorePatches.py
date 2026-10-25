@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import re
 
-from FixtureSupport import prepared_core, source_argument
+from FixtureSupport import pinned_source, prepared_core, source_argument
 
 
 # Module patch -> release copy. A new module core patch fails until it is mapped.
@@ -71,12 +71,11 @@ args = parser.parse_args()
 lock = json.loads((repository / 'versions.lock.json').read_text())
 
 core_patches = lock['core']['patches']
-module_patches = next(module for module in lock['modules'] if module['name'] == 'mod-era-talents')['patches']
-# The prepared module's patches/core is the pinned one: no release patch edits it.
-for name in module_patches:
-    assert not re.search(r'^diff --git a/patches/core/', (repository / name).read_text(), re.MULTILINE), name
 originals = {path.name: path.read_text() for path in sorted((args.module / 'patches/core').glob('*.patch'))}
 assert set(originals) == set(COPIES), sorted(set(originals) ^ set(COPIES))
+# The prepared module's patches/core is upstream's: no change of the fork edits it.
+for name, text in originals.items():
+    assert text == pinned_source('mod-era-talents', f'patches/core/{name}'), name
 assert all(copy in core_patches for copy in COPIES.values())
 copies = {copy: (repository / copy).read_text() for copy in COPIES.values()}
 

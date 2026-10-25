@@ -1,6 +1,7 @@
 """Shared helpers for the cmake/tests fixtures."""
 
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 from itertools import takewhile
 import json
 import os
@@ -10,6 +11,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import urllib.request
 
 
@@ -151,10 +153,19 @@ def reject_mutants(work, mutations, build, name):
 
 
 def pinned_source(name, path):
-    """path at the locked core or module revision, read from its PrepareModules cache."""
+    """path at the locked core or module revision, read from its PrepareModules cache.
+
+    A forked module's pinned commit already carries its changes, so its baseline
+    is the upstream revision the fork records.
+    """
     lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
-    revision = next(entry['revision'] for entry in [lock['core'], *lock['modules']] if entry['name'] == name)
-    return subprocess.run(['git', '-C', str(REPOSITORY / '.module-cache' / name), 'show', f'{revision}:{path}'],
+    entry = next(entry for entry in [lock['core'], *lock['modules']] if entry['name'] == name)
+    if 'upstream' in entry:
+        revision = entry['upstream']['revision']
+        cache = fork_history(name, entry['upstream']['url'], revision, 1)
+    else:
+        revision, cache = entry['revision'], REPOSITORY / '.module-cache' / name
+    return subprocess.run(['git', '-C', str(cache), 'show', f'{revision}:{path}'],
                           check=True, text=True, capture_output=True).stdout
 
 
@@ -191,6 +202,74 @@ def profession_skills(core):
         function(source, 'bool IsPrimaryProfessionSkill(uint32 skill)'),
         function(header, 'inline bool IsProfessionSkill(uint32 skill)'),
     ])
+
+
+def fork_history(component, url, commit, depth, repository=REPOSITORY):
+    """A bare cache of a fork or upstream holding commit and depth - 1 ancestors."""
+    history = repository / '.module-cache/fork-history' / re.sub(r'[^A-Za-z0-9_.-]', '-', component)
+
+    def fetched():
+        return subprocess.run(['git', '-C', str(history), 'cat-file', '-e', commit + '^' * (depth - 1) + '^{commit}'],
+                              capture_output=True, check=False).returncode == 0
+
+    if not (history / 'HEAD').exists():
+        # Fixtures may run alongside each other; only one initialized repository is moved in place.
+        history.parent.mkdir(parents=True, exist_ok=True)
+        staged = Path(tempfile.mkdtemp(prefix=history.name + '.', dir=history.parent))
+        subprocess.run(['git', 'init', '--quiet', '--bare', str(staged)], check=True, capture_output=True)
+        try:
+            os.rename(staged, history)
+        except OSError:
+            shutil.rmtree(staged)
+    for attempt in range(5):
+        if fetched():
+            return history
+        try:
+            subprocess.run(['git', '-C', str(history), 'fetch', '--quiet', f'--depth={depth}', url, commit],
+                           check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            # A fixture running alongside may hold the shallow lock.
+            if attempt == 4:
+                raise
+            time.sleep(1 + attempt)
+    return history
+
+
+def fork_change(component, change, paths=(), repository=REPOSITORY):
+    """The diff one commit of a forked component made, as a patch file.
+
+    versions.lock.json pins the fork and names the commit that carries each
+    change. Fixtures revert and reapply that diff exactly as they did with the
+    former patch, so a fixture fails when the fork loses the change. paths
+    limits the diff to the files a fixture copies.
+    """
+    lock = json.loads((repository / 'versions.lock.json').read_text())
+    entries = [entry for section in ('modules', 'clientAddons', 'sourceAddons')
+               for entry in lock.get(section, []) if entry['name'] == component]
+    if len(entries) != 1:
+        raise ValueError(f'Expected one locked component named {component}')
+    entry = entries[0]
+    commit = entry.get('forkChanges', {}).get(change, '')
+    if not re.fullmatch(r'[0-9a-f]{40}', commit) or not re.fullmatch(
+            r'https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+[.]git', entry['url']):
+        raise ValueError(f'{component} pins no fork commit for {change}')
+    scope = '-' + hashlib.sha256('\0'.join(paths).encode()).hexdigest()[:8] if paths else ''
+    output = repository / '.module-cache/fork-changes' / f'{change}-{commit[:12]}{scope}.patch'
+    if output.is_file():
+        return output
+    history = fork_history(component, entry['url'], commit, 2, repository)
+    # Diffs keep LF bytes and a fixed format whatever the host configures.
+    diff = subprocess.run(['git', '-c', 'core.autocrlf=false', '-c', 'diff.noprefix=false',
+                           '-c', 'diff.mnemonicPrefix=false', '-C', str(history), 'diff', '--binary',
+                           '--full-index', '--no-renames', '--no-color', '--no-ext-diff', commit + '^', commit,
+                           '--', *paths], check=True, capture_output=True).stdout
+    if not diff:
+        raise ValueError(f'{component} commit {commit} changes nothing')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staged = output.with_suffix(f'.{os.getpid()}.partial')
+    staged.write_bytes(diff)
+    os.replace(staged, output)
+    return output
 
 
 def git_apply(directory, patch, *options):
