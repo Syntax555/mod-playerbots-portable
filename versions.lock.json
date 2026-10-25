@@ -153,7 +153,8 @@
         "patches/multibot-era-talent-inspect.patch",
         "patches/multibot-role-strategies.patch",
         "patches/multibot-vendor-purchases.patch",
-        "patches/multibot-library-load-order.patch"
+        "patches/multibot-library-load-order.patch",
+        "patches/multibot-spellbook-items.patch"
       ]
     }
   ],
