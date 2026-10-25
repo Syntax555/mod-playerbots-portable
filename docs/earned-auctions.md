@@ -37,8 +37,9 @@ bag is bought while the bot carries an unequipped upgrade. A won bag waits in
 the mail until the backpack has room for it. Each purchase costs at most a
 quarter of the current balance and must fit the available category budget. Bots
 cannot buy their own or same-account auctions. They wait while an outstanding
-bid or an uncollected won item exists. Other bots' auctions are eligible because
-the buyer pays and the seller gives up the actual item.
+bid or an uncollected won item exists, except when the core's ownership limit
+prevents taking the won item. Other bots' auctions are eligible because the
+buyer pays and the seller gives up the actual item.
 
 A bot maintains at most 20 listings, at most two of the same item, and attempts
 at most two new listings and one purchase per visit. The purchase goes to the
@@ -95,7 +96,10 @@ undelivered, expired and COD mail is skipped.
 
 If bags are full, attachments remain in mail until space is available. Money can
 be collected with full bags. A receipt is deleted only after its money and all
-attachments have been retrieved successfully.
+attachments have been retrieved successfully. A won item refused by a unique-item
+or ownership-category limit stays in mail without blocking other purchases. If
+the owned count drops, ordinary collection can retrieve it again; inventory and
+bank ownership limits still apply to every new purchase.
 
 Natural progression blocks bot mail-send and mail-management shortcuts even if
 `Playerbots.BotSendMailEnabled` is re-enabled. Earned auction collection has

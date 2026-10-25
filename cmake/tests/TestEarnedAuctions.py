@@ -40,6 +40,10 @@ travel_module = (args.travel_source or args.source) / 'Bot'
 usage_header = (args.source / 'Ai/Base/Value/ItemUsageValue.h').read_text()
 values_source = (args.source / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
 item_header = (args.core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
+item_instance_header = (args.core / 'src/server/game/Entities/Item/Item.h').read_text()
+player_header = (args.core / 'src/server/game/Entities/Player/Player.h').read_text()
+dbc_header = (args.core / 'src/server/shared/DataStores/DBCStructure.h').read_text()
+dbc_enums = (args.core / 'src/server/shared/DataStores/DBCEnums.h').read_text()
 auction_header = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.h').read_text()
 auction_source = (args.core / 'src/server/game/AuctionHouse/AuctionHouseMgr.cpp').read_text()
 auction_handlers = (args.core / 'src/server/game/Handlers/AuctionHouseHandler.cpp').read_text()
@@ -51,6 +55,9 @@ native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (item_header, 'enum ItemSubclassWeapon'), (item_header, 'enum ItemSubclassContainer'),
     (item_header, 'enum ItemSubclassQuiver'), (item_header, 'enum InventoryType'),
     (auction_header, 'enum MailAuctionAnswers'),
+    (item_instance_header, 'enum InventoryResult : uint8'),
+    (dbc_enums, 'enum ItemLimitCategoryMode'),
+    (dbc_header, 'struct ItemLimitCategoryEntry'),
     (shared_defines, 'enum ItemQualities'), (pet_defines, 'enum PetType : uint8')))
 # Doubles for these producers keep their native shape.
 assert 'uint32 TotemCategory;' in item_header and 'uint32 RequiredLevel;' in item_header
@@ -61,7 +68,7 @@ for field in ('uint32 CreatureId = 0;', 'PetType Type = MAX_PET_TYPE;',
     assert field in pet_defines, field
 assert 'constexpr auto MAX_PET_STABLES = 4;' in pet_defines
 assert ('PetStable const* GetPetStable() const { return m_petStable.get(); }'
-        in (args.core / 'src/server/game/Entities/Player/Player.h').read_text())
+        in player_header)
 player_source = (args.core / 'src/server/game/Entities/Player/Player.cpp').read_text()
 stable_loader = function(player_source, 'void Player::_LoadPetStable(uint8 petStableSlots, PreparedQueryResult result)')
 for producer in ('petInfo.CreatureId = fields[1].Get<uint32>();',
@@ -78,6 +85,21 @@ pet_diet = function(pet_source, 'bool Pet::HaveInDiet(ItemTemplate const* item) 
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
 storage = (args.core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
 assert 'return item->ToBag();' in function(storage, 'Bag* Player::GetBagByPos(uint8 bag) const')
+item_source = (args.core / 'src/server/game/Entities/Item/Item.cpp').read_text()
+assert 'return sObjectMgr->GetItemTemplate(GetEntry());' in function(item_source, 'ItemTemplate const* Item::GetTemplate() const')
+# Compile the native ownership decision, including its public Item* overload.
+ownership_rules = function(storage, 'InventoryResult Player::CanTakeMoreSimilarItems(uint32 entry, uint32 count, Item* item,')
+ownership_overload = function(player_header, 'InventoryResult CanTakeMoreSimilarItems(Item* item,')
+store_item = function(storage, 'InventoryResult Player::CanStoreItem(uint8 bag, uint8 slot, ItemPosCountVec& dest, uint32 entry,')
+assert 'InventoryResult res = CanTakeMoreSimilarItems(entry, count, pItem, &no_similar_count);' in store_item
+for signature, contract in (
+    ('uint32 Player::GetItemCount(uint32 item, bool inBankAlso, Item* skipItem) const', 'if (inBankAlso)'),
+    ('uint32 Player::GetItemCountWithLimitCategory(uint32 limitCategory, Item* skipItem) const',
+     'i = BANK_SLOT_ITEM_START; i < BANK_SLOT_BAG_END;'),
+):
+    counter = function(storage, signature)
+    assert contract in counter and 'pItem != skipItem' in counter
+assert 'int32  MaxCount;' in item_header and 'uint32 ItemLimitCategory;' in item_header
 assert 'uint32 auctionTime = uint32(etime * sWorld->getRate(RATE_AUCTION_TIME));' in auction_handlers
 assert auction_handlers.count('CONFIG_AUCTION_LEVEL_REQ') == 2 and (
     'if (GetPlayer()->GetLevel() < sWorld->getIntConfig(CONFIG_AUCTION_LEVEL_REQ))'
@@ -252,7 +274,7 @@ constexpr uint8 INVENTORY_SLOT_BAG_0 = 0, INVENTORY_SLOT_BAG_START = 19,
     INVENTORY_SLOT_BAG_END = 23, INVENTORY_SLOT_ITEM_START = 23, INVENTORY_SLOT_ITEM_END = 39;
 constexpr int ITEM_FIELD_DURATION = 1, ITEM_FLAG_CONJURED = 2, BIND_QUEST_ITEM = 4,
     PLAYERSPELL_REMOVED = 1, MAX_SPELL_REAGENTS = 8, NULL_BAG = 255, NULL_SLOT = 255,
-    EQUIP_ERR_OK = 0, GAMEOBJECT_TYPE_MAILBOX = 1, UNIT_NPC_FLAG_MAILBOX = 2,
+    GAMEOBJECT_TYPE_MAILBOX = 1, UNIT_NPC_FLAG_MAILBOX = 2,
     UNIT_NPC_FLAG_AUCTIONEER = 4, MAIL_AUCTION = 2, MAIL_STATE_DELETED = 3,
     MAX_QUEST_LOG_SIZE = 25, SPELL_EFFECT_CREATE_ITEM = 24;
 constexpr int CMSG_GET_MAIL_LIST = 1, CMSG_MAIL_TAKE_MONEY = 2, CMSG_MAIL_TAKE_ITEM = 3,
@@ -282,7 +304,8 @@ struct ItemTemplate
     std::array<Spell, 5> Spells{};
     uint32 ItemId = 100, BuyPrice = 1000, BuyCount = 1, SellPrice = 100, Quality = 1, Class = ITEM_CLASS_MISC,
         SubClass = 0, Bonding = 0, TotemCategory = 0, RequiredLevel = 0, ContainerSlots = 0, InventoryType = 0,
-        FoodType = 0;
+        FoodType = 0, ItemLimitCategory = 0;
+    int32 MaxCount = 0;
     bool conjured = false;
     bool HasFlag(int) const { return conjured; }
 };
@@ -293,13 +316,14 @@ struct Item
     ObjectGuid guid, owner;
     uint32 count = 1, duration = 0;
     std::int32_t property = 0;
-    bool equipped = false, inTrade = false, tradable = true, nonempty = false, bound = false;
+    bool equipped = false, inTrade = false, tradable = true, nonempty = false, bound = false,
+        missingTemplate = false, m_lootGenerated = false;
     ObjectGuid GetGUID() const { return guid; }
     ObjectGuid GetOwnerGUID() const { return owner; }
     uint32 GetEntry() const { return proto.ItemId; }
     uint32 GetCount() const { return count; }
     std::int32_t GetItemRandomPropertyId() const { return property; }
-    ItemTemplate const* GetTemplate() const { return &proto; }
+    ItemTemplate const* GetTemplate() const { return missingTemplate ? nullptr : &proto; }
     bool IsEquipped() const { return equipped; }
     bool IsInTrade() const { return inTrade; }
     bool CanBeTraded() const { return tradable; }
@@ -309,6 +333,12 @@ struct Item
     uint32 GetUInt32Value(int) const { return duration; }
 };
 std::map<ObjectGuid, std::unique_ptr<Item>> allocatedItems;
+struct ItemLimitCategoryStore
+{
+    std::map<uint32, ItemLimitCategoryEntry> rows;
+    ItemLimitCategoryEntry const* LookupEntry(uint32 id) const
+    { auto it = rows.find(id); return it == rows.end() ? nullptr : &it->second; }
+} sItemLimitCategoryStore;
 struct Bag : Item
 {
     std::vector<Item*> items;
@@ -368,6 +398,12 @@ struct ObjectMgr
     std::map<uint32, Quest> quests;
     std::map<uint32, CreatureTemplate> creatures;
     mutable unsigned lookups = 0;
+    ItemTemplate const* GetItemTemplate(uint32 id) const
+    {
+        for (auto const& [guid, item] : allocatedItems)
+            if (item->GetEntry() == id && item->GetTemplate()) return item->GetTemplate();
+        return nullptr;
+    }
     Quest const* GetQuestTemplate(uint32 id) const
     { ++lookups; auto it = quests.find(id); return it == quests.end() ? nullptr : &it->second; }
     CreatureTemplate const* GetCreatureTemplate(uint32 id) const
@@ -501,7 +537,7 @@ struct Player
     bool online = true, alive = true, combat = false, flight = false, teleport = false,
         battleground = false, trade = false, range = true, store = true, usable = true, random = true;
     std::map<uint32, Item*> backpack;
-    std::map<ObjectGuid, Item*> inventory;
+    std::map<ObjectGuid, Item*> inventory, bank;
     std::vector<Mail*> mails;
     std::map<uint32, Item*> attachments;
     std::map<uint32, PlayerSpell*> spells;
@@ -524,8 +560,28 @@ struct Player
     Bag* GetBagByPos(uint8 slot) const { return dynamic_cast<Bag*>(GetItemByPos(INVENTORY_SLOT_BAG_0, slot)); }
     Item* GetItemByGuid(ObjectGuid id) const
     { auto it = inventory.find(id); return it == inventory.end() ? nullptr : it->second; }
-    uint32 GetItemCount(uint32 entry, bool) const
-    { uint32 count = 0; for (auto const& [id, item] : inventory) if (item->GetEntry() == entry) count += item->count; return count; }
+    uint32 GetItemCount(uint32 entry, bool inBankAlso, Item* skipItem = nullptr) const
+    {
+        uint32 count = 0;
+        for (auto const* contents : {&inventory, &bank})
+            if (contents == &inventory || inBankAlso)
+                for (auto const& [id, item] : *contents)
+                    if (item != skipItem && item->GetEntry() == entry) count += item->count;
+        return count;
+    }
+    uint32 GetItemCountWithLimitCategory(uint32 category, Item* skipItem) const
+    {
+        uint32 count = 0;
+        for (auto const* contents : {&inventory, &bank})
+            for (auto const& [id, item] : *contents)
+                if (item != skipItem && item->GetTemplate() && item->proto.ItemLimitCategory == category)
+                    count += item->count;
+        return count;
+    }
+    InventoryResult CanTakeMoreSimilarItems(uint32 entry, uint32 count, Item* item,
+                                           uint32* no_space_count = nullptr,
+                                           uint32* itemLimitedByLimitCategory = nullptr) const;
+    @@OWNERSHIP_OVERLOAD@@
     Pet* GetPet() const { return pet; }
     PetStable const* GetPetStable() const { return stable.get(); }
     auto const& GetSpellMap() const { return spells; }
@@ -538,14 +594,17 @@ struct Player
     Mail* GetMail(uint32 id) const { for (Mail* mail : mails) if (mail->messageID == id) return mail; return nullptr; }
     Item* GetMItem(uint32 id) const
     { auto it = attachments.find(id); return it == attachments.end() ? nullptr : it->second; }
-    int CanStoreItem(int bag, int, ItemPosCountVec&, Item*, bool) const
+    InventoryResult CanStoreItem(int bag, int, ItemPosCountVec&, Item* item, bool) const
     {
+        if (!item) return EQUIP_ERR_ITEM_NOT_FOUND;
+        InventoryResult const ownership = CanTakeMoreSimilarItems(item);
+        if (ownership != EQUIP_ERR_OK) return ownership;
         if (!store || bag != INVENTORY_SLOT_BAG_0)
-            return store ? EQUIP_ERR_OK : 1;
+            return store ? EQUIP_ERR_OK : EQUIP_ERR_INVENTORY_FULL;
         for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
             if (!backpack.count(slot))
                 return EQUIP_ERR_OK;
-        return 1;
+        return EQUIP_ERR_INVENTORY_FULL;
     }
     int CanUseItem(ItemTemplate const*) const { return usable ? EQUIP_ERR_OK : 1; }
     GameObject* GetGameObjectIfCanInteractWith(ObjectGuid id, int)
@@ -555,6 +614,7 @@ struct Player
         flag == UNIT_NPC_FLAG_MAILBOX && id == creatureMailbox.guid ? &creatureMailbox : nullptr; }
     bool IsWithinDistInMap(WorldObject*, float) const { return range; }
 };
+@@OWNERSHIP@@
 @@BAGS@@
 struct Config
 {
@@ -599,7 +659,9 @@ void WorldSession::HandleMailTakeMoney(WorldPacket& packet)
 void WorldSession::HandleMailTakeItem(WorldPacket& packet)
 {
     ++takesItem; Mail* mail = bot->GetMail(packet.data.at(1)); uint32 id = packet.data.at(2);
-    Item* item = bot->GetMItem(id); if (rejectItem || !bot->store || !mail || !item) return;
+    Item* item = bot->GetMItem(id); if (rejectItem || !mail || !item) return;
+    ItemPosCountVec destination;
+    if (bot->CanStoreItem(NULL_BAG, NULL_SLOT, destination, item, false) != EQUIP_ERR_OK) return;
     bot->attachments.erase(id);
     std::erase_if(mail->items, [id](auto const& info) { return info.item_guid == id; });
     if (mergeItem)
@@ -718,6 +780,7 @@ struct Scenario
         bot.guid = {nextBot++}; connected.clear(); connected[bot.guid] = &bot;
         auctionMgr.house.auctions.clear(); auctionMgr.items.clear(); characterCache.accounts.clear();
         allocatedItems.clear(); objectMgr.quests.clear(); objectMgr.creatures.clear();
+        sItemLimitCategoryStore.rows.clear();
         spellMgr.spells.clear(); spellMgr.abilities.clear();
         sCreatureFamilyStore.rows = {{1, {1}}, {2, {2}}};
         sSkillLineStore.rows = {{SKILL_TAILORING, {SKILL_TAILORING, SKILL_CATEGORY_PROFESSION}},
@@ -804,8 +867,94 @@ struct Scenario
     }
 };
 
+void PendingReceiptTests()
+{
+    using namespace EarnedAuction;
+    for (bool category : {false, true})
+        for (bool banked : {false, true})
+        {
+            // Ownership caps include the bank and shared HAVE categories. The
+            // uncollectable attachment remains owned while other purchases proceed.
+            Scenario s; Item& owned = s.BagItem(100, 1, ITEM_USAGE_KEEP);
+            Item& mailed = s.MakeItem(category ? 102 : 100, 1, ITEM_USAGE_KEEP);
+            if (category)
+            {
+                owned.proto.ItemLimitCategory = mailed.proto.ItemLimitCategory = 7;
+                sItemLimitCategoryStore.rows[7] = {7, 1, ITEM_LIMIT_CATEGORY_MODE_HAVE};
+            }
+            else
+                owned.proto.MaxCount = mailed.proto.MaxCount = 1;
+            if (banked)
+            {
+                s.bot.inventory.erase(owned.guid); s.bot.backpack.clear(); s.bot.bank[owned.guid] = &owned;
+            }
+            Mail& mail = s.Receipt(&mailed, 250); mail.subject = s.Subject(mailed, AUCTION_WON);
+            Item& duplicate = s.MakeItem(mailed.GetEntry(), 1, ITEM_USAGE_EQUIP); duplicate.proto = mailed.proto;
+            s.Offer(duplicate, 2, 100);
+            Item& useful = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); s.Offer(useful, 1, 500);
+            InventoryResult const limit = category ? EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED :
+                                                    EQUIP_ERR_CANT_CARRY_MORE_OF_THIS;
+            assert(s.bot.CanTakeMoreSimilarItems(&mailed) == limit);
+            assert(!OwnMarketState(&s.bot).pendingPurchase);
+            assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.session.lastAuction == 1);
+            assert(s.bot.money == 9500 && mail.money == 250 && mail.items.size() == 1 && mail.state == 0);
+            assert(s.bot.GetMItem(mailed.guid.value) == &mailed && owned.count == 1 && mailed.count == 1);
+            assert(s.bot.inventory.size() == (banked ? 0u : 1u) && !s.bot.session.takesItem &&
+                   !s.bot.session.takesMoney && !s.bot.session.deletes);
+            // An ordinary mailbox visit still refuses the attachment. Taking its
+            // money does not delete it or grant another copy of the unique item.
+            assert(s.Visit(true)); assert(s.bot.money == 9750 && mail.items.size() == 1 && mail.state == 0);
+            assert(!s.bot.session.takesItem && !s.bot.session.deletes);
+            s.bot.inventory.erase(owned.guid); s.bot.bank.clear(); s.bot.backpack.clear();
+            assert(s.bot.CanTakeMoreSimilarItems(&mailed) == EQUIP_ERR_OK);
+            assert(OwnMarketState(&s.bot).pendingPurchase);
+            now += sPlayerbotAIConfig.earnedAuctionInterval;
+            assert(s.Visit(true)); assert(s.bot.GetItemByGuid(mailed.guid) == &mailed);
+            assert(mail.state == MAIL_STATE_DELETED && !s.bot.GetMItem(mailed.guid.value));
+        }
+    for (int pending = 0; pending < 8; ++pending)
+    {
+        // Unknown state and temporary failures remain conservative. Every
+        // attachment matters even when the first is refused by an ownership cap.
+        Scenario s; Item& owned = s.BagItem(100, 1, ITEM_USAGE_KEEP); owned.proto.MaxCount = 1;
+        Item& mailed = s.MakeItem(pending == 5 ? 102 : 100, 1, ITEM_USAGE_KEEP); mailed.proto.MaxCount = 1;
+        Mail& mail = s.Receipt(&mailed, 250); mail.subject = s.Subject(mailed, AUCTION_WON);
+        switch (pending)
+        {
+            case 0: owned.proto.MaxCount = mailed.proto.MaxCount = 0; break;
+            case 1: mail.subject.clear(); break;
+            case 2: mailed.m_lootGenerated = true; break;
+            case 3:
+                owned.proto.MaxCount = mailed.proto.MaxCount = 0;
+                owned.proto.ItemLimitCategory = mailed.proto.ItemLimitCategory = 999; break;
+            case 4: s.bot.attachments.clear(); break;
+            case 5: mailed.missingTemplate = true; break;
+            case 6:
+            {
+                Item& other = s.MakeItem(102, 1, ITEM_USAGE_KEEP);
+                mail.items.push_back({other.guid.value}); s.bot.attachments[other.guid.value] = &other; break;
+            }
+            case 7: owned.proto.MaxCount = mailed.proto.MaxCount = 0; s.bot.store = false; break;
+        }
+        Item& offer = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); s.Offer(offer);
+        assert(OwnMarketState(&s.bot).pendingPurchase); assert(!s.Visit());
+        assert(!s.bot.session.buys && !s.bot.session.takesItem && !s.bot.session.takesMoney && !s.bot.session.deletes);
+        assert(s.bot.money == 10000 && mail.money == 250 && mail.state == 0 && s.bot.inventory.size() == 1);
+    }
+    {
+        // EQUIP category limits permit ownership of another copy and do not
+        // excuse waiting for its receipt, including before its delivery time.
+        Scenario s; Item& owned = s.BagItem(100, 1, ITEM_USAGE_KEEP); owned.proto.ItemLimitCategory = 7;
+        Item& mailed = s.MakeItem(102, 1, ITEM_USAGE_KEEP); mailed.proto.ItemLimitCategory = 7;
+        sItemLimitCategoryStore.rows[7] = {7, 1, ITEM_LIMIT_CATEGORY_MODE_EQUIP};
+        Mail& mail = s.Receipt(&mailed); mail.subject = s.Subject(mailed, AUCTION_WON); mail.deliver_time = now + 10;
+        assert(s.bot.CanTakeMoreSimilarItems(&mailed) == EQUIP_ERR_OK && OwnMarketState(&s.bot).pendingPurchase);
+    }
+}
+
 void ServiceTests()
 {
+    PendingReceiptTests();
     using namespace EarnedAuction;
     {
         Scenario s; assert(IsEnabled(&s.bot.ai)); assert(!IsEnabled(nullptr));
@@ -1598,6 +1747,7 @@ def build(directory, parts, name):
     text = fixtures.replace('@@NATIVE@@', native).replace('@@PROFESSIONS@@', profession_skills(args.core))
     text = text.replace('@@PROFESSION@@', parts['profession']).replace('@@SUBJECT@@', subject_writer)
     text = text.replace('@@PETDIET@@', pet_diet)
+    text = text.replace('@@OWNERSHIP@@', ownership_rules).replace('@@OWNERSHIP_OVERLOAD@@', ownership_overload)
     text = text.replace('@@BAGS@@', parts['bags'])
     text = text.replace('@@AUCTIONRULES@@', auction_rules).replace('@@TOOLS@@', tools)
     # The policy headers are compiled from private copies, so mutants can change them.
@@ -1735,8 +1885,23 @@ mutations = [
      'bool const expired = subject && subject->response == AUCTION_EXPIRED;', 'bool const expired = true;'),
     ('sale keeps the unsold record', 'service', 'Unsold().Sold(bot->GetGUID().GetCounter(), subject->item);',
      'Unsold().Sold(0, subject->item);'),
-    ('returned stock holds up purchases', 'service', 'if (!subject || subject->response == AUCTION_WON)',
-     'if (!subject || subject->response == AUCTION_WON || subject)'),
+    ('returned stock holds up purchases', 'service', 'else if (subject->response == AUCTION_WON)',
+     'else if (subject->response == AUCTION_WON || subject)'),
+    ('ownership-limited receipt holds up purchases', 'service',
+     'InventoryResult const result = bot->CanTakeMoreSimilarItems(item);',
+     'InventoryResult const result = EQUIP_ERR_OK;'),
+    ('unique receipt holds up purchases', 'service', 'result != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS &&', 'true &&'),
+    ('category-limited receipt holds up purchases', 'service',
+     'result != EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED)', 'true)'),
+    ('collectable receipt ignored', 'service',
+     'result != EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED)',
+     'result != EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED && false)'),
+    ('only the first receipt attachment checked', 'service',
+     'Item* item = bot->GetMItem(attachment.item_guid);',
+     'if (&attachment != &mail->items.front()) break;\n                    Item* item = bot->GetMItem(attachment.item_guid);'),
+    ('unreadable receipt ignored', 'service', 'if (!subject)\n                state.pendingPurchase = true;',
+     'if (!subject)\n                state.pendingPurchase = false;'),
+    ('unknown receipt template ignored', 'service', 'if (!item || !item->GetTemplate())', 'if (!item)'),
     ('unsold record never forgotten', 'policy',
      'return record.unsold < MaxUnsoldListings || UnsoldForgotten(record, now, listing);',
      'return record.unsold < MaxUnsoldListings || (UnsoldForgotten(record, now, listing) && false);'),

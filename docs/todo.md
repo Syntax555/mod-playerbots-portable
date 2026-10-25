@@ -230,8 +230,10 @@ pass.
   the quiver. A type-aware bag slot there would also change players' equip
   commands.
 - [ ] Unsold-stock records live in server memory; a restart forgets them.
-- [ ] A won item the bot can never store, such as a second unique copy, holds
-  up its auction purchases until the mail expires.
+- [x] Won items refused by the core's unique-item or ownership-category limits
+  stay in mail without blocking other auction purchases. Native fixtures cover
+  inventory and bank limits, preserved receipts and ordinary collection after
+  the owned count drops.
 - [ ] Upkeep can buy a vendor bag while a won auction bag still waits in the
   mail; the later bag may no longer be an upgrade.
 - [x] Protect the last pet-food reserve for owned hunter pets, including

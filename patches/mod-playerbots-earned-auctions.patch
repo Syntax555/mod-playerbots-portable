@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 5fd449f..14408de 100644
+index b8c99bf..37f27fa 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -91,6 +91,13 @@ Playerbots.RandomBotAutologin = 1
@@ -446,10 +446,10 @@ index 326c879..185643b 100644
  }
 diff --git a/src/Bot/EarnedAuction.cpp b/src/Bot/EarnedAuction.cpp
 new file mode 100644
-index 0000000..3b2ee13
+index 0000000..9f29169
 --- /dev/null
 +++ b/src/Bot/EarnedAuction.cpp
-@@ -0,0 +1,872 @@
+@@ -0,0 +1,888 @@
 +/*
 + * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
 + * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -950,8 +950,24 @@ index 0000000..3b2ee13
 +        {
 +            // Returned stock is no purchase; an unreadable subject counts as one.
 +            std::optional<AuctionSubject> const subject = ParseAuctionSubject(mail->subject);
-+            if (!subject || subject->response == AUCTION_WON)
++            if (!subject)
 +                state.pendingPurchase = true;
++            else if (subject->response == AUCTION_WON)
++                for (MailItemInfo const& attachment : mail->items)
++                {
++                    Item* item = bot->GetMItem(attachment.item_guid);
++                    if (!item || !item->GetTemplate())
++                    {
++                        state.pendingPurchase = true;
++                        continue;
++                    }
++                    // An ownership limit is not cleared by making bag space. Keep the
++                    // attachment for ordinary collection without blocking other buys.
++                    InventoryResult const result = bot->CanTakeMoreSimilarItems(item);
++                    if (result != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS &&
++                        result != EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED)
++                        state.pendingPurchase = true;
++                }
 +        }
 +    return state;
 +}
@@ -1882,7 +1898,7 @@ index 0000000..19a711a
 +}  // namespace EarnedAuctionTravel
 +#endif
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index c66cb33..f5eebe0 100644
+index dc50857..18973f7 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
 @@ -82,6 +82,9 @@ bool PlayerbotAIConfig::Initialize()
@@ -1909,7 +1925,7 @@ index 063808f..4e97ad8 100644
          std::make_shared<EarnedLevelBracketPolicy>()};
      bool vanillaBattlegroundsOnly = false;
 diff --git a/src/Script/Playerbots.cpp b/src/Script/Playerbots.cpp
-index b6d409e..0bbeb2a 100644
+index 8e1a00a..c27301f 100644
 --- a/src/Script/Playerbots.cpp
 +++ b/src/Script/Playerbots.cpp
 @@ -16,6 +16,7 @@
