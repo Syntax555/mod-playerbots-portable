@@ -641,12 +641,21 @@ function methods:Enable() self.enabled = true end
 function methods:Disable() self.enabled = false end
 function methods:SetID(id) self.id = id end
 function methods:GetID() return self.id end
-function methods:GetFrameLevel() return 1 end
+function methods:SetFrameLevel(level) self.level = level end
+function methods:GetFrameLevel()
+  local parent = rawget(self, "parent")
+  return rawget(self, "level") or (parent and parent:GetFrameLevel() + 1) or 1
+end
+function methods:GetParent() return rawget(self, "parent") end
 function methods:SetSize(width, height) self.width, self.height = width, height end
 function methods:GetWidth() return rawget(self, "width") or 100 end
 function methods:GetHeight() return rawget(self, "height") or 100 end
 function methods:SetPoint(point, relative, relativePoint, x, y) self.point = { point, relative, relativePoint, x, y } end
-function methods:CreateTexture() return Object(nil, "Texture") end
+function methods:CreateTexture()
+  local texture = Object(nil, "Texture")
+  texture.parent = self
+  return texture
+end
 function methods:CreateFontString() return Object(nil, "FontString") end
 for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture" }) do
   methods[getter] = function(self)
@@ -658,8 +667,9 @@ end
 function methods:Click(button)
   if self.scripts.OnClick then self.scripts.OnClick(self, button or "LeftButton") end
 end
-CreateFrame = function(kind, name)
+CreateFrame = function(kind, name, parent)
   local frame = Object(name, kind)
+  frame.parent = parent
   frame.shown = false
   if kind == "Frame" and not name then frame.shown = true end
   if name then _G[name] = frame end
@@ -672,8 +682,12 @@ GENERAL = "Allgemein"
 SEARCH = "Suchen"
 PlaySound = function() end
 PanelTemplates_TabResize = function() end
-PanelTemplates_SelectTab = function(tab) tab.selected = true end
-PanelTemplates_DeselectTab = function(tab) tab.selected = false end
+-- DragonUI's tab skin levels a tab one above its parent, four while selected.
+local function DragonTabLevel(tab)
+  if rawget(tab, "dragonSkin") then tab:SetFrameLevel(tab:GetParent():GetFrameLevel() + (tab.selected and 4 or 1)) end
+end
+PanelTemplates_SelectTab = function(tab) tab.selected = true; DragonTabLevel(tab) end
+PanelTemplates_DeselectTab = function(tab) tab.selected = false; DragonTabLevel(tab) end
 GameTooltip_Hide = function() end
 GetCoinTextureString = function(copper) return copper .. "c" end
 local shift = false
@@ -762,6 +776,7 @@ if withDragon then
     assert(loadfile(dragonDir .. "/modules/spellbook/" .. file))("DragonUI", addon)
   end
   addon.SpellbookModule.Config = function() return { scale = 0.8 } end
+  addon.CharacterPanel = { ReskinTab = function(tab) tab.dragonSkin = true end }
   DragonUI = addon
   DragonUI_NineSlice = { ApplyLayout = function() end, GetLayout = function() return {} end }
 end
@@ -801,6 +816,11 @@ assert(sent[#sent] == "BOOK 0x2", "the bot's trainer book is requested by its GU
 assert(book.tabs[GENERAL].text == "Allgemein" and book.tabs[CLASS].text == "Krieger",
   "DragonUI's two tabs: the general book and the bot's class")
 assert(book.tabs[GENERAL].point[4] < book.tabs[CLASS].point[4], "the general tab comes first, as in DragonUI")
+local function tabsInFront()
+  local paper = book.art.wood.parent:GetFrameLevel()
+  return book.tabs[GENERAL]:GetFrameLevel() > paper and book.tabs[CLASS]:GetFrameLevel() > paper
+end
+assert(tabsInFront(), "both tabs stay in front of the book's wood strip, selected or not")
 
 local function cards()
   local shown = {}
@@ -832,6 +852,7 @@ for _, packet in ipairs(packets) do
 end
 assert(book.selected == CLASS and titles() == L["Arms"] .. "," .. L["Fury"] .. "," .. L["Protection"],
   "with the bot's trainer book the class book opens, a section per talent tree as in DragonUI")
+assert(tabsInFront(), "both tabs stay in front of the book's wood strip after switching")
 local class, byID, order = cards(), {}, {}
 for index, entry in ipairs(class) do byID[entry.id], order[entry.id] = entry, index end
 assert(order[12294] < order[6673] and order[6673] < order[900002], "learned spells sit in their tree's section")
@@ -942,6 +963,8 @@ BOT_MUTATIONS = [
     ('two-page spreads', 'BotBook.lua', 'view.query), wide and 2 or 1,', 'view.query), 1,', True),
     ('DragonUI wording', 'BotBook.lua', 'local text = dragon and type(dragon.L) == "table" and rawget(dragon.L, key) or nil',
      'local text = nil', True),
+    ('tabs above the paper', 'BotBook.lua', '"EraTalentsBotBookFrameTab" .. cat, holder,',
+     '"EraTalentsBotBookFrameTab" .. cat, frame,', True),
     ('general tab first', 'BotBook.lua', 'local TAB_ORDER = { GENERAL, CLASS }', 'local TAB_ORDER = { CLASS, GENERAL }', True),
     ('button release', 'BotBook.lua', '    if button and button.setDisable then button.setDisable() end\n', '', True),
 ]
