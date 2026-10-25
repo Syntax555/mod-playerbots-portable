@@ -95,8 +95,10 @@ The selected realm mode is preserved; see
 ## Client packages
 
 The server updater does not install client addons or modify a WoW client. Each
-player installs the matching client packages manually; see
-[client installation](era-talents.md#install-the-matching-client-files).
+player installs the EraTalents client pack of the same release as the server
+manually; see [client installation](era-talents.md#install-the-matching-client-files).
+The optional MultiBot, DragonUI, Questie and Zygor addons are updated from
+their [forks' Latest releases](addons.md#addon-forks).
 
 ## Server data and the client cache
 

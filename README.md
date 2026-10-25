@@ -28,6 +28,12 @@ database, configuration and first-run setup.
   talent systems from each character's earned era. Matching client files include
   German and English text and selected restored class spells. See
   [historical talents](docs/era-talents.md).
+- **Client addons for earned play:** DragonUI's talent window, spellbook and
+  level-up notice follow each character's era and trainer list; MultiBot opens
+  and trains controlled altbots' historical trees; Questie shows group bots'
+  quest progress; Zygor guides, Gear Finder and Talent Advisor follow each
+  character's tier. These addons are published by their
+  [forks](docs/addons.md#addon-forks), each with its own Latest download.
 - **Autonomous dungeon parties:** nearby random bots form five-member groups for
   audited normal dungeons in their own era and walk to the entrance. See
   [routes and requirements](docs/bot-dungeons.md#autonomous-parties).
@@ -65,7 +71,9 @@ database, configuration and first-run setup.
 4. With WoW closed, copy the client pack's `Interface/AddOns/EraTalents/` folder
    and `Data/patch-V.mpq` into your WoW folder; see
    [client installation](docs/era-talents.md#install-the-matching-client-files).
-5. Set `set realmlist 127.0.0.1` in your client's `Data/<locale>/realmlist.wtf`,
+5. Optionally install MultiBot, DragonUI, Questie or Zygor from
+   [Downloads](#downloads).
+6. Set `set realmlist 127.0.0.1` in your client's `Data/<locale>/realmlist.wtf`,
    for example `Data/enUS/realmlist.wtf` or `Data/deDE/realmlist.wtf`. Start WoW
    and log in. Bots log in gradually from 30 seconds after you connect.
 
@@ -107,8 +115,9 @@ Each start checks Latest; for a newer release the launcher downloads the
 changed server files, verifies them and restarts with them. SQL migrations and
 new configuration defaults apply automatically; characters, databases, server
 data, custom settings and the realm mode are preserved. Client packages are
-installed manually. See the [update guide](docs/updating.md) for manual
-installation, backups and recovery.
+installed manually: update the EraTalents client pack with the server, and the
+optional addons from their forks' Latest releases. See the
+[update guide](docs/updating.md) for manual installation, backups and recovery.
 
 Configurations, databases, logs and server data live in `configs/`,
 `mysql/data/`, `logs/` and `data/` of the server folder. A server folder that
@@ -186,8 +195,9 @@ server start, including an automatic restart, overwrites `Server.log`,
 
 The release workflow runs launcher tests, source fixtures for the earned-play
 rules and package verification before publishing. These checks do not establish
-complete in-game coverage: full dungeon and raid runs, every class quest and the
-2,500-bot target have not been verified in game.
+complete in-game coverage: full dungeon and raid runs, every class quest, the
+2,500-bot target and parts of the DragonUI, Questie and Zygor integrations have
+not been verified in game; see the [roadmap](docs/todo.md#gameplay-validation).
 
 The server uses the Wrath core and client. Historical trees use Vanilla 1.12.1
 and TBC Classic 2.5.4 data; TBC is not an exact original 2.4.3 simulation.
@@ -232,7 +242,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [Progression](docs/changing-expansions.md) | Content milestones, expansion modes and realm migration. |
 | [EraTalents](docs/era-talents.md) | Client installation, training, talents and compatibility. |
 | [Class quests](docs/class-quests.md) | Historical priest quest rewards, race gates and paid training. |
-| [Client addons](docs/addons.md) | MultiBot, curated upstream addons and Lua diagnostics. |
+| [Client addons](docs/addons.md) | MultiBot, DragonUI, the addon forks, curated upstream addons and Lua diagnostics. |
 | [Questie bot progress](docs/questie-playerbots.md) | Server-controlled group bot quest counters, installation and validation. |
 | [Zygor Individual Progression](docs/zygor-progression.md) | Guides, Gear Finder and Talent Advisor by earned tier, installation and limits. |
 | [Bot dungeons and raids](docs/bot-dungeons.md) | Autonomous parties, player-led clears, raid tactics and travel. |
@@ -251,14 +261,15 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | **Development** | |
 | [TODO and validation](docs/todo.md) | Open integration work, validation tasks and completion criteria. |
 | [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build, client package and local checks. |
-| [Contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md) | Problem reports, patch workflow, documentation and releases. |
+| [Contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md) | Problem reports, patch and fork workflow, documentation and releases. |
 
 ## Contributing
 
 [Report a problem](https://github.com/Syntax555/mod-playerbots-portable/issues)
 or propose a change; the
 [contributing guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md)
-lists what a report needs and how to change pinned sources.
+lists what a report needs and how to change pinned sources. Addon changes are
+made in the [addon forks](docs/addons.md#addon-forks).
 
 ## License and credits
 
@@ -273,8 +284,11 @@ AzerothCore, modules and addons retain their upstream licenses and notices; see
 paths and pinned source references.
 
 Built with AzerothCore, Playerbots and the module authors linked above, the
-[MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) addon,
-[StormLib](https://github.com/ladislav-zezula/StormLib) and historical class
+[MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless),
+[DragonUI](https://github.com/NeticSoul/DragonUI),
+[Questie-335](https://github.com/Aldori15/Questie) and
+[Zygor Guides Viewer Remaster](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK)
+addons, [StormLib](https://github.com/ladislav-zezula/StormLib) and historical class
 data from [CMaNGOS](https://github.com/cmangos). First-run server data is
 provided by the [wowgaming client-data project](https://github.com/wowgaming/client-data),
 and German client text by

@@ -16,7 +16,7 @@ patches; packaged source manifests also record their hashes.
 | Portable paths | Generated SQL source paths are relative. A missing absolute `SourceDirectory` is pointed at the complete bundled SQL tree, with configuration backups. |
 | Supervision | MySQL, authserver and worldserver restart two seconds after they exit or crash, including after the console `server shutdown` command. |
 | Shutdown | Ctrl+C requests shutdown of the launcher's own game servers before its database; timeout handling targets only owned processes. |
-| Client packages | EraTalents and MultiBot are separate downloads. Each player installs matching client files manually with WoW closed. |
+| Client packages | The EraTalents client pack is part of the server release; MultiBot, DragonUI, Questie and Zygor come from their [forks' Latest releases](addons.md#addon-forks). Each player installs matching client files manually with WoW closed. |
 
 See [updates, moving the server and recovery](updating.md) for operating steps.
 
@@ -97,9 +97,11 @@ The matching EraTalents addon and merged MPQ provide historical trees and German
 and English text. German locale merging preserves numeric gameplay fields and
 other locale slots. Historical TBC trees use Classic 2.5.4 data; the client and
 core remain Wrath 3.3.5a. See [EraTalents](era-talents.md) for installation and
-supported historical rules.
+supported historical rules. With [DragonUI](era-talents.md#dragonui), its talent
+key opens the historical tree, the spellbook and level-up notice follow the
+character's own trainer list and the glyph page opens once Wrath is earned.
 
-The prepared MultiBot addon displays gold, silver and copper and initializes its
+The MultiBot fork displays gold, silver and copper and initializes its
 options with the supported fallback interface. Existing saved settings are
 retained. In its inventory's Buy mode, merchant clicks buy for the selected bot
 with that bot's own gold. Its spellbook lists the bot's spells from the Bridge,
@@ -124,8 +126,8 @@ prebuilt server includes its MultiBot Bridge support.
 Viewer Remaster the same way. The MultiBot Bridge reports the character's own
 tier, quest availability and instance access read-only; guides, the Gear
 Finder, best-in-slot lists and the Talent Advisor follow them, and an unknown
-state unlocks nothing. Run the separate Zygor IP installer from the matching
-Latest release.
+state unlocks nothing. Run the Zygor IP installer from the Zygor fork's Latest
+release.
 
 ## Validation and supported scope
 

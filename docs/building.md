@@ -62,9 +62,10 @@ is built separately on Linux; see
 client package built from the same pinned sources as your server.
 
 The server ZIP contains runtime files, configuration templates, required SQL,
-user guides and license notices. Addons are separate downloads; recommended
-configuration profiles are embedded in the launcher. Client exports omit
-development files while retaining their runtime resources.
+user guides and license notices. Addons are separate downloads from their
+[forks](addons.md#addon-forks); recommended configuration profiles are
+embedded in the launcher. Client exports omit development files while
+retaining their runtime resources.
 
 `portable-release.json` records the source commit and package version. The
 automatic updater applies only to `latest` packages; a `dev` build keeps its
