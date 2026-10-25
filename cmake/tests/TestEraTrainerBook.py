@@ -1,10 +1,12 @@
 """Check the EraTalents trainer book against the core's own trainer list.
 
-Requires PrepareModules.cmake and a C++20 compiler. No realm or database is
-started. The fixture compiles the production book builder, the ERATAL BOOK
-reply and the core's Trainer list, state and cost functions against the same
-doubles, so a book must hold exactly what the trainer window lists for that
-character. Mutants that drop a gate must fail.
+Requires PrepareModules.cmake, a C++20 compiler and Lua 5.1. No realm or
+database is started. The fixture compiles the production book builder, the
+ERATAL BOOK reply and the core's Trainer list, state and cost functions against
+the same doubles, so a book must hold exactly what the trainer window lists for
+that character. Its replies then feed DragonUI's real spellbook catalogue and
+level-up builder through the EraTalents client. Mutants that drop a gate must
+fail.
 """
 
 import argparse
@@ -452,8 +454,25 @@ GetTime = function() return 0 end
 GetLocale = function() return "deDE" end
 SlashCmdList = {}
 
-local addon = { L = setmetatable({}, { __index = function(_, key) return key end }) }
+local addon = { L = setmetatable({}, { __index = function(_, key) return key end }), _dir = "",
+                Fonts = { PRIMARY = "font" } }
+local modules = {}
 function addon:IsModuleEnabled() return true end
+function addon:RegisterModule(name, module) modules[name] = module end
+TALENT_POINTS, BATTLEGROUNDS, LOOKING_FOR_DUNGEON, GLYPHS = "Talent Points", "Battlegrounds", "Dungeon Finder", "Glyphs"
+LEVEL_RANGE = "Level Range"
+local expansions, unknown = {}, {}
+for _, id in ipairs({ 136, 137, 138, 140, 146, 147, 148, 149, 150, 151, 170, 171, 172, 173, 174, 198,
+                      175, 176, 177, 193, 194, 195, 196, 197, 199 }) do expansions[id] = 1 end
+for _, id in ipairs({ 202, 203, 204, 206, 207, 208, 209, 214, 216, 218, 220, 225, 245, 251, 253, 255,
+                      46, 159, 223, 224, 239, 243, 246, 279, 293 }) do expansions[id] = 2 end
+GetLFGDungeonInfo = function(id)
+  if unknown[id] then return nil end
+  return "Dungeon " .. id, 1, 1, 80, 1, 1, 80, expansions[id] or 0
+end
+GetNumBattlegroundTypes = function() return 0 end
+UnitFactionGroup = function() return "Horde" end
+EXPANSION_NAME1, EXPANSION_NAME2 = "The Burning Crusade", "Wrath of the Lich King"
 local Book = { initialized = false, applied = false }
 addon.SpellbookModule = Book
 local rebuilt = 0
@@ -461,12 +480,25 @@ function Book.MarkAllDirty() rebuilt = rebuilt + 1 end
 DragonUI = addon
 assert(loadfile(dragonDir .. "/modules/spellbook/trainerdata.lua"))("DragonUI", addon)
 assert(loadfile(dragonDir .. "/modules/spellbook/book_catalog.lua"))("DragonUI", addon)
+assert(loadfile(dragonDir .. "/modules/levelupenhance/levelupdata.lua"))("DragonUI", addon)
+assert(loadfile(dragonDir .. "/modules/levelupenhance/levelupenhance.lua"))("DragonUI", addon)
+local LevelUp = assert(modules.levelupenhance, "DragonUI registers its level-up module")
 for _, file in ipairs({ "Locales.lua", "EraTalents.lua", "Comms.lua", "DragonUIBook.lua" }) do
   assert(loadfile(eraDir .. "/" .. file))()
 end
 local ET = EraTalents
 ET.state = { ranks = {} }
 ET.InitDragonUIBook()
+
+-- DragonUI's own level-up builder, as its banner and chat lines call it.
+local function unlocks(from, to)
+  local found = {}
+  for _, entry in ipairs(LevelUp.BuildCharacterUnlocks(from, to, 0)) do
+    found[entry.spellID or entry.text] = entry.kind
+  end
+  return found
+end
+assert(unlocks(20, 20)[33388] == "feature", "DragonUI's riding table is kept until the realm's arrives")
 
 local function tick(seconds)
   for _, frame in ipairs(frames) do
@@ -545,6 +577,33 @@ deliver("large")
 local large = Book.TrainerIndex("WARRIOR")
 assert(large ~= own and #large.list == 49 and rebuilt == 2, "every chunk of a long book is kept")
 print("EraTalents trainer book: DragonUI spellbook uses the complete own book only")
+
+-- The level-up notice: the realm's riding levels and only instances of the earned era.
+ET.state.era = 0
+local vanilla = unlocks(57, 60)
+assert(vanilla["Dungeon 136"] == nil and vanilla["Dungeon 137"] == nil and vanilla["Dungeon 140"] == nil,
+  "Outland dungeons are not announced before TBC")
+assert(vanilla["Dungeon 48"] == "raid" and unlocks(55, 55)["Dungeon 40"] == "dungeon", "Vanilla instances stay")
+unknown[40] = true
+local hidden = unlocks(55, 55)
+assert(hidden["Dungeon 40"] == nil and hidden["Stratholme - Main Gate"] == nil and hidden["Dungeon 2"] == "dungeon",
+  "an instance of unknown expansion is not announced")
+unknown[40] = nil
+ET.state.era = 1
+local tbc = unlocks(68, 70)
+assert(tbc["Dungeon 202"] == nil and tbc["Dungeon 225"] == nil and tbc["Dungeon 204"] == nil,
+  "Northrend dungeons are not announced before Wrath")
+assert(tbc["Dungeon 171"] == "dungeon" and tbc["Dungeon 175"] == "raid" and tbc["The Burning Crusade"] == "heroic",
+  "TBC instances and heroic modes stay")
+assert(unlocks(80, 80)["Wrath of the Lich King"] == nil, "Wrath heroic modes are not announced before Wrath")
+ET.state.era = 2
+assert(unlocks(68, 69)["Dungeon 202"] == "dungeon" and unlocks(80, 80)["Wrath of the Lich King"] == "heroic",
+  "Wrath characters keep every instance")
+ET.state.era = 0
+assert(unlocks(30, 30)[900030] == "spell" and unlocks(64, 64)[23920] == nil, "class spells come from the own book")
+assert(unlocks(20, 20)[33388] == nil and unlocks(40, 40)[33388] == "feature" and unlocks(60, 60)[33391] == "feature",
+  "riding levels come from the realm's riding trainers")
+print("EraTalents trainer book: DragonUI level-up notice follows the era and the realm's riding")
 '''
 
 # (label, part, old, new): each removes one rule the book must keep.
@@ -575,6 +634,13 @@ CLIENT_MUTATIONS = [
     ('spellbook rebuild', 'DragonUIBook.lua', 'book.MarkAllDirty() end', 'end'),
     ('talent sync refresh', 'DragonUIBook.lua', '  table.insert(ET.syncHandlers, ET.RefreshOwnBook)\n', ''),
     ('request delay', 'DragonUIBook.lua', 'if waited < BOOK_DELAY then return end', ''),
+    ('realm riding levels', 'DragonUIBook.lua', '    if riding and not riding.partial then return riding.records end\n', ''),
+    ('earned era instances', 'DragonUIBook.lua', 'if expansion and expansion <= era then', 'if true then'),
+    ('unknown instance expansion', 'DragonUIBook.lua', 'if expansion and expansion <= era then',
+     'if (expansion or 0) <= era then'),
+    ('heroic mode expansion', 'DragonUIBook.lua',
+     'if key ~= "heroics" then expansion = select(8, GetLFGDungeonInfo(row[2])) end',
+     'expansion = select(8, GetLFGDungeonInfo(row[2]))'),
 ]
 
 

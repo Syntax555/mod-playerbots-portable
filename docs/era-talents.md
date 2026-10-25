@@ -79,6 +79,11 @@ enabled:
   notice the new class spells, from the character's own class trainer list on
   this server. The list follows the earned era, talents and class quests and
   shows level, base cost and any required talent or spell.
+- The level-up notice lists riding at this realm's trainer levels and leaves
+  out dungeons, raids and heroic modes of a later expansion than the
+  character's earned era. Raid progression and attunements still apply on
+  entry. DragonUI's own fixed lines remain: Dungeon Finder and glyphs at 15,
+  dual specialization at 40 and glyph slots at 30, 50, 70 and 80.
 
 Update the EraTalents addon from the current client package to get this
 behavior. Disabling DragonUI's talent module also restores the standard route.

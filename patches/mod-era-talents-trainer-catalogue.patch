@@ -67,14 +67,18 @@ index 34d4d74..1e8cc5c 100644
  
 diff --git a/client-addon/EraTalents/DragonUIBook.lua b/client-addon/EraTalents/DragonUIBook.lua
 new file mode 100644
-index 0000000..969457a
+index 0000000..0a8f71a
 --- /dev/null
 +++ b/client-addon/EraTalents/DragonUIBook.lua
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,106 @@
 +-- DragonUI's spellbook and level-up notice list the class spells still to learn from a fixed WotLK
 +-- trainer table. The server sends the character's own trainer list instead (BOOK), filtered like
 +-- the trainer window by earned era, talents and class quests, and it replaces that table for the
 +-- player's class. Without a reply DragonUI keeps its own table.
++--
++-- The level-up notice also lists riding, dungeons, raids and heroic modes by level. Riding levels
++-- come from the riding trainers' own list (RIDING), and instances of a later expansion than the
++-- character's earned era stay out.
 +EraTalents = EraTalents or {}
 +local ET = EraTalents
 +
@@ -113,10 +117,37 @@ index 0000000..969457a
 +  if book and type(book.MarkAllDirty) == "function" then book.MarkAllDirty() end
 +end
 +
++local function LevelUpRows(base, key)
++  if key == "riding" then
++    local riding = ET.books.riding[UnitGUID("player")]
++    if riding and not riding.partial then return riding.records end
++    return base.riding
++  end
++  local era = ET.state.era
++  if era == nil or era >= 2 or not (key == "dungeons" or key == "raids" or key == "heroics") then return base[key] end
++  local rows = {}
++  for _, row in ipairs(base[key] or {}) do
++    -- A heroic row names its expansion; an instance's comes from LFGDungeons, and one the client
++    -- cannot tell yet is left out rather than announced.
++    local expansion = row[2]
++    if key ~= "heroics" then expansion = select(8, GetLFGDungeonInfo(row[2])) end
++    if expansion and expansion <= era then rows[#rows + 1] = row end
++  end
++  return rows
++end
++
++local function InitLevelUp(dragon)
++  local base = dragon.LevelUpData
++  if type(base) ~= "table" or dragon._eraLevelUp then return end
++  dragon._eraLevelUp = true
++  dragon.LevelUpData = setmetatable({}, { __index = function(_, key) return LevelUpRows(base, key) end })
++end
++
 +function ET.InitDragonUIBook()
 +  local book = DragonBook()
 +  if not book or book._eraTrainerBook then return end
 +  book._eraTrainerBook = true
++  InitLevelUp(_G.DragonUI)
 +
 +  local trainerIndex = book.TrainerIndex
 +  book.TrainerIndex = function(classToken, ...)

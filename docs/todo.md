@@ -104,8 +104,11 @@ pass.
   `/talents`, spec tabs, glyph page, a hunter's pet tree, and inspecting an
   era altbot and a Wrath character. Check that the spellbook's unlearned spells
   match a class trainer for a Vanilla, TBC and Wrath character. The Lua
-  fixtures run DragonUI's entry points and spellbook catalogue but do not
-  render frames.
+  fixtures run DragonUI's entry points, spellbook catalogue and level-up
+  builder but do not render frames.
+- [ ] DragonUI's level-up notice hard-codes its Dungeon Finder, glyph and dual
+  specialization lines in local tables. Hiding them before a character can use
+  them needs a data hook in upstream DragonUI.
 - [ ] Verify complete runs in-game for each enabled Vanilla, TBC and Wrath
   dungeon: walking to the entrance, combat, loot rolls, quest objectives, wipes
   and normal recovery.
