@@ -219,6 +219,11 @@ pass.
 
 ## Dependency updates
 
+- [ ] Expose reusable DragonUI spellbook card, section-header and window
+  construction for EraTalents' bot book. Keep bot data and MultiBot actions in
+  EraTalents, and reuse DragonUI's rendering helpers instead of mirroring
+  `book_slots.lua`. Cover standalone MultiBot, disabled DragonUI modules,
+  paging, search and bot switching before removing the duplicate UI code.
 - [ ] Submit the prepared Individual Progression filter fix upstream when
   repository permissions allow; see the
   [upstream proposals](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/upstream/README.md).
@@ -234,6 +239,17 @@ pass.
 
 ## Core and module patches
 
+- [ ] Share talent-tab totals between Playerbots' `AiFactory::GetPlayerSpecTabs`
+  and the MultiBot bridge's `BuildTalentTabPoints`. First align removed-talent,
+  active-spec mask and `TalentEntry::RankID` handling in the native helper;
+  compare both callers for Wrath and historical trees in the combat-profile
+  fixtures before removing the bridge calculation.
+- [ ] Correct native bank quest accounting before replacing the bridge's
+  `MoveNaturalBankItem`: deposits must check quest counts before removing the
+  source item, and withdrawals must credit only the transferred count when
+  merging stacks. Exercise completed objectives and existing destination
+  stacks, then retain banker interaction, session ownership and transfer-result
+  checks around the native handlers.
 - [ ] Keep the rated-arena team-era filter while retained level-70 teams can
   enter the same native bracket with different earned eras after a TBC-to-Wrath
   realm transition. Remove it only if the native admission rules make this
