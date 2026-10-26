@@ -244,7 +244,7 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "3553f0ec8090ffa34b6414201f99ccff0ada1873",
+      "revision": "98274deeeac1f3e882bedc1281bc13015e1f95cf",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
         "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87"
@@ -253,7 +253,8 @@
       "toc": "Questie-335.toc",
       "forkChanges": {
         "questie-playerbots-progress": "438000dba6352b2123f882e74ded745889b890d6",
-        "questie-binding-header": "ff1b8fdf21e587da377bfd7e224ea1d1821e2480"
+        "questie-binding-header": "ff1b8fdf21e587da377bfd7e224ea1d1821e2480",
+        "questie-playerbots-roster": "98274deeeac1f3e882bedc1281bc13015e1f95cf"
       }
     },
     {

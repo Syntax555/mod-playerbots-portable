@@ -18,6 +18,7 @@ FILES = ("Modules/Network/QuestiePlayerbots.lua", "Modules/Network/QuestieComms.
          "Modules/Quest/QuestieQuest.lua", "Modules/Quest/QuestieQuestPrivates.lua")
 # The fork commit also adds an upstream-style regression test outside the addon files.
 PATCH = fork_change("Questie-335", "questie-playerbots-progress", FILES)
+ROSTER_PATCH = fork_change("Questie-335", "questie-playerbots-roster", FILES)
 SOURCE = None
 LUA = None
 
@@ -40,8 +41,10 @@ class QuestiePlayerbotsTests(unittest.TestCase):
                 target.write_bytes(subprocess.run(
                     ["git", "-C", str(cache), "show", f"{addon['revision']}:{relative}"],
                     check=True, capture_output=True).stdout)
+        unpatched(cls.directory, ROSTER_PATCH)
         unpatched(cls.directory, PATCH)
         git_apply(cls.directory, PATCH)
+        git_apply(cls.directory, ROSTER_PATCH)
         cls.pristine = {relative: (cls.directory / relative).read_text() for relative in FILES}
 
     def run_fixture(self):
@@ -55,6 +58,10 @@ class QuestiePlayerbotsTests(unittest.TestCase):
 
     def test_regressions_are_detected(self):
         mutations = (
+            (FILES[0], "if name ~= playerName then", "if true then", "own-character roster exclusion"),
+            (FILES[0], 'if name and UnitIsConnected("raid" .. i) then', "if name then", "connected raid roster"),
+            (FILES[0], 'if name and UnitIsConnected("party" .. i) then', "if name then", "connected party roster"),
+            (FILES[0], "        SyncGroupRoster()\n        return\n", "        return\n", "initial roster sync"),
             (FILES[0], "local owned = token == current\n", "local owned = true\n", "request token ownership"),
             (FILES[0], "token:sub(1, #TOKEN_PREFIX) ~= TOKEN_PREFIX", "true", "stale issued token"),
             (FILES[0], "not bridgeUnsupported and helloRetries", "helloRetries", "unsupported bridge probing"),
