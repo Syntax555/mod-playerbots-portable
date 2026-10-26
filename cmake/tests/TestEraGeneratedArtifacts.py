@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 
-from FixtureSupport import prepared_core
+from FixtureSupport import fork_change, git_apply, prepared_core
 
 
 META_SQL = 'data/sql/world/base/2026_08_14_11_era_talent_meta.sql'
@@ -46,11 +46,11 @@ def generated(module: Path) -> dict[Path, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--module-source', type=Path,
-                        default=prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-era-talents')
+    parser.add_argument('--module-source', type=Path)
     parser.add_argument('--no-mutations', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
-    module = args.module_source.resolve()
+    module = (args.module_source or prepared_core(Path(__file__).resolve().parents[2])
+              / 'modules/mod-era-talents').resolve()
     outputs = generated(module)
     drift = [str(path.relative_to(module)) for path, text in outputs.items()
              if not path.is_file() or path.read_text() != text]
@@ -58,8 +58,13 @@ def main() -> int:
         print(f'Stale generated EraTalents file: {path}')
     if drift:
         return 1
+    builds = subprocess.run([sys.executable, str(module / 'tools/gen_bot_builds.py'), '--check'],
+                            capture_output=True, text=True, check=False)
+    if builds.returncode:
+        print(builds.stdout + builds.stderr, end='')
+        return 1
     print(f'Era generated artifacts: {len(outputs)} addon tree, era_talent row and generation stamp '
-          'files match their dataset and locale sources')
+          'files and authored bot orders match their dataset and locale sources')
     if args.no_mutations:
         return 0
 
@@ -69,9 +74,12 @@ def main() -> int:
                  '"Arkaner Fokus X"', 'MageVanilla.lua'),
                 ('dataset tooltip', 'era-data/vanilla/warrior.yaml',
                  'Heroic Strike ability by 1 rage point.', 'Heroic Strike ability by 4 rage point.',
-                 'WarriorVanilla.lua')):
+                 'WarriorVanilla.lua'),
+                ('authored bot order', 'src/EraTalentBots.cpp',
+                 '{ { ERA_VANILLA, CLASS_WARRIOR, 0 }, { 18503,',
+                 '{ { ERA_VANILLA, CLASS_WARRIOR, 0 }, { 18501,', 'EraTalentBots.cpp')):
             copy = Path(temporary) / label.replace(' ', '-')
-            for part in ('tools', 'era-data', 'client-addon/EraTalents/data', 'data/sql/world/base'):
+            for part in ('tools', 'era-data', 'client-addon/EraTalents/data', 'data/sql/world/base', 'src'):
                 shutil.copytree(module / part, copy / part, ignore=shutil.ignore_patterns('__pycache__'))
             text = (copy / source).read_text()
             if old not in text:
@@ -79,10 +87,26 @@ def main() -> int:
             (copy / source).write_text(text.replace(old, new, 1))
             result = subprocess.run([sys.executable, __file__, '--module-source', str(copy), '--no-mutations'],
                                     capture_output=True, text=True, check=False)
-            if result.returncode == 0 or expected not in result.stdout or META_SQL not in result.stdout:
+            if (result.returncode == 0 or expected not in result.stdout
+                    or (source != 'src/EraTalentBots.cpp' and META_SQL not in result.stdout)):
                 raise SystemExit(f'A changed {label} was not reported as stale generated output:\n'
                                  + result.stdout + result.stderr)
             print(f'Era generated artifact mutation rejected: {label}')
+        if args.module_source is None:
+            patch = fork_change('mod-era-talents', 'mod-era-talents-combat-profiles',
+                                paths=('src/EraTalentBots.cpp',))
+            copy = Path(temporary) / 'fork-build-orders'
+            for part in ('tools', 'era-data', 'src'):
+                shutil.copytree(module / part, copy / part, ignore=shutil.ignore_patterns('__pycache__'))
+            git_apply(copy, patch, '--reverse')
+            command = [sys.executable, str(copy / 'tools/gen_bot_builds.py'), '--check']
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            if result.returncode == 0 or 'Stale kAuthoredOrders' not in result.stderr:
+                raise SystemExit('Reverting the authored-build fork change did not fail its generator check:\n'
+                                 + result.stdout + result.stderr)
+            git_apply(copy, patch)
+            subprocess.run(command, capture_output=True, text=True, check=True)
+            print('Era authored-build fork change fails when reverted and passes when reapplied')
     return 0
 
 

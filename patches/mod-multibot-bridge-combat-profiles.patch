@@ -1,0 +1,165 @@
+diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
+index fd9760e..4b3efe3 100644
+--- a/src/MultiBotBridge.cpp
++++ b/src/MultiBotBridge.cpp
+@@ -274,6 +274,7 @@ char const* const kQuestAbandonCapability = "QUEST_ABANDON_V1";
+ char const* const kQuestAbandonTargetCapability = "QUEST_ABANDON_TARGET_V1";
+ char const* const kTalentApplyCapability = "TALENT_APPLY_V1";
+ char const* const kTalentSpecApplyCapability = "TALENT_SPEC_APPLY_V1";
++char const* const kCombatProfileCapability = "COMBAT_PROFILE_V1";
+ char const* const kGlyphEquipCapability = "GLYPH_EQUIP_V1";
+ char const* const kCraftRecipeTargetCapability = "CRAFT_RECIPE_TARGET_V1";
+ char const* const kGroupRollCapability = "GROUP_ROLL_V1";
+@@ -462,6 +463,7 @@ bool SendCapabilitiesPackets(Player* player, ChatMsg chatType)
+         kQuestAbandonTargetCapability,
+         kTalentApplyCapability,
+         kTalentSpecApplyCapability,
++        kCombatProfileCapability,
+         kGlyphEquipCapability,
+         kCraftRecipeTargetCapability,
+         kGroupRollCapability,
+@@ -13382,6 +13384,100 @@ bool ConsumeStrategyMutationRateLimit(Player* requester)
+     return true;
+ }
+ 
++Player* FindCombatProfileTarget(Player* requester, std::string const& name, std::string& reason)
++{
++    if (!requester || !requester->GetSession())
++    {
++        reason = "BAD_REQUEST";
++        return nullptr;
++    }
++    Player* bot = name == requester->GetName() ? requester : FindBotByName(requester, name);
++    PlayerbotAI* ai = GetBotAI(bot);
++    if (!bot)
++        reason = "NO_BOT";
++    else if (!bot->IsInWorld() || !bot->GetSession())
++        reason = "BOT_UNAVAILABLE";
++    else if (!ai)
++        reason = "NO_AI";
++    else if (!ai->GetSecurity() ||
++             !ai->GetSecurity()->CheckLevelFor(PLAYERBOT_SECURITY_ALLOW_ALL, true, requester))
++        reason = "FORBIDDEN";
++    else
++        return bot;
++    return nullptr;
++}
++
++void SendCombatProfileResult(Player* requester, ChatMsg replyType, std::string const& token,
++                             std::string const& name, Player* bot, std::string const& reason, bool listRequest = false)
++{
++    std::ostringstream payload;
++    payload << token << kFieldSeparator << UrlEncodeField(name)
++        << kFieldSeparator << (reason == "OK" ? "OK" : "ERR")
++        << kFieldSeparator << reason
++        << kFieldSeparator << (bot ? AiFactory::GetCombatProfile(bot) : "auto")
++        << kFieldSeparator << (bot ? AiFactory::GetEffectiveCombatProfile(bot) : "");
++    if (!IsAddonPacketWithinBudget("COMBAT_PROFILE_RESULT", payload.str()))
++    {
++        SendProtocolError(requester, replyType, listRequest ? "GET" : "RUN",
++                          listRequest ? "COMBAT_PROFILES" : "COMBAT_PROFILE", token, "TOO_LARGE");
++        return;
++    }
++    SendAddonPacket(requester, replyType, "COMBAT_PROFILE_RESULT", payload.str());
++}
++
++void SendCombatProfiles(Player* requester, ChatMsg replyType, std::string const& name,
++                        std::string const& token)
++{
++    std::string reason = "OK";
++    Player* bot = FindCombatProfileTarget(requester, name, reason);
++    if (bot && !ConsumeStrategyMutationRateLimit(requester))
++        reason = "RATE_LIMIT";
++    if (reason != "OK")
++    {
++        SendCombatProfileResult(requester, replyType, token, name, bot, reason, true);
++        return;
++    }
++    std::ostringstream payload;
++    payload << token << kFieldSeparator << UrlEncodeField(bot->GetName())
++        << kFieldSeparator << AiFactory::GetCombatProfile(bot)
++        << kFieldSeparator << AiFactory::GetEffectiveCombatProfile(bot) << kFieldSeparator;
++    bool first = true;
++    for (std::string const& profile : AiFactory::GetCombatProfiles(bot->getClass()))
++    {
++        if (!first)
++            payload << ',';
++        payload << profile;
++        first = false;
++    }
++    if (!IsAddonPacketWithinBudget("COMBAT_PROFILES", payload.str()))
++    {
++        SendProtocolError(requester, replyType, "GET", "COMBAT_PROFILES", token, "TOO_LARGE");
++        return;
++    }
++    SendAddonPacket(requester, replyType, "COMBAT_PROFILES", payload.str());
++}
++
++void RunCombatProfileCommand(Player* requester, ChatMsg replyType, std::string const& name,
++                             std::string const& token, std::string const& profile)
++{
++    std::string reason = "OK";
++    Player* bot = FindCombatProfileTarget(requester, name, reason);
++    if (bot)
++    {
++        if (!ConsumeStrategyMutationRateLimit(requester))
++            reason = "RATE_LIMIT";
++        else if (bot->IsBeingTeleported())
++            reason = "BOT_UNAVAILABLE";
++        else if (bot->IsInCombat())
++            reason = "IN_COMBAT";
++        else if (!bot->IsAlive())
++            reason = "DEAD";
++        else if (!AiFactory::SetCombatProfile(bot, profile))
++            reason = "BAD_PROFILE";
++    }
++    SendCombatProfileResult(requester, replyType, token, name, bot, reason);
++}
++
+ bool ResolveRogueDpsStrategyAlias(
+     Player* bot,
+     BotState botState,
+@@ -20958,6 +21054,20 @@ bool HandleBridgeOpcode(Player* player, ChatMsg replyType, std::string const& op
+             return true;
+         }
+ 
++        if (requestType == "COMBAT_PROFILES")
++        {
++            std::string const token = GetSafeErrorToken(fields, 2);
++            if (fields.size() != 3)
++                return SendProtocolError(player, replyType, normalized, requestType, token, "BAD_FIELD_COUNT");
++            if (!IsValidRequestToken(fields[2]))
++                return SendProtocolError(player, replyType, normalized, requestType, "", "BAD_TOKEN");
++            std::string name;
++            if (!TryUrlDecodeField(fields[1], name, kMaxBotNameLength, false) || name != Trim(name))
++                return SendProtocolError(player, replyType, normalized, requestType, token, "BAD_BOT_NAME");
++            SendCombatProfiles(player, replyType, name, token);
++            return true;
++        }
++
+         if (requestType == "TALENT_SPEC_LIST")
+         {
+             std::string const token = GetSafeErrorToken(fields, 2);
+@@ -21747,6 +21857,22 @@ bool HandleBridgeOpcode(Player* player, ChatMsg replyType, std::string const& op
+         RunTalentApplyCommand(player, replyType, botName, fields[1], build);
+         return true;
+     }
++    if (requestType == "COMBAT_PROFILE")
++    {
++        std::string const token = GetSafeErrorToken(fields, 1);
++        if (fields.size() != 4)
++            return SendProtocolError(player, replyType, normalized, requestType, token, "BAD_FIELD_COUNT");
++        if (!IsValidRequestToken(fields[1]))
++            return SendProtocolError(player, replyType, normalized, requestType, "", "BAD_TOKEN");
++        std::string name;
++        if (!TryUrlDecodeField(fields[2], name, kMaxBotNameLength, false) || name != Trim(name))
++            return SendProtocolError(player, replyType, normalized, requestType, token, "BAD_BOT_NAME");
++        if (!IsValidCanonicalRawField(fields[3], 16, false))
++            return SendProtocolError(player, replyType, normalized, requestType, token, "BAD_PROFILE");
++        RunCombatProfileCommand(player, replyType, name, token, fields[3]);
++        return true;
++    }
++
+     if (requestType == "TALENT_SPEC_APPLY")
+     {
+         std::string const token = GetSafeErrorToken(fields, 1);

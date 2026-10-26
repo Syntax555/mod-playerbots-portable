@@ -38,6 +38,11 @@ server sends no EraTalents data and the button keeps MultiBot's talent window.
 Install both updated addons together; mixed addon or MPQ generations cannot
 supply a reliable historical view.
 
+The **Select combat profile** button offers automatic talent-based strategy
+selection and explicit class profiles, including tank, healer and damage
+specializations. It also checks the bot's carried gear against that profile.
+See [combat profiles and equipment](combat-profiles.md) for behavior and limits.
+
 For vendor purchases, open the altbot's MultiBot inventory, select **Buy** and
 click an item in the merchant window. While that inventory is visible in Buy
 mode, purchases use the selected bot's own gold and inventory. The bot must be

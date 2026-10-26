@@ -1,0 +1,926 @@
+diff --git a/src/Ai/Base/Actions/EquipAction.cpp b/src/Ai/Base/Actions/EquipAction.cpp
+index e5d0cd2..1e54972 100644
+--- a/src/Ai/Base/Actions/EquipAction.cpp
++++ b/src/Ai/Base/Actions/EquipAction.cpp
+@@ -12,6 +12,7 @@
+ #include "ItemVisitors.h"
+ #include "Playerbots.h"
+ #include "StatsWeightCalculator.h"
++#include <algorithm>
+ #include <utility>
+ 
+ bool EquipAction::Execute(Event event)
+@@ -62,7 +63,7 @@ void EquipAction::EquipItem(FindItemVisitor* visitor)
+         EquipItem(*items.begin());
+ }
+ 
+-void EquipAction::EquipItem(Item* item)
++void EquipAction::EquipItem(Item* item, uint8 forcedSlot)
+ {
+     uint8 bagIndex = item->GetBagSlot();
+     uint8 slot = item->GetSlot();
+@@ -117,7 +118,7 @@ void EquipAction::EquipItem(Item* item)
+             return;
+         }
+ 
+-        uint8 dstSlot = botAI->FindEquipSlot(itemProto, NULL_SLOT, true);
++        uint8 dstSlot = forcedSlot == NULL_SLOT ? botAI->FindEquipSlot(itemProto, NULL_SLOT, true) : forcedSlot;
+ 
+         // Check if the item is a weapon and whether the bot can dual wield or use Titan Grip
+         bool isWeapon = (itemProto->Class == ITEM_CLASS_WEAPON);
+@@ -142,7 +143,7 @@ void EquipAction::EquipItem(Item* item)
+         bool canDualWieldOrTG = (canDualWield || isTwoHander);
+ 
+         // If this is a weapon and we can dual wield or Titan Grip, check if we can improve main/off-hand setup
+-        if (isWeapon && canDualWieldOrTG)
++        if (isWeapon && canDualWieldOrTG && forcedSlot == NULL_SLOT)
+         {
+             // Fetch current main hand and offhand items
+             Item* mainHandItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+@@ -258,10 +259,10 @@ void EquipAction::EquipItem(Item* item)
+         }
+ 
+         // If not a special dual-wield/TG scenario or no improvement found, fall back to original logic
+-        if (dstSlot == EQUIPMENT_SLOT_FINGER1 ||
++        if (forcedSlot == NULL_SLOT && (dstSlot == EQUIPMENT_SLOT_FINGER1 ||
+             dstSlot == EQUIPMENT_SLOT_TRINKET1 ||
+             (dstSlot == EQUIPMENT_SLOT_MAINHAND && canDualWield &&
+-                ((invType != INVTYPE_2HWEAPON && !have2HWeaponEquipped) || (canTitanGrip && isValidTGWeapon))))
++                ((invType != INVTYPE_2HWEAPON && !have2HWeaponEquipped) || (canTitanGrip && isValidTGWeapon)))))
+         {
+             // Handle ring/trinket dual-slot logic
+             Item* const equippedItems[2] = {
+@@ -330,40 +331,110 @@ void EquipAction::EquipItem(Item* item)
+     botAI->TellMaster(out);
+ }
+ 
+-ItemIds EquipAction::SelectInventoryItemsToEquip()
++bool EquipAction::EquipUpgrades()
+ {
++    if (bot->IsInCombat())
++        return false;
++
+     CollectItemsVisitor visitor;
+     IterateItems(&visitor, ITERATE_ITEMS_IN_BAGS);
+ 
+-    ItemIds items;
+-    for (auto i = visitor.items.begin(); i != visitor.items.end(); ++i)
++    StatsWeightCalculator calculator(bot);
++    calculator.SetItemSetBonus(false);
++    calculator.SetOverflowPenalty(false);
++    calculator.SetPvpSpec(sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass()));
++    std::vector<std::pair<Item*, float>> items;
++    bool const shieldTank = PlayerbotAI::IsTank(bot) && (bot->getClass() == CLASS_WARRIOR || bot->getClass() == CLASS_PALADIN);
++    bool haveShield = false;
++    bool haveOnehand = false;
++    if (Item* offhand = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND))
++        haveShield = !offhand->IsBroken() && offhand->GetTemplate()->InventoryType == INVTYPE_SHIELD;
++    if (Item* mainhand = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND))
++        haveOnehand = !mainhand->IsBroken() && (mainhand->GetTemplate()->InventoryType == INVTYPE_WEAPON ||
++                                              mainhand->GetTemplate()->InventoryType == INVTYPE_WEAPONMAINHAND);
++    for (Item* item : visitor.items)
+     {
+-        Item* item = *i;
+-        if (!item)
++        if (!item || !item->GetTemplate() || item->IsBroken() || item->GetTemplate()->InventoryType == INVTYPE_NON_EQUIP)
+             continue;
+-
+-        ItemTemplate const* itemTemplate = item->GetTemplate();
+-        if (!itemTemplate)
++        float score = calculator.CalculateItem(item->GetEntry(), item->GetItemRandomPropertyId());
++        items.emplace_back(item, score);
++        if (score > 0 && bot->CanUseItem(item->GetTemplate()) == EQUIP_ERR_OK)
++        {
++            uint32 type = item->GetTemplate()->InventoryType;
++            if (type == INVTYPE_SHIELD)
++                haveShield = true;
++            if (type == INVTYPE_WEAPON || type == INVTYPE_WEAPONMAINHAND)
++                haveOnehand = true;
++        }
++    }
++    bool const preferShield = shieldTank && haveShield && haveOnehand;
++    // Main-hand changes can make an owned shield equippable during the same pass.
++    auto mainHand = [](Item* item)
++    {
++        uint32 type = item->GetTemplate()->InventoryType;
++        return type == INVTYPE_WEAPON || type == INVTYPE_WEAPONMAINHAND || type == INVTYPE_2HWEAPON;
++    };
++    std::stable_sort(items.begin(), items.end(), [&](auto const& left, auto const& right)
++    {
++        if (mainHand(left.first) != mainHand(right.first))
++            return mainHand(left.first);
++        return left.second > right.second;
++    });
++    for (auto const& [item, score] : items)
++    {
++        if (item->IsEquipped())
+             continue;
+-
+-        //TODO Expand to Glyphs and Gems, that can be placed in equipment
+-        //Pre-filter non-equipable items
+-        if (itemTemplate->InventoryType == INVTYPE_NON_EQUIP)
++        uint32 type = item->GetTemplate()->InventoryType;
++        if (preferShield && type == INVTYPE_2HWEAPON)
++            continue;
++        uint8 forcedSlot = NULL_SLOT;
++        if (preferShield && (mainHand(item) || type == INVTYPE_SHIELD))
++        {
++            forcedSlot = type == INVTYPE_SHIELD ? EQUIPMENT_SLOT_OFFHAND : EQUIPMENT_SLOT_MAINHAND;
++            Item* current = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, forcedSlot);
++            if (score <= 0)
++                continue;
++            if (current && !current->IsBroken() && current->GetTemplate()->InventoryType != INVTYPE_2HWEAPON &&
++                (type != INVTYPE_SHIELD || current->GetTemplate()->InventoryType == INVTYPE_SHIELD))
++            {
++                float currentScore = calculator.CalculateItem(current->GetEntry(), current->GetItemRandomPropertyId());
++                if (score <= currentScore || score <= currentScore * sPlayerbotAIConfig.EquipUpgradeThreshold)
++                    continue;
++            }
++        }
++        std::string qualifier = std::to_string(item->GetEntry()) + "," + std::to_string(item->GetItemRandomPropertyId());
++        ItemUsage usage = AI_VALUE2(ItemUsage, "item upgrade", qualifier);
++        if (forcedSlot == NULL_SLOT && usage == ITEM_USAGE_NONE)
++        {
++            // Native template comparisons omit different random suffixes of the same item.
++            uint8 slot = botAI->FindEquipSlot(item->GetTemplate(), NULL_SLOT, true);
++            uint8 slots = slot == EQUIPMENT_SLOT_FINGER1 || slot == EQUIPMENT_SLOT_TRINKET1 ||
++                          (slot == EQUIPMENT_SLOT_MAINHAND && bot->CanDualWield()) ? 2 : 1;
++            float lowest = score;
++            for (uint8 i = 0; i < slots; ++i)
++            {
++                Item* current = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot + i);
++                if (current && current->GetEntry() == item->GetEntry())
++                {
++                    float currentScore = calculator.CalculateItem(current->GetEntry(), current->GetItemRandomPropertyId());
++                    if (currentScore < lowest && score > currentScore * sPlayerbotAIConfig.EquipUpgradeThreshold)
++                    {
++                        lowest = currentScore;
++                        forcedSlot = slot + i;
++                    }
++                }
++            }
++        }
++        uint16 dest = 0;
++        InventoryResult canEquip = botAI->CanEquipItem(forcedSlot, dest, item, true, true);
++        if (canEquip != EQUIP_ERR_OK && canEquip != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS)
+             continue;
+-
+-        int32 randomProperty = item->GetItemRandomPropertyId();
+-        uint32 itemId = item->GetTemplate()->ItemId;
+-        std::string itemUsageParam;
+-        if (randomProperty != 0)
+-            itemUsageParam = std::to_string(itemId) + "," + std::to_string(randomProperty);
+-        else
+-            itemUsageParam = std::to_string(itemId);
+-
+-        ItemUsage usage = AI_VALUE2(ItemUsage, "item upgrade", itemUsageParam);
+         if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
+-            items.insert(itemId);
++            EquipItem(item, forcedSlot);
++        else if (forcedSlot != NULL_SLOT)
++            EquipItem(item, forcedSlot);
+     }
+-    return items;
++    return true;
+ }
+ 
+ bool EquipUpgradesPacketAction::Execute(Event event)
+@@ -403,14 +474,10 @@ bool EquipUpgradesPacketAction::Execute(Event event)
+             return false;
+     }
+ 
+-    ItemIds items = SelectInventoryItemsToEquip();
+-    EquipItems(items);
+-    return true;
++    return EquipUpgrades();
+ }
+ 
+ bool EquipUpgradeAction::Execute(Event /*event*/)
+ {
+-    ItemIds items = SelectInventoryItemsToEquip();
+-    EquipItems(items);
+-    return true;
++    return EquipUpgrades();
+ }
+diff --git a/src/Ai/Base/Actions/EquipAction.h b/src/Ai/Base/Actions/EquipAction.h
+index 551a635..9cb0efe 100644
+--- a/src/Ai/Base/Actions/EquipAction.h
++++ b/src/Ai/Base/Actions/EquipAction.h
+@@ -22,12 +22,12 @@ public:
+ 
+     bool Execute(Event event) override;
+     void EquipItems(ItemIds ids);
+-    ItemIds SelectInventoryItemsToEquip();
++    bool EquipUpgrades();
+ 
+ private:
+     void EquipItem(FindItemVisitor* visitor);
+     uint8 GetSmallestBagSlot();
+-    void EquipItem(Item* item);
++    void EquipItem(Item* item, uint8 forcedSlot = NULL_SLOT);
+ };
+ 
+ class EquipUpgradesPacketAction : public EquipAction
+diff --git a/src/Ai/Base/Actions/LfgActions.cpp b/src/Ai/Base/Actions/LfgActions.cpp
+index 34c94fc..afd79fb 100644
+--- a/src/Ai/Base/Actions/LfgActions.cpp
++++ b/src/Ai/Base/Actions/LfgActions.cpp
+@@ -60,7 +60,7 @@ uint32 LfgJoinAction::GetRoles()
+         case CLASS_DRUID:
+             if (spec == 2)
+                 return PLAYER_ROLE_HEALER;
+-            else if (spec == 1 && bot->HasAura(EraKnown(bot, 16931)) /* thick hide (stock or era clone) */)
++            else if (spec == 1 && AiFactory::IsFeralTank(bot))
+                 return PLAYER_ROLE_TANK;
+             else
+                 return PLAYER_ROLE_DAMAGE;
+diff --git a/src/Ai/Base/Actions/WorldBuffAction.cpp b/src/Ai/Base/Actions/WorldBuffAction.cpp
+index 18ababd..c337811 100644
+--- a/src/Ai/Base/Actions/WorldBuffAction.cpp
++++ b/src/Ai/Base/Actions/WorldBuffAction.cpp
+@@ -55,8 +55,7 @@ std::vector<uint32> WorldBuffAction::NeedWorldBuffs(Unit* unit)
+     // If this is a druid in the Feral tab, decide Bear vs. Cat
+     if (botClass == CLASS_DRUID && tab == 1)  // 1 = feral
+     {
+-        bool isBear = bot->HasTalent(16931, bot->GetActiveSpec()) ||
+-                      bot->HasAura(EraKnown(bot, 16931));  // Thick Hide rank 3 (stock talent or era clone)
++        bool isBear = AiFactory::IsFeralTank(bot);
+         if (!isBear)
+         {
+             // If not bear, then treat it as "cat" spec = 3
+diff --git a/src/Ai/Base/Value/CombatProfileValue.h b/src/Ai/Base/Value/CombatProfileValue.h
+new file mode 100644
+index 0000000..8c570e3
+--- /dev/null
++++ b/src/Ai/Base/Value/CombatProfileValue.h
+@@ -0,0 +1,32 @@
++/*
++ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
++ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
++ * or (at your option) any later version.
++ */
++
++#ifndef PLAYERBOTS_COMBATPROFILEVALUE_H
++#define PLAYERBOTS_COMBATPROFILEVALUE_H
++
++#include "AiFactory.h"
++#include "Player.h"
++#include "Value.h"
++#include <algorithm>
++
++class CombatProfileValue : public ManualSetValue<std::string>
++{
++public:
++    CombatProfileValue(PlayerbotAI* botAI) : ManualSetValue<std::string>(botAI, "auto", "combat profile") {}
++
++    std::string const Save() override { return value; }
++
++    bool Load(std::string const text) override
++    {
++        auto profiles = AiFactory::GetCombatProfiles(bot->getClass());
++        if (std::find(profiles.begin(), profiles.end(), text) == profiles.end())
++            return false;
++        value = text;
++        return true;
++    }
++};
++
++#endif
+diff --git a/src/Ai/Base/ValueContext.h b/src/Ai/Base/ValueContext.h
+index 9ba5724..7ee4d55 100644
+--- a/src/Ai/Base/ValueContext.h
++++ b/src/Ai/Base/ValueContext.h
+@@ -20,6 +20,7 @@
+ #include "CcTargetValue.h"
+ #include "ChatValue.h"
+ #include "CollisionValue.h"
++#include "CombatProfileValue.h"
+ #include "CraftValue.h"
+ #include "CurrentCcTargetValue.h"
+ #include "CurrentTargetValue.h"
+@@ -217,6 +218,7 @@ public:
+         creators["attackers"] = &ValueContext::attackers;
+         creators["invalid target"] = &ValueContext::invalid_target;
+         creators["mana save level"] = &ValueContext::mana_save_level;
++        creators["combat profile"] = &ValueContext::combat_profile;
+         creators["combat"] = &ValueContext::combat;
+         creators["lfg proposal"] = &ValueContext::lfg_proposal;
+         creators["bag space"] = &ValueContext::bag_space;
+@@ -371,6 +373,7 @@ private:
+     static UntypedValue* formation(PlayerbotAI* botAI) { return new FormationValue(botAI); }
+     static UntypedValue* stance(PlayerbotAI* botAI) { return new StanceValue(botAI); }
+     static UntypedValue* mana_save_level(PlayerbotAI* botAI) { return new ManaSaveLevelValue(botAI); }
++    static UntypedValue* combat_profile(PlayerbotAI* botAI) { return new CombatProfileValue(botAI); }
+     static UntypedValue* invalid_target(PlayerbotAI* botAI) { return new InvalidTargetValue(botAI); }
+     static UntypedValue* balance(PlayerbotAI* botAI) { return new BalancePercentValue(botAI); }
+     static UntypedValue* attackers(PlayerbotAI* botAI) { return new AttackersValue(botAI); }
+diff --git a/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp b/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp
+index d861243..1df47e0 100644
+--- a/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp
++++ b/src/Ai/Class/Druid/Strategy/FeralDruidStrategy.cpp
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include "FeralDruidStrategy.h"
++#include "AiFactory.h"
+ #include "EraTalentBridge.h"
+ #include "Playerbots.h"
+ 
+@@ -96,7 +97,7 @@ void FeralChargeDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+ {
+     Player* bot = botAI->GetBot();
+ 
+-    if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(EraKnown(bot, AURA_THICK_HIDE)))
++    if (bot->HasSpell(SPELL_CAT_FORM) && !AiFactory::IsFeralTank(bot))
+         triggers.push_back(new TriggerNode(
+             "enemy out of melee", { NextAction("feral charge - cat", 29.0f) }));
+     else
+diff --git a/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp b/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp
+index 7e5b611..506f0cd 100644
+--- a/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp
++++ b/src/Ai/Class/Druid/Strategy/GenericDruidStrategy.cpp
+@@ -63,7 +63,7 @@ void GenericDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+ 
+     if (tab == DRUID_TAB_FERAL)
+     {
+-        if (!bot->HasAura(EraKnown(bot, 16931)) /*thick hide (stock or era clone) — bear spec*/)
++        if (!AiFactory::IsFeralTank(bot))
+         {
+             triggers.push_back(new TriggerNode("predator's swiftness and combat party member dead",
+                                                { NextAction("rebirth", 29.0f) }));
+@@ -126,7 +126,7 @@ void DruidCcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+     }
+     if (tab == DRUID_TAB_FERAL)
+     {
+-        if (bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(EraKnown(bot, AURA_THICK_HIDE)))
++        if (bot->HasSpell(SPELL_CAT_FORM) && !AiFactory::IsFeralTank(bot))
+         {
+             triggers.push_back(new TriggerNode(
+                 "predator's swiftness and cyclone", { NextAction("cyclone on cc", 42.0f) }));
+@@ -182,7 +182,7 @@ void DruidAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+         triggers.push_back(new TriggerNode("moonfire on attacker", { NextAction("moonfire on attacker", 5.1f) }));
+     }
+ 
+-    if (tab == DRUID_TAB_FERAL && bot->HasSpell(SPELL_CAT_FORM) && !bot->HasAura(EraKnown(bot, AURA_THICK_HIDE)))
++    if (tab == DRUID_TAB_FERAL && bot->HasSpell(SPELL_CAT_FORM) && !AiFactory::IsFeralTank(bot))
+     {
+         triggers.push_back(new TriggerNode("clearcasting and medium aoe", { NextAction("swipe (cat)", 25.5f) }));
+         triggers.push_back(new TriggerNode("medium aoe", { NextAction("swipe (cat)", 25.0f) }));
+diff --git a/src/Bot/EraTalentBridge.h b/src/Bot/EraTalentBridge.h
+index f0b6172..b9133f6 100644
+--- a/src/Bot/EraTalentBridge.h
++++ b/src/Bot/EraTalentBridge.h
+@@ -14,6 +14,7 @@ class Player;
+ uint32 EraTalentBots_ResolveSpellId(Player* bot, uint32 stockSpellId);
+ bool EraTalentBots_SpecTabs(Player* bot, uint32* tabs3);
+ bool EraTalentBots_FactoryReconcile(Player* bot, int specTab);
++int EraTalentBots_FeralSpec(Player* bot);
+ 
+ // Resolve only known stock spells or their earned historical variants.
+ inline uint32 EraKnown(Player* bot, uint32 spellId) { return EraTalentBots_ResolveSpellId(bot, spellId); }
+diff --git a/src/Bot/Factory/AiFactory.cpp b/src/Bot/Factory/AiFactory.cpp
+index a921f3e..e2af803 100644
+--- a/src/Bot/Factory/AiFactory.cpp
++++ b/src/Bot/Factory/AiFactory.cpp
+@@ -17,6 +17,7 @@
+ #include "PaladinAiObjectContext.h"
+ #include "PlayerbotAI.h"
+ #include "PlayerbotAIConfig.h"
++#include "PlayerbotRepository.h"
+ #include "Playerbots.h"
+ #include "PriestAiObjectContext.h"
+ #include "ReactionEngine.h"
+@@ -27,6 +28,7 @@
+ #include "SpellMgr.h"
+ #include "WarlockAiObjectContext.h"
+ #include "WarriorAiObjectContext.h"
++#include <algorithm>
+ 
+ namespace
+ {
+@@ -66,8 +68,97 @@ AiObjectContext* AiFactory::createAiObjectContext(Player* player, PlayerbotAI* b
+     return new AiObjectContext(botAI);
+ }
+ 
++std::vector<std::string> AiFactory::GetCombatProfiles(uint8 cls)
++{
++    switch (cls)
++    {
++        case CLASS_WARRIOR: return {"auto", "arms", "fury", "prot"};
++        case CLASS_PALADIN: return {"auto", "holy", "prot", "ret"};
++        case CLASS_HUNTER: return {"auto", "bm", "mm", "surv"};
++        case CLASS_ROGUE: return {"auto", "assassin", "combat", "subtlety"};
++        case CLASS_PRIEST: return {"auto", "disc", "holy", "shadow"};
++        case CLASS_DEATH_KNIGHT: return {"auto", "blood", "frost", "unholy"};
++        case CLASS_SHAMAN: return {"auto", "ele", "enh", "resto"};
++        case CLASS_MAGE: return {"auto", "arcane", "fire", "frost"};
++        case CLASS_WARLOCK: return {"auto", "affli", "demo", "destro"};
++        case CLASS_DRUID: return {"auto", "balance", "cat", "bear", "resto"};
++        default: return {"auto"};
++    }
++}
++
++std::string AiFactory::GetCombatProfile(Player* player)
++{
++    PlayerbotAI* ai = player ? GET_PLAYERBOT_AI(player) : nullptr;
++    if (!ai || !ai->GetAiObjectContext())
++        return "auto";
++    std::string mode = ai->GetAiObjectContext()->GetValue<std::string>("combat profile")->Get();
++    auto profiles = GetCombatProfiles(player->getClass());
++    return std::find(profiles.begin(), profiles.end(), mode) != profiles.end() ? mode : "auto";
++}
++
++bool AiFactory::SetCombatProfile(Player* player, std::string const& mode)
++{
++    PlayerbotAI* ai = player ? GET_PLAYERBOT_AI(player) : nullptr;
++    if (!ai || !ai->GetAiObjectContext() || !player->IsInWorld() || !player->IsAlive() ||
++        player->IsInCombat() || player->IsBeingTeleported())
++        return false;
++    auto profiles = GetCombatProfiles(player->getClass());
++    if (std::find(profiles.begin(), profiles.end(), mode) == profiles.end())
++        return false;
++    auto value = ai->GetAiObjectContext()->GetValue<std::string>("combat profile");
++    bool changed = value->Get() != mode;
++    value->Set(mode);
++    ai->InvalidateCombatProfile();
++    ai->RefreshCombatProfile(true);
++    if (changed)
++        PlayerbotRepository::instance().Save(ai);
++    return true;
++}
++
++bool AiFactory::IsFeralTank(Player* player)
++{
++    std::string mode = GetCombatProfile(player);
++    if (mode == "cat")
++        return false;
++    if (mode == "bear")
++        return true;
++    int seeded = EraTalentBots_FeralSpec(player);
++    if (seeded >= 0)
++        return seeded == 1;
++    return player->GetShapeshiftForm() == FORM_BEAR || player->GetShapeshiftForm() == FORM_DIREBEAR ||
++           player->HasAura(EraKnown(player, SPELL_DRUID_THICK_HIDE));
++}
++
++std::string AiFactory::GetEffectiveCombatProfile(Player* player)
++{
++    if (!player)
++        return "";
++    std::string mode = GetCombatProfile(player);
++    if (mode != "auto")
++        return mode;
++    uint8 tab = GetPlayerSpecTab(player);
++    if (player->getClass() == CLASS_DRUID)
++        return tab == DRUID_TAB_BALANCE ? "balance" : tab == DRUID_TAB_RESTORATION ? "resto" :
++               IsFeralTank(player) ? "bear" : "cat";
++    if (player->getClass() == CLASS_WARRIOR && tab == WARRIOR_TAB_FURY && !player->HasSpell(SPELL_WHIRLWIND))
++        return "arms";
++    if (player->getClass() == CLASS_MAGE && tab == MAGE_TAB_FIRE &&
++        player->HasSpell(SPELL_FROSTFIRE_BOLT) && player->HasAura(SPELL_ICE_SHARDS))
++        return "frostfire";
++    auto profiles = GetCombatProfiles(player->getClass());
++    return tab + 1u < profiles.size() ? profiles[tab + 1] : "";
++}
++
+ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
+ {
++    std::string mode = GetCombatProfile(bot);
++    if (mode != "auto")
++    {
++        if (bot->getClass() == CLASS_DRUID)
++            return mode == "balance" ? DRUID_TAB_BALANCE : mode == "resto" ? DRUID_TAB_RESTORATION : DRUID_TAB_FERAL;
++        auto profiles = GetCombatProfiles(bot->getClass());
++        return uint8(std::find(profiles.begin(), profiles.end(), mode) - profiles.begin() - 1);
++    }
+     std::map<uint8, uint32> tabs = GetPlayerSpecTabs(bot);
+ 
+     if (bot->GetLevel() >= 10 && ((tabs[0] + tabs[1] + tabs[2]) > 0))
+@@ -153,51 +244,11 @@ std::map<uint8, uint32> AiFactory::GetPlayerSpecTabs(Player* bot)
+ 
+ BotRoles AiFactory::GetPlayerRoles(Player* player)
+ {
+-    BotRoles role = BOT_ROLE_NONE;
+-    uint8 tab = GetPlayerSpecTab(player);
+-
+-    switch (player->getClass())
+-    {
+-        case CLASS_PRIEST:
+-            if (tab == PRIEST_TAB_SHADOW)
+-                role = BOT_ROLE_DPS;
+-            else
+-                role = BOT_ROLE_HEALER;
+-            break;
+-        case CLASS_SHAMAN:
+-            if (tab == SHAMAN_TAB_RESTORATION)
+-                role = BOT_ROLE_HEALER;
+-            else
+-                role = BOT_ROLE_DPS;
+-            break;
+-        case CLASS_WARRIOR:
+-            if (tab == WARRIOR_TAB_PROTECTION)
+-                role = BOT_ROLE_TANK;
+-            else
+-                role = BOT_ROLE_DPS;
+-            break;
+-        case CLASS_PALADIN:
+-            if (tab == PALADIN_TAB_HOLY)
+-                role = BOT_ROLE_HEALER;
+-            else if (tab == PALADIN_TAB_PROTECTION)
+-                role = BOT_ROLE_TANK;
+-            else if (tab == PALADIN_TAB_RETRIBUTION)
+-                role = BOT_ROLE_DPS;
+-            break;
+-        case CLASS_DRUID:
+-            if (tab == DRUID_TAB_BALANCE)
+-                role = BOT_ROLE_DPS;
+-            else if (tab == DRUID_TAB_FERAL)
+-                role = (BotRoles)(BOT_ROLE_TANK | BOT_ROLE_DPS);
+-            else if (tab == DRUID_TAB_RESTORATION)
+-                role = BOT_ROLE_HEALER;
+-            break;
+-        default:
+-            role = BOT_ROLE_DPS;
+-            break;
+-    }
+-
+-    return role;
++    if (PlayerbotAI::IsTank(player, true))
++        return BOT_ROLE_TANK;
++    if (PlayerbotAI::IsHeal(player, true))
++        return BOT_ROLE_HEALER;
++    return BOT_ROLE_DPS;
+ }
+ 
+ std::string AiFactory::GetPlayerSpecName(Player* player)
+@@ -293,18 +344,10 @@ std::string AiFactory::GetPlayerSpecName(Player* player)
+     return specName;
+ }
+ 
+-void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const facade, Engine* engine)
++void AiFactory::AddClassCombatStrategies(Player* player, PlayerbotAI* const /*facade*/, Engine* engine)
+ {
+     uint8 tab = GetPlayerSpecTab(player);
+ 
+-    if (!player->InBattleground())
+-        engine->addStrategiesNoInit("racials", "chat", "default", "cast time", "potions", "duel", "boost", nullptr);
+-
+-    if (sPlayerbotAIConfig.AutoAvoidAoe && facade->HasGameClientMaster())
+-        engine->addStrategy("avoid aoe", false);
+-
+-    engine->addStrategy("formation", false);
+-
+     switch (player->getClass())
+     {
+         case CLASS_PRIEST:
+@@ -322,7 +365,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
+                 engine->addStrategiesNoInit("arcane", "bdps", nullptr);
+             else if (tab == MAGE_TAB_FIRE)
+             {
+-                if (player->HasSpell(SPELL_FROSTFIRE_BOLT) && player->HasAura(SPELL_ICE_SHARDS))
++                if (GetEffectiveCombatProfile(player) == "frostfire")
+                     engine->addStrategiesNoInit("frostfire", "bdps", nullptr);
+                 else
+                     engine->addStrategiesNoInit("fire", "bdps", nullptr);
+@@ -335,7 +378,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
+         case CLASS_WARRIOR:
+             if (tab == WARRIOR_TAB_PROTECTION)
+                 engine->addStrategiesNoInit("prot", "tank assist", "pull", "pull back", "aoe", nullptr);
+-            else if (tab == WARRIOR_TAB_ARMS || !player->HasSpell(SPELL_WHIRLWIND))
++            else if (GetEffectiveCombatProfile(player) == "arms")
+                 engine->addStrategiesNoInit("arms", "aoe", "dps assist", nullptr);
+             else // if (tab == WARRIOR_TAB_FURY)
+                 engine->addStrategiesNoInit("fury", "aoe", "dps assist", nullptr);
+@@ -369,7 +412,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
+                 engine->addStrategiesNoInit("resto", "cure", "dps assist", "tranquility", nullptr);
+             else
+             {
+-                if (player->HasSpell(SPELL_CAT_FORM) && !player->HasAura(EraKnown(player, SPELL_DRUID_THICK_HIDE)))
++                if (!IsFeralTank(player) && player->HasSpell(SPELL_CAT_FORM))
+                     engine->addStrategiesNoInit("cat", "aoe", "cc", "dps assist", "feral charge", nullptr);
+                 else
+                     engine->addStrategiesNoInit("bear", "tank assist", "pull", "pull back", "feral charge", nullptr);
+@@ -468,56 +511,9 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
+             }
+         }
+     }
+-    if (sRandomPlayerbotMgr.IsRandomBot(player))
+-        engine->ChangeStrategy(sPlayerbotAIConfig.RandomBotCombatStrategies);
+-    else
+-        engine->ChangeStrategy(sPlayerbotAIConfig.CombatStrategies);
+-
+-    // Battleground switch
+-    if (player->InBattleground() && player->GetBattleground())
+-    {
+-        BattlegroundTypeId bgType = player->GetBattlegroundTypeId();
+-        if (bgType == BATTLEGROUND_RB)
+-            bgType = player->GetBattleground()->GetBgTypeID(true);
+-
+-        if (bgType == BATTLEGROUND_WS)
+-            engine->addStrategy("warsong", false);
+-
+-        if (bgType == BATTLEGROUND_AB)
+-            engine->addStrategy("arathi", false);
+-
+-        if (bgType == BATTLEGROUND_AV)
+-            engine->addStrategy("alterac", false);
+-
+-        if (bgType == BATTLEGROUND_EY)
+-            engine->addStrategy("eye", false);
+-
+-        if (bgType == BATTLEGROUND_IC)
+-            engine->addStrategy("isle", false);
+-
+-        if (player->InArena())
+-        {
+-            engine->addStrategy("arena", false);
+-            engine->addStrategiesNoInit("boost", "racials", "chat", "default", "aoe", "cast time", "dps assist", nullptr);
+-        }
+-        else
+-            engine->addStrategiesNoInit("boost", "racials", "chat", "default", "aoe", "potions", "cast time", "dps assist", nullptr);
+-
+-        engine->removeStrategy("custom::say", false);
+-        engine->removeStrategy("threat", false);
+-        engine->addStrategy("boost", false);
+-    }
+ }
+ 
+-Engine* AiFactory::createCombatEngine(Player* player, PlayerbotAI* const facade, AiObjectContext* aiObjectContext)
+-{
+-    Engine* engine = new Engine(facade, aiObjectContext);
+-    AddDefaultCombatStrategies(player, facade, engine);
+-    engine->Init();
+-    return engine;
+-}
+-
+-void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const facade, Engine* nonCombatEngine)
++void AiFactory::AddClassNonCombatStrategies(Player* player, PlayerbotAI* const /*facade*/, Engine* nonCombatEngine)
+ {
+     uint8 tab = GetPlayerSpecTab(player);
+ 
+@@ -559,7 +555,7 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
+         case CLASS_DRUID:
+             if (tab == DRUID_TAB_FERAL)
+             {
+-                if (player->GetLevel() >= 20 && !player->HasAura(EraKnown(player, SPELL_DRUID_THICK_HIDE)))
++                if (!IsFeralTank(player) && player->HasSpell(SPELL_CAT_FORM))
+                     nonCombatEngine->addStrategy("dps assist", false);
+                 else
+                     nonCombatEngine->addStrategiesNoInit("tank assist", "pull", nullptr);
+@@ -602,15 +598,109 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
+             break;
+     }
+ 
++    if (sPlayerbotAIConfig.AutoSaveMana && PlayerbotAI::IsHeal(player, true))
++        nonCombatEngine->addStrategy("save mana", false);
++
++}
++
++void AiFactory::RefreshCombatStrategies(Player* player, PlayerbotAI* facade, Engine* combat, Engine* nonCombat)
++{
++    // Only class and role defaults belong to a profile; user travel, loot and instance choices stay.
++    static char const* const managed[] = {
++        "affli", "aoe", "arcane", "arms", "assassin", "balance", "baoe",
++        "barmor", "bcast", "bdps", "bear", "behind", "blood", "bm",
++        "bmana", "bmight", "bsanc", "bthreat", "bwisdom", "caster aoe", "cat",
++        "cc", "combat", "cure", "curse of agony", "curse of elements", "demo", "destro",
++        "disc", "dps assist", "ele", "enh", "felguard", "felhunter", "feral charge",
++        "fire", "firestone", "flametongue", "frost", "frost aoe", "frostfire", "fury",
++        "healer dps", "healing stream", "holy", "holy dps", "holy heal", "imp", "magma",
++        "mana spring", "meta melee", "mm", "pet", "prot", "pull", "pull back",
++        "resto", "ret", "rshadow", "save mana", "shadow", "shadow aoe", "shadow debuff",
++        "spellstone", "ss self", "stoneskin", "strength of earth", "surv", "tank assist", "tank face",
++        "tranquility", "unholy", "unholy aoe", "windfury", "wrath", "wrath of air",
++    };
++    for (char const* name : managed)
++    {
++        combat->removeStrategy(name, false);
++        nonCombat->removeStrategy(name, false);
++    }
++    AddClassCombatStrategies(player, facade, combat);
++    AddClassNonCombatStrategies(player, facade, nonCombat);
++    combat->Init();
++    nonCombat->Init();
++}
++
++void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const facade, Engine* engine)
++{
++    if (!player->InBattleground())
++        engine->addStrategiesNoInit("racials", "chat", "default", "cast time", "potions", "duel", "boost", nullptr);
++
++    if (sPlayerbotAIConfig.AutoAvoidAoe && facade->HasGameClientMaster())
++        engine->addStrategy("avoid aoe", false);
++
++    engine->addStrategy("formation", false);
++
++    AddClassCombatStrategies(player, facade, engine);
++
++    if (sRandomPlayerbotMgr.IsRandomBot(player))
++        engine->ChangeStrategy(sPlayerbotAIConfig.RandomBotCombatStrategies);
++    else
++        engine->ChangeStrategy(sPlayerbotAIConfig.CombatStrategies);
++
++    // Battleground switch
++    if (player->InBattleground() && player->GetBattleground())
++    {
++        BattlegroundTypeId bgType = player->GetBattlegroundTypeId();
++        if (bgType == BATTLEGROUND_RB)
++            bgType = player->GetBattleground()->GetBgTypeID(true);
++
++        if (bgType == BATTLEGROUND_WS)
++            engine->addStrategy("warsong", false);
++
++        if (bgType == BATTLEGROUND_AB)
++            engine->addStrategy("arathi", false);
++
++        if (bgType == BATTLEGROUND_AV)
++            engine->addStrategy("alterac", false);
++
++        if (bgType == BATTLEGROUND_EY)
++            engine->addStrategy("eye", false);
++
++        if (bgType == BATTLEGROUND_IC)
++            engine->addStrategy("isle", false);
++
++        if (player->InArena())
++        {
++            engine->addStrategy("arena", false);
++            engine->addStrategiesNoInit("boost", "racials", "chat", "default", "aoe", "cast time", "dps assist", nullptr);
++        }
++        else
++            engine->addStrategiesNoInit("boost", "racials", "chat", "default", "aoe", "potions", "cast time", "dps assist", nullptr);
++
++        engine->removeStrategy("custom::say", false);
++        engine->removeStrategy("threat", false);
++        engine->addStrategy("boost", false);
++    }
++}
++
++Engine* AiFactory::createCombatEngine(Player* player, PlayerbotAI* const facade, AiObjectContext* aiObjectContext)
++{
++    Engine* engine = new Engine(facade, aiObjectContext);
++    AddDefaultCombatStrategies(player, facade, engine);
++    engine->Init();
++    return engine;
++}
++
++void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const facade, Engine* nonCombatEngine)
++{
++    AddClassNonCombatStrategies(player, facade, nonCombatEngine);
++
+     if (!player->InBattleground())
+     {
+         nonCombatEngine->addStrategiesNoInit("nc", "food", "chat", "follow", "default", "force rebuff", "quest", "loot",
+                                             "gather", "duel", "pvp", "buff", "mount", "emote", nullptr);
+     }
+ 
+-    if (sPlayerbotAIConfig.AutoSaveMana && PlayerbotAI::IsHeal(player, true))
+-        nonCombatEngine->addStrategy("save mana", false);
+-
+     if ((sRandomPlayerbotMgr.IsRandomBot(player)) && !player->InBattleground())
+     {
+         Player* master = facade->GetMaster();
+diff --git a/src/Bot/Factory/AiFactory.h b/src/Bot/Factory/AiFactory.h
+index 23a8a98..5b682ca 100644
+--- a/src/Bot/Factory/AiFactory.h
++++ b/src/Bot/Factory/AiFactory.h
+@@ -9,6 +9,7 @@
+ 
+ #include "Common.h"
+ #include <map>
++#include <vector>
+ 
+ class AiObjectContext;
+ class Engine;
+@@ -31,6 +32,15 @@ public:
+     static void AddDefaultCombatStrategies(Player* player, PlayerbotAI* const facade, Engine* engine);
+     static void AddDefaultReactionStrategies(Player* player, PlayerbotAI* const facade, ReactionEngine* reactionEngine);
+ 
++    static std::vector<std::string> GetCombatProfiles(uint8 cls);
++    static std::string GetCombatProfile(Player* player);
++    static std::string GetEffectiveCombatProfile(Player* player);
++    static bool SetCombatProfile(Player* player, std::string const& mode);
++    static bool IsFeralTank(Player* player);
++    static void AddClassCombatStrategies(Player* player, PlayerbotAI* facade, Engine* engine);
++    static void AddClassNonCombatStrategies(Player* player, PlayerbotAI* facade, Engine* engine);
++    static void RefreshCombatStrategies(Player* player, PlayerbotAI* facade, Engine* combat, Engine* nonCombat);
++
+     static uint8 GetPlayerSpecTab(Player* player);
+     static std::map<uint8, uint32> GetPlayerSpecTabs(Player* player);
+     static BotRoles GetPlayerRoles(Player* player);
+diff --git a/src/Bot/Factory/PlayerbotFactory.cpp b/src/Bot/Factory/PlayerbotFactory.cpp
+index 481f3c7..c7752e9 100644
+--- a/src/Bot/Factory/PlayerbotFactory.cpp
++++ b/src/Bot/Factory/PlayerbotFactory.cpp
+@@ -109,7 +109,6 @@ std::vector<uint32> PlayerbotFactory::ccBreakTrinketCache;
+ 
+ namespace
+ {
+-constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
+ constexpr uint32 SPELL_OWLKIN_FRENZY = 48393;
+ constexpr uint32 SPELL_PRIMAL_TENACITY = 33957;
+ constexpr uint32 SPELL_IMPROVED_BARKSKIN = 63411;
+@@ -1738,7 +1737,7 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
+         /// @todo: fix cat druid hardcode
+         if (bot->getClass() == CLASS_DRUID && specTab == DRUID_TAB_FERAL && bot->GetLevel() >= 20)
+         {
+-            bool isCat = !bot->HasAura(EraKnown(bot, SPELL_DRUID_THICK_HIDE));
++            bool isCat = !AiFactory::IsFeralTank(bot);
+             if (!isCat && bot->GetLevel() == 20)
+             {
+                 uint32 bearP = sPlayerbotAIConfig.RandomClassSpecProb[cls][1];
+@@ -4847,8 +4846,8 @@ void PlayerbotFactory::InitGlyphs(bool increment)
+     // Druid PvE/PvP exceptions
+     if (bot->getClass() == CLASS_DRUID)
+     {
+-        // Cat PvE (spec index 3): If the bot is Feral spec, level 20 or higher, and does NOT have the Thick Hide talent
+-        if (tab == DRUID_TAB_FERAL && bot->GetLevel() >= 20 && !bot->HasAura(SPELL_DRUID_THICK_HIDE))
++        // Cat PvE follows the same role choice as its combat and equipment profile.
++        if (tab == DRUID_TAB_FERAL && bot->GetLevel() >= 20 && !AiFactory::IsFeralTank(bot))
+             tab = 3;
+         // Balance PvP (spec index 4): If the bot has the Owlkin Frenzy talent
+         else if (bot->HasAura(SPELL_OWLKIN_FRENZY))
+diff --git a/src/Bot/PlayerbotAI.cpp b/src/Bot/PlayerbotAI.cpp
+index dfcdd7c..32ee754 100644
+--- a/src/Bot/PlayerbotAI.cpp
++++ b/src/Bot/PlayerbotAI.cpp
+@@ -485,6 +485,14 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
+         bot->GetSession()->IsLoggingOut() || bot->IsDuringRemoveFromWorld())
+         return;
+ 
++    if (combatProfileCheckDelay > elapsed)
++        combatProfileCheckDelay -= elapsed;
++    else
++    {
++        combatProfileCheckDelay = 5000;
++        RefreshCombatProfile();
++    }
++
+     // Bots send no movement opcodes, so m_lastFallZ stays frozen and Player::IsFalling() (a Z test
+     // against it) blocks LFG teleports. Unit::IsFalling() is the flag test, so real falls keep theirs.
+     if (!bot->Unit::IsFalling())
+@@ -2243,8 +2251,30 @@ Strategy* PlayerbotAI::GetStrategy(std::string const name, BotState type)
+     return engines[type] ? engines[type]->GetStrategy(name) : nullptr;
+ }
+ 
++void PlayerbotAI::RefreshCombatProfile(bool force)
++{
++    if (!bot || !aiObjectContext || !bot->IsInWorld() || bot->IsInCombat() || !bot->IsAlive() ||
++        bot->IsBeingTeleported() || !engines[BOT_STATE_COMBAT] || !engines[BOT_STATE_NON_COMBAT])
++        return;
++    std::string effective = AiFactory::GetEffectiveCombatProfile(bot);
++    if (effective.empty())
++        return;
++    std::ostringstream signature;
++    signature << AiFactory::GetCombatProfile(bot) << ':' << effective << ':' << uint32(bot->GetLevel())
++              << ':' << uint32(bot->GetActiveSpec()) << ':' << bot->GetMapId() << ':' << bool(bot->GetGroup())
++              << ':' << bot->GetSpellMap().size();
++    std::string key = signature.str();
++    bool dirty = combatProfileDirty.exchange(false, std::memory_order_relaxed);
++    if (!force && !dirty && key == combatProfileKey)
++        return;
++    AiFactory::RefreshCombatStrategies(bot, this, engines[BOT_STATE_COMBAT], engines[BOT_STATE_NON_COMBAT]);
++    combatProfileKey = key;
++    DoSpecificAction("equip upgrade", Event(), true);
++}
++
+ void PlayerbotAI::ResetStrategies(bool /*load*/)
+ {
++    InvalidateCombatProfile();
+     for (uint8 i = 0; i < BOT_STATE_MAX; i++)
+         engines[i]->removeAllStrategies();
+ 
+@@ -2659,9 +2689,7 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
+             }
+             break;
+         case CLASS_DRUID:
+-            if (tab == DRUID_TAB_FERAL && (player->GetShapeshiftForm() == FORM_BEAR ||
+-                                           player->GetShapeshiftForm() == FORM_DIREBEAR ||
+-                                           player->HasAura(EraTalentBots_ResolveSpellId(player, 16931))))
++            if (tab == DRUID_TAB_FERAL && AiFactory::IsFeralTank(player))
+             {
+                 return true;
+             }
+diff --git a/src/Bot/PlayerbotAI.h b/src/Bot/PlayerbotAI.h
+index 921a931..bd363c9 100644
+--- a/src/Bot/PlayerbotAI.h
++++ b/src/Bot/PlayerbotAI.h
+@@ -442,6 +442,8 @@ public:
+     bool HasStrategy(std::string const name, BotState type);
+     BotState GetState() { return currentState; };
+     void ResetStrategies(bool load = false);
++    void RefreshCombatProfile(bool force = false);
++    void InvalidateCombatProfile() { combatProfileDirty.store(true, std::memory_order_relaxed); }
+     void ReInitCurrentEngine();
+     void Reset(bool full = false);
+     void LeaveOrDisbandGroup();
+@@ -653,6 +655,9 @@ public:
+     void AddTimedEvent(std::function<void()> callback, uint32 delayMs);
+ 
+ private:
++    std::atomic_bool combatProfileDirty = true;
++    std::string combatProfileKey;
++    uint32 combatProfileCheckDelay = 0;
+     std::map<uint16, std::string> _masterTaxiPacketHandlers;
+     std::optional<WorldPacket> _pendingMasterTaxiPacket;
+     std::mutex _masterTaxiPacketMutex;

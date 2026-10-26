@@ -68,6 +68,12 @@ pass.
   Twin Emperors target priority and dungeon navigation/loot/recovery in-game.
   Natural progression must still refuse floor-rescue teleports and unpaid
   Rocknot quest progress. Native fixtures do not start a realm or WoW client.
+- [ ] Validate [combat profiles and equipment](combat-profiles.md) on a live
+  client: automatic specialization changes, manual profiles for every class,
+  relog/reset persistence, preserved travel and loot settings, and owned bag
+  equipment changes, including protection weapon/shield and feral cat/bear.
+  Check combat refusals, inventory-space failures, controlled altbots and
+  SelfBots. Verify random-bot builds while leveling across both historical eras.
 - [ ] Verify startup data repairs on a fresh world database and an existing
   installation: historical priest rank chains, AQ event dragon menus, the
   retired Mirelow pool and the native Submerge Visual binding. Confirm the

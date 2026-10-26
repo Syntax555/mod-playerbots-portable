@@ -40,6 +40,7 @@ GAMEPLAY = (
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestZygorProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestDragonUIEraTalents", "TestEraTrainerBook", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestMultiBotVendorPurchases", "TestMultiBotSpellbook", "TestMultiBotSpellbookDisplay", "TestFormationMovement",
+    "TestCombatProfiles", "TestCombatProfileEquipment", "TestCombatProfileBridge", "TestMultiBotCombatProfiles",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
     "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",

@@ -35,6 +35,10 @@ database, configuration and first-run setup.
   Finder and Talent Advisor follow each character's tier. These addons are
   published by their
   [forks](docs/addons.md#addon-forks), each with its own Latest download.
+- **Bot combat profiles:** MultiBot offers automatic talent detection and manual
+  specialization choices. Class strategies, role support and equipment scoring
+  follow the same profile; bots equip suitable gear from their own bags. See
+  [combat profiles and equipment](docs/combat-profiles.md).
 - **Autonomous dungeon parties:** nearby random bots form five-member groups for
   audited normal dungeons in their own era and walk to the entrance. See
   [routes and requirements](docs/bot-dungeons.md#autonomous-parties).
@@ -240,6 +244,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | **Players** | |
 | [Progression](docs/changing-expansions.md) | Content milestones, expansion modes and realm migration. |
 | [EraTalents](docs/era-talents.md) | Client installation, training, talents and compatibility. |
+| [Combat profiles](docs/combat-profiles.md) | Automatic or manual bot specializations, class support and owned equipment. |
 | [Class quests](docs/class-quests.md) | Historical priest quest rewards, race gates and paid training. |
 | [Client addons](docs/addons.md) | MultiBot, DragonUI, the addon forks, curated upstream addons and Lua diagnostics. |
 | [Questie bot progress](docs/questie-playerbots.md) | Server-controlled group bot quest counters, installation and validation. |

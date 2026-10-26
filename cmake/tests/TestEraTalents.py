@@ -745,6 +745,7 @@ struct Player {
 struct EraTalentNode {
     uint32 id=0; uint8 eraId=0, classId=1, tab=1, maxRank=0;
     uint32 prereqTalentId=0; uint8 prereqPoints=0; std::vector<uint32> rankSpell;
+    uint8 tierRow=0, col=0;
 };
 struct Content {
     std::map<uint32,EraTalentNode> nodes;
@@ -839,6 +840,77 @@ int main() {
     compile_run(directory, 'era-learning', learn_fixture)
 
     bot_source = (src / 'EraTalentBots.cpp').read_text()
+    # Execute the shipped orders with the real purchase gates at every earned level.
+    authored_table = re.search(
+        r'(?ms)^    const std::map<std::tuple<uint8, uint8, int>, std::vector<uint32>> kAuthoredOrders = \{.*?^    \};',
+        bot_source).group()
+    authored_nodes = []
+    for file in sorted((module / 'client-addon/EraTalents/data/generated').glob('*.lua')):
+        text = file.read_text()
+        era, cls = re.search(r'EraTalentsData\[(\d+)\]\[(\d+)\] =', text).groups()
+        for node, tab, tier, column, maximum, pre, row_points in re.findall(
+                r'\{ id=(\d+), tab=(\d+), tier=(\d+), col=(\d+),[^\n]*?maxRank=(\d+), '
+                r'prereqTalent=(\d+), prereqPoints=(\d+)', text):
+            authored_nodes.append(
+                f' {{ auto node=Node({node},{cls},{era},{tab},{maximum}); '
+                f'node.prereqTalentId={pre}; node.prereqPoints={row_points}; '
+                f'node.tierRow={tier}; node.col={column}; '
+                f'authored[{{{era},{cls}}}].push_back(node); }}')
+    assert len(authored_nodes) > 900
+    authored_fixture = (learn_fixture[:learn_fixture.index('int main() {')]
+                        + '#include <array>\n#include <tuple>\n'
+                        + 'constexpr uint8 CLASS_WARRIOR=1, CLASS_PALADIN=2, CLASS_HUNTER=3, CLASS_ROGUE=4, '
+                          'CLASS_PRIEST=5, CLASS_SHAMAN=7, CLASS_MAGE=8, CLASS_WARLOCK=9, CLASS_DRUID=11;\n'
+                        + '#define LOG_WARN(...) ((void)0)\n'
+                        + 'namespace EraTalents { struct BotBuildScope { BotBuildScope(Player*,EraId) {} }; }\n'
+                        + authored_table + '\n' + function(bot_source, '    void LearnToMax(') + '\n'
+                        + function(bot_source, '    void SpendBuild(') + r'''
+int main() {
+    std::map<std::pair<uint8,uint8>,std::vector<EraTalentNode>> authored;
+''' + '\n'.join(authored_nodes) + r'''
+    assert(authored.size()==18 && kAuthoredOrders.size()==56);
+    for (auto const& [key,order] : kAuthoredOrders) {
+        EraId era=EraId(std::get<0>(key)); uint8 cls=std::get<1>(key); int spec=std::get<2>(key);
+        Fresh(); Player p; p.cls=cls; p.era=p.stored=era;
+        for (auto const& node : authored.at({uint8(era),cls})) content.nodes[node.id]=node;
+        int cap=era==ERA_VANILLA ? 51 : 61;
+        for (int budget=0;budget<=cap;++budget) {
+            p.level=uint8(budget+9);
+            SpendBuild(&p,era,spec);
+            assert(EraTalents::SpentPoints(&p,era)==budget && p.learns==budget);
+            assert(p.money==123456 && p.xp==987 && p.gear==17);
+            std::map<uint32,uint8> expected; int remaining=budget;
+            for (uint32 node : order) {
+                int rank=std::min(remaining,int(content.nodes.at(node).maxRank));
+                if (rank) expected[node]=uint8(rank);
+                remaining-=rank;
+            }
+            assert(remaining==0 && EraTalents::ranks==expected);
+            std::array<int,3> points{};
+            for (auto const& [node,rank] : EraTalents::ranks) points[content.nodes.at(node).tab-1]+=rank;
+            int primary=spec==3 ? 1 : spec;
+            for (int value : points) assert(points[primary]>=value);
+            if (cls==CLASS_DRUID && era==ERA_TBC && (spec==1 || spec==3) && budget==61)
+                assert((points==std::array<int,3>{0,44,17}));
+            if (cls==CLASS_PRIEST && era==ERA_TBC && spec==2) {
+                if (budget==31) assert(EraTalents::CurrentRank(&p,era,20560)==1);
+                if (budget==41) assert(EraTalents::CurrentRank(&p,era,20563)==1);
+            }
+        }
+        auto complete=EraTalents::ranks;
+        EraTalents::ranks.clear();
+        Player fresh; fresh.cls=cls; fresh.era=fresh.stored=era; fresh.level=uint8(cap+9);
+        SpendBuild(&fresh,era,spec);
+        assert(EraTalents::ranks==complete && fresh.learns==cap);
+    }
+    std::cout << "Authored era builds: all 56 orders match real TryLearn at every earned point budget, feral PvE builds and Shadow keystone timing passed\n";
+}
+''')
+    compile_run(directory, 'era-authored-builds', authored_fixture)
+    mutation = authored_fixture.replace('while (EraTalents::TryLearn(bot, talentId, err))',
+                                        'if (EraTalents::TryLearn(bot, talentId, err))')
+    assert mutation != authored_fixture
+    rejects(directory, 'era-authored-builds-mutated', mutation, 'authored nodes learn only one rank')
     playerbots = core / 'modules/mod-playerbots/src'
     selfbot_command = (playerbots / 'Bot/PlayerbotMgr.cpp').read_text()
     # The SelfBot double below mirrors the command: the human's own AI is its master.
@@ -952,6 +1024,9 @@ struct PlayerbotFactory {
 namespace EraTalentBots {
 EraId BotEra(Player* p) { return p->era; }
 EraId EraFor(Player* p) { return p->era; }
+}
+''' + function(bot_source, 'int EraTalentBots_FeralSpec(') + r'''
+namespace EraTalentBots {
 ''' + factory_code + '\n' + bot_login_code + '\n' + bot_level_code + r'''
 }
 int main() {
@@ -984,7 +1059,10 @@ int main() {
     assert(pending.spent==61 && pending.lastSpec==1);
 
     Player druid; druid.cls=CLASS_DRUID; druid.level=20; druid.spent=5; druid.tabs[1]=5; druid.cat=true;
+    sPlayerbotAIConfig.RandomClassSpecProb[CLASS_DRUID][3]=100;
+    assert(EraTalentBots_FeralSpec(&druid)==3);
     assert(EraTalentBots::FactoryReconcile(&druid,0));
+    sPlayerbotAIConfig.RandomClassSpecProb[CLASS_DRUID][3]=0;
     assert(druid.lastSpec==3 && druid.spent==11);
     Player dk; dk.cls=6; dk.level=55;
     assert(!EraTalentBots::FactoryReconcile(&dk,0) && dk.spent==0);
@@ -1015,6 +1093,9 @@ int main() {
         assert(IsBot(&alt) && EraTalentBots::FactoryReconcile(&alt,0)==(era!=ERA_WOTLK));
         EraTalentBots::OnBotLevelChanged(&alt); EraTalentBots::OnBotLogin(&alt);
         assert(alt.spent==0 && alt.builds==0 && alt.nativeBuilds==0 && alt.nativeSpent==10 && alt.reconciles>0);
+        alt.cls=CLASS_DRUID;
+        while (SeedSpecTab(&alt)!=1) ++alt.guid;
+        assert(EraTalentBots_FeralSpec(&alt)==-1);
     }
 
     // Fresh builds follow the configured PvE spec mix, and a GUID always seeds the same spec.
@@ -1039,9 +1120,11 @@ int main() {
     for (feral.level=10; feral.level<=14; ++feral.level) {
         EraTalentBots::OnBotLevelChanged(&feral); assert(feral.lastSpec==3);
     }
-    feral.cat=true; feral.level=20; EraTalentBots::OnBotLevelChanged(&feral);
-    assert(feral.lastSpec==3 && feral.spent==11);
+    feral.cat=true; feral.bear=true; feral.level=20; EraTalentBots::OnBotLevelChanged(&feral);
+    assert(feral.lastSpec==3 && feral.spent==11 && EraTalentBots_FeralSpec(&feral)==3);
     Player bear=feral; bear.cat=false; bear.bear=true; bear.lastSpec=-1;
+    while (SeedSpecTab(&bear)!=1) ++bear.guid;
+    assert(EraTalentBots_FeralSpec(&bear)==1);
     assert(EraTalentBots::FactoryReconcile(&bear,3) && bear.lastSpec==-1); // no new points: no rebuild
     bear.level=25; assert(EraTalentBots::FactoryReconcile(&bear,3) && bear.lastSpec==1); // an existing bear stays bear
     feral.era=feral.stored=ERA_TBC; feral.spent=0; feral.tabs={}; feral.cat=false; feral.level=70;
@@ -1057,7 +1140,8 @@ int main() {
             ('altbot native points spent', 'if (SpendsOwnPoints(bot))', 'if (bot)'),
             ('fresh builds ignore the spec mix', 'FactoryReconcile(bot, SeedSpecTab(bot));',
              'FactoryReconcile(bot, int(bot->GetGUID().GetCounter() % 3));'),
-            ('seeded cat druids rebuilt as bears', ' || SeedSpecTab(bot) == 3', ''))):
+            ('seeded cat druids rebuilt as bears', 'if (EraTalentBots_FeralSpec(bot) == 3)', 'if (false)'),
+            ('altbot treated as seeded random feral', ' || !SpendsOwnPoints(bot)', ''))):
         mutated = bot_fixture.replace(old, new)
         if mutated == bot_fixture:
             raise SystemExit(f'{label} mutation was not applied')

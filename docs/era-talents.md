@@ -126,8 +126,9 @@ button to open its Vanilla or TBC tree. Click a talent to buy one rank with that
 bot's unspent points; the displayed ranks and remaining points update from the
 server's reply. The bot must be under your control, in your group and within
 normal inspect range. Other characters' trees remain read-only.
-After choosing a different specialization, select its combat strategy in
-MultiBot so the bot's rotation matches the build.
+With automatic [combat profiles](combat-profiles.md), a different specialization
+refreshes the bot's class strategies and equipment preferences outside combat.
+MultiBot also allows an explicit profile without spending the bot's talent points.
 
 Historical trainer spells require ordinary paid purchases with gold, level and
 prerequisite checks. Talent and class-quest spells require their earned sources.
