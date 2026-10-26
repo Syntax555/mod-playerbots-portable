@@ -12,7 +12,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Component | Source repository | Locked revision | Role |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) | `3f2969ddb0da` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots with Raid Clear | [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) | `d490f896d905` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
+| Playerbots with Raid Clear | [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) | `80f2afa04543` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `4933d455d2f6` | Earned content milestones and expansion access |
 | Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `fcb680fb279c` | Autonomous earned-era parties and player-led clears without event shortcuts |
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `c3955915c76d` | Scoped party sharing of naturally dropped quest items |
@@ -21,10 +21,10 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `2615e82902cf` | Always included access guards for optional Dungeon Finder use |
 | MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `ebfa01a129dd` | Server support for the MultiBot controls |
 | MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), fork of [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) at `80148dff3f3a` | `5b0276851632` | Client bot controls and combat-profile selection |
-| Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `d695e9048e6d` | `776a0da07946` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
-| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `9087c457e20f` | `8c10beb35fc2` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
-| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `82a6c52c93ad` | `34c820d523f1` | Shared talent renderer for historical player and bot trees, plus spellbook catalogue integration |
-| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `e804e85d1964` | Historical server trees, authored random-bot builds and client addon |
+| Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `d695e9048e6d` | `3553f0ec8090` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
+| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `9087c457e20f` | `84787533d8a1` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
+| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `cde60f02cffc4` | `ac2d10d3431f` | Shared talent renderer for historical player and bot trees, plus spellbook catalogue integration |
+| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `a88ef30407c1` | Historical server trees, authored random-bot builds and client addon |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
 | CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
 | CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records and 2.4.3 quest experience values |
@@ -79,6 +79,10 @@ The Playerbots pin contains `5dc162f3` (safe item lifetimes), `45112ef7`
 (addon messages do not command bots) and `c9398d16` (RPG quest-giver search
 skips despawned quest givers). The regression fixture checks all four fixes
 against the prepared sources.
+
+Surplus Soul Shard disposal consumes one shard through the core's item-count
+handler and preserves the remainder of a stack. The regression fixture checks
+backpack and bag stacks while leaving other items and bank contents untouched.
 
 Core and Playerbots use the matching asynchronous module-database API. The
 core's auth migration converts existing numeric account locales to language
@@ -170,7 +174,7 @@ MultiBot Bridge are checked as a compatible pair. New bridge
 endpoints, such as pet creation, glyph application and maintenance, must
 preserve natural progression.
 
-The Playerbots pin `d490f896` reads `Playerbots.*` configuration names.
+The Playerbots pin `80f2afa0` reads `Playerbots.*` configuration names.
 Profiles and launcher settings use that prefix. Normal startup migrates legacy
 `AiPlayerbot.*` values and their managed baselines before merging profile
 updates; existing `Playerbots.*` values take precedence. See

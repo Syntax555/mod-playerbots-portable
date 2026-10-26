@@ -26,7 +26,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
-      "revision": "d490f896d905900d62f1621c923132bd3bdd1075",
+      "revision": "80f2afa04543871245d22ee0a314e78e29f2feb0",
       "patches": [
         "patches/mod-playerbots-natural-progression.patch",
         "patches/mod-playerbots-earned-auctions.patch",
@@ -119,7 +119,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "e804e85d19649977eb56e0ace5fb1b53c6d3dfa5",
+      "revision": "a88ef30407c152f2d2209fd4bc49b22cebdee369",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -138,7 +138,8 @@
         "mod-era-talents-glyph-page": "8b1bbc7cdf12bcd1ae561fc0ed2d0ab64a26b8a5",
         "mod-era-talents-bot-spellbook": "264554b352d8c1cbb5754896bea24378521ce51f",
         "mod-era-talents-dragonui-view": "23734cd212972cb88a0e2316202ea5012cff1655",
-        "mod-era-talents-combat-profiles": "e804e85d19649977eb56e0ace5fb1b53c6d3dfa5"
+        "mod-era-talents-combat-profiles": "e804e85d19649977eb56e0ace5fb1b53c6d3dfa5",
+        "mod-era-talents-dragonui-colors": "a88ef30407c152f2d2209fd4bc49b22cebdee369"
       }
     }
   ],
@@ -228,10 +229,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "34c820d523f1f8f2972bfe417ced3825ddcb51e1",
+      "revision": "ac2d10d3431f77028c2309dc9c74272eacbe7879",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "82a6c52c93ad5eae8eda520c14204f9db72e868e"
+        "revision": "cde60f02cffc4576cfcbc620c104dd3aee685285"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -243,7 +244,7 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "776a0da0794690189842e65aa227926bd841c587",
+      "revision": "3553f0ec8090ffa34b6414201f99ccff0ada1873",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
         "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87"
@@ -258,7 +259,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "8c10beb35fc25ccff6e34d2efce6a94e90169540",
+      "revision": "84787533d8a16b7c5cd063b84ac1ceb28361fd34",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718"
@@ -267,7 +268,8 @@
       "interface": 30300,
       "toc": "ZygorGuidesViewerRM.toc",
       "forkChanges": {
-        "zygor-individual-progression": "1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea"
+        "zygor-individual-progression": "1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea",
+        "zygor-incremental-gearfinder": "84787533d8a16b7c5cd063b84ac1ceb28361fd34"
       }
     }
   ]

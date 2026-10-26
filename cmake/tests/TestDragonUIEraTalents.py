@@ -206,10 +206,14 @@ StaticPopupDialogs={}
 GetCVarBool=function(name) return GetCVar(name)=="1" end
 GetNumTalentTabs=function(_,pet) return pet and 1 or 3 end
 GetNumTalents=function() return 1 end
-GetTalentInfo=function(tab,index,inspect,pet) return "Native talent","native-icon",pet and 6 or 11,2,0,1,false,true,0,true end
-GetTalentTabInfo=function(tab) return "Native "..tab,nil,0,"NativeBackground",0 end
+local nativeRank,nativeMaxRank,nativePoints,nativeSpent,nativeTier=0,1,4,0,11
+GetTalentInfo=function(tab,index,inspect,pet)
+  local rank=tab==1 and nativeRank or 0
+  return "Native talent","native-icon",pet and 6 or nativeTier,2,rank,nativeMaxRank,false,true,rank,true
+end
+GetTalentTabInfo=function(tab) return "Native "..tab,nil,tab==1 and nativeSpent or 0,"NativeBackground",0 end
 GetTalentPrereqs=function() end
-GetUnspentTalentPoints=function() return 4 end
+GetUnspentTalentPoints=function() return nativePoints end
 GetGroupPreviewTalentPointsSpent=function() return 0 end
 local nativeLearns=0
 LearnPreviewTalents=function() nativeLearns=nativeLearns+1 end
@@ -325,6 +329,15 @@ assert(win and TM.applied,"DragonUI applies on login")
 reply("GEN a1b2c3d4"); reply("SYNC 2 0 0")
 press("N")
 assert(win:IsShown() and not panel() and not painted.external and ns.depth==11,"native Wrath keeps the native DragonUI tree")
+playerLevel=11
+nativeRank,nativeMaxRank,nativePoints,nativeSpent,nativeTier=2,5,0,2,1
+ns.Refresh()
+local nativePartialNoPoints=painted.trees[1].talents[1].state
+assert(nativePartialNoPoints=="yellow","native learned partial ranks stay yellow without unspent points")
+playerLevel=15; nativePoints=4; ns.Refresh()
+local nativePartialLearnable=painted.trees[1].talents[1].state
+assert(nativePartialLearnable=="green","native learned partial ranks turn green when another rank can be learned")
+nativeRank,nativeMaxRank,nativePoints,nativeSpent,nativeTier=0,1,4,0,11
 reset()
 reply("SYNC 0 1 5 "..warrior..":1")
 for _,open in ipairs({function() press("N") end,function() TalentMicroButton:Click() end,
@@ -376,6 +389,7 @@ end
 ownClass="WARRIOR"; ET._classId=1
 reply("SYNC 0 1 5 "..warrior..":1"); ns.OpenTalents()
 local originalNode=assert(nodes()[warrior])
+assert(originalNode.state==nativePartialLearnable,"historical learnable partial ranks match the native green state")
 originalNode:Click()
 assert(sent[#sent]=="LEARN "..warrior and ET.state.ranks[warrior]==1,"own learning sends LEARN without optimistic rank changes")
 local beforeRight=#sent
@@ -430,7 +444,7 @@ ET._classId=1
 reply("SYNC 0 1 0 "..warrior..":2")
 local n=#sent; nodes()[warrior]:Click()
 assert(#sent==n,"zero available points cannot buy a rank")
-assert(nodes()[warrior].state=="green","learned partial ranks keep their color with zero unspent points")
+assert(nodes()[warrior].state==nativePartialNoPoints,"historical learned partial ranks match native yellow with zero unspent points")
 assert(nodes()[EraTalentsData[0][1].talents[2].id].state=="gray","empty unavailable talents stay gray")
 reply("SYNC 0 1 4 "..warrior..":"..EraTalentsData[0][1].talents[1].maxRank)
 n=#sent; nodes()[warrior]:Click()
@@ -488,14 +502,24 @@ assert(win:IsShown() and ns.inspectUnit=="party1" and not panel(),"bot opens the
 assert(nodeCount()==0,"bot waits without showing native ranks")
 reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":1")
 local botNode=assert(nodes()[warrior])
-assert(botNode.state=="green","read-only learned partial ranks retain their color")
+assert(botNode.state==nativePartialNoPoints,"read-only learned partial bot ranks match native yellow")
 local count=#sent
 botNode:Click()
 assert(#sent==count,"inspected player remains read-only before IEDIT")
+reply("IEDIT "..units.party1.." 0 5")
+assert(nodes()[warrior].state==nativePartialNoPoints,"read-only bot ranks stay yellow even with known unspent points")
+assert(nodes()[EraTalentsData[0][1].talents[2].id].state=="gray","read-only empty bot talents stay gray")
+reply("IEDIT "..units.party1.." 1 0")
+assert(nodes()[warrior].state==nativePartialNoPoints,"controlled bot ranks stay yellow without unspent points")
+nodes()[warrior]:Click()
+assert(#sent==count,"controlled bot without points cannot buy another rank")
 reply("IEDIT "..units.party1.." 1 5")
-botNode=nodes()[warrior]; botNode:Click()
+botNode=nodes()[warrior]
+assert(botNode.state==nativePartialLearnable,"authorized bot partial ranks match native green while spendable")
+botNode:Click()
 assert(sent[#sent]=="ILEARN "..units.party1.." "..warrior,"controlled altbot spends through ILEARN")
 assert(ET.inspect.cache[units.party1].ranks[warrior]==1,"bot ranks remain authoritative")
+assert(nodes()[warrior].state==nativePartialNoPoints,"consumed bot permission restores the native yellow state")
 count=#sent; botNode:Click()
 assert(#sent==count,"permission is consumed until a fresh server reply")
 reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":2")
@@ -607,8 +631,13 @@ def main() -> None:
             (addon / 'TalentUI.lua', 'if ET.state.clientGen ~= ET.state.serverGen then', 'if false then'),
             (addon / 'TalentUI.lua', 'if not byId[id] or rank < 0 or rank > byId[id].maxRank then',
              'if not byId[id] or rank < 0 then'),
-            (addon / 'DragonUI.lua', 'if rank == 0 and reachable and (view.available < 1 or view.readOnly) then',
-             'if rank < node.maxRank and (view.available < 1 or view.readOnly) then'),
+            (addon / 'DragonUI.lua', 'if reachable and (view.available < 1 or view.readOnly) then',
+             'if rank == 0 and reachable and (view.available < 1 or view.readOnly) then'),
+            (addon / 'DragonUI.lua', 'view.available < 1 or view.readOnly', 'view.readOnly'),
+            (addon / 'DragonUI.lua', 'view.available < 1 or view.readOnly', 'view.available < 1'),
+            (addon / 'DragonUI.lua', 'rank > 0 and "yellow" or "gray"', '"gray"'),
+            (addon / 'DragonUI.lua', 'or reachable and "green" or "locked"',
+             'or reachable and "yellow" or "locked"'),
             (addon / 'DragonUI.lua', '      if button ~= "LeftButton" then return end\n', ''),
             (addon / 'DragonUI.lua', '      if not ET.IsReachable(talent, fresh.trees[talent.tab].points, fresh.state.ranks, fresh.byId) then return end\n', ''),
             (dragon_addon / 'modules/talents/build_editor.lua', '    if ns.Call("ExternalTalents", true) then return end\n', ''),
@@ -625,14 +654,26 @@ def main() -> None:
             path.write_text(original.replace(before, after, 1))
             run(addon, chunks, directory, enabled=True, expect_failure=True)
             path.write_text(original)
+        color_patch = fork_change('mod-era-talents', 'mod-era-talents-dragonui-colors',
+                                  paths=('client-addon/EraTalents/DragonUI.lua',))
+        print('Checking reverted historical talent colors', flush=True)
+        git_apply(era, color_patch, '--reverse')
+        run(addon, chunks, directory, enabled=True, expect_failure=True)
+        git_apply(era, color_patch)
+        run(addon, chunks, directory, enabled=True)
         for component, change, path in (
                 ('mod-era-talents', 'mod-era-talents-dragonui-view', era),
                 ('DragonUI', 'dragonui-era-talents', dragon)):
+            # Revert the later adapter edit before undoing its original integration.
+            if component == 'mod-era-talents':
+                git_apply(era, color_patch, '--reverse')
             patch = fork_change(component, change, paths=('client-addon/',) if component == 'mod-era-talents' else ())
             print(f'Checking reverted {change}', flush=True)
             git_apply(path, patch, '--reverse')
             run(addon, dragon_chunks(dragon_addon, args.multibot_source), directory, enabled=True, expect_failure=True)
             git_apply(path, patch)
+            if component == 'mod-era-talents':
+                git_apply(era, color_patch)
         print('Removed integration, glyph and bot-authority guards all fail the regression fixture')
 
 

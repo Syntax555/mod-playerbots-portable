@@ -81,6 +81,8 @@ enabled:
   `/talents` open the historical trees inside DragonUI's talent window, with
   its talent nodes, prerequisite connections and search. Vanilla uses seven
   rows and TBC nine; ranks, remaining points and learning use EraTalents data.
+  Learned partial ranks are gold when no point can be spent; reachable talents
+  remain green while the owner can buy another rank.
 - DragonUI keeps the pet tree (`/pettalents` opens it) and characters on
   native Wrath trees. Its glyph page opens once the character has earned
   Wrath; before that the glyph key, the glyph tab and using a glyph show a

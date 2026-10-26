@@ -18,6 +18,8 @@ import tempfile
 
 from FixtureSupport import (
     REPOSITORY,
+    fork_change,
+    git_apply,
     in_parallel,
     prepared_core,
     run_fixture,
@@ -298,6 +300,32 @@ def upstream_suite(lua, addon, tools_root):
             if result.returncode:
                 raise AssertionError(f'{test.relative_to(directory)}: {result.stdout}{result.stderr}')
         print(f'Upstream Zygor regression suite passed: {len(tests)} tests', flush=True)
+        # Keep the new tests while removing the production change they verify.
+        changed = ('IndividualProgression.lua', 'Item-GearFinder.lua', 'ZygorQuestLootDB.lua')
+        patch = fork_change('ZygorGuidesViewerRM', 'zygor-incremental-gearfinder',
+                            paths=tuple('ZygorGuidesViewerRM/' + name for name in changed))
+        work = Path(directory) / 'reverted'
+        candidate = work / 'ZygorGuidesViewerRM'
+        candidate.mkdir(parents=True)
+        for name in changed:
+            shutil.copyfile(addon / name, candidate / name)
+        git_apply(work, patch, '--reverse')
+        regressions = ('test_incremental_scan.lua', 'test_quest_cache.lua', 'test_progression_refresh.lua')
+        for name in regressions:
+            test = Path(directory) / 'tools/gearfinder' / name
+            result = run_fixture([lua, str(test), str(candidate)], name, cwd=directory)
+            if result.returncode == 0 or "in function 'assert'" not in result.stderr:
+                raise AssertionError(f'Reverting incremental Gear Finder did not fail {name}:\n'
+                                     + result.stdout + result.stderr)
+        git_apply(work, patch)
+        for name in regressions:
+            test = Path(directory) / 'tools/gearfinder' / name
+            result = run_fixture([lua, str(test), str(candidate)], name, cwd=directory)
+            if result.returncode:
+                raise AssertionError(f'Reapplying incremental Gear Finder failed {name}:\n'
+                                     + result.stdout + result.stderr)
+        print('Incremental Gear Finder fork change fails all three regressions when reverted and passes when reapplied',
+              flush=True)
 
 
 def main():

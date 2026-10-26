@@ -88,7 +88,8 @@ or unknown; locked and unknown content is never presented as available.
   The stat weights follow the character's talents: for an EraTalents
   character, the most-spent tab of its Vanilla or TBC tree. Before Wrath,
   without EraTalents data, the class's leveling build applies and can be
-  chosen in the gear options.
+  chosen in the gear options. The finder opens while its gear scan continues
+  in the background; progression changes invalidate stale results.
 - **Best-in-slot lists.** The Wrath lists apply from tier 13; tier 13 opens T7
   and each later tier the next list. Earlier eras get no annotation.
 - **Talent Advisor.** The bundled advisor knows only the native Wrath trees.

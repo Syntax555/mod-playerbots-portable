@@ -32,8 +32,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--module-source', type=Path,
                     default=prepared_core(repo) / 'modules/mod-era-talents')
 parser.add_argument('--core-source', type=Path, default=prepared_core(repo))
+parser.add_argument('--dragon-source', type=Path,
+                    default=repo / '.module-cache/prepared-source-addons/DragonUI')
 args = parser.parse_args()
-DRAGONUI = repo / '.module-cache/prepared-source-addons/DragonUI'
+DRAGONUI = args.dragon_source
 MULTIBOT = repo / '.module-cache/prepared-addons/MultiBot'
 module, core = args.module_source, args.core_source
 training = (module / 'src/EraTrainerBook.cpp').read_text()
@@ -441,6 +443,9 @@ CreateFrame = function()
   return frame
 end
 local sent, known = {}, {}
+local companions = { MOUNT = {}, CRITTER = {} }
+GetNumCompanions = function(kind) return #companions[kind] end
+GetCompanionInfo = function(kind, index) return 0, "Companion", companions[kind][index], "icon", false end
 SendAddonMessage = function(prefix, message, channel, target)
   assert(prefix == "ERATAL" and channel == "WHISPER" and target == "Master")
   table.insert(sent, message)
@@ -566,6 +571,34 @@ assert(grey[5242] == nil and grey[900002].tree == 3, "later ranks follow their f
 known[12294] = true
 assert(cards()[21551] == nil, "a known talent shows its rank on the talent's own card")
 
+-- The client moves learned class mounts to the companion book, outside IsSpellKnown.
+local function mountOffered()
+  local filters = { trainer = Book.TrainerIndex("PALADIN"), level = 60, raceBit = Book.RaceBit("Human") }
+  for _, entries in pairs(Book.UnlearnedByTree(filters)) do
+    for _, entry in ipairs(entries) do if entry.spellID == 13819 then return true end end
+  end
+  return false
+end
+assert(mountOffered(), "an unlearned Warhorse stays in the native trainer catalog")
+companions.MOUNT = { 13819 }
+assert(not IsSpellKnown(13819) and not mountOffered(), "a learned class mount is not offered again")
+companions.MOUNT = {}
+
+-- Highest-rank slots retain separate Polymorph forms; only numeric ranks join a rank menu.
+local slots = { {118, "Rang 1"}, {28272, "Schwein"}, {12824, "Rang 2"}, {28271, "Schildkröte"} }
+GetSpellTabInfo = function() return "Arkan", "icon", 0, 4, 0, 3 end
+GetKnownSlotFromHighestRankSlot = function(slot) return ({ 2, 3, 4 })[slot] end
+GetSpellName = function(slot) return "Verwandlung", slots[slot][2] end
+GetSpellTexture = function() return "icon" end
+GetSpellLink = function(slot) return "|Hspell:" .. slots[slot][1] .. "|h[Verwandlung]|h" end
+IsPassiveSpell = function() return false end
+local variants = Book.ReadTab(1, false)
+assert(#variants == 3 and variants[1].spellID == 28272 and variants[3].spellID == 28271,
+  "highest-rank slots keep independent Polymorph variants")
+assert(not variants[1].lower and not variants[3].lower, "Polymorph variants do not borrow sheep ranks")
+assert(#variants[2].lower == 1 and variants[2].lower[1].spellID == 118,
+  "numeric rank menus omit interleaved Polymorph variants")
+
 -- Another character's book and partial chunks never touch the player's own table.
 deliver("bot")
 assert(Book.TrainerIndex("WARRIOR") == own and rebuilt == 1, "a bot's book stays the bot's")
@@ -605,6 +638,60 @@ assert(unlocks(30, 30)[900030] == "spell" and unlocks(64, 64)[23920] == nil, "cl
 assert(unlocks(20, 20)[33388] == nil and unlocks(40, 40)[33388] == "feature" and unlocks(60, 60)[33391] == "feature",
   "riding levels come from the realm's riding trainers")
 print("EraTalents trainer book: DragonUI level-up notice follows the era and the realm's riding")
+
+-- Clique binds the player's native cards, without touching the separate bot-book renderer.
+local nativeSlots = assert(io.open(dragonDir .. "/modules/spellbook/book_slots.lua")):read("*a")
+assert(nativeSlots:find("card.entry = entry", 1, true), "native card entry contract")
+local made = {}
+local widgetMethods = {}
+for _, key in ipairs({ "SetAllPoints", "ClearAllPoints", "SetPoint", "RegisterForClicks", "EnableMouseWheel", "EnableKeyboard",
+                        "SetFrameLevel", "SetFrameStrata" }) do widgetMethods[key] = function() end end
+local function widget(parent)
+  local frame = { parent = parent, scripts = {}, shown = true }
+  function frame:GetParent() return self.parent end
+  function frame:IsVisible() return self.shown and 1 or nil end
+  function frame:Show() self.shown = true end
+  function frame:Hide() self.shown = false end
+  function frame:SetScript(key, callback) self.scripts[key] = callback end
+  function frame:HookScript(key, callback) self.scripts[key] = callback end
+  return setmetatable(frame, { __index = widgetMethods })
+end
+CreateFrame = function(_, _, parent) local frame = widget(parent); made[#made + 1] = frame; return frame end
+hooksecurefunc = function(owner, key, callback)
+  local original = assert(owner[key])
+  owner[key] = function(...) original(...); callback(...) end
+end
+local bindings, repainted = {}, 0
+Clique = { AddBinding = function(_, binding) bindings[#bindings + 1] = binding end,
+           GetCapturedKey = function(_, key) return key == "LeftButton" and "BUTTON1" end }
+CliqueConfig = widget()
+CliqueConfig.page1 = widget(CliqueConfig)
+CliqueConfig.bindAlert = widget(CliqueConfig)
+SpellButton1 = widget()
+SpellButton1.shown = false
+CliqueConfig.UpdateList = function() repainted = repainted + 1 end
+local cliqueBook = { root = widget(), IsOpen = function() return true end, Level = function() return 6 end,
+                    PaintCard = function(card, entry) card.entry = entry end, ApplyScale = function() end }
+addon.SpellbookModule = cliqueBook
+assert(loadfile(dragonDir .. "/modules/spellbook/book_clique.lua"))("DragonUI", addon)
+cliqueBook.InstallClique()
+local card = widget()
+cliqueBook.PaintCard(card, { name = "Lesser Heal", sub = "Rank 1", icon = "heal", spellID = 2050 })
+local bindingOverlay = made[#made]
+assert(bindingOverlay:GetParent() == card and bindingOverlay.shown, "Clique overlays the player's native card")
+bindingOverlay.scripts.OnClick(bindingOverlay, "LeftButton")
+assert(#bindings == 1 and bindings[1].spell == "Lesser Heal" and bindings[1].spellSubName == "Rank 1"
+  and bindings[1].key == "BUTTON1" and repainted == 1, "Clique receives the native spell and rank")
+card.entry.grey = true
+bindingOverlay.scripts.OnClick(bindingOverlay, "LeftButton")
+assert(#bindings == 1, "Clique cannot bind an unlearned trainer card")
+card.entry.grey, card.entry.passive = false, true
+bindingOverlay.scripts.OnClick(bindingOverlay, "LeftButton")
+assert(#bindings == 1, "Clique cannot bind a passive card")
+CliqueConfig.page1.shown = false
+CliqueConfig.page1.scripts.OnHide(CliqueConfig.page1)
+assert(not bindingOverlay.shown, "closing Clique's binding page removes its interception overlay")
+print("DragonUI Clique: native card hooks, binding data and inactive-card guards passed")
 '''
 
 BOT_FIXTURE = r'''
@@ -1048,6 +1135,30 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
     if outcome.returncode:
         raise SystemExit(outcome.stdout + outcome.stderr)
     print(outcome.stdout, end='')
+    dragon_source = DRAGONUI
+    for index, (label, filename, old, new) in enumerate((
+            ('learned class mount', 'book_catalog.lua',
+             'IsSpellKnown(spellID) or knownCompanion(spellID, filters)', 'IsSpellKnown(spellID)'),
+            ('variant owns no numeric ranks', 'book_catalog.lua',
+             '    if not isRankText(entry.sub) then return end\n', ''),
+            ('rank menu excludes variants', 'book_catalog.lua',
+             '        if isRankText(rank) then', '        if true then'),
+            ('Clique unlearned and passive cards', 'book_clique.lua',
+             'return entry ~= nil and not entry.grey and not entry.passive', 'return entry ~= nil'))):
+        dragon_copy = directory / f'dragon-catalog-{index}'
+        for part in ('modules/spellbook', 'modules/levelupenhance'):
+            shutil.copytree(DRAGONUI / part, dragon_copy / part)
+        path = dragon_copy / 'modules/spellbook' / filename
+        text = path.read_text()
+        if text.count(old) != 1:
+            raise SystemExit(f'{label} catalog mutation was not applied')
+        path.write_text(text.replace(old, new, 1))
+        DRAGONUI = dragon_copy
+        mutated = run_client(directory, client, packets)
+        DRAGONUI = dragon_source
+        if mutated.returncode == 0 or not re.search(r'client\.lua:\d+: ', mutated.stderr):
+            raise SystemExit(f'The native DragonUI catalog fixture did not reject {label}:\n{mutated.stderr}')
+        print(f'DragonUI catalog mutation rejected: {label}')
     for index, (label, file, old, new) in enumerate(CLIENT_MUTATIONS):
         copy = directory / f'client-{index}'
         shutil.copytree(client, copy)
