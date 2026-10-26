@@ -61,14 +61,14 @@ diff, so add a new change there together with its fixture, and update a commit
 that is amended or replaced. Then prepare the sources and run the fixtures as
 below.
 
-Compile each changed C++ file against `.module-cache/prepared-core`, then run
-the fixtures and the other checks the change touches, as the
-[build guide](docs/building.md#integration-checks) lists them:
-
-```bash
-python3 cmake/tests/run_fixtures.py check
-python3 cmake/tests/run_fixtures.py gameplay
-```
+Before committing, run targeted local checks for the changed files and their
+affected callers, configuration and integrations, as the
+[build guide](docs/building.md#integration-checks) describes. Compile each changed
+C++ file against `.module-cache/prepared-core` and run only the relevant
+`cmake/tests/Test*.py` fixtures directly. Run
+`python3 cmake/tests/run_fixtures.py check` when fixture or CI wiring changes.
+The complete suite runs separately in GitHub Actions on code pushes and before
+manual builds; do not repeat the full suite or unrelated checks locally.
 
 New fixtures go into `GAMEPLAY` in `cmake/tests/run_fixtures.py`, or into the
 checks workflow when they need its build outputs.

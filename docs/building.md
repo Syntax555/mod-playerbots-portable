@@ -131,44 +131,32 @@ The checks run on Linux and require Go, Python with PyYAML 6.0.3, GCC with
 AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1,
 Ruff 0.17.1 and actionlint 1.7.11. The gameplay fixtures execute selected native
 handlers with controlled adapters; a complete server build and live realm tests
-remain necessary for platform and encounter validation. These commands repeat the
-checks workflow's launcher, packaging and native gameplay checks:
+remain necessary for platform and encounter validation.
 
-```bash
-gofmt -l cmd
-go test ./...
-go vet ./...
-GOOS=windows GOARCH=amd64 go test -c -o /dev/null ./cmd/startup
-GOOS=windows GOARCH=amd64 go vet ./...
-go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
-staticcheck ./...
-GOOS=windows GOARCH=amd64 staticcheck ./...
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
-actionlint
-python3 cmake/tests/run_fixtures.py check
-ruff check cmake scripts
-pwsh cmake/tests/TestPortableZip.ps1
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-pwsh cmake/tests/TestDependencyLicenses.ps1
-python3 cmake/tests/TestEraClientPackaging.py
-python3 cmake/tests/TestClientAddonPatches.py
-python3 cmake/tests/TestClientLocales.py
-cmake -P cmake/PrepareModules.cmake
-python3 cmake/tests/run_fixtures.py gameplay
-```
+Before committing, select local checks from the changed files and their affected
+callers, configuration and integrations. Run the relevant fixtures directly,
+rather than the complete suite or unrelated checks. For patch and dependency
+updates, prepare the sources with `cmake -P cmake/PrepareModules.cmake` and compile
+each changed C++ file against `.module-cache/prepared-core` before its fixtures.
+For example, a combat-profile change uses
+`python3 cmake/tests/TestCombatProfiles.py`; a documentation-only change uses
+`python3 cmake/tests/TestDocumentation.py`.
 
-`python3 cmake/tests/run_fixtures.py check` fails when a fixture in
-`cmake/tests` does not run in CI. The gameplay run also checks the
-documentation's links, anchors and stated versions. The MultiBot Lua and
-packaged-client fixtures run in the client job, as the checks workflow names
-them. Fixtures refuse to run under `python -O`, which would skip their assert
-checks.
+| Changed area | Targeted local checks |
+| --- | --- |
+| Go launcher | Format changed files; run tests, vet and staticcheck for affected packages, including Windows checks where affected. |
+| Patches and module pins | Compile changed C++ files against the prepared sources and run the relevant native and integration fixtures. |
+| Addon forks | Check changed Lua files and affected addon behavior, then run the relevant server integration fixtures against the new pin. |
+| Packaging and release | Run affected Python test modules and PowerShell fixtures, Ruff for changed Python files and actionlint for workflow changes. |
+| Documentation | Run `python3 cmake/tests/TestDocumentation.py` for links, anchors and stated versions. |
+| Fixture or CI wiring | Run `python3 cmake/tests/run_fixtures.py check`. |
 
-The native suite runs in four disjoint CI jobs, with per-fixture timings.
-`gameplay` without options still runs the complete suite locally. To repeat one
-CI job, use `python3 cmake/tests/run_fixtures.py gameplay --shard-index 0
---shard-count 4`, replacing `0` with the job's zero-based index. The wiring check
-also verifies that the workflow matrix covers every shard exactly once.
+GitHub Actions runs the complete checks separately on code pushes and before a
+manual build. The native suite runs in four disjoint CI jobs, with per-fixture
+timings; the MultiBot Lua and packaged-client fixtures run in the client job.
+The wiring check fails when a fixture does not run in CI or the workflow matrix
+does not cover every gameplay shard exactly once. Fixtures refuse to run under
+`python -O`, which would skip their assert checks.
 
 The checks workflow also verifies historical spell mechanics in the generated
 MPQ, client locales, dependency notices, package inventories and update

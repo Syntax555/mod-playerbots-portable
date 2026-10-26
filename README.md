@@ -275,6 +275,12 @@ or propose a change; the
 lists what a report needs and how to change pinned sources. Addon changes are
 made in the [addon forks](docs/addons.md#addon-forks).
 
+Before committing, run targeted local checks for the changed files and their
+affected callers, configuration and integrations. The complete test suite runs
+separately in GitHub Actions on code pushes and before a manual build; it does
+not need to be repeated locally. See the
+[local check guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md#integration-checks).
+
 ## License and credits
 
 The portable project was originally created by **Onur Aslan** as

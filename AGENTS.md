@@ -64,20 +64,24 @@ Sources, licenses and update instructions are in
 
 ## Verifying a change
 
-Run what applies before every commit; all of it must pass:
+Before every commit, run targeted local checks for the changed files and their
+affected callers, configuration and integrations. All selected checks must pass.
+Do not run unrelated checks or the complete suite locally; GitHub Actions runs
+the full checks separately on code pushes and before manual builds.
 
-- Go launcher: `gofmt -l cmd`, `go vet ./...`, `GOOS=windows go vet ./...`,
-  `go test ./...`, `GOOS=windows go test -c -o /dev/null ./cmd/startup` and
-  staticcheck for both systems, as in `.github/workflows/checks.yml`.
-- Patches: `cmake -P cmake/PrepareModules.cmake`, then compile every changed
-  C++ file against the prepared sources, then
-  `python3 cmake/tests/run_fixtures.py check` and
-  `python3 cmake/tests/run_fixtures.py gameplay`.
-- Fork changes: the fork's own checks and its Latest workflow, then the
-  server fixtures against the newly pinned commit.
-- Packaging and release: `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`,
-  the PowerShell checks in `cmake/tests`, `ruff check cmake scripts` and
-  actionlint for workflow edits.
+- Go launcher: format the changed Go files and run the affected package's tests,
+  vet and staticcheck. Include the Windows checks when the change affects it.
+- Patches and dependency updates: `cmake -P cmake/PrepareModules.cmake`, compile
+  each changed C++ file against the prepared sources, then run the relevant
+  `cmake/tests/Test*.py` fixtures directly.
+- Fork changes: check changed Lua files and affected fork behavior, then run the
+  relevant server fixtures against the newly pinned commit. The fork's full
+  checks and Latest workflow run in GitHub Actions.
+- Packaging and release: run only the affected Python test modules and
+  PowerShell fixtures. Run Ruff on changed Python files and actionlint for
+  workflow changes.
+- Documentation: `python3 cmake/tests/TestDocumentation.py`.
+- Fixture or CI wiring: `python3 cmake/tests/run_fixtures.py check`.
 
 State honestly what could not be run (for example the Windows build) and
 leave it to CI rather than claiming it works.
