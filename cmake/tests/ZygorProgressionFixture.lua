@@ -834,7 +834,8 @@ local function readEra(path)
 	return text
 end
 EraTalents = nil
-for _, path in ipairs({"Locales.lua", "Comms.lua", "TalentUI.lua", "data/generated/MageVanilla.lua"}) do
+for _, path in ipairs({"Locales.lua", "Comms.lua", "TalentUI.lua", "data/generated/MageVanilla.lua",
+	"data/generated/DruidVanilla.lua", "data/generated/DruidTBC.lua"}) do
 	compile(readEra(path), path)()
 end
 local ET = EraTalents
@@ -847,14 +848,21 @@ for _, node in ipairs(EraTalentsData[0][8].talents) do
 end
 check(fire and EraTalentsData[0][8].className == "MAGE", "the generated Vanilla Mage tree has a five-rank Fire talent")
 
-local nativeSpent, nativeFree = 0, 0
+local nativeSpent, nativeFree, nativeTab, nativeHideRank = 0, 0, 1, 0
 function GetNumTalentTabs() return 3 end
-function GetTalentTabInfo(tab) return "Tree", "", tab == 1 and nativeSpent or 0 end
+function GetTalentTabInfo(tab) return "Tree", "", tab == nativeTab and nativeSpent or 0 end
 function UnitCharacterPoints() return nativeFree end
 function GetActiveTalentGroup() return 1 end
 compile(section("Item-ItemScore.lua", "ItemScore.LevelingBuildFallback = {", "function ItemScore:GetGearRoleBuild"),
 	"Item-ItemScore.lua", scoreEnv)()
-ZGV.ItemScore.rules = {MAGE = {[1] = {}, [2] = {}, [3] = {}}}
+run("Data-WOTLK/Item-Statweights.lua", scoreEnv)
+-- Wrath's return contract: tier is third, allocated rank is fifth. Talent identity comes from links.
+function GetNumTalents() return 30 end
+function GetTalentLink(_, index) return "|Htalent:" .. (index == 7 and 794 or index == 11 and 801 or (1000 + index)) .. ":0|h" end
+function GetTalentInfo(_, index, inspect, pet, group)
+	check(not inspect and not pet and group == 1, "native role reads the active player's talent group")
+	return "Localized talent", "icon", 2, 3, index == 7 and nativeHideRank or (index == 11 and 2 or 0), 3
+end
 function ZGV.ItemScore:IsKnownWeightClass(token) return self.rules[token] ~= nil end
 local function talentState() return ZGV.ItemScore:GetTalentState("MAGE", 15) end
 
@@ -878,6 +886,42 @@ nativeSpent = 7
 check(talentState().totalPoints == 7 and not talentState().uncertain, "native points keep the native build")
 nativeSpent = 0
 
+-- Druid rules split Feral into two gear profiles; the third talent tab is Restoration, profile four.
+local druidBuilds = ZGV.ItemScore.rules.DRUID
+check(druidBuilds[2].name == "Feral DPS" and druidBuilds[3].name == "Feral TANK"
+	and druidBuilds[4].name == "Restoration", "Druid gear profiles have a separate tank entry")
+local druidTank, druidCat
+for era = 0, 1 do
+	local nodes = {}
+	for _, node in ipairs(EraTalentsData[era][11].talents) do nodes[node.name] = node end
+	local hide, ferocity, aggression, resto = nodes["Thick Hide"], nodes["Ferocity"], nodes["Feral Aggression"], nodes["Improved Mark of the Wild"]
+	check(hide and hide.tab == 2 and hide.maxRank >= 2 and ferocity.maxRank == 5 and aggression.maxRank == 5
+		and resto.tab == 3, "generated Druid talents keep canonical English names next to localized metadata")
+	druidTank = "SYNC " .. era .. " 1 3 " .. ferocity.id .. ":5," .. hide.id .. ":2"
+	druidCat = "SYNC " .. era .. " 1 3 " .. ferocity.id .. ":5," .. aggression.id .. ":2"
+	ET.ParseSync(ET.state, druidTank)
+	check(ZGV.ItemScore:DetectActiveBuild("DRUID", 60) == 3, "historical Thick Hide selects the tank heuristic")
+	ET.ParseSync(ET.state, druidCat)
+	check(ZGV.ItemScore:DetectActiveBuild("DRUID", 60) == 2, "historical Feral without Thick Hide selects DPS")
+	ET.ParseSync(ET.state, "SYNC " .. era .. " 1 3 " .. resto.id .. ":2")
+	check(ZGV.ItemScore:DetectActiveBuild("DRUID", 60) == 4, "historical Restoration selects healing weights")
+end
+ET.ParseSync(ET.state, "SYNC 2 0 0")
+nativeSpent, nativeTab, nativeHideRank = 7, 2, 0
+check(ZGV.ItemScore:DetectActiveBuild("DRUID", 80) == 2, "a tier or Primal Fury rank is not Thick Hide")
+nativeHideRank = 2
+check(ZGV.ItemScore:DetectActiveBuild("DRUID", 80) == 3, "native Thick Hide is found by talent identity and fifth rank return")
+nativeTab = 3
+check(ZGV.ItemScore:DetectActiveBuild("DRUID", 80) == 4, "native Restoration selects healing weights")
+nativeSpent = 0
+GetPrimaryTalentTree = function() return 3 end
+check(ZGV.ItemScore:DetectActiveBuild("DRUID", 80) == 4, "native primary-tree fallback keeps Restoration healing weights")
+GetPrimaryTalentTree, nativeSpent = nil, 7
+local nativeLink = GetTalentLink
+GetTalentLink, nativeTab = nil, 2
+check(ZGV.ItemScore:DetectActiveBuild("DRUID", 80) == 2, "a missing native talent link keeps a conservative Feral baseline")
+GetTalentLink, nativeSpent, nativeTab = nativeLink, 0, 1
+
 -- Historical points arrive without native talent events; a changed SYNC rescores gear once.
 local refreshes = 0
 ZGV.ItemScore.Initialised, ZGV.ItemScore.playerclass = true, "MAGE"
@@ -890,6 +934,14 @@ ET.OnAddonMsg(ET.PREFIX, "SYNC 0 1 3 " .. fire.id .. ":5")
 check(refreshes == 1, "an unchanged SYNC does not restart the Gear Finder")
 ET.OnAddonMsg(ET.PREFIX, "SYNC 0 1 2 " .. fire.id .. ":6")
 check(refreshes == 2, "spending a historical point rescores gear")
+ZGV.ItemScore.playerclass = "DRUID"
+ET.OnAddonMsg(ET.PREFIX, druidTank)
+local beforeRoleChange = refreshes
+ET.OnAddonMsg(ET.PREFIX, druidCat)
+check(refreshes == beforeRoleChange + 1, "a historical role change rescores even with identical tab totals and free points")
+ET.OnAddonMsg(ET.PREFIX, druidCat)
+check(refreshes == beforeRoleChange + 1, "an unchanged historical role does not rescore")
+ZGV.ItemScore.playerclass = "MAGE"
 ZGV.ItemScore.DelayedRefreshUserData, ZGV.ItemScore.Initialised = delayedRefresh, nil
 ET.ParseSync(ET.state, "SYNC 0 0 0")
 

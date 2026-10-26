@@ -261,7 +261,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "84787533d8a16b7c5cd063b84ac1ceb28361fd34",
+      "revision": "258ee399fffc38307b760faf899e1a3bef6a1dff",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718"
@@ -271,7 +271,8 @@
       "toc": "ZygorGuidesViewerRM.toc",
       "forkChanges": {
         "zygor-individual-progression": "1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea",
-        "zygor-incremental-gearfinder": "84787533d8a16b7c5cd063b84ac1ceb28361fd34"
+        "zygor-incremental-gearfinder": "84787533d8a16b7c5cd063b84ac1ceb28361fd34",
+        "zygor-druid-gear-profiles": "258ee399fffc38307b760faf899e1a3bef6a1dff"
       }
     }
   ]

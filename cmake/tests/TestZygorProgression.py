@@ -32,7 +32,7 @@ FIXTURE = Path(__file__).with_name('ZygorProgressionFixture.lua')
 FILES = (
     'IndividualProgression.lua', 'Parser.lua', 'Step.lua', 'Goal.lua', 'ZygorGuidesViewer.lua',
     'QuestAutoAccept.lua', 'Dungeons.lua', 'Data-WOTLK/Dungeons.lua', 'Item-GearFinder.lua',
-    'Item-ItemScore.lua', 'ZygorTalentAdvisor/ZygorTalentAdvisor.lua', 'TalentAdvisorCompat.lua', 'Options.lua',
+    'Item-ItemScore.lua', 'Data-WOTLK/Item-Statweights.lua', 'ZygorTalentAdvisor/ZygorTalentAdvisor.lua', 'TalentAdvisorCompat.lua', 'Options.lua',
 )
 MODULE = 'IndividualProgression.lua'
 TOOLS = '.module-cache/client-addon-ZygorGuidesViewerRM'
@@ -58,6 +58,8 @@ def enum_values(header, prefix=''):
 def contracts(addon, core):
     """Tie the module's tables to the sources that decide the same rules."""
     module = (addon / MODULE).read_text()
+    native_talents = (addon / 'ZygorTalentAdvisor/Registering.lua').read_text().split('["DRUID"]={', 1)[1]
+    assert '["Thick Hide"]=794,' in native_talents.split('},', 1)[0]
     ip = core / 'modules/mod-individual-progression/src'
     header = (ip / 'IndividualProgression.h').read_text()
     player = (ip / 'IndividualProgressionPlayer.cpp').read_text()
@@ -270,7 +272,15 @@ def mutations():
         ('status text', m, 'lines[#lines + 1] = L.next:format(s.next, self:MilestoneText(s.next))', ''),
         ('German text', m, '\t\tstatus_level = "Erfahrung endet bei Level %d bis zur Stufe der nächsten Erweiterung.",\n', ''),
         ('historical talent points', 'Item-ItemScore.lua',
-         'if ZGV.IP then eraPoints, eraTotal, eraAvailable = ZGV.IP:EraTalentPoints(classToken) end', ''),
+         'if ZGV.IP then eraPoints, eraTotal, eraAvailable, eraFeralRank = ZGV.IP:EraTalentPoints(classToken) end', ''),
+        ('Druid restoration profile', 'Item-ItemScore.lua', 'and pointsTree == 3 then return 4, false end',
+         'and pointsTree == 3 then return 3, false end'),
+        ('Druid primary-tree restoration', 'Item-ItemScore.lua', 'and tree == 3 then return 4, false end',
+         'and tree == 3 then return 3, false end'),
+        ('native talent rank return', 'Item-ItemScore.lua', 'select(5, GetTalentInfo(2, index,', 'select(3, GetTalentInfo(2, index,'),
+        ('native talent identity', 'Item-ItemScore.lua', 'link:match("talent:(%d+)") == "794"', 'index == 11'),
+        ('historical feral rank', m, '(state.ranks and state.ranks[node.id]) or 0', '0'),
+        ('historical role rescore', m, '.. "/" .. (feralRank or "")', ''),
         ('historical native trees', 'Item-ItemScore.lua', 'elseif ZGV.IP and ZGV.IP:NativeTalentsHistorical() then',
          'elseif false then'),
         ('wing instance names', m, 'self.INSTANCES[wing and wing.instancename or ""]', 'nil'),

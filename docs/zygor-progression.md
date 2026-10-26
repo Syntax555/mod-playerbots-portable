@@ -88,7 +88,11 @@ or unknown; locked and unknown content is never presented as available.
   The stat weights follow the character's talents: for an EraTalents
   character, the most-spent tab of its Vanilla or TBC tree. Before Wrath,
   without EraTalents data, the class's leveling build applies and can be
-  chosen in the gear options. The finder opens while its gear scan continues
+  chosen in the gear options. Druid Restoration uses healing weights; Feral
+  uses Thick Hide ranks as a tank/DPS heuristic. Hybrid Feral builds can select
+  `/zygortank` or `/zygordps`; `/zygorrole auto` restores automatic selection.
+  These are the viewer's Wrath stat-priority weights, not historically optimized
+  Vanilla or TBC simulations. The finder opens while its gear scan continues
   in the background; progression changes invalidate stale results.
 - **Best-in-slot lists.** The Wrath lists apply from tier 13; tier 13 opens T7
   and each later tier the next list. Earlier eras get no annotation.
@@ -112,7 +116,7 @@ Text is available in English and German.
 | Guide browser | Level, class and chain suggestions | Later-tier guides suggested | Same | Suggestions filtered, reason shown | Filtered | Unchanged | Fixture | Manual selection stays possible |
 | Dungeons and raids | Level and attunement | Locked raids shown as current | `IP_ACCESS` | Future or unknown source | Not current | Unchanged | Fixture | Locks and group rules not reported |
 | Gear Finder phases | All Wrath phases on 3.3.5a | Later raid tiers | `IP_STATE` | Phase per tier 13–17 | Inactive | Unchanged | Fixture | Wrath phases only |
-| Gear Finder weights | Spec from native talent points, retried while empty | Endless rescans for historical trees | EraTalents, `IP_STATE` | Historical tab points | Native retry | Unchanged | Fixture | Feral tank check uses native talents |
+| Gear Finder weights | Spec from native talent points, retried while empty | Endless rescans for historical trees | EraTalents, `IP_STATE` | Historical tab points | Native retry | Unchanged | Fixture | Cat/bear heuristic; Wrath stat weights |
 | Vendors and crafting | Expansion filters | Later-era currency and recipes | `IP_STATE` | Era gate, known or trainer recipes | Not current | Unchanged | Fixture | Recipe drops not verified |
 | Best-in-slot | Wrath phase lists | Later raid lists as current | `IP_STATE` | Rank from tier | No annotation | Unchanged | Fixture | Wrath lists only |
 | Talent Advisor | Wraps `LearnTalent`, Wrath builds | Wrong trees, automatic spending | `IP_STATE`, EraTalents | Inactive outside Wrath | Inactive | Unchanged | Fixture | Wrath builds only |
