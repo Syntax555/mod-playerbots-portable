@@ -119,7 +119,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "a88ef30407c152f2d2209fd4bc49b22cebdee369",
+      "revision": "5d4b03d46ebf54118f33f1f01f89bdf4082327c1",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -139,7 +139,8 @@
         "mod-era-talents-bot-spellbook": "264554b352d8c1cbb5754896bea24378521ce51f",
         "mod-era-talents-dragonui-view": "23734cd212972cb88a0e2316202ea5012cff1655",
         "mod-era-talents-combat-profiles": "e804e85d19649977eb56e0ace5fb1b53c6d3dfa5",
-        "mod-era-talents-dragonui-colors": "a88ef30407c152f2d2209fd4bc49b22cebdee369"
+        "mod-era-talents-dragonui-colors": "a88ef30407c152f2d2209fd4bc49b22cebdee369",
+        "mod-era-talents-bot-book-native-helpers": "5d4b03d46ebf54118f33f1f01f89bdf4082327c1"
       }
     }
   ],

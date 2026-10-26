@@ -695,7 +695,7 @@ print("DragonUI Clique: native card hooks, binding data and inactive-card guards
 '''
 
 BOT_FIXTURE = r'''
-local multibotDir, eraDir, packets, withDragon, dragonDir = ...
+local multibotDir, eraDir, packets, withDragon, dragonDir, withoutInk = ...
 -- Widgets: a recording object whose scripts run like the client's.
 local methods = {}
 local function Object(name, kind)
@@ -720,6 +720,9 @@ function methods:Hide()
 end
 function methods:IsShown() return self.shown end
 function methods:SetText(text) self.text = text end
+function methods:SetFont(path, size) self.font, self.fontSize = path, size end
+function methods:GetFont() return "fixture-font" end
+function methods:SetTextColor(...) self.textColor = { ... } end
 function methods:GetText() return self.text end
 function methods:SetFormattedText(format, ...) self.text = string.format(format, ...) end
 function methods:SetTexture(path) self.texture = path end
@@ -765,6 +768,9 @@ end
 UIParent = Object("UIParent")
 UIParent.width, UIParent.height = 1920, 1080
 UISpecialFrames = {}
+for _, name in ipairs({ "GameFontHighlightLarge", "GameFontNormalSmall", "GameFontNormalHuge" }) do
+  _G[name] = Object(name, "Font")
+end
 GENERAL = "Allgemein"
 SEARCH = "Suchen"
 PlaySound = function() end
@@ -809,12 +815,14 @@ MultiBot.TimerAfter = function() end
 MultiBot.toUnit = function(name) return name == "Botty" and "party1" or nil end
 MultiBot.SpellToMacro = function(name, spell, icon) table.insert(macros, { name, spell, icon }) end
 MultiBot.ActionToTarget = function(action, name) table.insert(actions, { action, name }) end
-local disabled = 0
-local unitButton = { setDisable = function() disabled = disabled + 1 end }
+local disabled, pressed = 0, false
+local unitButton = { setDisable = function() disabled = disabled + 1; pressed = false end,
+                     setEnable = function() pressed = true end }
 MultiBot.frames = { MultiBar = { frames = { Units = { frames = { Botty = { getButton = function(name)
   assert(name == "Spellbook")
   return unitButton
 end } } } } } }
+local nativeHideSync = assert(loadstring(NATIVE_HIDE_SYNC))()
 SPELLBOOK = "Zauberbuch"
 local overlay = { buttons = {}, texts = {} }
 for _, key in ipairs({ "<", ">" }) do overlay.buttons[key] = Object() end
@@ -833,11 +841,14 @@ for _, key in ipairs({ "<", ">" }) do
 end
 overlay.setButton = function(key, texture) overlay.buttons[key].texture = texture end
 overlay.setText = function(key, text) overlay.texts[key] = overlay.texts[key] or Object(); overlay.texts[key].text = text end
-local multibotShown = 0
+local multibotShown, nativeVisible = 0, false
 MultiBot.spellbook = { spells = {}, index = 0, frames = { Overlay = overlay }, name = "",
-  Show = function(self) multibotShown = multibotShown + 1 end,
-  Hide = function(self) self.hidden = true end,
-  IsVisible = function() return false end,
+  Show = function(self) multibotShown = multibotShown + 1; nativeVisible = true end,
+  Hide = function(self)
+    self.hidden = true
+    if nativeVisible then nativeVisible = false; nativeHideSync() end
+  end,
+  IsVisible = function() return nativeVisible end,
   setTitle = function(self, title) self.title = title end }
 assert(loadfile(multibotDir .. "/UI/MultiBotSpell.lua"))()
 assert(loadstring(PAYLOAD_METHODS))()
@@ -859,9 +870,10 @@ if withDragon then
     end
     return result
   end }
-  for _, file in ipairs({ "book_layout.lua", "book_catalog.lua" }) do
+  for _, file in ipairs({ "book_layout.lua", "book_catalog.lua", "book_frame.lua", "book_slots.lua" }) do
     assert(loadfile(dragonDir .. "/modules/spellbook/" .. file))("DragonUI", addon)
   end
+  if withoutInk then addon.SpellbookModule.InkLabel = nil end
   addon.SpellbookModule.Config = function() return { scale = 0.8 } end
   addon.CharacterPanel = { ReskinTab = function(tab) tab.dragonSkin = true end }
   DragonUI = addon
@@ -888,7 +900,8 @@ local function collect(ids)
   book:finishPayload()
 end
 
-if not withDragon then
+if not withDragon or withoutInk then
+  assert(not MultiBot.spellbook._eraBotBook, "without DragonUI MultiBot's own window stays unhooked")
   local opened = pcall(collect, { 6673, 12294, 900002 })
   assert(opened and multibotShown == 1 and EraTalentsBotBookFrame == nil, "without DragonUI MultiBot keeps its own spellbook")
   print("EraTalents bot spellbook: MultiBot's own window without DragonUI")
@@ -897,7 +910,12 @@ end
 collect({ 6673, 12294, 900002 })
 local book = EraTalentsBotBookFrame
 local CLASS, GENERAL = 1, 2
-assert(multibotShown == 0 and book:IsShown(), "with DragonUI the bot's spellbook opens as a book")
+assert(multibotShown == 0 and book:IsShown() and pressed, "with DragonUI the bot's spellbook opens as a book")
+local empty = book.empty
+assert(empty.font == "fixture-font" and empty.fontSize == 16
+  and empty.textColor[1] == DragonUI.SpellbookModule.INK[1]
+  and empty.textColor[2] == DragonUI.SpellbookModule.INK[2]
+  and empty.textColor[3] == DragonUI.SpellbookModule.INK[3], "bot labels use DragonUI's own font helper and ink")
 assert(book.title.text == "Zauberbuch von Botty", "the book names the bot")
 assert(sent[#sent] == "BOOK 0x2", "the bot's trainer book is requested by its GUID")
 assert(book.tabs[GENERAL].text == "Allgemein" and book.tabs[CLASS].text == "Krieger",
@@ -1007,8 +1025,17 @@ book.next:Click()
 assert(book.pageText.text == "Seite 2/2" and #cards() == 17 and book.prev.enabled, "the pager turns to the next spread")
 book.mode:Click()
 assert(book.pageText.text == "Seite 2/3" and #cards() == 27, "single-page mode shows one page per spread")
+spellbookOn = false
+MultiBot.spellbook:Show()
+assert(multibotShown == 1 and nativeVisible and not book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
+  "after disabling DragonUI's spellbook MultiBot opens its own window and closes the bot book")
+spellbookOn = true
+MultiBot.spellbook:Show()
+assert(multibotShown == 1 and not nativeVisible and book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
+  "after enabling DragonUI's spellbook the bot book replaces MultiBot's open window")
 MultiBot.spellbook:Hide()
-assert(not book:IsShown() and disabled == 1, "MultiBot's hide closes the book and releases its button")
+assert(not book:IsShown() and not MultiBot.spellbook:IsVisible() and not pressed and disabled == 3,
+  "MultiBot's hide closes the book and releases its button")
 print("EraTalents bot spellbook: DragonUI's book with the bot's spells, trainer spells, search and MultiBot's actions")
 '''
 
@@ -1032,6 +1059,14 @@ MUTATIONS = [
 
 # (label, file, old, new, with DragonUI) in the bot spellbook.
 BOT_MUTATIONS = [
+    ('native helper required', 'BotBook.lua', '      or type(book.InkLabel) ~= "function"\n', '', 'missing-ink'),
+    ('native font helper', 'BotBook.lua', 'return DragonBook().InkLabel(parent, layer, fontObject, size)',
+     'return parent:CreateFontString(nil, layer, fontObject)', True),
+    ('runtime module preference', 'BotBook.lua', '    if not DragonBookOn() then\n', '    if false then\n', True),
+    ('fallback closes bot book', 'BotBook.lua', '      if frame then frame:Hide() end\n', '', True),
+    ('native window closes', 'BotBook.lua', '    if visible(self) then hide(self) end\n', '', True),
+    ('native handoff button', 'BotBook.lua', '      SetSpellbookButton(self.name, true)\n', '', True),
+    ('DragonUI handoff button', 'BotBook.lua', '  SetSpellbookButton(name, true)\n', '', True),
     ('DragonUI only', 'BotBook.lua', 'if type(spellbook) ~= "table" or not DragonBookOn() or', 'if type(spellbook) ~= "table" or', False),
     ('DragonUI spellbook on', 'BotBook.lua', 'or dragon:IsModuleEnabled("spellbook")', 'or true', True),
     ('bot book request', 'BotBook.lua', '  if guid then ET.RequestBook(guid) end\n', '', True),
@@ -1053,7 +1088,7 @@ BOT_MUTATIONS = [
     ('tabs above the paper', 'BotBook.lua', '"EraTalentsBotBookFrameTab" .. cat, holder,',
      '"EraTalentsBotBookFrameTab" .. cat, frame,', True),
     ('general tab first', 'BotBook.lua', 'local TAB_ORDER = { GENERAL, CLASS }', 'local TAB_ORDER = { CLASS, GENERAL }', True),
-    ('button release', 'BotBook.lua', '    if button and button.setDisable then button.setDisable() end\n', '', True),
+    ('button release', 'BotBook.lua', '    SetSpellbookButton(view.name, false)\n', '', True),
 ]
 
 # (label, file, old, new) in the EraTalents client.
@@ -1089,13 +1124,18 @@ def build(directory, name, source, warnings=('-Wall', '-Wextra', '-Werror')):
 def run_bot_client(directory, era_dir, packets, with_dragon):
     lua = shutil.which('lua5.1') or shutil.which('lua')
     frame = (MULTIBOT / 'UI/MultiBotSpellBookFrame.lua').read_text()
+    assert 'window.frame:HookScript("OnHide", syncSpellbookButtonStateOnHide)' in frame
     start = frame.index('\tMultiBot.spellbook.beginPayload = function(self, botName)')
     payload = frame[start:frame.index('\tfor i = 1, GetNumMacroIcons() do', start)]
+    hide_sync = frame[frame.index('local function getUnitsRootFrame()'):frame.index('local function createSpellbookContent(window)')]
     rows = ',\n'.join(f'{{{json.dumps(label)},{json.dumps(body)}}}' for label, body in packets)
     script = directory / 'bot-client.lua'
     script.write_text('local function fixture(...)\n' + BOT_FIXTURE.replace('assert(loadstring(PAYLOAD_METHODS))()', payload)
+                      .replace('local nativeHideSync = assert(loadstring(NATIVE_HIDE_SYNC))()',
+                               hide_sync + '\nlocal nativeHideSync = syncSpellbookButtonStateOnHide')
                       + '\nend\n' + f'fixture({json.dumps(str(MULTIBOT))}, {json.dumps(str(era_dir))}, {{{rows}}}, '
-                      + ('true' if with_dragon else 'false') + f', {json.dumps(str(DRAGONUI))})\n')
+                      + ('true' if with_dragon else 'false') + f', {json.dumps(str(DRAGONUI))}, '
+                      + ('true' if with_dragon == 'missing-ink' else 'false') + ')\n')
     return run_fixture([lua, str(script)], 'era trainer book bot client')
 
 
@@ -1173,7 +1213,7 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
             raise SystemExit(f'{label} mutant failed outside the fixture assertions:\n{mutated.stderr}')
         print(f'Era trainer book client mutation rejected: {label}')
 
-    for with_dragon in (True, False):
+    for with_dragon in (True, False, 'missing-ink'):
         outcome = run_bot_client(directory, client, packets, with_dragon)
         if outcome.returncode:
             raise SystemExit(outcome.stdout + outcome.stderr)
