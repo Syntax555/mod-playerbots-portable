@@ -139,7 +139,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | Era Talents | Historical Vanilla/TBC trees; native Wrath after earned access |
 | MultiBot Chatless and Bridge | Bot-control UI with natural-progression restrictions |
 | Quest Loot Party | Share naturally rolled normal-quality quest loot with eligible corpse looters |
-| World Buff Bots | Timed Vanilla events for eligible Vanilla-progress characters; native TBC events unchanged |
+| World Buff Bots | Disabled by default; optional timed Vanilla events with earned-era checks |
 | Era Events | Timed outdoor encounters at exact earned tiers 4, 6, 7 and 12; one real player required, no automatic victory payouts |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
@@ -161,10 +161,11 @@ can run Dungeon Clear in any instance it entered; see
 configuration. A large bot population does not require a dungeon simulator or
 establish that every instance can be cleared autonomously.
 
-World Buff Bots uses independent 30–150 minute timers for its three Vanilla
-events. Eligibility follows each character's own earned tier and native buff
-conditions. TBC buffs use ordinary quests and areas, including personal K'iru
-requirements. See [world buffs](world-buffs.md) for locations and settings.
+World buffs use native quest and area events. World Buff Bots' automatic
+Vanilla simulation is disabled by default; enabling it adds independent
+30–150 minute timers with earned-tier and native buff conditions. TBC buffs
+retain ordinary quests and areas, including personal K'iru requirements.
+See [world buffs](world-buffs.md) for locations and settings.
 
 Era Events adds Ahn'Qiraj, Scourge, Legion and zombie encounters in each
 character's exact earned tier. Bots participate without counting towards the

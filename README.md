@@ -57,7 +57,8 @@ database, configuration and first-run setup.
   configuration templates. Required server data is downloaded on first start.
 - **Companions and world activity:** SelfBot and controlled bot companions,
   earned-era battleground queues, timed [era world events](docs/world-events.md),
-  and Vanilla world buffs complement individual progression.
+  and quest-triggered [world buffs](docs/world-buffs.md) complement individual
+  progression.
 
 ## Quick start
 
@@ -147,7 +148,7 @@ stopped. Updates keep custom values; see the
 | Resident level caps and battleground filling | [Bot brackets and PvP](docs/earned-bot-brackets.md) |
 | Auction trading | [Auction economy](docs/earned-auctions.md#configuration) |
 | Autonomous dungeons and raid tactics | [Bot dungeons and raids](docs/bot-dungeons.md#configuration) |
-| World buff timers | [World buffs](docs/world-buffs.md#configuration) |
+| Optional world buff simulation | [World buffs](docs/world-buffs.md#configuration) |
 | Outdoor world event timers | [Era world events](docs/world-events.md#configuration) |
 
 ## Troubleshooting
@@ -226,7 +227,7 @@ include this distribution's local integration and defaults; see
 | [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Character-specific content milestones and expansion unlocks. |
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | Earned-era talents and selected class spell variants for players and bots. |
 | [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
-| [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Timed Vanilla world buffs for eligible Vanilla-progress characters. |
+| [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Optional timed Vanilla buffs; disabled by default in favor of native quest events. |
 | [Era Events](https://github.com/buildthehomelab/wow-mod-era-events) | Outdoor AQ, Scourge, Legion and zombie encounters at each character's exact earned tier, with ordinary kill loot. |
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Always included earned-era access guards for the [optional Dungeon Finder](docs/bot-dungeons.md#optional-dungeon-finder), which is disabled by default. |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
@@ -252,7 +253,7 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | [Bot dungeons and raids](docs/bot-dungeons.md) | Autonomous parties, player-led clears, raid tactics and travel. |
 | [Bot brackets and PvP](docs/earned-bot-brackets.md) | Resident levels, battleground eligibility and match rules. |
 | [Auction economy](docs/earned-auctions.md) | Trading behavior, settings and market limits. |
-| [World buffs](docs/world-buffs.md) | Vanilla event timers, recipient conditions and native TBC events. |
+| [World buffs](docs/world-buffs.md) | Native quest events, buff conditions and optional Vanilla simulation. |
 | [Era world events](docs/world-events.md) | Outdoor encounters, earned tiers, timers and configuration. |
 | **Server administration** | |
 | [Quest diagnostics](docs/quest-diagnostics.md) | Read-only quest status, acceptance reasons and progression checks. |

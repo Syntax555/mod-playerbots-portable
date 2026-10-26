@@ -1,12 +1,31 @@
 # World buffs
 
-The default profile enables timed Vanilla events through
-[World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots). Each
-event checks the recipient's own rewarded Individual Progression milestones.
-Humans, controlled altbots, random bots and SelfBot characters share these rules.
-No client addon is required.
+The default profile uses the core's quest-triggered world-buff events.
+Automatic simulated turn-ins through
+[World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) are
+disabled. Playerbots' synthetic world-buff supplies are also disabled by
+natural progression. No client addon is required.
 
 ## Vanilla events
+
+Warchief's Blessing follows the Rend head quest, Rallying Cry of the
+Dragonslayer follows the Onyxia/Nefarian head quests, and Spirit of Zandalar
+follows the Heart of Hakkar quest. Their native scripts control delivery,
+announcements and event state. Warchief lasts 60 minutes; Dragonslayer and
+Zandalar last 120 minutes. The timer module does not change those durations
+or the real quest events.
+
+This distribution uses AzerothCore's WotLK implementation and Individual
+Progression. Disabling simulated turn-ins does not establish complete Vanilla
+1.12 parity; native event cooldowns, recipient rules and lower-level scaling
+still require comparison and in-game validation.
+
+## Optional simulator
+
+Setting `WorldBuffBots.Enable = 1` opts into automatic events without a real
+quest turn-in. These events are an alternative to the default quest-only
+behavior. The simulator applies the following rules to humans, controlled
+altbots, random bots and SelfBot characters alike.
 
 | Buff | Timer location | Native duration | Recipient conditions |
 | --- | --- | --- | --- |
@@ -55,7 +74,7 @@ Edit `configs/modules/mod_world_buff_bots.conf` with the servers stopped.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `WorldBuffBots.Enable` | `1` | Enable simulated Vanilla events |
+| `WorldBuffBots.Enable` | `0` | Opt into simulated Vanilla events |
 | `WorldBuffBots.BaseMinutes` / `VarianceMinutes` | `90` / `60` | Repeat interval and random variation |
 | `WorldBuffBots.InitialMinMinutes` / `InitialMaxMinutes` | `30` / `150` | First event delay after startup or reload |
 | `WorldBuffBots.Warchief.Enable` | `1` | Warchief event |
@@ -76,7 +95,10 @@ the default progression chain and an empty `CustomProgression`. With an inactive
 or custom chain, the simulator supplies no Vanilla buffs because the tier numbers
 no longer establish the required era.
 
-The launcher adds missing module configuration and preserves existing custom
-values. See [configuration updates](configuration.md) and
+The launcher adds missing module configuration. A saved, unchanged managed
+`WorldBuffBots.Enable = 1` follows the new default of `0` on update; custom
+values and existing values without a saved baseline are preserved. For a
+quest-only existing realm, stop the servers and set `WorldBuffBots.Enable = 0`
+in its active configuration. See [configuration updates](configuration.md) and
 [server adaptations](adaptations.md) for the integration rules. Exact source
 revisions and patches are recorded in [the manifest](../versions.lock.json).

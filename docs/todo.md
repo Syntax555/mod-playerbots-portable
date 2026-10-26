@@ -50,6 +50,12 @@ pass.
 
 ## Gameplay validation
 
+- [ ] Compare native Vanilla world-buff events with 1.12 behavior and validate
+  real Rend, Onyxia/Nefarian and Heart of Hakkar turn-ins in game: both faction
+  capitals, Crossroads/Yojamba/Booty Bay delivery, event cooldowns, recipient
+  levels and aura scaling, durations, death and dispelling. The shipped profile
+  disables simulated turn-ins; the WotLK core's native scripts are not yet a
+  verified 1:1 Vanilla implementation.
 - [ ] Verify the integrated Playerbots/Raid Clear build on Windows and a stopped
   copy of an existing realm: migrate customized `RaidClear.*` settings into
   `playerbots.conf`, preserve explicit destination values and the old active

@@ -61,8 +61,9 @@ Edit `configs/modules/mod_era_events.conf` with the servers stopped.
 Starting an event manually skips its timer and player minimum, while keeping
 its earned-tier and realm-ceiling requirements.
 
-The separate [World Buff Bots](world-buffs.md) module supplies Vanilla buff
-timers. Era Events' Scourge encounter is separate from the core's global
+The separate [World Buff Bots](world-buffs.md) module offers optional Vanilla
+buff timers, disabled by default in favor of native quest events. Era Events'
+Scourge encounter is separate from the core's global
 Scourge Invasion (game event 17), which Individual Progression disables.
 
 The launcher adds the module configuration and preserves custom values during

@@ -16,7 +16,7 @@ See [server adaptations](adaptations.md) for the behavior of the local changes.
 | Individual Progression | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | `4933d455d2f6` | Earned content milestones and expansion access |
 | Dungeon Clear | [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) | `fcb680fb279c` | Autonomous earned-era parties and player-led clears without event shortcuts |
 | Quest Loot Party | [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) | `c3955915c76d` | Scoped party sharing of naturally dropped quest items |
-| World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Timed Vanilla events with individual earned-era and native recipient checks |
+| World Buff Bots | [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | `baae5656aa6a` | Optional timed Vanilla events with earned-era checks; disabled by default |
 | Era Events | [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) | `cf02786aceb5` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
 | LFG Progression | [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | `2615e82902cf` | Always included access guards for optional Dungeon Finder use |
 | MultiBot Bridge | [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | `ebfa01a129dd` | Server support for the MultiBot controls |
