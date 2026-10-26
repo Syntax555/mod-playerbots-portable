@@ -219,6 +219,15 @@ pass.
 
 ## Dependency updates
 
+- [ ] Add Zygor gear advice for the visibly inspected altbot by reusing its
+  existing item scorer. Supply the target's class, race, level, talent profile,
+  equipped links and stat totals without reading the owner's item restrictions
+  or equipped stats. Keep evaluation on demand and invalidate it on target or
+  equipment changes. For bag upgrades, extend the existing MultiBot inventory
+  snapshot with native usability checks; for source suggestions, report the
+  bot's own progression and access before using Gear Finder gates. Cover
+  different owner/bot classes, stale inspect replies, missing item data and
+  closing the window without background scans.
 - [ ] Expose reusable DragonUI spellbook card, section-header and window
   construction for EraTalents' bot book. Keep bot data and MultiBot actions in
   EraTalents, and reuse DragonUI's rendering helpers instead of mirroring
