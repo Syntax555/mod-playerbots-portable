@@ -53,6 +53,11 @@ assert re.search(r'RACE_BLOODELF\s*= 10,', (core / 'src/server/shared/SharedDefi
 assert re.search(r'RACE_DRAENEI\s*= 11\b', (core / 'src/server/shared/SharedDefines.h').read_text())
 assert re.search(r'QUEST_STATUS_REWARDED\s*= 6,', (core / 'src/server/game/Quests/QuestDef.h').read_text())
 assert 'struct InstanceTemplate\n{\n    uint32 Parent;' in (core / 'src/server/game/Maps/Map.h').read_text()
+map_mgr = (core / 'src/server/game/Maps/MapMgr.cpp').read_text()
+assert 'if (!map)\n        return nullptr;' in function(map_mgr, 'Map* MapMgr::FindMap(')
+zone_lookup = function((core / 'src/server/game/Maps/MapMgr.h').read_text(),
+                       '    [[nodiscard]] uint32 GetZoneId(uint32 phaseMask, uint32 mapid, float x, float y, float z) const')
+assert 'CreateBaseMap(mapid)' in zone_lookup
 
 hook = function(player_source, '    bool OnPlayerBeforeTeleport(').replace(' override', '')
 gates = function(player_source, '    static bool CanEnterMap(')
@@ -124,7 +129,14 @@ struct Player
     bool TeleportTo(uint32, float, float, float, float) { ++teleports; return true; }
 };
 struct Map { uint32 zone = 0; uint32 GetZoneId(uint32, float, float, float) const { return zone; } };
-struct MapMgr { Map map; Map const* FindMap(uint32, uint32) const { return &map; } } mapManager;
+struct MapMgr
+{
+    Map map;
+    bool loaded = true;
+    Map* CreateBaseMap(uint32) { loaded = true; return &map; }
+    Map const* FindMap(uint32, uint32) const { return loaded ? &map : nullptr; }
+@ZONE_LOOKUP@
+} mapManager;
 auto* sMapMgr = &mapManager;
 struct InstanceTemplate { uint32 Parent; };
 struct ObjectMgr
@@ -220,6 +232,18 @@ int main()
     }
     assert(refusals > 1000 && messages > 1000);
 
+    // Remote source checks can reach Outland before its base map exists.
+    Player bloodElf; bloodElf.race = RACE_BLOODELF; Stage(bloodElf, 7);
+    mapManager.map.zone = AREA_EVERSONG_WOODS; mapManager.loaded = false;
+    assert(Check(bloodElf, MAP_OUTLAND).allowed && mapManager.loaded);
+    mapManager.map.zone = AREA_HELLFIRE_PENINSULA; mapManager.loaded = false;
+    assert(!Check(bloodElf, MAP_OUTLAND).allowed && mapManager.loaded);
+    Player outland; Stage(outland, 8);
+    mapManager.map.zone = AREA_ISLE_OF_QUEL_DANAS; mapManager.loaded = false;
+    assert(!Check(outland, MAP_OUTLAND).allowed && mapManager.loaded);
+    Stage(outland, 12); mapManager.loaded = false;
+    assert(Check(outland, MAP_OUTLAND).allowed && mapManager.loaded);
+
     // The dungeon stages used by autonomous parties.
     Player bot;
     for (uint8 stage = 0; stage <= 18; ++stage)
@@ -254,8 +278,9 @@ int main()
 '''
 
 
-def build(gate_source, hook_source, bridge_source):
-    return (prelude.replace('@ENUMS@', enums).replace('@NATIVES@', natives).replace('@STARTING_ZONE@', starting_zone)
+def build(gate_source, hook_source, bridge_source, starting_source=starting_zone):
+    return (prelude.replace('@ENUMS@', enums).replace('@NATIVES@', natives).replace('@STARTING_ZONE@', starting_source)
+            .replace('@ZONE_LOOKUP@', zone_lookup)
             .replace('@HOOK@', hook_source).replace('@GATES@', gate_source).replace('@BRIDGE@', bridge_source) + tests)
 
 
@@ -266,6 +291,10 @@ mutations = (
     ('session in the exported check', bridge, 'x, y, z, nullptr)', 'x, y, z, player->GetSession())',
      'check.messages == 0'),
     ('silent teleport', hook, 'player ? player->GetSession() : nullptr', 'nullptr', 'teleport.messages == 1'),
+    ('unloaded starting-zone map', starting_zone, 'sMapMgr->GetZoneId(0, mapid, x, y, z)',
+     'sMapMgr->FindMap(mapid, 0)->GetZoneId(0, x, y, z)', 'runtime error:'),
+    ('unloaded Outland map', gates, 'sMapMgr->GetZoneId(0, mapid, x, y, z)',
+     'sMapMgr->FindMap(mapid, 0)->GetZoneId(0, x, y, z)', 'runtime error:'),
 )
 with tempfile.TemporaryDirectory(prefix='portable-map-gates-') as directory:
     temporary = Path(directory)
@@ -274,7 +303,8 @@ with tempfile.TemporaryDirectory(prefix='portable-map-gates-') as directory:
         assert old in text, label
         changed = text.replace(old, new)
         variants.append((label, build(changed if text is gates else gates, changed if text is hook else hook,
-                                      changed if text is bridge else bridge), failure))
+                                      changed if text is bridge else bridge,
+                                      changed if text is starting_zone else starting_zone), failure))
     for label, source_text, failure in variants:
         source = temporary / 'gates.cpp'
         executable = temporary / 'gates'

@@ -577,10 +577,20 @@ index 3af9f84..e6b8293 100644
      void UpdateProgressionState(Player* player, ProgressionState newState) const;
      static void ForceUpdateProgressionState(Player* player, ProgressionState newState);
 diff --git a/src/IndividualProgressionPlayer.cpp b/src/IndividualProgressionPlayer.cpp
-index e3c5f17..05ff4c9 100644
+index e3c5f17..2acb0c9 100644
 --- a/src/IndividualProgressionPlayer.cpp
 +++ b/src/IndividualProgressionPlayer.cpp
-@@ -86,6 +86,29 @@ public:
+@@ -8,8 +8,7 @@ class IndividualPlayerProgression : public PlayerScript
+ private:
+     static bool IsTBCRaceStartingZone(uint32 mapid, float x, float y, float z)
+     {
+-        Map const *map = sMapMgr->FindMap(mapid, 0);
+-        uint32 zoneId = map->GetZoneId(0, x, y, z);
++        uint32 zoneId = sMapMgr->GetZoneId(0, mapid, x, y, z);
+         return (zoneId == AREA_AZUREMYST_ISLE || zoneId == AREA_BLOODMYST_ISLE || zoneId == AREA_GHOSTLANDS || zoneId == AREA_EVERSONG_WOODS ||
+                 zoneId == AREA_THE_EXODAR || zoneId == AREA_SILVERMOON_CITY || zoneId == AREA_AMMEN_VALE || zoneId == AREA_VEILED_SEA);
+     }
+@@ -86,6 +85,29 @@ public:
              sIndividualProgression->UpdateRNDbotSpells(player);
      }
  
@@ -610,7 +620,7 @@ index e3c5f17..05ff4c9 100644
      void OnPlayerResurrect(Player* player, float /*restore_percent*/, bool& /*applySickness*/) override
      {
          if (!player || !player->IsInWorld())
-@@ -580,6 +603,13 @@ public:
+@@ -580,6 +602,13 @@ public:
      }
  
      bool OnPlayerBeforeTeleport(Player* player, uint32 mapid, float x, float y, float z, float /*orientation*/, uint32 /*options*/, Unit* /*target*/) override
@@ -624,7 +634,7 @@ index e3c5f17..05ff4c9 100644
      {
          if (!player)
              return false;
-@@ -593,7 +623,7 @@ public:
+@@ -593,7 +622,7 @@ public:
  
          if (mapid == MAP_BLACKWING_LAIR && !sIndividualProgression->hasPassedProgression(player, PROGRESSION_MOLTEN_CORE))
          {
@@ -633,7 +643,7 @@ index e3c5f17..05ff4c9 100644
              return false;
          }
          if (mapid == MAP_ONYXIAS_LAIR)
-@@ -620,18 +650,18 @@ public:
+@@ -620,18 +649,18 @@ public:
  
              if (PLAYER_PROGRESSION < REQUIRED_ZG_PROGRESSION)
              {
@@ -655,7 +665,7 @@ index e3c5f17..05ff4c9 100644
              return false;
          }
          if (mapid == MAP_OUTLAND)
-@@ -643,7 +673,7 @@ public:
+@@ -643,19 +672,18 @@ public:
  
                  if ((highestProgression < sIndividualProgression->tbcRacesProgressionLevel) && (player->getRace() != RACE_DRAENEI && player->getRace() != RACE_BLOODELF))
                  {
@@ -664,7 +674,12 @@ index e3c5f17..05ff4c9 100644
                      return false;
                  }
                  else
-@@ -655,7 +685,7 @@ public:
+                     return IsTBCRaceStartingZone(mapid, x, y, z);
+             }
+ 
+-            Map const *map = sMapMgr->FindMap(mapid, 0);
+-            uint32 zoneId = map->GetZoneId(0, x, y, z);
++            uint32 zoneId = sMapMgr->GetZoneId(0, mapid, x, y, z);
  
              if (!sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_4) && zoneId == AREA_ISLE_OF_QUEL_DANAS)
              {
@@ -673,7 +688,7 @@ index e3c5f17..05ff4c9 100644
                  return false;
              }
          }
-@@ -666,12 +696,15 @@ public:
+@@ -666,12 +694,15 @@ public:
  
              if (PLAYER_PROGRESSION < REQUIRED_ZA_PROGRESSION)
              {
@@ -690,7 +705,7 @@ index e3c5f17..05ff4c9 100644
              const uint16 AREA_COLD_HEARTH_MANOR = 166;
              const uint16 AREA_DRYGULCH_RAVINE = 370;
              const uint16 AREA_STORMWIND_GREAT_SEA = 2364;
-@@ -710,55 +743,55 @@ public:
+@@ -710,55 +741,55 @@ public:
                  break;
              }
  
@@ -756,7 +771,7 @@ index e3c5f17..05ff4c9 100644
                  return false;
              }
          }
-@@ -766,12 +799,12 @@ public:
+@@ -766,12 +797,12 @@ public:
          {
              if (!sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_1))
              {
@@ -771,7 +786,7 @@ index e3c5f17..05ff4c9 100644
                  return false;
              }
          }
-@@ -779,12 +812,12 @@ public:
+@@ -779,12 +810,12 @@ public:
          {
              if (!sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_2))
              {
@@ -786,7 +801,7 @@ index e3c5f17..05ff4c9 100644
                  return false;
              }
          }
-@@ -792,12 +825,12 @@ public:
+@@ -792,12 +823,12 @@ public:
          {
              if (!sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_2))
              {
@@ -801,7 +816,7 @@ index e3c5f17..05ff4c9 100644
                  return false;
              }
          }
-@@ -864,7 +897,8 @@ public:
+@@ -864,7 +895,8 @@ public:
                   sIndividualProgression->UpdateProgressionState(player, PROGRESSION_AQ_WAR);
              break;
          case INTO_THE_BREACH:
@@ -811,7 +826,7 @@ index e3c5f17..05ff4c9 100644
                   sIndividualProgression->UpdateProgressionState(player, PROGRESSION_PRE_TBC);
              break;
          case QUEST_MORROWGRAIN:
-@@ -878,6 +912,11 @@ public:
+@@ -878,6 +910,11 @@ public:
              }
              break;
          }
@@ -823,7 +838,7 @@ index e3c5f17..05ff4c9 100644
      }
  
      bool OnPlayerCanGroupInvite(Player* player, std::string& membername) override
-@@ -1129,6 +1168,11 @@ public:
+@@ -1129,6 +1166,11 @@ public:
              }
          }
  
@@ -835,7 +850,7 @@ index e3c5f17..05ff4c9 100644
          Group* group = killer->GetGroup();
          
          if (killed->GetCreatureTemplate()->rank > CREATURE_ELITE_NORMAL)
-@@ -1184,6 +1228,24 @@ public:
+@@ -1184,6 +1226,24 @@ public:
          }
      }
  
@@ -860,7 +875,7 @@ index e3c5f17..05ff4c9 100644
      bool OnPlayerUpdateFishingSkill(Player* player, int32 /*skill*/, int32 /*zone_skill*/, int32 chance, int32 roll) override
      {
          if (!player || !player->IsInWorld() || !chance || !roll)
-@@ -1328,6 +1390,12 @@ public:
+@@ -1328,6 +1388,12 @@ public:
          if (!accountId || !charRace || !charClass)
              return false;
  
@@ -873,7 +888,7 @@ index e3c5f17..05ff4c9 100644
          if ((!sIndividualProgression->enabled) ||
              (charRace != RACE_DRAENEI && charRace != RACE_BLOODELF && charClass != CLASS_DEATH_KNIGHT) ||
              (!sIndividualProgression->tbcRacesProgressionLevel && !sIndividualProgression->deathKnightProgressionLevel))
-@@ -1501,6 +1569,11 @@ public:
+@@ -1501,6 +1567,11 @@ public:
  
  };
  

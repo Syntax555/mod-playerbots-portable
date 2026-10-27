@@ -22,6 +22,7 @@ from FixtureSupport import (
     prepared_core,
     run_fixture,
     source_argument,
+    sql_rows,
 )
 
 
@@ -68,6 +69,9 @@ def native_contracts(core):
     disables = (core / 'src/server/game/Conditions/DisableMgr.cpp').read_text()
     creature = (core / 'src/server/game/Entities/Creature/Creature.cpp').read_text()
     gameobject = (core / 'src/server/game/Entities/GameObject/GameObject.cpp').read_text()
+    spawns = (core / 'src/server/game/Maps/SpawnData.h').read_text()
+    map_ids = (core / 'src/server/game/Maps/AreaDefines.h').read_text()
+    object_mgr = (core / 'src/server/game/Globals/ObjectMgr.cpp').read_text()
     maps = (core / 'src/server/game/Maps/MapMgr.cpp').read_text()
     commands = (core / 'src/server/scripts/Commands/cs_quest.cpp').read_text()
     session = (core / 'src/server/game/Server/WorldSession.cpp').read_text()
@@ -135,6 +139,28 @@ def native_contracts(core):
     # Spawn and template script ids follow the native resolution.
     assert 'creatureData->ScriptId && entry == creatureData->id' in function(creature, 'uint32 Creature::GetScriptId() const')
     assert 'return GetGOInfo()->ScriptId;' in function(gameobject, 'uint32 GameObject::GetScriptId() const')
+    for field in ('uint16 mapid{0};', 'float posX{0.0f};', 'float posY{0.0f};', 'float posZ{0.0f};'):
+        assert field in spawns, field
+    assert re.search(r'MAP_OUTLAND\s*= 530,', map_ids) and re.search(r'MAP_NORTHREND\s*= 571,', map_ids)
+    assert 'int32  GetZoneOrSort() const { return ZoneOrSort; }' in quest
+    assert 'data.mapid              = fields[2].Get<uint16>();' in object_mgr
+    assert 'struct CreatureData : public SpawnData' in (core / 'src/server/game/Entities/Creature/CreatureData.h').read_text()
+    assert 'struct GameObjectData : public SpawnData' in (core / 'src/server/game/Entities/GameObject/GameObjectData.h').read_text()
+    hellfire = sql_rows(core, 'quest_template', {10055})[0]
+    starter = sql_rows(core, 'creature_queststarter', {21209})
+    spawn = sql_rows(core, 'creature', {74397})[0]
+    assert any(row['quest'] == '10055' for row in starter)
+    assert hellfire['QuestLevel'] == '61' and hellfire['MinLevel'] == '58' and hellfire['QuestSortID'] == '3483'
+    assert spawn['id1'] == '21209' and spawn['map'] == '530' and spawn['phaseMask'] == '1'
+    source_data = '\n'.join(
+        f'constexpr {kind} {name} = {row[field]}{suffix};' for kind, name, row, field, suffix in (
+            ('uint32', 'NativeHellfireMinLevel', hellfire, 'MinLevel', ''),
+            ('int32', 'NativeHellfireZone', hellfire, 'QuestSortID', ''),
+            ('uint16', 'NativeHellfireMap', spawn, 'map', ''),
+            ('float', 'NativeHellfireX', spawn, 'position_x', 'f'),
+            ('float', 'NativeHellfireY', spawn, 'position_y', 'f'),
+            ('float', 'NativeHellfireZ', spawn, 'position_z', 'f'),
+        ))
 
     # The milestone getter of boss credits writes a missing setting.
     assert 'UpdatePlayerSetting(source, index, 0);' in function(settings, 'PlayerSetting Player::GetPlayerSetting(')
@@ -150,6 +176,11 @@ def native_contracts(core):
     gate = function(players, 'static bool CanEnterMap(Player* player, uint32 mapid, float x, float y, float z, WorldSession* session)')
     assert 'ChatHandler(player->GetSession())' not in gate
     assert gate.index('if (!session)\n                return false;') < gate.index('TeleportTo')
+    assert 'if (mapid == MAP_OUTLAND)' in gate and \
+        '!sIndividualProgression->hasPassedProgression(player, PROGRESSION_PRE_TBC)' in gate
+    assert 'if (mapid == MAP_NORTHREND && !sIndividualProgression->hasPassedProgression(player, PROGRESSION_TBC_TIER_5))' in gate
+    assert 'return IsTBCRaceStartingZone(mapid, x, y, z);' in gate
+    assert 'sMapMgr->GetZoneId(0, mapid, x, y, z)' in gate
     assert 'return IndividualPlayerProgression::CanEnterMap(player, mapId, x, y, z, nullptr);' in \
         function(players, 'bool IndividualProgression::CanEnterMap(')
     assert 'return CanEnterMap(player, mapid, x, y, z, player ? player->GetSession() : nullptr);' in players
@@ -176,7 +207,7 @@ def native_contracts(core):
         'bool IndividualProgression::isExcludedAccount(Player* player)',
         'bool IndividualProgression::isBotAccount(Player* player)',
     ))
-    return re.sub(r'^#.*$', '', policy, flags=re.MULTILINE) + '\n' + sizes, production
+    return re.sub(r'^#.*$', '', policy, flags=re.MULTILINE) + '\n' + sizes + '\n' + source_data, production
 
 
 def extract_production(bridge, unit, header, awareness):
@@ -260,7 +291,27 @@ def mutations(production):
         ('target-master', 'ai->GetMaster() == requester', 'true'),
         ('target-name', 'targetName != Trim(targetName)', 'false'),
         ('target-state-subject', 'MultiBotBridgeProgression::State(subject)', 'MultiBotBridgeProgression::State(player)'),
-        ('target-quest-subject', 'MultiBotBridgeProgression::Quest(subject, questId)', 'MultiBotBridgeProgression::Quest(player, questId)'),
+        ('target-quest-subject', 'MultiBotBridgeProgression::Quest(subject, questId, subject != player)',
+         'MultiBotBridgeProgression::Quest(player, questId, subject != player)'),
+        ('target-source-scope', 'MultiBotBridgeProgression::Quest(subject, questId, subject != player)',
+         'MultiBotBridgeProgression::Quest(subject, questId, false)'),
+        ('own-source-scope', 'MultiBotBridgeProgression::Quest(subject, questId, subject != player)',
+         'MultiBotBridgeProgression::Quest(subject, questId, true)'),
+        ('source-map-gate', 'if (!sIndividualProgression->CanEnterMap(player, spawn.mapId, spawn.x, spawn.y, spawn.z))', 'if (false)'),
+        ('source-coordinates', 'CanEnterMap(player, spawn.mapId, spawn.x, spawn.y, spawn.z)',
+         'CanEnterMap(player, spawn.mapId, 0.0f, 0.0f, 0.0f)'),
+        ('source-visibility', 'if (rule != IpVisibilityRules().end() && !rule->second(player))', 'if (false)'),
+        ('source-phase', 'if (!(spawn.phaseMask & PHASEMASK_NORMAL))', 'if (false)'),
+        ('source-unknown', "return unknown || !known ? 'U' : 'L';", "return 'A';"),
+        ('source-active-quest', 'if (forSource)\n    {', 'if (forSource && player->GetQuestStatus(questId) == QUEST_STATUS_NONE)\n    {'),
+        ('source-rewarded', 'if (player->GetQuestStatus(questId) == QUEST_STATUS_REWARDED)', 'if (false)'),
+        ('source-default', 'bool forSource = false', 'bool forSource = true'),
+        ('source-map-known', 'if (!sMapStore.LookupEntry(spawn.mapId))', 'if (false)'),
+        ('source-map-disabled', 'if (!sDisableMgr->IsDisabledFor(DISABLE_TYPE_MAP, spawn.mapId, player))', 'if (true)'),
+        ('source-creature-map', 'data.ScriptId : creature->ScriptID, data.phaseMask, data.mapid,',
+         'data.ScriptId : creature->ScriptID, data.phaseMask, 0,'),
+        ('source-object-map', 'data.phaseMask, data.mapid, data.posX, data.posY, data.posZ});',
+         'data.phaseMask, 0, data.posX, data.posY, data.posZ});'),
         ('target-access-subject', 'MultiBotBridgeProgression::Access(subject)', 'MultiBotBridgeProgression::Access(player)'),
         ('target-metadata-scope', 'if (subject != player)', 'if (true)'),
         ('target-profile-subject', 'AiFactory::GetEffectiveCombatProfile(subject)', 'AiFactory::GetEffectiveCombatProfile(player)'),

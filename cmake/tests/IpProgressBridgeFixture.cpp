@@ -66,10 +66,12 @@ struct Quest
     uint32 maxLevel = 0;
     uint32 breadcrumbFor = 0;
     bool repeatable = false;
+    int32 zoneOrSort = 0;
     uint32 GetQuestId() const { return id; }
     uint32 GetMinLevel() const { return minLevel; }
     uint32 GetMaxLevel() const { return maxLevel; }
     uint32 GetBreadcrumbForQuestId() const { return breadcrumbFor; }
+    int32 GetZoneOrSort() const { return zoneOrSort; }
 };
 struct WorldSession
 {
@@ -291,8 +293,19 @@ MapDifficulty const* GetMapDifficultyData(uint32 map, Difficulty difficulty)
 
 struct CreatureTemplate { uint32 ScriptID = 0; };
 struct GameObjectTemplate { uint32 ScriptId = 0; };
-struct CreatureData { uint32 id = 0, id2 = 0, id3 = 0; uint32 phaseMask = 1; uint32 ScriptId = 0; };
-struct GameObjectData { uint32 id = 0; uint32 phaseMask = 1; uint32 ScriptId = 0; };
+struct CreatureData
+{
+    uint32 id = 0, id2 = 0, id3 = 0;
+    uint32 phaseMask = 1, ScriptId = 0;
+    uint16 mapid = 0;
+    float posX = 0, posY = 0, posZ = 0;
+};
+struct GameObjectData
+{
+    uint32 id = 0, phaseMask = 1, ScriptId = 0;
+    uint16 mapid = 0;
+    float posX = 0, posY = 0, posZ = 0;
+};
 struct InstanceTemplate { };
 struct AreaTriggerTeleport { uint32 target_mapId; float target_X, target_Y, target_Z, target_Orientation; };
 using QuestRelations = std::multimap<uint32, uint32>;
@@ -389,6 +402,11 @@ public:
     {
         assert(player);
         mapChecks.emplace_back(mapId, x, y, z);
+        // The native gate uses the subject's markers, never the requester or quest level.
+        if (mapId == 530 && !hasPassedProgression(player, PROGRESSION_PRE_TBC))
+            return false;
+        if (mapId == 571 && !hasPassedProgression(player, PROGRESSION_TBC_TIER_5))
+            return false;
         return !refusedMaps.contains(mapId);
     }
 } individualProgression;
@@ -749,6 +767,32 @@ int main()
     objectMgr.creatureStarters.insert({505, 332});
     objectMgr.quests[332] = Quest{332};
     objectMgr.creatureStarters.insert({503, 300});
+    // Target source locations come from native spawns, including class/sort quests.
+    for (uint32 id : {301u, 305u, 322u, 350u, 353u, 355u, 356u})
+        objectMgr.creatureStarters.insert({504, id});
+    for (uint32 id = 350; id <= 361; ++id)
+        objectMgr.quests[id] = Quest{id};
+    objectMgr.quests[350].zoneOrSort = -1; // class-sort categories still use native spawns
+    objectMgr.creatureTemplates[601];
+    objectMgr.creatures[8] = CreatureData{601, 0, 0, 1, 0, 530, -729.0f, 2690.0f, 92.0f};
+    for (uint32 id : {351u, 355u, 357u, 358u, 359u})
+        objectMgr.creatureStarters.insert({601, id});
+    objectMgr.objectTemplates[602];
+    objectMgr.objects[9] = GameObjectData{602, 1, 0, 571, 2215.0f, 5178.0f, 11.0f};
+    objectMgr.objectStarters.insert({602, 352});
+    objectMgr.creatureStarters.insert({501, 356}); // unknown unspawned alternative
+    objectMgr.creatureStarters.insert({501, 357});
+    objectMgr.creatureStarters.insert({16841, 358}); // accessible map, hidden from Vanilla
+    objectMgr.creatureStarters.insert({502, 360}); // phase visibility is unverified
+    objectMgr.creatureTemplates[603];
+    objectMgr.creatures[10] = CreatureData{603, 0, 0, 1, 0, 999};
+    objectMgr.creatureStarters.insert({603, 361}); // missing native map metadata
+    objectMgr.quests[10055] = Quest{10055, NativeHellfireMinLevel};
+    objectMgr.quests[10055].zoneOrSort = NativeHellfireZone;
+    objectMgr.creatureTemplates[21209];
+    objectMgr.creatureStarters.insert({21209, 10055});
+    objectMgr.creatures[74397] = CreatureData{21209, 0, 0, 1, 0, NativeHellfireMap,
+        NativeHellfireX, NativeHellfireY, NativeHellfireZ};
 
     // Quest availability uses the native checks without messages.
     Reward(player, 7);
@@ -893,6 +937,42 @@ int main()
     bot.statuses[301] = QUEST_STATUS_COMPLETE;
     assert(Dispatch(&player, {"IP_QUESTS", "targetq", "301,304,305,322,326", "BOT", "Botty"}));
     assert(Items("IP_QUESTS", "targetq") == "301:C,304:R,305:A,322:A,326:A");
+    // A Wrath owner does not unlock Outland or Northrend quest sources for the altbot.
+    Reward(player, 18);
+    Reward(bot, 7);
+    bot.level = 60;
+    bot.statuses[351] = QUEST_STATUS_INCOMPLETE;
+    bot.statuses[352] = QUEST_STATUS_COMPLETE;
+    bot.statuses[354] = QUEST_STATUS_COMPLETE; // no verified source location
+    bot.rewarded.insert(359);
+    failingChecks.insert({353, "race"});
+    failingChecks.insert({355, "class"});
+    sMapStore.maps[530];
+    sMapStore.maps[571];
+    AllowRequests(player);
+    assert(Dispatch(&player, {"IP_QUESTS", "sources", "350,351,352,353,354,355,356,357,358,359,360,361,10055", "BOT", "Botty"}));
+    assert(Items("IP_QUESTS", "sources") ==
+        "350:A,351:L20000,352:L20000,353:L4,354:U,355:L2,356:A,357:U,358:L20000,359:R,360:U,361:U,10055:L20000");
+    // Own replies retain their native quest-status and acceptance semantics.
+    assert(Dispatch(&player, {"IP_QUESTS", "ownsource", "351,352,354"}));
+    assert(Items("IP_QUESTS", "ownsource") == "351:A,352:A,354:A");
+    assert(MultiBotBridgeProgression::Quest(&player, 354) == "354:A");
+    assert(MultiBotBridgeProgression::Quest(&player, 351, true) == "351:A");
+    assert(MultiBotBridgeProgression::Quest(&player, 352, true) == "352:A");
+    assert(MultiBotBridgeProgression::Quest(&player, 10055, true) == "10055:A");
+    disableMgr.maps.insert({0, disableMgr.playerDifficulty});
+    assert(MultiBotBridgeProgression::Quest(&bot, 350, true) == "350:L20000");
+    disableMgr.maps.erase({0, disableMgr.playerDifficulty});
+    Reward(bot, 8);
+    assert(MultiBotBridgeProgression::Quest(&bot, 351, true) == "351:I");
+    assert(MultiBotBridgeProgression::Quest(&bot, 352, true) == "352:L20000");
+    assert(std::find(individualProgression.mapChecks.begin(), individualProgression.mapChecks.end(),
+        std::make_tuple(530u, -729.0f, 2690.0f, 92.0f)) != individualProgression.mapChecks.end());
+    assert(std::find(individualProgression.mapChecks.begin(), individualProgression.mapChecks.end(),
+        std::make_tuple(571u, 2215.0f, 5178.0f, 11.0f)) != individualProgression.mapChecks.end());
+    // Keep the following access and no-write checks on their original character state.
+    Reward(player, 7);
+    Reward(bot, 9);
     bot.missingAccess = {{532, 0}};
     assert(Dispatch(&player, {"IP_ACCESS", "targeta", "BOT", "Botty"}));
     assert(Items("IP_ACCESS", "targeta") == "33:DD--,249:A---,469:G---,532:RA--,548:D---");
