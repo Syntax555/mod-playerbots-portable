@@ -122,12 +122,14 @@ def native_strategy_names(module, directory):
     bridge = (module.parents[1] / 'mod-multibot-bridge/src/MultiBotBridge.cpp').read_text()
     mutation = function(bridge, 'bool ApplyNativeStrategyMutation(')
     assert 'ResolveStrategyMutationCanonicalNames(botAI, resolvedOperations, resolvedChanges)' in mutation
+    assert 'ResolveRogueDpsStrategyAlias(' in mutation
     context = (module / 'Bot/Engine/AiObjectContext.cpp').read_text()
     assert 'return strategyContexts.GetContextObject(name, botAI);' in function(
         context, 'Strategy* AiObjectContext::GetStrategy(')
     code = r'''
 #include <cassert>
 #include <cctype>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -142,6 +144,18 @@ struct PlayerbotAI {
     AiObjectContext* context = nullptr;
     AiObjectContext* GetAiObjectContext() { return context; }
 };
+'''
+    header = (module / 'Bot/PlayerbotAI.h').read_text()
+    shared = (prepared_core(ROOT) / 'src/server/shared/SharedDefines.h').read_text()
+    code += 'using uint8 = std::uint8_t;\n'
+    code += '\n'.join(function(text, signature) + ';' for text, signature in (
+        (header, 'enum BotState'), (header, 'enum ROGUE_TABS'), (shared, 'enum Classes')))
+    code += r'''
+struct Player {
+    uint8 cls = CLASS_ROGUE, tab = ROGUE_TAB_COMBAT;
+    uint8 getClass() const { return cls; }
+};
+namespace AiFactory { uint8 GetPlayerSpecTab(Player* player) { return player->tab; } }
 '''
     # The bridge's own limits apply to the extracted parser and resolver.
     limits = re.findall(r'std::size_t constexpr kMax(?:StrategyName|Command)Length = [^;]+;', bridge)
@@ -160,7 +174,23 @@ struct PlayerbotAI {
         aliases = re.findall(r'creators\["' + alias + r'"\] = ([^;]+);', factory)
         assert canonical and canonical[0] in aliases, f'{cls} native alias changed'
         assert f'return new {strategy}(botAI);' in factory
-    code += resolver + '\nint main() {\n'
+    rogue_factory = (module / 'Ai/Class/Rogue/RogueAiObjectContext.cpp').read_text()
+    for strategy, path, name in (
+        ('CombatRogueStrategy', 'Ai/Class/Rogue/Strategy/CombatRogueStrategy.h', 'combat'),
+        ('AssassinationRogueStrategy', 'Ai/Class/Rogue/Strategy/AssassinationRogueStrategy.h', 'assassin'),
+        ('RogueAoeStrategy', 'Ai/Class/Rogue/Strategy/GenericRogueStrategy.h', 'aoe'),
+        ('DpsAoeStrategy', 'Ai/Base/Strategy/DpsAssistStrategy.h', 'dps aoe'),
+    ):
+        native_class = function((module / path).read_text(), 'class ' + strategy)
+        code += f'struct {strategy} : Strategy {{ {function(native_class, "std::string const getName()")} }};\n'
+        factory = (module / 'Ai/Base/StrategyContext.h').read_text() if name == 'dps aoe' else rogue_factory
+        binding = re.search(r'creators\["' + name + r'"\] = &(\w+)::(\w+);', factory)
+        assert binding, f'{name} native factory binding changed'
+        creator = function(function(factory, 'class ' + binding[1]), 'static Strategy* ' + binding[2] + '(')
+        assert f'return new {strategy}(botAI);' in creator, f'{name} native strategy changed'
+    engine = (module / 'Bot/Engine/Engine.cpp').read_text()
+    assert 'strategies[strategy->getName()] = strategy;' in function(engine, 'void Engine::addStrategy(')
+    code += resolver + '\n' + function(bridge, 'bool ResolveRogueDpsStrategyAlias(') + '\nint main() {\n'
     for _, _, strategy, name, alias in ROLES:
         code += f'''
  {{ {strategy} strategy; AiObjectContext context; context.strategies["{alias}"] = &strategy;
@@ -187,6 +217,28 @@ struct PlayerbotAI {
  context.strategies["invalid"] = &invalid;
  operations = {{true, "invalid"}};
  assert(!ResolveStrategyMutationCanonicalNames(&ai, operations, changes));
+
+ CombatRogueStrategy combat; AssassinationRogueStrategy assassin;
+ RogueAoeStrategy aoe; DpsAoeStrategy dpsAoe;
+ assert(combat.getName() == "combat" && assassin.getName() == "assassin");
+ assert(aoe.getName() == "aoe" && dpsAoe.getName() == "dps aoe");
+ context.strategies = {{"combat", &combat}, {"assassin", &assassin}, {"aoe", &aoe}, {"dps aoe", &dpsAoe}};
+ Player rogue;
+ for (auto tab : {ROGUE_TAB_ASSASSINATION, ROGUE_TAB_COMBAT, ROGUE_TAB_SUBTLETY}) {
+    rogue.tab = tab;
+    std::string expected = tab == ROGUE_TAB_COMBAT ? combat.getName() : assassin.getName();
+    for (bool enable : {false, true}) {
+        operations = {{enable, "dps"}, {true, "stealthed"}, {true, "dps aoe"}, {true, "aoe"}};
+        std::string const original = std::string(enable ? "+" : "-") + "dps,+stealthed,+dps aoe,+aoe";
+        std::vector<StrategyMutationOperation> resolved;
+        assert(ResolveRogueDpsStrategyAlias(&rogue, BOT_STATE_COMBAT, original, operations, changes, resolved));
+        assert(resolved[0].name == expected && resolved[0].enable == enable);
+        assert(changes == std::string(enable ? "+" : "-") + expected + ",+stealthed,+dps aoe,+aoe");
+        assert(ResolveStrategyMutationCanonicalNames(&ai, resolved, changes));
+        assert(resolved[0].name == expected && resolved[1].name == "stealthed");
+        assert(resolved[2].name == "dps aoe" && resolved[3].name == "aoe");
+    }
+ }
 }
 '''
     source, binary = directory / 'native.cpp', directory / 'native'
@@ -194,11 +246,16 @@ struct PlayerbotAI {
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(binary)], check=True)
     names = subprocess.run([str(binary)], check=True, text=True, capture_output=True, timeout=20).stdout.splitlines()
     assert names == [role[3] for role in ROLES], 'Playerbots canonical role names changed'
-    assert 'operation.name = canonicalName;' in code
-    source.write_text(code.replace('operation.name = canonicalName;', 'static_cast<void>(canonicalName);'))
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(binary)], check=True)
-    result = subprocess.run([str(binary)], capture_output=True, timeout=20, check=False)
-    assert result.returncode != 0, 'bridge canonical strategy mutation survived'
+    for label, before, after in (
+        ('canonical strategy', 'operation.name = canonicalName;', 'static_cast<void>(canonicalName);'),
+        ('Rogue DPS alias', 'operation.name = strategyName;', 'static_cast<void>(strategyName);'),
+    ):
+        assert before in code
+        source.write_text(code.replace(before, after))
+        subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(binary)], check=True)
+        result = subprocess.run([str(binary)], capture_output=True, timeout=20, check=False)
+        assert result.returncode != 0, f'bridge {label} mutation survived'
+        print(f'MultiBot native roles mutation rejected: {label}')
 
 
 def run_lua(lua, directory):
@@ -240,7 +297,7 @@ def main():
                 assert run_lua(args.lua, directory).returncode != 0, f'{cls} {button} {label} mutant survived'
                 path.write_text(original)
                 print(f'MultiBot roles mutation rejected: {cls} {button} {label}')
-    print('MultiBot roles: 5 native names and aliases, bot/SelfBot toggles and 16 mutations passed')
+    print('MultiBot roles: 5 native roles, Rogue DPS aliases, distinct AoE strategies and 17 mutations passed')
 
 
 if __name__ == '__main__':

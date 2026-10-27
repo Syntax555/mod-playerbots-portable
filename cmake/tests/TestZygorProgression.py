@@ -369,20 +369,20 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
                         'Item-Upgrades.lua', 'ZygorQuestLootDB.lua', 'Code-WOTLK/Item-GearFinder.lua',
                         'Code-WOTLK/Item-ItemScore.lua')
         target_paths = tuple('ZygorGuidesViewerRM/' + name for name in target_files)
-        if working_tools:
-            # Include the unpublished feature commit and any final working edits.
-            diff = subprocess.run(['git', '-C', str(tools_root), 'diff', '--binary', 'HEAD^', '--', *target_paths],
-                                  check=True, capture_output=True).stdout
-            if not diff:
-                diff = subprocess.run(['git', '-C', str(tools_root), 'show', '--format=', '--binary', 'HEAD',
-                                       '--', *target_paths], check=True, capture_output=True).stdout
-            target_patch = Path(directory) / 'target.patch'
-            target_patch.write_bytes(diff)
-            assert diff, 'the inspect fork change is missing'
-        else:
-            target_patch = fork_change('ZygorGuidesViewerRM', 'zygor-inspected-altbot-gearfinder', paths=target_paths)
+        target_patch = fork_change('ZygorGuidesViewerRM', 'zygor-inspected-altbot-gearfinder', paths=target_paths)
+        launchers = fork_change('ZygorGuidesViewerRM', 'zygor-gearfinder-equipment-launchers',
+                                paths=('ZygorGuidesViewerRM/Code-WOTLK/Item-GearFinder.lua',))
+        launcher_test = Path(directory) / 'tools/gearfinder/test_inspect_context.lua'
+        git_apply(work, launchers, '--reverse')
+        result = run_fixture([lua, str(launcher_test), str(candidate)], 'equipment launchers', cwd=directory)
+        assert result.returncode != 0 and "in function 'assert'" in result.stderr, result.stdout + result.stderr
+        git_apply(work, launchers)
+        result = run_fixture([lua, str(launcher_test), str(candidate)], 'equipment launchers', cwd=directory)
+        assert result.returncode == 0, result.stdout + result.stderr
+        print('Gear Finder equipment launchers fail when reverted and pass when reapplied', flush=True)
         target_tests = ('gearfinder/test_inspect_context.lua', 'gearfinder/test_target_sources.lua',
                         'itemscore/test_target_context.lua', 'itemscore/test_target_tooltip.lua')
+        git_apply(work, launchers, '--reverse')
         git_apply(work, target_patch, '--reverse')
         for name in target_tests:
             result = run_fixture([lua, str(Path(directory) / 'tools' / name), str(candidate)], name, cwd=directory)
@@ -390,6 +390,7 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
                 raise AssertionError(f'Reverting inspected Gear Finder did not fail {name}:\n'
                                      + result.stdout + result.stderr)
         git_apply(work, target_patch)
+        git_apply(work, launchers)
         for name in target_tests:
             result = run_fixture([lua, str(Path(directory) / 'tools' / name), str(candidate)], name, cwd=directory)
             if result.returncode:
@@ -398,6 +399,7 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
         print('Inspected Gear Finder fork change fails all four regressions when reverted and passes when reapplied',
               flush=True)
         # The earlier incremental commit is checked against its native parent context.
+        git_apply(work, launchers, '--reverse')
         git_apply(work, target_patch, '--reverse')
         changed = ('IndividualProgression.lua', 'Item-GearFinder.lua', 'ZygorQuestLootDB.lua')
         patch = fork_change('ZygorGuidesViewerRM', 'zygor-incremental-gearfinder',

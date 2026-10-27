@@ -148,7 +148,7 @@
     {
       "name": "MultiBot",
       "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
-      "revision": "6a43fd688c3a2657028be707ea75f3e2fac7636c",
+      "revision": "7383260afe2fe5826cd00becc5e5fecf6d16138b",
       "upstream": {
         "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
         "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f"
@@ -166,7 +166,9 @@
         "multibot-library-load-order": "4ce9a460ca9637af2a6ebf057c9b16b165dd7e6f",
         "multibot-spellbook-items": "03e291a36e1f368abf54ca0bbc756d8d47847410",
         "multibot-combat-profiles": "541c815266855c5f9445d0c698f0be7f30c4157e",
-        "multibot-control-ownership": "6a43fd688c3a2657028be707ea75f3e2fac7636c"
+        "multibot-control-ownership": "6a43fd688c3a2657028be707ea75f3e2fac7636c",
+        "multibot-rogue-strategy-state": "5af530724160e1761cb805b573cbfd0400f06502",
+        "multibot-class-profile-state": "7383260afe2fe5826cd00becc5e5fecf6d16138b"
       }
     }
   ],
@@ -263,7 +265,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "1633821cf1cf4221326cb2e42c905da676054faa",
+      "revision": "de9461efb1b4720dc36c2fc9daa6e21e485414c3",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718"
@@ -275,7 +277,8 @@
         "zygor-individual-progression": "1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea",
         "zygor-incremental-gearfinder": "84787533d8a16b7c5cd063b84ac1ceb28361fd34",
         "zygor-druid-gear-profiles": "258ee399fffc38307b760faf899e1a3bef6a1dff",
-        "zygor-inspected-altbot-gearfinder": "1633821cf1cf4221326cb2e42c905da676054faa"
+        "zygor-inspected-altbot-gearfinder": "1633821cf1cf4221326cb2e42c905da676054faa",
+        "zygor-gearfinder-equipment-launchers": "de9461efb1b4720dc36c2fc9daa6e21e485414c3"
       }
     }
   ]
