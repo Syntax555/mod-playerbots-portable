@@ -36,6 +36,11 @@ Sources, licenses and update instructions are in
 
 ## Changing code
 
+- For WoW addon work, start with the
+  [WoW 3.3.5a addon wiki index](https://github.com/NeticSoul/wow-335a-addon-wiki/blob/main/index.md)
+  and read the pages relevant to the change. Target Lua 5.1 and Interface 30300;
+  verify API and widget behavior against the pinned client and addon sources.
+  Modern Retail APIs require an explicit compatibility implementation.
 - Prefer existing AzerothCore, Playerbots and module functions, data and
   configuration over new logic. Check the pinned sources before writing a
   replacement. Do not call hooks with side effects to probe a decision.
