@@ -1,8 +1,16 @@
 diff --git a/src/MultiBotBridge.cpp b/src/MultiBotBridge.cpp
-index 1f586de..c81fefa 100644
+index 1f586de..1ef88ea 100644
 --- a/src/MultiBotBridge.cpp
 +++ b/src/MultiBotBridge.cpp
-@@ -35,6 +35,7 @@
+@@ -16,6 +16,7 @@
+ #include "NPCPackets.h"
+ #include "ObjectAccessor.h"
+ #include "ObjectGuid.h"
++#include "ObjectDefines.h"
+ #include "ObjectMgr.h"
+ #include "Player.h"
+ #include "QuestPackets.h"
+@@ -35,6 +36,7 @@
  #include "AiObjectContext.h"
  #include "AiFactory.h"
  #include "EraTalentBridge.h"
@@ -10,23 +18,25 @@ index 1f586de..c81fefa 100644
  #include "Event.h"
  #include "EventProcessor.h"
  #include "Strategy.h"
-@@ -268,6 +269,7 @@ char const* const kInventoryOpenCapability = "INVENTORY_OPEN_V1";
+@@ -268,6 +270,8 @@ char const* const kInventoryOpenCapability = "INVENTORY_OPEN_V1";
  char const* const kLootRuleItemCapability = "LOOT_RULE_ITEM_V1";
  char const* const kQuestProgressCapability = "QUEST_PROGRESS_V1";
  char const* const kQuestProgressPushCapability = "QUEST_PROGRESS_PUSH_V1";
 +char const* const kIpProgressCapability = "IP_PROGRESS_V1";
++char const* const kIpTargetCapability = "IP_TARGET_V1";
  char const* const kQuestAbandonCapability = "QUEST_ABANDON_V1";
  char const* const kQuestAbandonTargetCapability = "QUEST_ABANDON_TARGET_V1";
  char const* const kTalentApplyCapability = "TALENT_APPLY_V1";
-@@ -455,6 +457,7 @@ bool SendCapabilitiesPackets(Player* player, ChatMsg chatType)
+@@ -455,6 +459,8 @@ bool SendCapabilitiesPackets(Player* player, ChatMsg chatType)
          kLootRuleItemCapability,
          kQuestProgressCapability,
          kQuestProgressPushCapability,
 +        kIpProgressCapability,
++        kIpTargetCapability,
          kQuestAbandonCapability,
          kQuestAbandonTargetCapability,
          kTalentApplyCapability,
-@@ -2331,6 +2334,157 @@ void UpdateQuestProgress(uint32 diff)
+@@ -2331,6 +2337,181 @@ void UpdateQuestProgress(uint32 diff)
  
  // MB_QUEST_PROGRESS_V1_END
  
@@ -66,11 +76,25 @@ index 1f586de..c81fefa 100644
 +    std::string watched;
 +};
 +
-+// Answers concern the sender's own character only. Chat requests and
-+// WorldScript::OnUpdate both run on the world thread.
++// Chat requests and WorldScript::OnUpdate both run on the world thread.
++// Only the sender can watch; inspected altbot answers are requested on demand.
 +std::map<ObjectGuid, IpProgressRequester> ipProgressRequesters;
 +
-+void HandleIpProgressRequest(Player* player, std::string const& requestType, std::vector<std::string> const& fields)
++Player* FindIpProgressTarget(Player* requester, std::string const& name)
++{
++    Player* target = FindBotByName(requester, name);
++    if (!requester->IsInWorld() || !requester->GetSession() || requester->GetSession()->IsSocketClosed() ||
++        !target || target == requester || !target->IsInWorld() || !target->GetSession() ||
++        !requester->GetGroup() ||
++        target->GetGroup() != requester->GetGroup() ||
++        !requester->IsWithinDistInMap(target, INSPECT_DISTANCE, false) || requester->IsValidAttackTarget(target))
++        return nullptr;
++    PlayerbotAI* ai = GetBotAI(target);
++    return ai && ai->IsAltBot() && ai->GetMaster() == requester ? target : nullptr;
++}
++
++void HandleIpProgressRequest(Player* player, std::string const& requestType,
++    std::vector<std::string> const& fields, std::string const& targetName)
 +{
 +    ChatMsg const replyType = CHAT_MSG_WHISPER;
 +    std::string const& token = fields[1];
@@ -93,6 +117,13 @@ index 1f586de..c81fefa 100644
 +        return;
 +    }
 +
++    Player* subject = targetName.empty() ? player : FindIpProgressTarget(player, targetName);
++    if (!subject)
++    {
++        SendProtocolError(player, replyType, "GET", requestType, token, "BOT_UNAVAILABLE");
++        return;
++    }
++
 +    if (requestType == "IP_STATE")
 +    {
 +        if (fields.size() == 3 && fields[2] == "UNWATCH")
@@ -101,7 +132,7 @@ index 1f586de..c81fefa 100644
 +                requester.watchToken.clear();
 +            return;
 +        }
-+        std::string const state = MultiBotBridgeProgression::State(player);
++        std::string const state = MultiBotBridgeProgression::State(subject);
 +        if (fields.size() == 3)
 +        {
 +            requester.watchToken = token;
@@ -109,6 +140,9 @@ index 1f586de..c81fefa 100644
 +            requester.watched = state;
 +        }
 +        SendAddonPacket(player, replyType, "IP_STATE", token + kFieldSeparator + state);
++        if (subject != player)
++            SendAddonPacket(player, replyType, "IP_TARGET", token + kFieldSeparator +
++                AiFactory::GetEffectiveCombatProfile(subject) + kFieldSeparator + (subject->CanDualWield() ? "1" : "0"));
 +        return;
 +    }
 +
@@ -124,7 +158,7 @@ index 1f586de..c81fefa 100644
 +                SendProtocolError(player, replyType, "GET", requestType, token, "BAD_QUEST");
 +                return;
 +            }
-+            items.push_back(MultiBotBridgeProgression::Quest(player, questId));
++            items.push_back(MultiBotBridgeProgression::Quest(subject, questId));
 +        }
 +        if (items.empty())
 +        {
@@ -133,7 +167,7 @@ index 1f586de..c81fefa 100644
 +        }
 +    }
 +    else
-+        items = MultiBotBridgeProgression::Access(player);
++        items = MultiBotBridgeProgression::Access(subject);
 +
 +    auto const packets = BuildIpListPackets(requestType, token, items);
 +    if (packets.empty())
@@ -184,28 +218,38 @@ index 1f586de..c81fefa 100644
  void AppendGameObjectUnitLines(PlayerbotAI* botAI, std::vector<std::string>& lines, std::string const& title, std::string const& valueName)
  {
      lines.push_back(title);
-@@ -20533,6 +20687,20 @@ bool HandleBridgeOpcode(Player* player, ChatMsg replyType, std::string const& op
+@@ -20533,6 +20714,30 @@ bool HandleBridgeOpcode(Player* player, ChatMsg replyType, std::string const& op
              HandleQuestProgressRequest(player, CHAT_MSG_WHISPER, fields[1], fields[2], fields.size() == 4 ? fields[3] : "");
              return true;
          }
 +        if (requestType == "IP_STATE" || requestType == "IP_QUESTS" || requestType == "IP_ACCESS")
 +        {
 +            std::string const token = GetSafeErrorToken(fields, 1);
-+            bool const fieldCount = requestType == "IP_QUESTS" ? fields.size() == 3 :
-+                requestType == "IP_STATE" ? fields.size() == 2 || fields.size() == 3 : fields.size() == 2;
++            std::size_t const baseCount = requestType == "IP_QUESTS" ? 3 : 2;
++            bool const targeted = fields.size() == baseCount + 2 && fields[baseCount] == "BOT";
++            bool const fieldCount = targeted || fields.size() == baseCount ||
++                (requestType == "IP_STATE" && fields.size() == 3);
 +            if (!fieldCount)
 +                return SendProtocolError(player, CHAT_MSG_WHISPER, normalized, requestType, token, "BAD_FIELD_COUNT");
 +            if (!IsValidRequestToken(fields[1]))
 +                return SendProtocolError(player, CHAT_MSG_WHISPER, normalized, requestType, "", "BAD_TOKEN");
 +            if (requestType == "IP_STATE" && fields.size() == 3 && fields[2] != "WATCH" && fields[2] != "UNWATCH")
 +                return SendProtocolError(player, CHAT_MSG_WHISPER, normalized, requestType, token, "BAD_MODE");
-+            HandleIpProgressRequest(player, requestType, fields);
++            std::string targetName;
++            std::vector<std::string> requestFields = fields;
++            if (targeted)
++            {
++                if (!TryUrlDecodeField(fields.back(), targetName, kMaxBotNameLength, false) || targetName != Trim(targetName))
++                    return SendProtocolError(player, CHAT_MSG_WHISPER, normalized, requestType, token, "BAD_BOT_NAME");
++                requestFields.resize(baseCount);
++            }
++            HandleIpProgressRequest(player, requestType, requestFields, targetName);
 +            return true;
 +        }
          // MB_INVENTORY_H1B1A_GET_EQUIP_OBSERVE_V1_BEGIN
          if (requestType == "EQUIP_OBSERVE")
          {
-@@ -22572,6 +22740,7 @@ public:
+@@ -22572,6 +22777,7 @@ public:
      void OnUpdate(uint32 diff) override
      {
          UpdateQuestProgress(diff);
@@ -541,7 +585,7 @@ index 0000000..dd25def
 +}
 diff --git a/src/MultiBotBridgeProgression.h b/src/MultiBotBridgeProgression.h
 new file mode 100644
-index 0000000..46c82b7
+index 0000000..ae63dbd
 --- /dev/null
 +++ b/src/MultiBotBridgeProgression.h
 @@ -0,0 +1,24 @@
@@ -555,8 +599,8 @@ index 0000000..46c82b7
 +
 +class Player;
 +
-+// Read-only Individual Progression answers about the requesting character
-+// for IP_PROGRESS_V1. Individual Progression's header cannot share a
++// Read-only Individual Progression answers about the supplied character
++// for IP_PROGRESS_V1 and IP_TARGET_V1. Individual Progression's header cannot share a
 +// translation unit with Playerbots' (both declare GENERAL), so it lives here.
 +namespace MultiBotBridgeProgression
 +{

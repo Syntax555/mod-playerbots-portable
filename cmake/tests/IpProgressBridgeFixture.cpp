@@ -30,6 +30,9 @@ constexpr char kFieldSeparator = '~';
 constexpr char const* kAddonEnvelope = "MBOT\t";
 constexpr std::size_t kMaxBridgeWireLength = 255;
 constexpr std::size_t kMaxTokenLength = 64;
+constexpr std::size_t kMaxBotNameLength = 64;
+constexpr std::size_t kMaxEncodedFieldLength = 192;
+constexpr float INSPECT_DISTANCE = 28.0f;
 constexpr uint32 PHASEMASK_NORMAL = 0x00000001;
 enum Difficulty : uint8 { DUNGEON_DIFFICULTY_NORMAL = 0, DUNGEON_DIFFICULTY_HEROIC = 1 };
 constexpr uint8 MAX_DIFFICULTY = 4;
@@ -47,6 +50,15 @@ struct ObjectGuid
 };
 
 class Player;
+struct Group { };
+Group groupA, groupB;
+struct PlayerbotAI
+{
+    Player* master = nullptr;
+    bool alt = true;
+    bool IsAltBot() const { return alt; }
+    Player* GetMaster() const { return master; }
+};
 struct Quest
 {
     uint32 id = 0;
@@ -85,7 +97,16 @@ class Player
 {
 public:
     ObjectGuid guid{1};
+    std::string name = "Owner";
     WorldSession session;
+    bool hasSession = true;
+    Group* group = &groupA;
+    PlayerbotAI* ai = nullptr;
+    bool sameMap = true;
+    bool hostile = false;
+    float distance = 0.0f;
+    std::string effectiveProfile = "fire";
+    bool dualWield = false;
     bool online = true;
     bool connected = true;
     bool gm = false;
@@ -97,7 +118,15 @@ public:
     std::vector<std::tuple<uint32, uint8, bool>> satisfyCalls;
 
     ObjectGuid GetGUID() const { return guid; }
-    WorldSession* GetSession() { return &session; }
+    WorldSession* GetSession() { return hasSession ? &session : nullptr; }
+    Group* GetGroup() const { return group; }
+    bool CanDualWield() const { return dualWield; }
+    bool IsWithinDistInMap(Player const* target, float range, bool is3D) const
+    {
+        assert(range == INSPECT_DISTANCE && !is3D);
+        return target->sameMap && target->distance <= range;
+    }
+    bool IsValidAttackTarget(Player const* target) const { return target->hostile; }
     bool IsInWorld() const { return online; }
     bool IsGameMaster() const { return gm; }
     uint32 GetLevel() const { return level; }
@@ -160,6 +189,20 @@ public:
     }
 };
 std::map<ObjectGuid, Player*> worldPlayers;
+uint32 targetLookups = 0;
+Player* FindBotByName(Player*, std::string const& name)
+{
+    ++targetLookups;
+    for (auto const& [_, player] : worldPlayers)
+        if (player->name == name)
+            return player;
+    return nullptr;
+}
+PlayerbotAI* GetBotAI(Player* player) { return player ? player->ai : nullptr; }
+namespace AiFactory
+{
+std::string GetEffectiveCombatProfile(Player* player) { return player->effectiveProfile; }
+}
 namespace ObjectAccessor
 {
 Player* FindConnectedPlayer(ObjectGuid guid)
@@ -450,7 +493,74 @@ int main()
     ExpectError("BAD_FIELD_COUNT");
     assert(Dispatch(&player, {"IP_ACCESS", "zip1", "533"}));
     ExpectError("BAD_FIELD_COUNT");
+    assert(Dispatch(&player, {"IP_STATE", "zip1", "WATCH", "BOT", "Botty"}));
+    ExpectError("BAD_FIELD_COUNT");
+    assert(Dispatch(&player, {"IP_STATE", "zip1", "BOT", "Botty", "UNWATCH"}));
+    ExpectError("BAD_FIELD_COUNT");
+    assert(Dispatch(&player, {"IP_STATE", "zip1", "OTHER", "Botty"}));
+    ExpectError("BAD_FIELD_COUNT");
+    for (std::string const& name : {std::string(""), std::string("%GG"), std::string("%00"), std::string(" Botty"), std::string(65, 'b')})
+    {
+        assert(Dispatch(&player, {"IP_STATE", "zip1", "BOT", name}));
+        ExpectError("BAD_BOT_NAME");
+    }
     assert(ipProgressRequesters.empty());
+
+    Player bot;
+    bot.guid = {2};
+    bot.name = "Botty";
+    bot.session.socketClosed = true; // Native altbot sessions have no client socket.
+    PlayerbotAI botAI;
+    botAI.master = &player;
+    bot.ai = &botAI;
+    worldPlayers[bot.guid] = &bot;
+    assert(FindIpProgressTarget(&player, "Botty") == &bot);
+    bot.online = false;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.online = true;
+    bot.hasSession = false;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.hasSession = true;
+    bot.group = &groupB;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.group = &groupA;
+    player.online = false;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    player.online = true;
+    player.hasSession = false;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    player.hasSession = true;
+    player.session.socketClosed = true;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    player.session.socketClosed = false;
+    player.group = bot.group = nullptr;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    player.group = bot.group = &groupA;
+    bot.sameMap = false;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.sameMap = true;
+    bot.distance = INSPECT_DISTANCE + 0.1f;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.distance = INSPECT_DISTANCE;
+    assert(FindIpProgressTarget(&player, "Botty") == &bot);
+    bot.hostile = true;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.hostile = false;
+    bot.ai = nullptr;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    bot.ai = &botAI;
+    botAI.alt = false;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    botAI.alt = true;
+    botAI.master = &bot;
+    assert(!FindIpProgressTarget(&player, "Botty"));
+    botAI.master = &player;
+    player.ai = &botAI;
+    assert(!FindIpProgressTarget(&player, "Owner"));
+    player.ai = nullptr;
+    assert(Dispatch(&player, {"IP_STATE", "zip1", "BOT", "Unknown"}));
+    ExpectError("BOT_UNAVAILABLE");
+    ipProgressRequesters.clear();
 
 #ifndef MBB_WITH_INDIVIDUAL_PROGRESSION
     // Without the module the realm reports no progression and no progression gates.
@@ -465,6 +575,13 @@ int main()
     mapDifficulties.insert({532, 0});
     assert(Dispatch(&player, {"IP_ACCESS", "zip3"}));
     assert(Items("IP_ACCESS", "zip3") == "532:A---");
+    assert(Dispatch(&player, {"IP_STATE", "target", "BOT", "%42otty"}));
+    assert(sentPackets.size() == 2 && sentPackets[0].recipient == player.guid
+        && sentPackets[0].payload == "target~1~0~0~0~0~0~255~0~0~N~0~80");
+    assert(sentPackets[1].recipient == player.guid && sentPackets[1].distribution == CHAT_MSG_WHISPER
+        && sentPackets[1].opcode == "IP_TARGET" && sentPackets[1].payload == "target~fire~0");
+    sentPackets.clear();
+    assert(ipProgressRequesters.at(player.guid).watchToken.empty());
     std::cout << "IP progress bridge without Individual Progression passed\n";
     return 0;
 #else
@@ -755,6 +872,45 @@ int main()
     assert(Items("IP_ACCESS", "zipa").starts_with("33:DD--,"));
     assert(std::none_of(player.satisfyCalls.begin(), player.satisfyCalls.end(),
         [](auto const& call) { return std::get<0>(call) == 33; }));
+    // One inspected altbot uses its own earned state, quest eligibility and access requirements.
+    Reward(bot, 8);
+    bot.level = 61;
+    AllowRequests(player);
+    bot.effectiveProfile = "combat";
+    bot.dualWield = true;
+    assert(Dispatch(&player, {"IP_STATE", "target", "BOT", "%42otty"}));
+    assert(sentPackets.size() == 2 && sentPackets[0].recipient == player.guid
+        && sentPackets[0].payload == "target~1~1~1~8~8~0~1~9~0~N~0~80");
+    assert(sentPackets[1].recipient == player.guid && sentPackets[1].distribution == CHAT_MSG_WHISPER
+        && sentPackets[1].opcode == "IP_TARGET" && sentPackets[1].payload == "target~combat~1");
+    sentPackets.clear();
+    assert(ipProgressRequesters.at(player.guid).watchToken.empty());
+    // State is on demand; changing the bot does not subscribe or change the owner's watch.
+    Reward(bot, 9);
+    UpdateIpProgress(1000);
+    assert(sentPackets.empty());
+    bot.rewarded.insert(304);
+    bot.statuses[301] = QUEST_STATUS_COMPLETE;
+    assert(Dispatch(&player, {"IP_QUESTS", "targetq", "301,304,305,322,326", "BOT", "Botty"}));
+    assert(Items("IP_QUESTS", "targetq") == "301:C,304:R,305:A,322:A,326:A");
+    bot.missingAccess = {{532, 0}};
+    assert(Dispatch(&player, {"IP_ACCESS", "targeta", "BOT", "Botty"}));
+    assert(Items("IP_ACCESS", "targeta") == "33:DD--,249:A---,469:G---,532:RA--,548:D---");
+    // Target lookups share the requester budget and stop before scanning visible bots.
+    ipProgressRequesters.at(player.guid).requests = 20;
+    uint32 const lookups = targetLookups;
+    assert(Dispatch(&player, {"IP_STATE", "target", "BOT", "Botty"}));
+    ExpectError("RATE_LIMIT");
+    assert(targetLookups == lookups);
+    // A self watch remains self-owned even while another character is inspected.
+    AllowRequests(player);
+    assert(Dispatch(&player, {"IP_STATE", "selfwatch", "WATCH"}));
+    sentPackets.clear();
+    assert(Dispatch(&player, {"IP_STATE", "target", "BOT", "Botty"}));
+    sentPackets.clear();
+    assert(ipProgressRequesters.at(player.guid).watchToken == "selfwatch");
+    assert(Dispatch(&player, {"IP_STATE", "selfwatch", "UNWATCH"}));
+    assert(sentPackets.empty());
     // Answers never change progression, quests or settings.
     assert(settingWrites == 0 && player.rewarded.contains(66007) && !player.rewarded.contains(66008));
     std::cout << "IP progress bridge state, quests, givers, access, watches and limits passed\n";

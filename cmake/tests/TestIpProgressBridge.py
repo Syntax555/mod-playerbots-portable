@@ -70,6 +70,21 @@ def native_contracts(core):
     gameobject = (core / 'src/server/game/Entities/GameObject/GameObject.cpp').read_text()
     maps = (core / 'src/server/game/Maps/MapMgr.cpp').read_text()
     commands = (core / 'src/server/scripts/Commands/cs_quest.cpp').read_text()
+    session = (core / 'src/server/game/Server/WorldSession.cpp').read_text()
+    inspect = (core / 'src/server/game/Handlers/MiscHandler.cpp').read_text()
+    bot_ai = (core / 'modules/mod-playerbots/src/Bot/PlayerbotAI.cpp').read_text()
+    # Altbots have server-side sessions without a socket; only the requester needs a live socket.
+    assert 'return !m_Socket || !m_Socket->IsOpen();' in function(session, 'bool WorldSession::IsSocketClosed() const')
+    assert '!sRandomPlayerbotMgr.IsRandomBot(bot) && !IsSelfBot(bot)' in function(bot_ai, 'bool PlayerbotAI::IsAltBot()')
+    native_inspect = function(inspect, 'void WorldSession::HandleInspectOpcode(')
+    assert 'IsWithinDistInMap(player, INSPECT_DISTANCE, false)' in native_inspect
+    assert 'IsValidAttackTarget(player)' in native_inspect
+    factory = (core / 'modules/mod-playerbots/src/Bot/Factory/AiFactory.cpp').read_text()
+    effective = function(factory, 'std::string AiFactory::GetEffectiveCombatProfile(')
+    assert 'std::string mode = GetCombatProfile(player);' in effective and 'return mode;' in effective
+    assert '{"auto", "assassin", "combat", "subtlety"}' in function(factory, 'std::vector<std::string> AiFactory::GetCombatProfiles(')
+    unit = (core / 'src/server/game/Entities/Unit/Unit.h').read_text()
+    assert 'bool CanDualWield() const { return _dualWieldMode == DualWieldMode::ENABLED; }' in unit
     module = core / 'modules/mod-individual-progression/src'
     header = (module / 'IndividualProgression.h').read_text()
     progression = (module / 'IndividualProgression.cpp').read_text()
@@ -172,6 +187,9 @@ def extract_production(bridge, unit, header, awareness):
 
     assert 'kIpProgressCapability = "IP_PROGRESS_V1";' in bridge
     assert 'kIpProgressCapability,' in function(bridge, 'bool SendCapabilitiesPackets(')
+    assert 'kIpTargetCapability = "IP_TARGET_V1";' in bridge
+    assert 'kIpTargetCapability,' in function(bridge, 'bool SendCapabilitiesPackets(')
+    assert 'std::size_t constexpr kMaxEncodedFieldLength = 192;' in bridge
     assert 'UpdateIpProgress(diff);' in function(bridge, 'class MultiBotBridgeWorldScript')
     assert '#include "MultiBotBridgeProgression.h"' in bridge
     assert 'IndividualProgression.h' not in bridge, 'Playerbots and IP headers both declare GENERAL'
@@ -182,7 +200,7 @@ def extract_production(bridge, unit, header, awareness):
         'std::string Trim(', 'std::vector<std::string> SplitFields(', 'bool HasControlCharacter(',
         'bool IsValidRawField(', 'bool IsValidCanonicalRawField(', 'bool IsValidRequestToken(',
         'std::string GetSafeErrorToken(', 'std::size_t GetAddonWireLength(', 'bool IsAddonPacketWithinBudget(',
-        'bool TryParseUint32Field(',
+        'bool TryParseUint32Field(', 'int HexDigitValue(', 'bool TryUrlDecodeField(',
     ))
     declarations = header[header.index('namespace MultiBotBridgeProgression'):header.rindex('#endif')]
     body = re.sub(r'^#include .*$', '', unit, flags=re.MULTILINE)
@@ -228,6 +246,25 @@ def mutations(production):
         ('packet-budget', 'if (!IsAddonPacketWithinBudget(opcode, header + chunk))', 'if (false)'),
         ('reply-self', 'ChatMsg const replyType = CHAT_MSG_WHISPER;', 'ChatMsg const replyType = 2;'),
         ('mode-validation', 'fields[2] != "WATCH" && fields[2] != "UNWATCH"', 'false'),
+        ('target-tag', 'fields[baseCount] == "BOT"', 'true'),
+        ('target-inworld', '!target->IsInWorld() || ', ''),
+        ('requester-inworld', '!requester->IsInWorld() || ', ''),
+        ('requester-socket', 'requester->GetSession()->IsSocketClosed() ||', 'false ||'),
+        ('target-self', 'target == requester || ', ''),
+        ('target-session', '!target->GetSession() ||', 'false ||'),
+        ('target-group', 'target->GetGroup() != requester->GetGroup() ||', 'false ||'),
+        ('requester-group', '!requester->GetGroup() ||', 'false ||'),
+        ('target-distance', '!requester->IsWithinDistInMap(target, INSPECT_DISTANCE, false)', 'false'),
+        ('target-hostile', 'requester->IsValidAttackTarget(target)', 'false'),
+        ('target-altbot', 'ai->IsAltBot() && ', ''),
+        ('target-master', 'ai->GetMaster() == requester', 'true'),
+        ('target-name', 'targetName != Trim(targetName)', 'false'),
+        ('target-state-subject', 'MultiBotBridgeProgression::State(subject)', 'MultiBotBridgeProgression::State(player)'),
+        ('target-quest-subject', 'MultiBotBridgeProgression::Quest(subject, questId)', 'MultiBotBridgeProgression::Quest(player, questId)'),
+        ('target-access-subject', 'MultiBotBridgeProgression::Access(subject)', 'MultiBotBridgeProgression::Access(player)'),
+        ('target-metadata-scope', 'if (subject != player)', 'if (true)'),
+        ('target-profile-subject', 'AiFactory::GetEffectiveCombatProfile(subject)', 'AiFactory::GetEffectiveCombatProfile(player)'),
+        ('target-dual-wield', 'subject->CanDualWield() ? "1" : "0"', 'player->CanDualWield() ? "1" : "0"'),
     ]
     for label, before, after in replacements:
         if production.count(before) != 1:
