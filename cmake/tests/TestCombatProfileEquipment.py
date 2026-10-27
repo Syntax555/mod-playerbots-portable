@@ -1,8 +1,9 @@
 """Exercise owned-inventory profile equipment through the real equip actions.
 
-The production selection, per-item equip code and both action entry points run
-with native-shaped item instances and session packets. No item is created,
-bought, granted or selected from a bank.
+The production equipment classifier, selection, per-item equip code and both
+action entry points run with native-shaped item instances and session packets.
+Only owned bag instances can be equipped; no inventory item is granted, bought
+or selected from a bank.
 """
 
 import argparse
@@ -21,6 +22,7 @@ source = (args.source / 'Ai/Base/Actions/EquipAction.cpp').read_text()
 header = (args.source / 'Ai/Base/Actions/EquipAction.h').read_text()
 core = prepared_core(ROOT)
 item_header = (core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
+item_instance = (core / 'src/server/game/Entities/Item/Item.h').read_text()
 player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
 shared = (core / 'src/server/shared/SharedDefines.h').read_text()
 
@@ -33,19 +35,25 @@ handler = (core / 'src/server/game/Handlers/ItemHandler.cpp').read_text()
 native_handler = function(handler, 'void WorldSession::HandleAutoEquipItemSlotOpcode(')
 assert 'if (checkInterval < 2)' in value and 'value = Calculate();' in value
 assert 'QueryItemUsageForEquip(proto, randomPropertyId)' in function(usage, 'ItemUsage ItemUpgradeValue::Calculate()')
+assert 'GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID)' in function(usage, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip(')
 assert 'std::vector<Item*> items;' in function(visitor, 'class CollectItemsVisitor')
 assert '_player->GetItemByGuid(packet.ItemGuid)' in native_handler
 assert '_player->SwapItem(item->GetPos(), dstpos);' in native_handler
+assert 'return GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID);' in function(item_instance, 'int32 GetItemRandomPropertyId()')
+current_item = function(usage, 'Item* ItemUsageValue::CurrentItem(')
+assert 'item->GetUInt32Value(ITEM_FIELD_DURABILITY) < bestItem->GetUInt32Value(ITEM_FIELD_DURABILITY)' in current_item
 assert 'void EquipItem(Item* item, uint8 forcedSlot = NULL_SLOT);' in header
 
 enums = '\n'.join(function(text, 'enum ' + name) + ';' for text, name in (
     (item_header, 'InventoryType'), (item_header, 'ItemClass'), (item_header, 'ItemSubclassWeapon'),
+    (item_header, 'ItemFlags : uint32'), (item_header, 'ItemSubclassContainer'),
     (player_header, 'EquipmentSlots'), (player_header, 'InventorySlots'), (shared, 'Classes')))
 production = '\n\n'.join(function(source, signature) for signature in (
     'void EquipAction::EquipItem(Item* item, uint8 forcedSlot)',
     'bool EquipAction::EquipUpgrades()',
     'bool EquipUpgradesPacketAction::Execute(Event event)',
     'bool EquipUpgradeAction::Execute(Event'))
+production = function(usage, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip(') + '\n\n' + production
 
 FIXTURE = r'''
 #include <algorithm>
@@ -65,6 +73,7 @@ using uint64=std::uint64_t; using int32=std::int32_t;
 constexpr uint8 INVENTORY_SLOT_BAG_0=255, NULL_SLOT=255;
 constexpr uint32 CMSG_AUTOEQUIP_ITEM_SLOT=1, TRADE_STATUS_TRADE_ACCEPT=1;
 constexpr uint32 ITEM_FIELD_RANDOM_PROPERTIES_ID=0;
+constexpr uint32 ITEM_FIELD_DURABILITY=1, ITEM_FIELD_MAXDURABILITY=2;
 constexpr uint32 ITERATE_ITEMS_IN_BAGS=1;
 enum InventoryResult { EQUIP_ERR_OK, EQUIP_ERR_CANT_CARRY_MORE_OF_THIS, EQUIP_ERR_INVALID };
 enum ItemUsage { ITEM_USAGE_NONE, ITEM_USAGE_EQUIP, ITEM_USAGE_REPLACE, ITEM_USAGE_BAD_EQUIP, ITEM_USAGE_BROKEN_EQUIP };
@@ -73,14 +82,22 @@ struct ItemTemplate {
     uint32 ItemId=0, InventoryType=INVTYPE_HEAD, Class=ITEM_CLASS_ARMOR, SubClass=0;
     uint32 allowedClass=0, level=1;
     std::map<int32,float> tank, dps;
+    uint32 ContainerSlots=0;
+    bool HasFlag(ItemFlags) const { return false; }
 };
 std::map<uint32,ItemTemplate> templates;
+struct Player;
 struct Item {
     uint64 guid=0; uint32 entry=0; int32 property=0; uint8 bag=0,slot=0; bool broken=false;
     ItemTemplate const* GetTemplate() const { return &templates.at(entry); }
     uint32 GetEntry() const { return entry; }
     int32 GetItemRandomPropertyId() const { return property; }
-    int32 GetInt32Value(uint32) const { return property; }
+    int32 GetInt32Value(uint32 field) const { assert(field==ITEM_FIELD_RANDOM_PROPERTIES_ID); return property; }
+    uint32 GetUInt32Value(uint32 field) const { return field==ITEM_FIELD_MAXDURABILITY?100:(broken?0:100); }
+    static Item* CreateItem(uint32 entry,uint32 count,Player*) {
+        assert(count==1); auto* item=new Item; item->entry=entry; return item;
+    }
+    void RemoveFromUpdateQueueOf(Player*) {}
     ObjectGuid GetGUID() const { return {guid}; }
     uint8 GetBagSlot() const { return bag; }
     uint8 GetSlot() const { return slot; }
@@ -131,6 +148,11 @@ struct Player {
         for(auto& item:owned) if(item.bag==bag && item.slot==slot) return &item;
         return nullptr;
     }
+    Item* GetItemByPos(uint16 pos) { return GetItemByPos(pos>>8,pos&255); }
+    bool HasItemOrGemWithIdEquipped(uint32 id,uint32 count) const {
+        assert(count==1);
+        return std::any_of(equipped.begin(),equipped.end(),[&](auto const& pair){return pair.second->entry==id;});
+    }
     InventoryResult CanUseItem(ItemTemplate const* p) const {
         return (p->allowedClass && p->allowedClass!=cls) || p->level>level ? EQUIP_ERR_INVALID:EQUIP_ERR_OK;
     }
@@ -173,26 +195,7 @@ struct PlayerbotAI {
         return EQUIP_ERR_OK;
     }
     void TellMaster(std::ostringstream const&) {}
-    ItemUsage Upgrade(std::string const& qualifier) {
-        auto comma=qualifier.find(',');
-        uint32 id=std::stoul(qualifier.substr(0,comma));
-        int32 property=comma==std::string::npos?0:std::stoi(qualifier.substr(comma+1));
-        auto* p=&templates.at(id);
-        if(bot->CanUseItem(p)!=EQUIP_ERR_OK) return ITEM_USAGE_NONE;
-        uint8 slot=FindEquipSlot(p,NULL_SLOT,true);
-        StatsWeightCalculator calc(bot);
-        float score=calc.CalculateItem(id,property);
-        uint8 possible=(p->InventoryType==INVTYPE_FINGER ||
-            (slot==EQUIPMENT_SLOT_MAINHAND && bot->dual && (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0,slot) ||
-             bot->GetItemByPos(INVENTORY_SLOT_BAG_0,slot)->GetTemplate()->InventoryType!=INVTYPE_2HWEAPON)))?2:1;
-        for(uint8 n=0;n<possible;++n) {
-            auto* old=bot->GetItemByPos(INVENTORY_SLOT_BAG_0,slot+n);
-            if(!old) return score>0?ITEM_USAGE_EQUIP:ITEM_USAGE_BAD_EQUIP;
-            if(id!=old->entry && score>calc.CalculateItem(old->entry,old->property)*1.01f)
-                return ITEM_USAGE_EQUIP;
-        }
-        return ITEM_USAGE_NONE;
-    }
+    ItemUsage Upgrade(std::string const& qualifier);
 };
 void Session::HandleAutoEquipItemSlotOpcode(WorldPackets::Item::AutoEquipItemSlot& packet) {
     auto guid=packet.packet.values.at(0); uint8 slot=packet.packet.values.at(1);
@@ -215,6 +218,10 @@ struct CollectItemsVisitor { std::vector<Item*> items; };
 struct Chat { std::string FormatItem(ItemTemplate const* p) { return std::to_string(p->ItemId); } };
 struct Config { bool AutoEquipUpgradeLoot=false; float EquipUpgradeThreshold=1.01f; } sPlayerbotAIConfig;
 struct RandomMgr { bool IsRandomBot(Player* p) { return p->random; } bool IsSpecPvp(uint32,uint8) { return false; } } sRandomPlayerbotMgr;
+struct RandomItemMgr {
+    bool CanEquipWeapon(ItemTemplate const*,uint8) { return true; }
+    bool CanEquipArmor(ItemTemplate const*,uint8,uint8) { return true; }
+} sRandomItemMgr;
 struct ObjectMgr { ItemTemplate const* GetItemTemplate(uint32 id) { return &templates.at(id); } } manager;
 auto* sObjectMgr=&manager;
 struct Event {
@@ -236,6 +243,21 @@ public:
 struct EquipUpgradesPacketAction:EquipAction { using EquipAction::EquipAction; bool Execute(Event event); };
 struct EquipUpgradeAction:EquipAction { using EquipAction::EquipAction; bool Execute(Event event); };
 #define AI_VALUE2(type,name,qualifier) botAI->Upgrade(qualifier)
+struct ItemUsageValue {
+    Player* bot; PlayerbotAI* botAI;
+    ItemUsage QueryItemUsageForEquip(ItemTemplate const*,int32);
+    uint32 GetSmallestBagSize() const { return 16; }
+    Item* CurrentItem(ItemTemplate const* proto) const {
+        for(auto& item:bot->owned) if(item.entry==proto->ItemId && !item.broken) return &item;
+        return nullptr;
+    }
+};
+ItemUsage PlayerbotAI::Upgrade(std::string const& qualifier) {
+    auto comma=qualifier.find(',');
+    auto id=std::stoul(qualifier.substr(0,comma));
+    auto property=comma==std::string::npos?0:std::stoi(qualifier.substr(comma+1));
+    return ItemUsageValue{bot,this}.QueryItemUsageForEquip(&templates.at(id),property);
+}
 // PRODUCTION
 void AddTemplate(uint32 id,uint32 type,float tank,float dps,uint32 cls=0,uint32 level=1) {
     uint32 itemClass=(type==INVTYPE_WEAPON || type==INVTYPE_WEAPONMAINHAND || type==INVTYPE_2HWEAPON)?ITEM_CLASS_WEAPON:ITEM_CLASS_ARMOR;
@@ -332,8 +354,9 @@ mutations = (
      'bool const preferShield = shieldTank && haveShield && haveOnehand && false;'),
     ('broken inventory exclusion', ' || item->IsBroken()', ''),
     ('random suffix identity', 'EquipItem(item, forcedSlot);', 'EquipItem(&*std::find_if(bot->owned.begin(), bot->owned.end(), [&](auto const& owned) { return owned.GetEntry() == item->GetEntry(); }), forcedSlot);'),
-    ('paired suffix slot', 'forcedSlot = slot + i;', 'forcedSlot = slot;'),
-    ('suffix upgrade threshold', ' && score > currentScore * sPlayerbotAIConfig.EquipUpgradeThreshold', ''),
+    ('variant classification', ' ||\n             randomPropertyId != oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID)', ''),
+    ('paired suffix slot', '        possibleSlots = 2;', '        possibleSlots = 1;'),
+    ('suffix upgrade threshold', 'itemScore > oldScore * sPlayerbotAIConfig.EquipUpgradeThreshold', 'itemScore > oldScore'),
 )
 with tempfile.TemporaryDirectory(prefix='profile-equipment-') as temporary:
     work = Path(temporary)

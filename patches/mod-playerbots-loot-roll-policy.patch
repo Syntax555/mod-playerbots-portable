@@ -1,5 +1,5 @@
 diff --git a/src/Ai/Base/Actions/LootRollAction.cpp b/src/Ai/Base/Actions/LootRollAction.cpp
-index fdfc913..3692a5e 100644
+index bcc2a31..f2fd6af 100644
 --- a/src/Ai/Base/Actions/LootRollAction.cpp
 +++ b/src/Ai/Base/Actions/LootRollAction.cpp
 @@ -6,9 +6,11 @@
@@ -81,6 +81,28 @@ index fdfc913..3692a5e 100644
  bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
  {
      // Get the bitmask for the bot's class
+@@ -196,19 +177,8 @@ bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
+ 
+ bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
+ {
+-    // Count the total number of the item (equipped + in bags)
+-    uint32 totalItemCount = bot->GetItemCount(proto->ItemId, true);
+-
+-    // Count the number of the item in bags only
+-    uint32 bagItemCount = bot->GetItemCount(proto->ItemId, false);
+-
+-    // Determine if the unique item is already equipped
+-    bool isEquipped = (totalItemCount > bagItemCount);
+-    if (isEquipped && proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+-        return true;  // Unique Item is already equipped
+-    else if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && (bagItemCount > 1))
+-        return true; // Unique item already in bag, don't roll for it
+-    return false; // Item is not equipped or in bags, roll for it
++    return proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) &&
++           (bot->HasItemOrGemWithIdEquipped(proto->ItemId, 1) || bot->GetItemCount(proto->ItemId, false) > 1);
+ }
+ 
+ bool RollAction::Execute(Event event)
 diff --git a/src/Ai/Base/Actions/LootRollAction.h b/src/Ai/Base/Actions/LootRollAction.h
 index 586d8c2..193d679 100644
 --- a/src/Ai/Base/Actions/LootRollAction.h
@@ -93,3 +115,42 @@ index 586d8c2..193d679 100644
  };
  
  class RollAction : public Action
+diff --git a/src/Ai/Base/Value/ItemUsageValue.cpp b/src/Ai/Base/Value/ItemUsageValue.cpp
+index 3188a3d..744f4f3 100644
+--- a/src/Ai/Base/Value/ItemUsageValue.cpp
++++ b/src/Ai/Base/Value/ItemUsageValue.cpp
+@@ -258,21 +258,8 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto,
+     bool needToCheckUnique = result == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS ||
+          itemProto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE);
+ 
+-    if (needToCheckUnique)
+-    {
+-        // Count the total number of the item (equipped + in bags)
+-        uint32 totalItemCount = bot->GetItemCount(itemProto->ItemId, true);
+-
+-        // Count the number of the item in bags only
+-        uint32 bagItemCount = bot->GetItemCount(itemProto->ItemId, false);
+-
+-        // Determine if the unique item is already equipped
+-        bool isEquipped = (totalItemCount > bagItemCount);
+-
+-        if (isEquipped)
+-            return ITEM_USAGE_NONE;  // Item is already equipped
+-        // If not equipped, continue processing
+-    }
++    if (needToCheckUnique && bot->HasItemOrGemWithIdEquipped(itemProto->ItemId, 1))
++        return ITEM_USAGE_NONE;
+ 
+     if (itemProto->Class == ITEM_CLASS_QUIVER && bot->getClass() != CLASS_HUNTER)
+         return ITEM_USAGE_NONE;
+@@ -418,7 +405,9 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto,
+         bool oldItemIsBroken =
+             oldItem->GetUInt32Value(ITEM_FIELD_DURABILITY) == 0 && oldItem->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) > 0;
+ 
+-        if (itemProto->ItemId != oldItemProto->ItemId && (shouldEquipInSlot || !existingShouldEquip) && isBetter)
++        if ((itemProto->ItemId != oldItemProto->ItemId ||
++             randomPropertyId != oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID)) &&
++            (shouldEquipInSlot || !existingShouldEquip) && isBetter)
+         {
+             switch (itemProto->Class)
+             {

@@ -33,6 +33,7 @@ CPP = r'''
 #include <cstdint>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -202,9 +203,22 @@ struct PlayerbotAI {
     static bool IsDps(Player* player, bool bySpec = false);
     static bool IsRanged(Player* player, bool bySpec = false);
     static bool IsMelee(Player* player, bool bySpec = false);
+    static bool IsCaster(Player* player, bool bySpec = false);
     void UpdateAI(uint32 elapsed, bool minimal = false);
     void RefreshCombatProfile(bool force = false);
     void InvalidateCombatProfile() { combatProfileDirty.store(true, std::memory_order_relaxed); }
+};
+struct StatsCollector {
+    StatsCollector(CollectorType, uint8, uint8) {}
+};
+struct StatsWeightCalculator {
+    Player* player_;
+    CollectorType type_, hitOverflowType_;
+    std::unique_ptr<StatsCollector> collector_;
+    uint8 cls, lvl;
+    int tab;
+    bool enable_overflow_penalty_, enable_item_set_bonus_;
+    explicit StatsWeightCalculator(Player* player);
 };
 struct PlayerbotRepository {
     int saves = 0;
@@ -269,6 +283,7 @@ TESTS = r"""
                 PlayerbotAI ai(player);
                 assert(AiFactory::GetCombatProfile(&player) == "auto");
                 assert(AiFactory::GetPlayerSpecTab(&player) == (player.managed ? 0 : 1));
+                assert(StatsWeightCalculator(&player).tab == (player.managed ? 0 : 1));
                 auto const actual = AiFactory::GetPlayerSpecTabs(&player);
                 if (player.managed) assert(actual.at(0) == 15 && actual.at(1) == 0 && actual.at(2) == 10);
                 else assert(actual.at(0) == 0 && actual.at(1) == 37 && (!actual.contains(2) || actual.at(2) == 0));
@@ -281,6 +296,8 @@ TESTS = r"""
                     (profile == "balance" ? 0 : profile == "resto" ? 2 : 1) :
                     uint8(std::find(expected.profiles.begin(), expected.profiles.end(), profile) - expected.profiles.begin());
                 assert(AiFactory::GetPlayerSpecTab(&player) == expectedTab);
+                StatsWeightCalculator const manualWeights(&player);
+                assert(manualWeights.tab == expectedTab && manualWeights.cls == player.cls && manualWeights.lvl == player.level);
                 assert(AiFactory::GetPlayerSpecTabs(&player) == actual);
                 assert(player.spells.empty() && player.talents.size() == 1);
                 assert(ai.combat.HasStrategy("stay") && ai.combat.HasStrategy("travel") && ai.combat.HasStrategy("loot"));
@@ -322,6 +339,7 @@ TESTS = r"""
                 player.combat = false;
                 assert(AiFactory::SetCombatProfile(&player, "auto"));
                 assert(AiFactory::GetPlayerSpecTabs(&player) == actual);
+                assert(StatsWeightCalculator(&player).tab == (player.managed ? 0 : 1));
             }
         }
     }
@@ -483,11 +501,14 @@ def main() -> None:
     factory = (args.source / 'src/Bot/Factory/AiFactory.cpp').read_text()
     ai = (args.source / 'src/Bot/PlayerbotAI.cpp').read_text()
     header = (args.source / 'src/Bot/PlayerbotAI.h').read_text()
+    stats = (args.source / 'src/Mgr/Item/StatsWeightCalculator.cpp').read_text()
+    collector = (args.source / 'src/Mgr/Item/StatsCollector.h').read_text()
     shared = (prepared_core(ROOT) / 'src/server/shared/SharedDefines.h').read_text()
     enums = '\n'.join(function(header, 'enum ' + name) + ';' for name in (
         'HUNTER_TABS', 'ROGUE_TABS', 'PRIEST_TABS', 'DEATH_KNIGHT_TABS', 'DRUID_TABS',
         'MAGE_TABS', 'SHAMAN_TABS', 'PALADIN_TABS', 'WARLOCK_TABS', 'WARRIOR_TABS', 'BotRoles : uint8'))
     enums += '\n' + function(shared, 'enum Classes') + ';'
+    enums += '\n' + function(collector, 'enum CollectorType : uint8') + ';'
     assert 'bool EraTalentBots_SpecTabs(Player* bot, uint32* tabs3);' in (
         args.source / 'src/Bot/EraTalentBridge.h').read_text()
     factory_functions = (
@@ -505,9 +526,10 @@ def main() -> None:
     )
     ai_functions = ('bool PlayerbotAI::IsTank(', 'bool PlayerbotAI::IsHeal(',
                     'bool PlayerbotAI::IsDps(', 'bool PlayerbotAI::IsRanged(',
-                    'bool PlayerbotAI::IsMelee(', 'void PlayerbotAI::RefreshCombatProfile(')
+                    'bool PlayerbotAI::IsMelee(', 'bool PlayerbotAI::IsCaster(', 'void PlayerbotAI::RefreshCombatProfile(')
     production = '\n\n'.join(function(factory, signature) for signature in factory_functions)
     production += '\n\n' + '\n\n'.join(function(ai, signature) for signature in ai_functions)
+    production += '\n\n' + function(stats, 'StatsWeightCalculator::StatsWeightCalculator(')
     update = function(ai, 'void PlayerbotAI::UpdateAI(')
     boundary = update.index('    // Bots send no movement opcodes')
     update = update[:boundary] + '}\n'
@@ -542,6 +564,7 @@ def main() -> None:
         ('profile not saved', '        PlayerbotRepository::instance().Save(ai);', '        (void)ai;'),
         ('invalid persisted profile', 'if (std::find(profiles.begin(), profiles.end(), text) == profiles.end())', 'if (false)'),
         ('automatic update disconnected', '        RefreshCombatProfile();', ''),
+        ('native item weights ignore profile', '    tab = AiFactory::GetPlayerSpecTab(player);', '    tab = 0;'),
     )
     with tempfile.TemporaryDirectory(prefix='combat-profiles-') as temporary:
         directory = Path(temporary)

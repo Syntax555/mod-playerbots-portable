@@ -1,9 +1,10 @@
 """Exercise both bot loot-roll entry points with the actual native vote policy.
 
 Production action, unique checks, master classification, packet construction,
-session handler, usability, LFG eligibility and group vote counting are extracted unchanged. Fixtures provide
-item-usage classifications, inventory counts, group state and recording output;
-they do not emulate a live realm or its complete item-scoring system. Native
+session handler, usability, LFG eligibility, equipment classification, inventory
+counts and group vote counting are extracted unchanged. Fixtures provide deterministic
+calculator scores, group state and recording output; they do not emulate
+a live realm or its complete item-scoring system. Native
 WorldPacket, ByteBuffer, ObjectGuid and Event types carry the real roll packets.
 """
 
@@ -18,6 +19,7 @@ from FixtureSupport import (
     cxx,
     function,
     prepared_core,
+    run_fixture,
     source_argument,
 )
 
@@ -43,6 +45,8 @@ unit = (core / 'src/server/game/Entities/Unit/UnitDefines.h').read_text()
 shared = (core / 'src/server/shared/SharedDefines.h').read_text()
 loot = (core / 'src/server/game/Loot/LootMgr.h').read_text()
 usage = (module / 'Ai/Base/Value/ItemUsageValue.h').read_text()
+usage_source = (module / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
+player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
 
 assert 'botOutgoingPacketHandlers.AddHandler(SMSG_LOOT_START_ROLL, "master loot roll");' in ai
 assert 'creators["master loot roll"]' in (module / 'Ai/Base/WorldPacketActionContext.h').read_text()
@@ -53,18 +57,32 @@ assert 'new TriggerNode("very often", { NextAction("loot roll", relevance) })' i
 action_header = (module / 'Ai/Base/Actions/LootRollAction.h').read_text()
 master_class = function(action_header, 'class MasterLootRollAction')
 assert 'Execute' not in master_class and 'MasterLootRollAction::Execute' not in action
+roll_constructor = function(group, 'Roll::Roll(')
+assert 'itemRandomPropId(li.randomPropertyId), itemRandomSuffix(li.randomSuffix)' in roll_constructor
+assert ('int32 GetItemRandomPropertyId() const { return GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID); }'
+        in item_header)
+# Nonquest armor falls through from no equipment use to the native sale use.
+calculate = function(usage_source, 'ItemUsage ItemUsageValue::Calculate()')
+assert ('ItemUsage equip = QueryItemUsageForEquip(proto, randomPropertyId);\n'
+        '    if (equip != ITEM_USAGE_NONE)\n        return equip;') in calculate
+assert ('if (proto->SellPrice > 0)' in calculate and
+        'proto->Quality >= ITEM_QUALITY_NORMAL && !isSoulbound && proto->Bonding != BIND_WHEN_PICKED_UP' in calculate and
+        'return ITEM_USAGE_AH;' in calculate and 'return ITEM_USAGE_VENDOR;' in calculate)
 
 enums = '\n'.join(function(source, signature) + ';' for source, signature in (
     (group_header, 'enum RollVote : uint8'),
     (loot, 'enum RollType'), (loot, 'enum RollMask'), (loot, 'enum LootMethod'),
     (item, 'enum ItemClass'), (item, 'enum ItemBondingType'), (item, 'enum ItemFlags : uint32'),
-    (item, 'enum ItemSubclassJunk'), (shared, 'enum ItemQualities'),
+    (item, 'enum ItemSubclassJunk'), (item, 'enum ItemSubclassContainer'), (shared, 'enum ItemQualities'),
     (item, 'enum ItemFlags2 : uint32'), (item, 'enum ItemModType'),
     (item, 'enum ItemSubclassArmor'), (item, 'enum ItemSubclassWeapon'),
     (item, 'enum InventoryType'), (item_header, 'enum InventoryResult : uint8'),
     (shared, 'enum Classes'), (shared, 'enum SkillType'), (shared, 'enum TeamId : uint8'),
     (unit, 'enum ClassContext : uint8'),
     (usage, 'enum ItemUsage : uint32'),
+    *((player_header, 'enum ' + name) for name in (
+        'EquipmentSlots', 'InventorySlots', 'InventoryPackSlots', 'BankItemSlots',
+        'BankBagSlots', 'KeyRingSlots', 'CurrencyTokenSlots')),
 ))
 
 fixture = r'''
@@ -87,6 +105,9 @@ NATIVE_ENUMS
 class Player;
 class PlayerbotAI;
 class Group;
+constexpr uint8 INVENTORY_SLOT_BAG_0 = 255, NULL_SLOT = 255;
+constexpr uint32 ITEM_FIELD_RANDOM_PROPERTIES_ID = 0, ITEM_FIELD_DURABILITY = 1,
+    ITEM_FIELD_MAXDURABILITY = 2;
 constexpr uint32 PLAYER_FLAGS_NO_PLAY_TIME = 1;
 constexpr uint32 PTF_UNHEALTHY_TIME = 1;
 constexpr uint32 ACHIEVEMENT_CRITERIA_TYPE_ROLL_NEED = 1;
@@ -130,7 +151,9 @@ struct ItemTemplate
     uint32 InventoryType = INVTYPE_CHEST;
     uint32 HolidayId = 0;
     uint32 ItemLevel = 20;
+    uint32 SellPrice = 1;
     bool spellPower = false;
+    uint32 ContainerSlots = 0, GemProperties = 0;
     bool HasFlag(ItemFlags flag) const { return flags & flag; }
     bool HasFlag2(ItemFlags2 flag) const { return flags2 & flag; }
     bool HasStat(ItemModType) const { return spellPower; }
@@ -147,12 +170,40 @@ struct ObjectManager
 };
 ObjectManager objectManager;
 #define sObjectMgr (&objectManager)
+struct Item
+{
+    uint32 entry = 100;
+    int32 property = 0;
+    uint32 count = 1;
+    bool broken = false;
+    uint32 gem = 0;
+    bool soulbound = false;
+    ItemTemplate const* GetTemplate() const { return sObjectMgr->GetItemTemplate(entry); }
+    uint32 GetEntry() const { return entry; }
+    uint32 GetCount() const { return count; }
+    bool HasSocket() const { return gem != 0; }
+    bool IsSoulBound() const { return soulbound; }
+    uint32 GetGemCountWithID(uint32 id) const { return gem == id ? 1 : 0; }
+    int32 GetInt32Value(uint32 field) const { assert(field == ITEM_FIELD_RANDOM_PROPERTIES_ID); return property; }
+    uint32 GetUInt32Value(uint32 field) const
+    {
+        assert(field == ITEM_FIELD_DURABILITY || field == ITEM_FIELD_MAXDURABILITY);
+        return field == ITEM_FIELD_MAXDURABILITY ? 100 : broken ? 0 : 100;
+    }
+    static Item* CreateItem(uint32 entry, uint32 count, Player*) { return new Item{entry, 0, count}; }
+    void RemoveFromUpdateQueueOf(Player*) {}
+};
+struct Bag
+{
+    uint32 GetItemCount(uint32, Item*) const { return 0; }
+};
 struct PlayerbotAIConfig
 {
     int32 LootNeedRollLevel = 1;
     bool LootGreedRollLevel = false;
     bool LootRollRecipe = false;
     bool LootRollDisenchant = false;
+    float EquipUpgradeThreshold = 1.01f;
 };
 PlayerbotAIConfig playerbotAIConfig;
 #define sPlayerbotAIConfig playerbotAIConfig
@@ -230,8 +281,10 @@ public:
     uint32 team = TEAM_ALLIANCE;
     std::map<uint32, uint32> skills;
     std::set<uint32> knownSpells;
-    uint32 bagCount = 0;
-    uint32 totalCount = 0;
+    std::map<uint16, Item> items;
+    std::map<std::pair<uint32, int32>, float> scores;
+    std::vector<std::pair<uint32, int32>> scoreQueries;
+    InventoryResult equipResult = EQUIP_ERR_OK;
     bool noPlayTime = false;
     WorldSession session;
     std::vector<uint32> achievements;
@@ -252,17 +305,63 @@ public:
     bool IsClass(Classes cls, ClassContext) const { return classId == cls; }
     InventoryResult CanRollForItemInLFG(ItemTemplate const* proto, WorldObject const* source) const;
     InventoryResult CanUseItem(ItemTemplate const* proto) const;
-    uint32 GetItemCount(uint32, bool bank) const { return bank ? totalCount : bagCount; }
+    uint32 GetItemCount(uint32 item, bool bank, Item* skipItem = nullptr) const;
+    bool HasItemOrGemWithIdEquipped(uint32 item, uint32 count, uint8 except_slot = NULL_SLOT) const;
+    bool CanDualWield() const { return false; }
+    bool CanTitanGrip() const { return false; }
+    Item* GetItemByPos(uint16 position) const
+    {
+        auto found = items.find(position);
+        return found == items.end() ? nullptr : const_cast<Item*>(&found->second);
+    }
+    Item* GetItemByPos(uint8 bag, uint8 slot) const { return GetItemByPos((uint16(bag) << 8) | slot); }
+    Bag* GetBagByPos(uint8) const { return nullptr; }
+    Item* GetItemByEntry(uint32 id) const
+    {
+        for (auto const& [position, item] : items)
+            if (item.entry == id) return GetItemByPos(position);
+        return nullptr;
+    }
+    Item& AddItem(uint8 slot, uint32 count = 1, int32 property = 0, uint32 id = 100)
+    {
+        Item& item = items.insert_or_assign((uint16(INVENTORY_SLOT_BAG_0) << 8) | slot,
+                                           Item{id, property, count}).first->second;
+        item.soulbound = slot < EQUIPMENT_SLOT_END;
+        return item;
+    }
     bool HasPlayerFlag(uint32) const { return noPlayTime; }
     void UpdateAchievementCriteria(uint32 criterion, uint32) { achievements.push_back(criterion); }
     void SendDirectMessage(WorldPacket const* packet) { session.SendDirectMessage(packet); }
 };
+struct StatsWeightCalculator
+{
+    Player* bot;
+    explicit StatsWeightCalculator(Player* player) : bot(player) {}
+    void SetItemSetBonus(bool enabled) { assert(!enabled); }
+    void SetOverflowPenalty(bool enabled) { assert(!enabled); }
+    void SetPvpSpec(bool) {}
+    float CalculateItem(uint32 id, int32 property = 0)
+    {
+        bot->scoreQueries.emplace_back(id, property);
+        return bot->scores.at({id, property});
+    }
+};
+struct RandomPlayerbotMgr
+{
+    bool IsSpecPvp(uint32, uint8) const { return false; }
+} sRandomPlayerbotMgr;
+struct RandomItemMgr
+{
+    bool CanEquipArmor(ItemTemplate const*, uint8, uint32) const { return true; }
+    bool CanEquipWeapon(ItemTemplate const*, uint8) const { return true; }
+} sRandomItemMgr;
 class PlayerbotAI
 {
 public:
     Player* bot;
     Player* master;
     bool lootAllowed = true;
+    bool nativeEquipment = false;
     std::map<std::string, ItemUsage> usages;
     std::vector<std::string> queries;
     WorldObject* lootSource = nullptr;
@@ -270,13 +369,51 @@ public:
     Player* GetBot() { return bot; }
     Player* GetMaster() { return master; }
     WorldObject* GetWorldObject(ObjectGuid guid) { return guid ? lootSource : nullptr; }
-    ItemUsage Usage(std::string const& qualifier)
+    uint8 FindEquipSlot(ItemTemplate const* proto, uint8, bool) const
     {
-        queries.push_back(qualifier);
-        auto found = usages.find(qualifier);
-        return found == usages.end() ? ITEM_USAGE_NONE : found->second;
+        assert(proto->InventoryType == INVTYPE_WAIST);
+        return EQUIPMENT_SLOT_WAIST;
     }
+    InventoryResult CanEquipItem(uint8, uint16& dest, Item* item, bool swap, bool notLoading) const
+    {
+        assert(swap && notLoading);
+        dest = (uint16(INVENTORY_SLOT_BAG_0) << 8) | FindEquipSlot(item->GetTemplate(), NULL_SLOT, true);
+        return bot->equipResult;
+    }
+    ItemUsage Usage(std::string const& qualifier);
 };
+class ItemUsageValue
+{
+public:
+    PlayerbotAI* botAI;
+    Player* bot;
+    explicit ItemUsageValue(PlayerbotAI* ai) : botAI(ai), bot(ai->GetBot()) {}
+    ItemUsage QueryItemUsageForEquip(ItemTemplate const*, int32);
+    uint32 GetSmallestBagSize() const { return 0; }
+    Item* CurrentItem(ItemTemplate const* proto) const { return bot->GetItemByEntry(proto->ItemId); }
+};
+ItemUsage PlayerbotAI::Usage(std::string const& qualifier)
+{
+    queries.push_back(qualifier);
+    if (nativeEquipment)
+    {
+        auto comma = qualifier.find(',');
+        uint32 id = std::stoul(qualifier.substr(0, comma));
+        int32 property = comma == std::string::npos ? 0 : std::stoi(qualifier.substr(comma + 1));
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(id);
+        ItemUsageValue usage(this);
+        ItemUsage equip = usage.QueryItemUsageForEquip(proto, property);
+        if (equip != ITEM_USAGE_NONE) return equip;
+        Item* item = bot->GetItemByEntry(id);
+        bool isSoulbound = item && item->IsSoulBound();
+        if (proto->SellPrice > 0)
+            return proto->Quality >= ITEM_QUALITY_NORMAL && !isSoulbound && proto->Bonding != BIND_WHEN_PICKED_UP ?
+                   ITEM_USAGE_AH : ITEM_USAGE_VENDOR;
+        return ITEM_USAGE_NONE;
+    }
+    auto found = usages.find(qualifier);
+    return found == usages.end() ? ITEM_USAGE_NONE : found->second;
+}
 struct LFGManager
 {
     uint32 dungeon = 1;
@@ -347,6 +484,9 @@ production = '\n'.join([
     function(group, 'bool Group::CountRollVote'),
     function(group, 'void Group::SendLootStartRollToPlayer'),
     function(handler, 'void WorldSession::HandleLootRoll'),
+    function(storage, 'uint32 Player::GetItemCount(uint32 item,'),
+    function(storage, 'bool Player::HasItemOrGemWithIdEquipped('),
+    function(usage_source, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip('),
     function(storage, 'InventoryResult Player::CanRollForItemInLFG'),
     function(storage, 'InventoryResult Player::CanUseItem(ItemTemplate const* proto)'),
 ])
@@ -492,15 +632,24 @@ void ItemGuardsAndVariants()
 {
     for (bool notification : {false, true})
     {
-        for (uint32 uniqueState = 0; uniqueState < 4; ++uniqueState)
+        for (uint32 uniqueState = 0; uniqueState < 5; ++uniqueState)
         {
             Scenario s;
             playerbotAIConfig.LootNeedRollLevel = 2;
             s.Item().flags = ITEM_FLAG_UNIQUE_EQUIPPABLE;
-            s.bot.bagCount = uniqueState;
-            s.bot.totalCount = uniqueState == 0 ? 1 : uniqueState;
+            switch (uniqueState)
+            {
+                case 0: break;
+                case 1: s.bot.AddItem(BANK_SLOT_ITEM_START); break;
+                case 2: s.bot.AddItem(INVENTORY_SLOT_ITEM_START); break;
+                case 3: s.bot.AddItem(EQUIPMENT_SLOT_WAIST); break;
+                case 4:
+                    s.bot.AddItem(INVENTORY_SLOT_ITEM_START);
+                    s.bot.AddItem(INVENTORY_SLOT_ITEM_START + 1);
+                    break;
+            }
             assert(notification ? s.Receive() : s.periodic.Execute(Event("loot roll")));
-            s.Expect(uniqueState == 1 ? NEED : PASS);
+            s.Expect(uniqueState < 3 ? NEED : PASS);
         }
         for (bool sameClass : {false, true})
         {
@@ -754,6 +903,119 @@ void NativeEligibility()
     }
 }
 
+void NativeInventoryContract()
+{
+    Scenario s;
+    s.bot.AddItem(BANK_SLOT_ITEM_START);
+    assert(s.bot.GetItemCount(100, false) == 0 && s.bot.GetItemCount(100, true) == 1);
+    assert(!s.bot.HasItemOrGemWithIdEquipped(100, 1));
+    s.bot.AddItem(INVENTORY_SLOT_ITEM_START);
+    assert(s.bot.GetItemCount(100, false) == 1 && s.bot.GetItemCount(100, true) == 2);
+    assert(!s.bot.HasItemOrGemWithIdEquipped(100, 1));
+    s.bot.AddItem(EQUIPMENT_SLOT_WAIST);
+    assert(s.bot.GetItemCount(100, false) == 2 && s.bot.GetItemCount(100, true) == 3);
+    assert(s.bot.HasItemOrGemWithIdEquipped(100, 1));
+    assert(!s.bot.HasItemOrGemWithIdEquipped(100, 1, EQUIPMENT_SLOT_WAIST));
+    objectManager.items.emplace(101, ItemTemplate{});
+    objectManager.items.at(101).ItemId = 101;
+    s.Item().GemProperties = 1;
+    s.bot.items.clear();
+    s.bot.AddItem(EQUIPMENT_SLOT_WAIST, 1, 0, 101).gem = 100;
+    assert(s.bot.HasItemOrGemWithIdEquipped(100, 1));
+}
+
+void NativeEquipmentRollIntegration()
+{
+    for (bool notification : {false, true})
+    {
+        for (int32 candidate : {-83, 57, 5, 6, 7})
+        {
+            Scenario s;
+            s.ai.nativeEquipment = true;
+            s.bot.classId = CLASS_ROGUE;
+            s.Item().InventoryType = INVTYPE_WAIST;
+            s.Item().SubClass = ITEM_SUBCLASS_ARMOR_LEATHER;
+            playerbotAIConfig = {2, true, false, false};
+            s.bot.AddItem(EQUIPMENT_SLOT_WAIST, 1, 5);
+            s.bot.scores = {{{100, 5}, 100}, {{100, -83}, 140}, {{100, 57}, 130},
+                            {{100, 6}, 90}, {{100, 7}, 100.5f}};
+            s.roll.itemRandomPropId = candidate;
+            s.roll.itemRandomSuffix = candidate < 0 ? 12345 : 0;
+            ItemUsageValue classifier(&s.ai);
+            ItemUsage usage = classifier.QueryItemUsageForEquip(&s.Item(), candidate);
+            bool upgrade = candidate == -83 || candidate == 57;
+            assert(usage == (upgrade ? ITEM_USAGE_REPLACE : ITEM_USAGE_NONE));
+            s.bot.scoreQueries.clear();
+            assert(notification ? s.Receive() : s.periodic.Execute(Event("loot roll")));
+            s.Expect(upgrade ? NEED : GREED);
+            assert((s.bot.scoreQueries == std::vector<std::pair<uint32, int32>>{{100, candidate}, {100, 5}}));
+        }
+        for (uint32 forbidden = 0; forbidden < 3; ++forbidden)
+        {
+            Scenario s;
+            s.ai.nativeEquipment = true;
+            s.bot.classId = CLASS_ROGUE;
+            s.Item().InventoryType = INVTYPE_WAIST;
+            s.Item().SubClass = ITEM_SUBCLASS_ARMOR_LEATHER;
+            s.bot.AddItem(EQUIPMENT_SLOT_WAIST, 1, 5);
+            s.bot.scores = {{{100, 5}, 100}, {{100, -83}, 140}};
+            s.roll.itemRandomPropId = -83;
+            s.roll.itemRandomSuffix = 12345;
+            playerbotAIConfig = {2, true, false, false};
+            s.group.method = NEED_BEFORE_GREED;
+            s.group.lfg = true;
+            switch (forbidden)
+            {
+                case 0: s.Item().spellPower = true; break;
+                case 1: s.roll.rollVoteMask = ROLL_FLAG_TYPE_PASS | ROLL_FLAG_TYPE_GREED; break;
+                case 2: s.roll.rollVoteMask = ROLL_FLAG_TYPE_PASS; break;
+            }
+            ItemUsageValue classifier(&s.ai);
+            assert(classifier.QueryItemUsageForEquip(&s.Item(), -83) == ITEM_USAGE_REPLACE);
+            bool canNeed = s.bot.CanRollForItemInLFG(&s.Item(), &s.source) == EQUIP_ERR_OK;
+            assert(canNeed == (forbidden != 0));
+            assert(notification ? s.Receive(canNeed) : s.periodic.Execute(Event("loot roll")));
+            s.Expect(forbidden == 2 ? PASS : GREED);
+        }
+        for (InventoryResult result : {EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED,
+                                       EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_EQUIPPED_EXCEEDED})
+        {
+            Scenario s;
+            s.ai.nativeEquipment = true;
+            s.Item().InventoryType = INVTYPE_WAIST;
+            s.bot.equipResult = result;
+            s.bot.scores = {{{100, -83}, 140}};
+            s.roll.itemRandomPropId = -83;
+            s.roll.itemRandomSuffix = 12345;
+            playerbotAIConfig = {2, true, false, false};
+            ItemUsageValue classifier(&s.ai);
+            assert(classifier.QueryItemUsageForEquip(&s.Item(), -83) == ITEM_USAGE_NONE);
+            assert(notification ? s.Receive() : s.periodic.Execute(Event("loot roll")));
+            s.Expect(GREED);
+            assert(s.bot.scoreQueries.empty());
+        }
+        for (bool uniqueFlag : {false, true})
+        for (bool equipped : {false, true})
+        {
+            Scenario s;
+            s.ai.nativeEquipment = true;
+            s.Item().InventoryType = INVTYPE_WAIST;
+            s.Item().flags = uniqueFlag ? uint32(ITEM_FLAG_UNIQUE_EQUIPPABLE) : 0u;
+            s.bot.equipResult = EQUIP_ERR_CANT_CARRY_MORE_OF_THIS;
+            s.bot.AddItem(equipped ? uint8(EQUIPMENT_SLOT_WAIST) : uint8(BANK_SLOT_ITEM_START), 1, 5);
+            s.bot.scores = {{{100, 5}, 100}, {{100, -83}, 140}};
+            s.roll.itemRandomPropId = -83;
+            s.roll.itemRandomSuffix = 12345;
+            playerbotAIConfig = {2, true, false, false};
+            ItemUsageValue classifier(&s.ai);
+            assert(classifier.QueryItemUsageForEquip(&s.Item(), -83) ==
+                   (equipped ? ITEM_USAGE_NONE : ITEM_USAGE_EQUIP));
+            assert(notification ? s.Receive() : s.periodic.Execute(Event("loot roll")));
+            s.Expect(equipped ? GREED : NEED);
+        }
+    }
+}
+
 int main()
 {
     MasterModesAndOrder();
@@ -763,14 +1025,17 @@ int main()
     NativeMasksAndSession();
     MaskCombinations();
     NativeEligibility();
-    std::cout << "Bot loot rolls: 1,152 policy cases, 192 vote-mask cases, native LFG/usability, packets/counters, master types, ordering, recipes, unique items and random properties passed\n";
+    NativeInventoryContract();
+    NativeEquipmentRollIntegration();
+    std::cout << "Bot loot rolls: 1,152 policy cases, 192 vote-mask cases, native LFG/usability, packets/counters, master types, ordering, recipes, unique inventory contracts and native same-template variant upgrades passed\n";
 }
 '''
 
 with tempfile.TemporaryDirectory(prefix='portable-loot-roll-policy-') as directory:
     temporary = Path(directory)
     source = temporary / 'loot-policy.cpp'
-    source.write_text(fixture + '\n' + production + '\n' + tests)
+    body = fixture + '\n' + production + '\n' + tests
+    source.write_text(body)
     executable = temporary / 'loot-policy'
     includes = [
         module / 'Bot/Engine/WorldPacket',
@@ -783,6 +1048,35 @@ with tempfile.TemporaryDirectory(prefix='portable-loot-roll-policy-') as directo
     command += [argument for path in includes for argument in ('-I', str(path))]
     command += [str(source), '-o', str(executable)]
     subprocess.run(command, check=True)
-    subprocess.run([str(executable)], check=True, timeout=30,
-                   env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
-                        'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
+    environment = {**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
+                   'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'}
+    subprocess.run([str(executable)], check=True, timeout=30, env=environment)
+    mutations = (
+        ('same-template variant identity',
+         ('(itemProto->ItemId != oldItemProto->ItemId ||\n'
+          '             randomPropertyId != oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID))'),
+         '(itemProto->ItemId != oldItemProto->ItemId)'),
+        ('candidate random property',
+         'calculator.CalculateItem(itemProto->ItemId, randomPropertyId)',
+         'calculator.CalculateItem(itemProto->ItemId, 5)'),
+        ('upgrade threshold', 'oldScore * sPlayerbotAIConfig.EquipUpgradeThreshold', 'oldScore'),
+        ('native equip eligibility',
+         'result != EQUIP_ERR_OK && result != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS', 'false'),
+        ('unique equipped inventory',
+         'needToCheckUnique && bot->HasItemOrGemWithIdEquipped(itemProto->ItemId, 1)',
+         'needToCheckUnique && bot->GetItemCount(itemProto->ItemId, true) > bot->GetItemCount(itemProto->ItemId, false)'),
+        ('unique roll equipped inventory',
+         'bot->HasItemOrGemWithIdEquipped(proto->ItemId, 1)',
+         '(bot->GetItemCount(proto->ItemId, true) > bot->GetItemCount(proto->ItemId, false))'),
+        ('unique bag duplicates', 'bot->GetItemCount(proto->ItemId, false) > 1',
+         'bot->GetItemCount(proto->ItemId, false) > 2'),
+        ('native LFG need eligibility', 'bot->CanRollForItemInLFG(proto, source) != EQUIP_ERR_OK', 'false'),
+        ('advertised need mask', '!(voteMask & ROLL_FLAG_TYPE_NEED)', 'false'),
+    )
+    for label, before, after in mutations:
+        assert before in body, 'Missing loot policy mutation: ' + label
+        source.write_text(body.replace(before, after))
+        subprocess.run(command, check=True)
+        result = run_fixture([str(executable)], 'loot roll ' + label, env=environment)
+        assert result.returncode != 0 and 'Assertion' in result.stderr, result.stdout + result.stderr
+        print('Loot roll mutation rejected:', label, flush=True)
