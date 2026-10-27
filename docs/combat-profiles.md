@@ -4,6 +4,7 @@ MultiBot's **Select combat profile** button offers **Automatic** and the
 specializations available for that bot's class. Install the matching MultiBot
 addon and server. This menu changes combat behavior and equipment preferences;
 it does not buy talents, switch dual-specialization slots or grant abilities.
+An active SelfBot has the same selector in its compact MultiBot toolbar.
 
 In automatic mode, Playerbots reads the character's current talent distribution,
 including its Vanilla or TBC EraTalents tree. A specialization change refreshes
@@ -20,7 +21,13 @@ a role does not supply them. Travel, loot, formation and instance strategies
 are retained when the class profile changes.
 
 Profiles reuse the available Playerbots class rotations. Its rogue AI uses the
-same native assassination rotation for assassination and subtlety profiles.
+same native assassination rotation for assassination and subtlety profiles;
+combat uses its own rotation. Shared damage buttons can look the same across
+different specializations even when their native rotations differ.
+Ungrouped healing SelfBots retain Playerbots' solo damage support: holy damage
+for priests, elemental for shamans and retribution for paladins. Grouped
+SelfBots use their selected healing rotation. The selected profile still drives
+their role and equipment preferences.
 
 ## Equipment
 
@@ -36,6 +43,13 @@ skills or retrieve items from the bank. Ordinary automatic equipping of new loot
 continues to follow the server's existing setting. The native stat weights are
 an equipment heuristic, not a guarantee of the optimal raid loadout for every
 encounter or talent combination.
+
+Loot rolls use the same native item classification as ordinary automatic
+equipping. Different random-property variants of one item are compared by
+their own stats. `Playerbots.LootNeedRollLevel = 2` permits Need for a suitable
+upgrade; native loot-method restrictions can still refuse Need. Zygor's
+source suggestions use the same selected combat profile with its own
+stat-priority weights.
 
 ## Random bots and historical talents
 

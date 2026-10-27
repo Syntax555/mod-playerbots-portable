@@ -79,7 +79,14 @@ pass.
   relog/reset persistence, preserved travel and loot settings, and owned bag
   equipment changes, including protection weapon/shield and feral cat/bear.
   Check combat refusals, inventory-space failures, controlled altbots and
-  SelfBots. Verify random-bot builds while leveling across both historical eras.
+  SelfBots, including the compact SelfBot profile selector and returning to
+  automatic selection. Verify random-bot builds while leveling across both
+  historical eras.
+- [ ] Verify loot rolls and automatic equipping with real random-property
+  variants of the same item: a stronger variant, an identical or weaker copy,
+  equipped unique items and bank-only copies. Check both ordinary group loot
+  and native LFG Need restrictions with `Playerbots.LootNeedRollLevel = 2`;
+  a refused Need must retain the ordinary Greed/Pass behavior.
 - [ ] Verify startup data repairs on a fresh world database and an existing
   installation: historical priest rank chains, AQ event dragon menus, the
   retired Mirelow pool and the native Submerge Visual binding. Confirm the
@@ -119,6 +126,13 @@ pass.
   Gear Finder sources at tiers 7, 8 and 13, the inactive Talent Advisor for an
   EraTalents character and addon traffic in a group. The Lua fixture does not
   render frames or exercise the live bridge.
+- [ ] Verify the inspected-altbot Gear Finder on a live client with stock and
+  DragonUI inspect windows: current and later-era dungeons, quest-giver access,
+  faction-specific vendors, different owner/bot classes and profiles, cold
+  inspect data, empty equipment, profile and equipment changes, rapid target
+  switches and closing the view during replies. Measure frame time and addon
+  traffic; source fixtures cover the scan slices and cancellation, not rendered
+  graphics or a loaded realm.
 - [ ] Validate the [DragonUI talent route](era-talents.md#dragonui) on a live
   client with DragonUI's talent module enabled: talent key, micro-button,
   `/talents`, spec tabs, glyph page, a hunter's pet tree, and inspecting an
@@ -129,6 +143,9 @@ pass.
   match a class trainer for a Vanilla, TBC and Wrath character. The Lua
   fixtures run DragonUI's talent renderer and controls, entry points,
   spellbook catalogue and level-up builder but do not render game graphics.
+  Confirm the selected bot's MultiBot talent button stays pressed only while
+  its stock or DragonUI inspect view is visible, while the player's talent
+  micro-button follows the player's own window.
 - [ ] Check the MultiBot bot spellbook in DragonUI's book on a live client:
   art, tabs, tree sections, search, paging, single-page mode, cast, macro and
   shift-click skip for an era altbot, next to the player's own book. The Lua
@@ -219,15 +236,10 @@ pass.
 
 ## Dependency updates
 
-- [ ] Add Zygor gear advice for the visibly inspected altbot by reusing its
-  existing item scorer. Supply the target's class, race, level, talent profile,
-  equipped links and stat totals without reading the owner's item restrictions
-  or equipped stats. Keep evaluation on demand and invalidate it on target or
-  equipment changes. For bag upgrades, extend the existing MultiBot inventory
-  snapshot with native usability checks; for source suggestions, report the
-  bot's own progression and access before using Gear Finder gates. Cover
-  different owner/bot classes, stale inspect replies, missing item data and
-  closing the window without background scans.
+- [x] Use Zygor's existing Gear Finder for the visibly inspected controlled
+  altbot, with its own profile, equipment, progression and verified source
+  access. Fixtures cover owner isolation, bounded scanning, target changes and
+  stale replies; live validation remains listed above.
 - [ ] Expose reusable DragonUI spellbook card, section-header and window
   construction for EraTalents' bot book. Keep bot data and MultiBot actions in
   EraTalents, and reuse DragonUI's rendering helpers instead of mirroring

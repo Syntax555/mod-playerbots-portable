@@ -35,6 +35,8 @@ Other characters remain read-only; normal inspect access and range still apply.
 The separate MultiBot talent window and its Custom/Glyph tabs are not opened
 through this route. On a realm with native trees (`EraTalents.Enable = 0`), the
 server sends no EraTalents data and the button keeps MultiBot's talent window.
+The selected bot's talent button stays pressed while its inspect view is open;
+the player's talent micro-button follows the player's own talent window.
 Install both updated addons together; mixed addon or MPQ generations cannot
 supply a reliable historical view.
 

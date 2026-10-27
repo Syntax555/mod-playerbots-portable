@@ -107,6 +107,32 @@ or unknown; locked and unknown content is never presented as available.
 
 Text is available in English and German.
 
+### Inspected altbots
+
+Open a controlled altbot's Blizzard or DragonUI inspect window and click its
+Zygor button to use the same Gear Finder for that bot. The bot must be online,
+in your group and within ordinary inspect range. This view needs matching
+server and addon versions with the inspected-bot bridge support. If this support
+is unavailable, clicking the button reports it. The framed button is shown only
+on the equipment pane; changing to another tab closes the bot's Gear Finder.
+
+Recommendations use the bot's class, level, equipped items, effective combat
+profile and personal progression. Dungeon access and quest availability are
+read from the server for that bot. Source coverage follows Zygor's installed
+dungeon, quest-reward and vendor tables; unknown access stays unavailable.
+Quest sources need a known giver spawn whose map and Individual Progression
+visibility rules permit the bot's own earned stage; unverified or differently
+phased locations stay unknown. Other scripted NPC visibility conditions are not
+evaluated by this interface.
+Crafting and profession-dependent recommendations require information about
+the bot's learned recipes and are not included in this view.
+
+The existing finder processes its scan in short slices while the view is open.
+Changing or closing the inspected character cancels its pending results.
+The player's Gear Finder, talent advice and equipment settings remain personal.
+Bot loot rolls and equipping use Playerbots' native item evaluation; Zygor's
+display scores retain the viewer's stat-priority weights described above.
+
 ### Feature review
 
 | Feature | Upstream behaviour | Progression risk | Server source | Integration | Unknown state | Off or other realms | Verification | Limit |
@@ -139,7 +165,7 @@ shares goal progress between party members and does not concern progression.
 ## Server progression interface
 
 `IP_PROGRESS_V1` in the bridge's `HELLO` capabilities advertises three requests.
-They concern the sending character only and carry no character name:
+Their ordinary forms concern the sending character:
 
 ```text
 GET~IP_STATE~token[~WATCH|~UNWATCH]
@@ -149,6 +175,31 @@ GET~IP_ACCESS~token
 
 Replies are self-sender addon whispers on the `MBOT` prefix. Errors use the
 bridge's `ERR~GET~<request>~token~reason` format.
+
+`IP_TARGET_V1` additionally accepts the same requests for a controlled altbot:
+
+```text
+GET~IP_STATE~token~BOT~urlEncodedName
+GET~IP_QUESTS~token~questId,questId,...~BOT~urlEncodedName
+GET~IP_ACCESS~token~BOT~urlEncodedName
+```
+
+The requester must be the bot's current master, share its group and be within
+the native inspect distance. Random bots, SelfBots and other players are not
+valid targets. Target requests share the requester's normal budget and do not
+support `WATCH` or `UNWATCH`. Replies use the same formats and the requester's
+addon whisper channel. A target `IP_STATE` is followed by:
+
+```text
+IP_TARGET~token~effectiveCombatProfile~canDualWield
+```
+
+The profile is the bot's native automatic or selected combat profile;
+`canDualWield` is `0` or `1`. The client keeps these answers in the active inspect
+view and rejects replies from an earlier view. A strict target view follows
+the bot's personal era even when the reported account is a bot account.
+For target quest-source requests, `U` also covers an unverified giver location,
+and `IP_QUEST_GIVER_HIDDEN` also covers givers outside the bot's map access.
 
 ### State
 
