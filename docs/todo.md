@@ -145,12 +145,14 @@ pass.
   spellbook catalogue and level-up builder but do not render game graphics.
   Confirm the selected bot's MultiBot talent button stays pressed only while
   its stock or DragonUI inspect view is visible, while the player's talent
-  micro-button follows the player's own window.
+  micro-button follows the player's own window. Check split background textures
+  on D3D9 and D3D9Ex, including historical class trees and the hunter's pet tree.
 - [ ] Check the MultiBot bot spellbook in DragonUI's book on a live client:
   art, tabs, tree sections, search, paging, single-page mode, cast, macro and
   shift-click skip for an era altbot, next to the player's own book. The Lua
   fixture runs DragonUI's layout and search code and MultiBot's spellbook
-  collection but does not render frames.
+  collection but does not render frames. Check both halves of the book header
+  in single- and two-page views on D3D9 and D3D9Ex.
 - [ ] Decide whether characters that trained a TBC or Wrath class lesson
   before the trainer gate existed should unlearn it with a refund of the
   training cost. The gate only stops new training.

@@ -444,8 +444,11 @@ CreateFrame = function()
 end
 local sent, known = {}, {}
 local companions = { MOUNT = {}, CRITTER = {} }
+local skills = {}
 GetNumCompanions = function(kind) return #companions[kind] end
 GetCompanionInfo = function(kind, index) return 0, "Companion", companions[kind][index], "icon", false end
+GetNumSkillLines = function() return #skills end
+GetSkillLineInfo = function(index) return unpack(skills[index]) end
 SendAddonMessage = function(prefix, message, channel, target)
   assert(prefix == "ERATAL" and channel == "WHISPER" and target == "Master")
   table.insert(sent, message)
@@ -583,6 +586,23 @@ assert(mountOffered(), "an unlearned Warhorse stays in the native trainer catalo
 companions.MOUNT = { 13819 }
 assert(not IsSpellKnown(13819) and not mountOffered(), "a learned class mount is not offered again")
 companions.MOUNT = {}
+
+-- Armor proficiencies live in the player's skill list, without a known-spell slot.
+local function plateOffered()
+  local filters = { trainer = Book.TrainerIndex("PALADIN"), level = 60, raceBit = Book.RaceBit("Human") }
+  for _, entries in pairs(Book.UnlearnedByTree(filters)) do
+    for _, entry in ipairs(entries) do if entry.spellID == 750 then return true end end
+  end
+  return false
+end
+assert(plateOffered(), "unlearned armor proficiency stays in the native trainer catalog")
+skills = { { "Spell 750", 1 } }
+assert(plateOffered(), "a skill header cannot stand in for a learned armor proficiency")
+skills = { { "Armor", 1 }, { "Spell 750" } }
+assert(not IsSpellKnown(750) and not plateOffered(), "a learned armor proficiency is not offered again")
+skills = { { "Armor", 1 } }
+assert(not plateOffered(), "collapsing the skill header keeps learned armor proficiency hidden")
+skills = {}
 
 -- Highest-rank slots retain separate Polymorph forms; only numeric ranks join a rank menu.
 local slots = { {118, "Rang 1"}, {28272, "Schwein"}, {12824, "Rang 2"}, {28271, "Schildkröte"} }
@@ -726,6 +746,10 @@ function methods:SetTextColor(...) self.textColor = { ... } end
 function methods:GetText() return self.text end
 function methods:SetFormattedText(format, ...) self.text = string.format(format, ...) end
 function methods:SetTexture(path) self.texture = path end
+function methods:SetAtlasTexture(name)
+  assert(DragonUI.atlasinfo[name], "the bot book uses an existing DragonUI atlas: " .. tostring(name))
+  self.atlas = name
+end
 function methods:SetDesaturated(value) self.desaturated = value and true or false end
 function methods:Enable() self.enabled = true end
 function methods:Disable() self.enabled = false end
@@ -857,6 +881,7 @@ local spellbookOn = false
 if withDragon then
   -- DragonUI's real spellbook layout and search code and its German strings.
   local addon = { _dir = "Interface\\AddOns\\DragonUI\\", SpellbookModule = {}, atlasinfo = {}, L = {} }
+  assert(loadfile(dragonDir .. "/utils/atlas.lua"))("DragonUI", addon)
   for line in io.lines(dragonDir .. "/Locales/deDE.lua") do
     local key, value = line:match('^L%["(.-)"%]%s*=%s*"(.-)"%s*$')
     if key then addon.L[key] = value end
@@ -911,6 +936,10 @@ collect({ 6673, 12294, 900002 })
 local book = EraTalentsBotBookFrame
 local CLASS, GENERAL = 1, 2
 assert(multibotShown == 0 and book:IsShown() and pressed, "with DragonUI the bot's spellbook opens as a book")
+assert(book.art.wood.atlas == "spellbook-header-left-half"
+  and book.art.woodRight.atlas == "spellbook-header-right-half" and book.art.woodRight:IsShown()
+  and book.art.wood.point[3] == "TOP" and book.art.wood.point[4] == 0,
+  "the wide bot book draws DragonUI's two header halves up to the page center")
 local empty = book.empty
 assert(empty.font == "fixture-font" and empty.fontSize == 16
   and empty.textColor[1] == DragonUI.SpellbookModule.INK[1]
@@ -1025,6 +1054,8 @@ book.next:Click()
 assert(book.pageText.text == "Seite 2/2" and #cards() == 17 and book.prev.enabled, "the pager turns to the next spread")
 book.mode:Click()
 assert(book.pageText.text == "Seite 2/3" and #cards() == 27, "single-page mode shows one page per spread")
+assert(not book.art.woodRight:IsShown() and book.art.wood.point[3] == "TOPRIGHT" and book.art.wood.point[4] == -8,
+  "the single-page bot book stretches only its left header half")
 spellbookOn = false
 MultiBot.spellbook:Show()
 assert(multibotShown == 1 and nativeVisible and not book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
@@ -1059,6 +1090,10 @@ MUTATIONS = [
 
 # (label, file, old, new, with DragonUI) in the bot spellbook.
 BOT_MUTATIONS = [
+    ('wide header joins at center', 'BotBook.lua', 'wide and "TOP" or "TOPRIGHT", wide and 0 or -8, -26',
+     '"TOPRIGHT", -8, -26', True),
+    ('single-page header hides right half', 'BotBook.lua',
+     '  if wide then art.woodRight:Show() else art.woodRight:Hide() end', '  art.woodRight:Show()', True),
     ('native helper required', 'BotBook.lua', '      or type(book.InkLabel) ~= "function"\n', '', 'missing-ink'),
     ('native font helper', 'BotBook.lua', 'return DragonBook().InkLabel(parent, layer, fontObject, size)',
      'return parent:CreateFontString(nil, layer, fontObject)', True),
@@ -1179,6 +1214,10 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
     for index, (label, filename, old, new) in enumerate((
             ('learned class mount', 'book_catalog.lua',
              'IsSpellKnown(spellID) or knownCompanion(spellID, filters)', 'IsSpellKnown(spellID)'),
+            ('learned armor proficiency', 'book_catalog.lua', ' or knownSkill(spellID, filters)', ''),
+            ('skill headers excluded', 'book_catalog.lua', 'if name and not isHeader then', 'if name then'),
+            ('collapsed skill proficiency retained', 'book_catalog.lua', '        filters.skillsRead = true\n',
+             '        filters.skillsRead = true\n        skillNames = {}\n'),
             ('variant owns no numeric ranks', 'book_catalog.lua',
              '    if not isRankText(entry.sub) then return end\n', ''),
             ('rank menu excludes variants', 'book_catalog.lua',

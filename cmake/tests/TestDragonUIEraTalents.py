@@ -29,9 +29,11 @@ def dragon_chunks(source: Path, multibot: Path) -> dict[str, str]:
     talents = source / 'modules/talents'
     shell = (talents / 'window_shell.lua').read_text()
     header = 'local addon = select(2, ...)\nlocal TM = addon.TalentModule\nlocal ns = TM.ns\n'
-    window = header + section(shell, 'function ns.SetTitle(text)', '-- Ambient clouds and dust') \
+    window = header + 'local max, min = math.max, math.min\n' \
+        + section(shell, '-- Background art', '-- Portrait and title') \
+        + section(shell, 'function ns.SetTitle(text)', '-- Ambient clouds and dust') \
         + section(shell, 'function ns.SetDepth(depth)', '-- Show and hide') \
-        + section(shell, 'local function onShow()', 'local function onDragStart(win)') + 'return onShow, onHide\n'
+        + section(shell, 'local function onShow()', 'local function onDragStart(win)') + 'return onShow, onHide, newPair\n'
     tabs = header + 'local L = addon.L\n' + section((talents / 'tab_strip.lua').read_text(), 'local TAB_PREFIX',
                                                      '-- Spec rename cog') + 'return tabClicked\n'
     bot_source = (multibot / 'UI/MultiBotTalentFrame.lua').read_text()
@@ -39,7 +41,7 @@ def dragon_chunks(source: Path, multibot: Path) -> dict[str, str]:
     every = (multibot / 'Core/MultiBotEvery.lua').read_text()
     button_start = every.index('pFrame.addButton("Talent", 304')
     button = every[button_start:every.index('\n\t--', button_start)]
-    return {'window': window, 'tabs': tabs, 'bot': bot, 'bot_button': button,
+    return {'window': window, 'atlas': str(source / 'utils/atlas.lua'), 'tabs': tabs, 'bot': bot, 'bot_button': button,
             **{name: str(talents / filename) for name, filename in (
                 ('namespace', 'namespace.lua'), ('entry', 'entry_points.lua'),
                 ('live', 'live_view.lua'), ('canvas', 'tree_canvas.lua'), ('footer', 'footer_bar.lua'),
@@ -219,7 +221,7 @@ GetTalentInfo=function(tab,index,inspect,pet)
   local rank=tab==1 and nativeRank or 0
   return "Native talent","native-icon",pet and 6 or nativeTier,2,rank,nativeMaxRank,false,true,rank,true
 end
-GetTalentTabInfo=function(tab) return "Native "..tab,nil,tab==1 and nativeSpent or 0,"NativeBackground",0 end
+GetTalentTabInfo=function(tab,_,pet) return "Native "..tab,nil,tab==1 and nativeSpent or 0,pet and "HunterPetFerocity" or "NativeBackground",0 end
 GetTalentPrereqs=function() end
 GetUnspentTalentPoints=function() return nativePoints end
 GetGroupPreviewTalentPointsSpent=function() return 0 end
@@ -261,19 +263,14 @@ function addon:IsModuleEnabled(name) return name=="talents" and moduleEnabled en
 DragonUI=addon
 local function runTimers() local list=timers; timers={}; for _,fn in ipairs(list) do fn() end end
 assert(loadfile(chunks.namespace))("DragonUI",addon)
+assert(loadfile(chunks.atlas))("DragonUI",addon)
 local TM,ns=addon.TalentModule,addon.TalentModule.ns
-local onShow,onHide=assert(loadstring(chunks.window))("DragonUI",addon)
+local onShow,onHide,newPair=assert(loadstring(chunks.window))("DragonUI",addon)
 for _,key in ipairs({"live","canvas","footer","editor"}) do assert(loadfile(chunks[key]))("DragonUI",addon) end
 local tabClicked=assert(loadstring(chunks.tabs))("DragonUI",addon)
-ns.SetClassArt=function(token,tree) ns.artClass=token; ns.artTree=tree end
-ns.SetPetArt=function() end
+hooksecurefunc(ns,"SetClassArt",function(token,tree) ns.artClass=token; ns.artTree=tree end)
 ns.SetPortraitClass=function(token) ns.portraitClass=token end
 ns.SetPortraitUnit=function() end
-ns.DominantTree=function(points,count)
-  local best=1
-  for i=2,count or 0 do if (points[i] or 0)>(points[best] or 0) then best=i end end
-  return best
-end
 local nativeBuildReads=0
 ns.TreeData=function() nativeBuildReads=nativeBuildReads+1 end
 ns.BuildBucket=function() nativeBuildReads=nativeBuildReads+1; return {} end
@@ -282,12 +279,13 @@ ns.ApplyScale=function() end
 ns.BuildDropdown=function(parent) return CreateFrame("Button","FixtureBuildDropdown",parent) end
 ns.PaintGlyphs=function() end
 for _,name in ipairs({"InstallGlyphEvents","InstallOrbEvents","InstallSharing","PlaceCatcher"}) do ns[name]=function() end end
--- Art creation is omitted; show/hide, depth, canvas, footer and tabs are production code.
+-- Frame construction is omitted; art pairs, depth, canvas, footer and tabs are production code.
 ns.BuildWindow=function()
   if ns.win then return ns.win end
   local win=CreateFrame("Frame","DragonUI_TalentFrame",UIParent)
   ns.win=win
-  ns.title,ns.classArt,ns.petArt,ns.glyphArt,ns.fx=Object(),Object(),Object(),Object(),Object()
+  ns.title,ns.fx=Object(),Object()
+  ns.classArt,ns.petArt,ns.glyphArt=newPair(win,"BORDER"),newPair(win,"BORDER"),newPair(win,"BORDER")
   ns.BuildTrees(win,1); ns.BuildTabs(win)
   ns.BuildFooterControls(CreateFrame("Frame",nil,win))
   win:SetScript("OnShow",onShow); win:SetScript("OnHide",onHide)
@@ -345,6 +343,17 @@ end
 local function nodeCount()
   local n=0; ns.EachNode(function() n=n+1 end); return n
 end
+local function assertArtPair(pair)
+  assert(pair:IsShown() and pair[1]:IsShown() and pair[2]:IsShown(),"the native art pair shows both texture halves")
+  assert(pair[2].SetTextureArgs[1]==pair[1].SetTextureArgs[1].."_r","the right texture uses the upstream split asset")
+  assert(math.abs(pair[1]:GetWidth()+pair[2]:GetWidth()-ns.WIDTH)<0.001,"texture halves fill the talent window width")
+  for half=1,2 do
+    for _,coordinate in ipairs(pair[half].SetTexCoordArgs) do
+      assert(coordinate>=0 and coordinate<=1,"each drawn half stays within the 1024-wide texture")
+    end
+  end
+  assert(pair[1].SetTexCoordArgs[2]==1 and pair[2].SetTexCoordArgs[1]==0,"texture halves meet at the original sheet seam")
+end
 local warrior=EraTalentsData[0][1].talents[1].id
 if not moduleEnabled then
   assert(not win and next(bindings)==nil,"disabled module installs no window or bindings")
@@ -399,6 +408,8 @@ for era=0,1 do
     assert(ns.depth==(era==0 and 7 or 9),"historical tree uses its own depth")
     assert(win:GetHeight()==ns.WindowHeight(ns.depth),"window height follows historical depth")
     assert(ns.artClass==token and ns.portraitClass==token,"historical class selects matching artwork")
+    assertArtPair(ns.classArt)
+    assert(ns.classArt[1].SetTextureArgs[1]:find("talents-bg-"..token:lower(),1,true),"historical art uses the native class asset")
     local byId=nodes()
     assert(nodeCount()==#tree.talents,"every historical talent is rendered exactly once")
     for _,talent in ipairs(tree.talents) do
@@ -521,10 +532,14 @@ assert(not win:IsShown() and #warnings==chats+1,"pet opener without a pet preser
 units.pet="0x0000000000000009"; petTalents=true
 ET.OpenStockTalents(); runTimers()
 assert(win:IsShown() and ns.PetView() and not painted.external and ns.depth==11,"pet tree remains native and restores native depth")
+assertArtPair(ns.petArt)
+assert(not ns.classArt:IsShown(),"native pet art hides the historical class art")
 StaticPopupDialogs.DUI_TALENTS_LEARN.OnAccept()
 assert(nativeLearns==1,"native pet preview can still be applied")
 tabClicked({GetID=function() return 1 end})
 assert(painted.external and ns.depth==7,"returning from pet tree restores historical tree")
+assertArtPair(ns.classArt)
+assert(not ns.petArt:IsShown(),"historical class art hides the native pet art")
 reset(); units.pet=nil; petTalents=false
 playerLevel=9; press("N")
 assert(not win:IsShown() and notices[1]==FEATURE_BECOMES_AVAILABLE_AT_LEVEL:format(10),"talents remain level-gated")
@@ -591,6 +606,7 @@ reply("ISYNC "..units.party1.." 1 1 8 "..mage..":1")
 reply("IEDIT "..units.party1.." 1 4")
 assert(ns.depth==9 and ns.artClass=="MAGE" and nodeCount()==#EraTalentsData[1][8].talents,
   "bot TBC class and era select their own complete tree independent of the player")
+assertArtPair(ns.classArt)
 count=#sent; ns.NodeClicked(retiredBot,"LeftButton")
 assert(#sent==count,"stale painted bot class/era cannot send a purchase")
 nodes()[mage]:Click()
@@ -688,6 +704,8 @@ def main() -> None:
         dragon_addon = dragon / 'DragonUI'
         shutil.copytree(args.era_source / 'client-addon', era / 'client-addon')
         shutil.copytree(args.dragon_source / 'modules/talents', dragon_addon / 'modules/talents')
+        (dragon_addon / 'utils').mkdir()
+        shutil.copyfile(args.dragon_source / 'utils/atlas.lua', dragon_addon / 'utils/atlas.lua')
         for filename in ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'):
             destination = multibot / filename
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -747,6 +765,11 @@ def main() -> None:
             path.write_text(original.replace(before, after, 1))
             run(addon, chunks, directory, enabled=True, expect_failure=True)
             path.write_text(original)
+        print('Checking native talent art split mutation', flush=True)
+        right_half = 'self[2]:SetTexture(file .. "_r")'
+        assert right_half in chunks['window']
+        run(addon, dict(chunks, window=chunks['window'].replace(right_half, 'self[2]:SetTexture(file)', 1)),
+            directory, enabled=True, expect_failure=True)
         for label, before in (
                 ('selected bot button', '    if name then setTalentButtonEnabled(name, true) end\n'),
                 ('previous bot release',
