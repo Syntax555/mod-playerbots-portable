@@ -6,7 +6,9 @@ character/context doubles; mutation checks keep the combat and ownership gates.
 """
 
 import argparse
+import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -59,14 +61,24 @@ struct Group {};
 struct Session { bool loggingOut = false; bool IsLoggingOut() const { return loggingOut; } };
 struct Event {};
 
+@SIBLINGS@
+
 struct Engine {
     std::set<std::string> strategies;
+    uint8 cls = 0;
     int initCalls = 0;
-    bool addStrategy(std::string const& name, bool = false) { return strategies.insert(name).second; }
+    bool addStrategy(std::string const& name, bool = false) {
+        for (auto const& siblings : nativeSiblings.at(cls)) {
+            if (!siblings.contains(name)) continue;
+            for (auto const& sibling : siblings) strategies.erase(sibling);
+            break;
+        }
+        return strategies.insert(name).second;
+    }
     void addStrategiesNoInit(char const* first, ...) {
         va_list names;
         va_start(names, first);
-        for (char const* name = first; name; name = va_arg(names, char const*)) strategies.insert(name);
+        for (char const* name = first; name; name = va_arg(names, char const*)) addStrategy(name);
         va_end(names);
     }
     bool removeStrategy(std::string const& name, bool = false) { return strategies.erase(name) != 0; }
@@ -189,7 +201,10 @@ struct PlayerbotAI {
     uint32 nextAICheckDelay = 0, combatProfileCheckDelay = 0;
     std::atomic_bool combatProfileDirty = true;
     std::string combatProfileKey;
-    explicit PlayerbotAI(Player& player) : bot(&player) { player.ai = this; }
+    explicit PlayerbotAI(Player& player) : bot(&player) {
+        player.ai = this;
+        combat.cls = nonCombat.cls = player.cls;
+    }
     Player* GetBot() const { return bot; }
     AiObjectContext* GetAiObjectContext() { return aiObjectContext; }
     bool ContainsStrategy(uint32) const { return false; }
@@ -343,6 +358,62 @@ TESTS = r"""
             }
         }
     }
+    Group selfGroup;
+    for (auto const& expected : classes) {
+        for (bool grouped : {false, true}) {
+            Player player;
+            player.cls = expected.cls;
+            player.self = true;
+            player.managed = player.cls != CLASS_DEATH_KNIGHT;
+            player.eraTabs = {31, 0, 0};
+            player.talents[100] = &nativeRank;
+            player.spells.insert(SPELL_CAT_FORM);
+            player.group = grouped ? &selfGroup : nullptr;
+            PlayerbotAI ai(player);
+            ai.combat.strategies = {"stay", "threat"};
+            ai.nonCombat.strategies = {"loot", "travel"};
+            auto const actualTalents = AiFactory::GetPlayerSpecTabs(&player);
+            auto profiles = expected.profiles;
+            profiles.push_back("auto");
+            for (auto const& profile : profiles) {
+                assert(AiFactory::SetCombatProfile(&player, profile));
+                std::string effective = profile == "auto" ?
+                    expected.profiles[player.cls == CLASS_DEATH_KNIGHT ? 1 : 0] : profile;
+                assert(AiFactory::GetCombatProfile(&player) == profile);
+                assert(AiFactory::GetEffectiveCombatProfile(&player) == effective);
+                auto canonical = [&](std::string const& mode) {
+                    if (player.cls == CLASS_PRIEST && mode == "holy") return std::string("holy heal");
+                    if (player.cls == CLASS_ROGUE && mode == "subtlety") return std::string("assassin");
+                    return mode;
+                };
+                std::string primary = canonical(effective);
+                if (!grouped) {
+                    if (player.cls == CLASS_PRIEST && effective != "shadow") primary = "holy dps";
+                    if (player.cls == CLASS_SHAMAN && effective == "resto") primary = "ele";
+                    if (player.cls == CLASS_PALADIN && effective == "holy") primary = "ret";
+                }
+                assert(ai.combat.HasStrategy(primary));
+                for (auto const& mode : expected.profiles)
+                    assert(ai.combat.HasStrategy(canonical(mode)) == (canonical(mode) == primary));
+                bool const tank = effective == "bear" || effective == "prot" ||
+                    (player.cls == CLASS_DEATH_KNIGHT && effective == "blood");
+                bool const healer = effective == "resto" || effective == "disc" ||
+                    (effective == "holy" && (player.cls == CLASS_PRIEST || player.cls == CLASS_PALADIN));
+                assert(AiFactory::GetPlayerRoles(&player) ==
+                       (tank ? BOT_ROLE_TANK : healer ? BOT_ROLE_HEALER : BOT_ROLE_DPS));
+                assert(ai.combat.HasStrategy("tank face") == tank);
+                assert(ai.combat.HasStrategy("tank assist") == (tank && grouped));
+                assert(ai.combat.HasStrategy("dps assist") == (!tank || !grouped));
+                assert(ai.combat.HasStrategy("save mana") == healer);
+                assert(ai.combat.HasStrategy("boost") == !grouped);
+                assert(ai.combat.HasStrategy("threat") == grouped);
+                assert(ai.combat.HasStrategy("stay") && ai.nonCombat.HasStrategy("loot") && ai.nonCombat.HasStrategy("travel"));
+                assert(AiFactory::GetPlayerSpecTabs(&player) == actualTalents && player.talents.size() == 1);
+                assert(player.spells == std::set<uint32>{SPELL_CAT_FORM});
+                assert(PlayerbotRepository::instance().saved == profile);
+            }
+        }
+    }
     assert(!AiFactory::SetCombatProfile(nullptr, "auto"));
     Player human;
     human.cls = CLASS_PRIEST;
@@ -352,6 +423,31 @@ TESTS = r"""
     assert(AiFactory::GetPlayerSpecTab(&human) == PRIEST_TAB_SHADOW);
     assert(!PlayerbotAI::IsHeal(&human, true));
     assert(!AiFactory::SetCombatProfile(&human, "holy"));
+    Player rogue;
+    rogue.cls = CLASS_ROGUE;
+    rogue.self = true;
+    rogue.managed = true;
+    rogue.eraTabs = {0, 31, 0};
+    rogue.talents[100] = &nativeRank;
+    PlayerbotAI rogueAI(rogue);
+    rogueAI.combat.strategies = {"stay", "stealthed"};
+    rogueAI.nonCombat.strategies = {"loot", "stealth"};
+    auto const rogueTalents = AiFactory::GetPlayerSpecTabs(&rogue);
+    for (std::string const profile : {"assassin", "combat", "subtlety"}) {
+        int const saved = PlayerbotRepository::instance().saves;
+        assert(AiFactory::SetCombatProfile(&rogue, profile));
+        assert(AiFactory::GetCombatProfile(&rogue) == profile);
+        assert(AiFactory::GetEffectiveCombatProfile(&rogue) == profile);
+        assert(AiFactory::GetPlayerSpecTab(&rogue) ==
+               (profile == "combat" ? ROGUE_TAB_COMBAT : profile == "subtlety" ? ROGUE_TAB_SUBTLETY : ROGUE_TAB_ASSASSINATION));
+        assert(rogueAI.combat.HasStrategy("combat") == (profile == "combat"));
+        assert(rogueAI.combat.HasStrategy("assassin") == (profile != "combat"));
+        assert(!rogueAI.combat.HasStrategy("dps") && !rogueAI.combat.HasStrategy("subtlety"));
+        assert(rogueAI.combat.HasStrategy("stay") && rogueAI.combat.HasStrategy("stealthed"));
+        assert(rogueAI.nonCombat.HasStrategy("loot") && rogueAI.nonCombat.HasStrategy("stealth"));
+        assert(PlayerbotRepository::instance().saves == saved + 1 && PlayerbotRepository::instance().saved == profile);
+        assert(AiFactory::GetPlayerSpecTabs(&rogue) == rogueTalents && rogue.talents.size() == 1 && rogue.spells.empty());
+    }
     Player timed;
     timed.managed = true;
     timed.eraTabs = {0, 0, 20};
@@ -494,6 +590,55 @@ TESTS = r"""
 """
 
 
+def native_siblings(module):
+    """Keep the engine double's exclusivity tied to the native context producer."""
+    engine = (module / 'src/Bot/Engine/Engine.cpp').read_text()
+    add = function(engine, 'void Engine::addStrategy(')
+    assert 'aiObjectContext->GetSiblingStrategy(name)' in add and 'removeStrategy(*i, init);' in add
+    assert 'strategies[strategy->getName()] = strategy;' in add
+    context = (module / 'src/Bot/Engine/NamedObjectContext.h').read_text()
+    siblings = function(context, 'std::set<std::string> GetSiblings(')
+    assert 'if (!(*i)->IsSupportsSiblings())' in siblings
+    assert 'supported.erase(found);' in siblings and 'return supported;' in siblings
+    context = (module / 'src/Bot/Engine/AiObjectContext.cpp').read_text()
+    assert 'return strategyContexts.GetSiblings(name);' in function(context, 'std::set<std::string> AiObjectContext::GetSiblingStrategy(')
+
+    def groups(source, registration):
+        result = []
+        source = re.sub(r'//[^\n]*', '', source)
+        for name in re.findall(r'strategyContexts.Add\(new (\w+)\(\)\);', registration):
+            assert f'class {name} : public NamedObjectContext<Strategy>' in source
+            body = function(source, 'class ' + name)
+            if 'NamedObjectContext<Strategy>(false, true)' in body:
+                result.append(re.findall(r'creators\["([^"]+)"\]', body))
+        return result
+
+    registration = function((module / 'src/Bot/Engine/BuildSharedStrategyContexts.cpp').read_text(),
+                            'void AiObjectContext::BuildSharedStrategyContexts(')
+    headers = []
+    for name in ('StrategyContext.h', 'DungeonStrategyContext.h', 'RaidStrategyContext.h', 'RaidClearContexts.h'):
+        paths = list((module / 'src').rglob(name))
+        assert len(paths) == 1, name
+        headers.append(paths[0].read_text())
+    common = groups('\n'.join(headers), registration)
+    assert ['dps assist', 'dps aoe', 'tank assist'] in common
+    entries = []
+    for cls, directory, prefix in (
+        ('WARRIOR', 'Warrior', 'Warrior'), ('PALADIN', 'Paladin', 'Paladin'),
+        ('HUNTER', 'Hunter', 'Hunter'), ('ROGUE', 'Rogue', 'Rogue'),
+        ('PRIEST', 'Priest', 'Priest'), ('DEATH_KNIGHT', 'Dk', 'DK'),
+        ('SHAMAN', 'Shaman', 'Shaman'), ('MAGE', 'Mage', 'Mage'),
+        ('WARLOCK', 'Warlock', 'Warlock'), ('DRUID', 'Druid', 'Druid'),
+    ):
+        source = (module / f'src/Ai/Class/{directory}/{prefix}AiObjectContext.cpp').read_text()
+        registration = function(source, f'void {prefix}AiObjectContext::BuildSharedStrategyContexts(')
+        assert registration.index('AiObjectContext::BuildSharedStrategyContexts(strategyContexts);') < registration.index('strategyContexts.Add(')
+        contexts = common + groups(source, registration)
+        value = '{' + ','.join('{' + ','.join(json.dumps(name) for name in group) + '}' for group in contexts) + '}'
+        entries.append('{CLASS_' + cls + ',' + value + '}')
+    return 'std::map<uint8, std::vector<std::set<std::string>>> const nativeSiblings = {' + ','.join(entries) + '};'
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     source_argument(parser, default=prepared_core(ROOT) / 'modules/mod-playerbots')
@@ -545,6 +690,7 @@ def main() -> None:
     value = (args.source / 'src/Ai/Base/Value/CombatProfileValue.h').read_text()
     value = function(value, 'class CombatProfileValue') + ';'
     text = CPP.replace('@ENUMS@', enums).replace('@SAVED_VALUE@', value)
+    text = text.replace('@SIBLINGS@', native_siblings(args.source))
     text = text.replace('@PRODUCTION@', production).replace('@TESTS@', TESTS)
     mutations = (
         ('manual changes in combat', 'player->IsInCombat() || ', ''),
@@ -554,6 +700,8 @@ def main() -> None:
         ('seeded cat becomes bear', '    if (seeded >= 0)', '    if (false)'),
         ('manual cat becomes bear', '    if (mode == "cat")', '    if (false)'),
         ('stale class strategies retained', '        combat->removeStrategy(name, false);', ''),
+        ('Rogue combat profile ignored', 'engine->addStrategiesNoInit("combat", nullptr);',
+         'engine->addStrategiesNoInit("assassin", nullptr);'),
         ('unrelated user strategy removed', 'combat->removeStrategy(name, false);', 'combat->removeStrategy("stay", false);'),
         ('refresh during combat', ' || bot->IsInCombat()', ''),
         ('dirty role change ignored', 'bool dirty = combatProfileDirty.exchange(false, std::memory_order_relaxed);',
@@ -565,6 +713,9 @@ def main() -> None:
         ('invalid persisted profile', 'if (std::find(profiles.begin(), profiles.end(), text) == profiles.end())', 'if (false)'),
         ('automatic update disconnected', '        RefreshCombatProfile();', ''),
         ('native item weights ignore profile', '    tab = AiFactory::GetPlayerSpecTab(player);', '    tab = 0;'),
+        ('solo SelfBot assistance ignored', 'if (IsSelfBot(player) || sRandomPlayerbotMgr.IsRandomBot(player))',
+         'if (sRandomPlayerbotMgr.IsRandomBot(player))'),
+        ('grouped SelfBot uses solo assistance', '        if (!player->GetGroup())', '        if (true)'),
     )
     with tempfile.TemporaryDirectory(prefix='combat-profiles-') as temporary:
         directory = Path(temporary)
