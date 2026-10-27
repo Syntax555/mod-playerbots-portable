@@ -167,6 +167,23 @@ def contracts(addon, core):
     assert order[:9] == ['ip', 'strict', 'stored', 'effective', 'limit', 'era', 'next', 'nextMet', 'account'], order
     assert 'IP_STATE~token~1~ip~strict~stored~effective~limit~era~next~nextMet~account~gm~maxLevel' in module
 
+    # Every effective native bot profile maps to the existing Zygor build order.
+    factory = (core / 'modules/mod-playerbots/src/Bot/Factory/AiFactory.cpp').read_text()
+    native_profiles = re.search(r'AiFactory::GetCombatProfiles\(.*?\n\}', factory, re.DOTALL).group(0)
+    finder = (addon / 'Item-GearFinder.lua').read_text()
+    client_profiles = re.search(r'local PROFILE_BUILDS = \{(.*?)\n\}', finder, re.DOTALL).group(1)
+    for class_name, profiles in re.findall(r'case CLASS_(\w+): return \{([^}]+)\};', native_profiles):
+        class_token = class_name.replace('_', '')
+        values = re.findall(r'"([a-z]+)"', profiles)
+        expected = {name: index for index, name in enumerate(values) if name != 'auto'}
+        client = re.search(r'\b' + class_token + r'=\{([^}]+)\}', client_profiles).group(1)
+        actual = {name: int(index) for name, index in re.findall(r'([a-z]+)=(\d+)', client)}
+        assert all(actual.get(name) == index for name, index in expected.items()), (class_token, expected, actual)
+    assert 'return "frostfire";' in factory and 'frostfire=2' in client_profiles
+    transport = (core / 'modules/mod-multibot-bridge/src/MultiBotBridge.cpp').read_text()
+    assert 'AiFactory::GetEffectiveCombatProfile(subject)' in transport
+    assert 'subject->CanDualWield() ? "1" : "0"' in transport
+
 
 def mutations():
     """(label, file, old, new): each must make the fixture fail an assertion."""
@@ -185,6 +202,38 @@ def mutations():
         ('watch renewal', m, 'now - self.watchAt >= WATCH_RENEW', 'false'),
         ('bounded probing', m, 'if self.helloRetries >= HELLO_RETRIES then', 'if false then'),
         ('capability check', m, 'self.caps[CAPABILITY] and "ready" or "unsupported"', '"ready"'),
+        ('target capability', m, 'self.bridge == "ready" and self.caps and self.caps.IP_TARGET_V1',
+         'self.bridge == "ready" and self.caps'),
+        ('target bridge readiness', m, 'self.bridge == "ready" and self.caps and self.caps.IP_TARGET_V1',
+         'self.caps and self.caps.IP_TARGET_V1'),
+        ('target mode ignores owner setting', m, 'if self.targetName then return "on" end', ''),
+        ('strict target bot-account gate', m, 'if self.targetName and s and s.strict then return s.ip end', ''),
+        ('target owns mutable tables', m, 'quests={}, queued={}, inflight={}, requests={}, generation=1, onChanged=onChanged',
+         'quests=self.quests, queued=self.queued, inflight=self.inflight, requests=self.requests, generation=1, onChanged=onChanged'),
+        ('target does not inherit owner answers', m,
+         'if type(value) == "function" or key:match("^[A-Z_]+$") then return value end', 'return value'),
+        ('target token namespace', m, 'if self.targetName then return IP:Token() end',
+         'if self.targetName then return IP.watchToken end'),
+        ('previous target closed', m, 'if self.target then self.target.closed = true end', ''),
+        ('closed target parser', m, 'function IP:OnMessage(prefix, message, sender)\n\tif self.closed then return end',
+         'function IP:OnMessage(prefix, message, sender)'),
+        ('target profile token', m, 'opcode == "IP_TARGET" and self.targetName and fields[2] == self.watchToken',
+         'opcode == "IP_TARGET" and self.targetName'),
+        ('target request timeout', m,
+         'function IP:ExpireTargetRequest(token)\n\tif not self.targetName or not ZGV.ScheduleTimer then return end',
+         'function IP:ExpireTargetRequest(token)\n\tif true then return end'),
+        ('target profile timeout', m, 'if not target.closed and not (target.state and target.profile) then',
+         'if not target.closed and not target.state then'),
+        ('target error notification', m, 'else self.error = fields[5] or "UNAVAILABLE"; self:Changed() end',
+         'else self.error = fields[5] or "UNAVAILABLE" end'),
+        ('bounded target rate retry', m, '(self.rateRetries or 0) < 3', 'true'),
+        ('inactive target quest state', m,
+         'if self.bridge ~= "ready" or not (self.state and (self.state.ip or self.targetName)) then return end',
+         'if self.bridge ~= "ready" or not (self.state and self.state.ip) then return end'),
+        ('target suffix batch budget', m, ' + #(self.targetSuffix or "")', ''),
+        ('target name encoding', m,
+         'local encoded = name:gsub("[^%w_.%-]", function(char) return string.format("%%%02X", string.byte(char)) end)',
+         'local encoded = name'),
         ('incomplete reply stored', m, 'if tonumber(fields[3]) ~= #request.items then', 'if false then'),
         ('stale generation stored', m, 'if request.generation ~= self.generation then\n\t\tself:Requeue(request)',
          'if false then\n\t\tself:Requeue(request)'),
@@ -240,8 +289,8 @@ def mutations():
         ('disabled is future', m, 'if code == "D" then return "unknown", reason end', ''),
         ('next tier label', m, 'tier <= s.next then return L.gear_next end', 'false then return L.gear_next end'),
         ('phase gate', 'Item-GearFinder.lua', 'if earned ~= nil then return earned end', ''),
-        ('vendor gate', 'Item-GearFinder.lua', 'local check, reason = ZGV.IP:VendorCheck(source)\n\t\tif check ~= "ok" then',
-         'local check, reason = ZGV.IP:VendorCheck(source)\n\t\tif false then'),
+        ('vendor gate', 'Item-GearFinder.lua', 'local check, reason = GF_Progression():VendorCheck(source)\n\t\tif check ~= "ok" then',
+         'local check, reason = GF_Progression():VendorCheck(source)\n\t\tif false then'),
         ('craft era', m, 'local check = self:TierCheck(tier)\n\tif check ~= "ok" then return check, self:TierReason(check, tier) end\n\tif not self:Gated() then return "ok" end\n\tlocal spell',
          'local check = "ok"\n\tif check ~= "ok" then return check, self:TierReason(check, tier) end\n\tif not self:Gated() then return "ok" end\n\tlocal spell'),
         ('craft recipe source', m, 'return "unknown", L.gear_recipe', 'return "ok"'),
@@ -295,14 +344,17 @@ def run_lua(lua, source, era, fixture=FIXTURE):
     return run_fixture([lua, '-e', globals_, str(fixture)], 'Zygor progression fixture')
 
 
-def upstream_suite(lua, addon, tools_root):
+def upstream_suite(lua, addon, tools_root, working_tools=False):
     with tempfile.TemporaryDirectory(prefix='zygor-tools-') as directory:
-        lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
-        revision = next(item['revision'] for item in lock['sourceAddons'] if item['name'] == 'ZygorGuidesViewerRM')
-        archive = subprocess.run(['git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', '-C', str(tools_root),
-                                  'archive', revision, 'tools'],
-                                 check=True, capture_output=True).stdout
-        subprocess.run(['tar', '-x', '-C', directory], input=archive, check=True)
+        if working_tools:
+            shutil.copytree(tools_root / 'tools', Path(directory) / 'tools')
+        else:
+            lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
+            revision = next(item['revision'] for item in lock['sourceAddons'] if item['name'] == 'ZygorGuidesViewerRM')
+            archive = subprocess.run(['git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', '-C', str(tools_root),
+                                      'archive', revision, 'tools'],
+                                     check=True, capture_output=True).stdout
+            subprocess.run(['tar', '-x', '-C', directory], input=archive, check=True)
         tests = sorted(Path(directory).glob('tools/*/test_*.lua'))
         assert len(tests) >= 20, 'the upstream Zygor regression suite is missing'
         for test in tests:
@@ -310,15 +362,46 @@ def upstream_suite(lua, addon, tools_root):
             if result.returncode:
                 raise AssertionError(f'{test.relative_to(directory)}: {result.stdout}{result.stderr}')
         print(f'Upstream Zygor regression suite passed: {len(tests)} tests', flush=True)
-        # Keep the new tests while removing the production change they verify.
+        work = Path(directory) / 'reverted'
+        candidate = work / 'ZygorGuidesViewerRM'
+        shutil.copytree(addon, candidate)
+        target_files = ('IndividualProgression.lua', 'Item-GearFinder.lua', 'Item-ItemScore.lua',
+                        'Item-Upgrades.lua', 'ZygorQuestLootDB.lua', 'Code-WOTLK/Item-GearFinder.lua',
+                        'Code-WOTLK/Item-ItemScore.lua')
+        target_paths = tuple('ZygorGuidesViewerRM/' + name for name in target_files)
+        if working_tools:
+            # Include the unpublished feature commit and any final working edits.
+            diff = subprocess.run(['git', '-C', str(tools_root), 'diff', '--binary', 'HEAD^', '--', *target_paths],
+                                  check=True, capture_output=True).stdout
+            if not diff:
+                diff = subprocess.run(['git', '-C', str(tools_root), 'show', '--format=', '--binary', 'HEAD',
+                                       '--', *target_paths], check=True, capture_output=True).stdout
+            target_patch = Path(directory) / 'target.patch'
+            target_patch.write_bytes(diff)
+            assert diff, 'the inspect fork change is missing'
+        else:
+            target_patch = fork_change('ZygorGuidesViewerRM', 'zygor-inspected-altbot-gearfinder', paths=target_paths)
+        target_tests = ('gearfinder/test_inspect_context.lua', 'gearfinder/test_target_sources.lua',
+                        'itemscore/test_target_context.lua', 'itemscore/test_target_tooltip.lua')
+        git_apply(work, target_patch, '--reverse')
+        for name in target_tests:
+            result = run_fixture([lua, str(Path(directory) / 'tools' / name), str(candidate)], name, cwd=directory)
+            if result.returncode == 0 or "in function 'assert'" not in result.stderr:
+                raise AssertionError(f'Reverting inspected Gear Finder did not fail {name}:\n'
+                                     + result.stdout + result.stderr)
+        git_apply(work, target_patch)
+        for name in target_tests:
+            result = run_fixture([lua, str(Path(directory) / 'tools' / name), str(candidate)], name, cwd=directory)
+            if result.returncode:
+                raise AssertionError(f'Reapplying inspected Gear Finder failed {name}:\n'
+                                     + result.stdout + result.stderr)
+        print('Inspected Gear Finder fork change fails all four regressions when reverted and passes when reapplied',
+              flush=True)
+        # The earlier incremental commit is checked against its native parent context.
+        git_apply(work, target_patch, '--reverse')
         changed = ('IndividualProgression.lua', 'Item-GearFinder.lua', 'ZygorQuestLootDB.lua')
         patch = fork_change('ZygorGuidesViewerRM', 'zygor-incremental-gearfinder',
                             paths=tuple('ZygorGuidesViewerRM/' + name for name in changed))
-        work = Path(directory) / 'reverted'
-        candidate = work / 'ZygorGuidesViewerRM'
-        candidate.mkdir(parents=True)
-        for name in changed:
-            shutil.copyfile(addon / name, candidate / name)
         git_apply(work, patch, '--reverse')
         regressions = ('test_incremental_scan.lua', 'test_quest_cache.lua', 'test_progression_refresh.lua')
         for name in regressions:
@@ -342,7 +425,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     source_argument(parser, 'addon', help='patched ZygorGuidesViewerRM directory')
     source_argument(parser, 'core', help='prepared core source directory')
-    source_argument(parser, 'tools', help='pinned Zygor repository checkout with the upstream tools')
+    source_argument(parser, 'tools', help='Zygor checkout whose working regression tools should run')
     parser.add_argument('--lua', default=shutil.which('lua5.1'), help='Lua 5.1 executable')
     args = parser.parse_args()
     if not args.lua:
@@ -381,7 +464,7 @@ def main():
                 raise AssertionError(f'Zygor progression fixture did not reject {label}')
             print(f'Zygor progression mutation rejected: {label}', flush=True)
 
-    upstream_suite(args.lua, addon, args.tools or REPOSITORY / TOOLS)
+    upstream_suite(args.lua, addon, args.tools or REPOSITORY / TOOLS, working_tools=args.tools is not None)
 
 
 if __name__ == '__main__':

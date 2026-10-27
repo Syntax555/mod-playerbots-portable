@@ -12,7 +12,7 @@ from FixtureSupport import fork_change, git_apply, multibot_sources
 FILES = (
     'Core/MultiBotLocale.lua', 'Core/MultiBotComm.lua', 'UI/MultiBotSpecUI.lua',
     'Locales/MultiBotAceLocale-enUS.lua', 'Locales/MultiBotAceLocale-deDE.lua',
-    'tests/test_combat_profiles.lua',
+    'Core/MultiBotEvery.lua', 'tests/test_combat_profiles.lua',
 )
 
 
@@ -31,12 +31,20 @@ def main() -> None:
         subprocess.run(command, check=True, timeout=30)
         if args.no_fork_reversion:
             return
-        patch = fork_change('MultiBot', 'multibot-combat-profiles', paths=FILES[:-1])
+        controls = fork_change('MultiBot', 'multibot-control-ownership', paths=FILES[:-1])
+        git_apply(addon, controls, '--reverse')
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30)
+        assert result.returncode != 0, 'Reverted control ownership survived the selector fixture'
+        assert 'SelfBot toolbar has no combat-profile selector' in result.stderr, result.stderr
+        patch = fork_change('MultiBot', 'multibot-combat-profiles', paths=tuple(path for path in FILES[:-1] if path != 'Core/MultiBotEvery.lua'))
         git_apply(addon, patch, '--reverse')
+        git_apply(addon, controls)
         result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30)
         assert result.returncode != 0, 'Reverted combat-profile fork change survived the selector fixture'
         assert 'test_combat_profiles.lua:' in result.stderr, result.stderr
+        git_apply(addon, controls, '--reverse')
         git_apply(addon, patch)
+        git_apply(addon, controls)
         subprocess.run(command, check=True, timeout=30)
         print('MultiBot combat-profile fork change is covered by the real selector fixture')
 

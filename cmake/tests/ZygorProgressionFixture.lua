@@ -714,7 +714,8 @@ gearEnv.IsQuestFlaggedCompleted = function() return true end
 run("Dungeons.lua", gearEnv)
 run("Data-WOTLK/Dungeons.lua", gearEnv)
 local finder = "Item-GearFinder.lua"
-local helpers = section(finder, "local function GF_IsPhaseActive", "local function GF_GetFactionVendor")
+local helpers = section(finder, "local function GF_Subject()", "local PROFILE_BUILDS")
+	.. section(finder, "local function GF_IsPhaseActive", "local function GF_GetFactionVendor")
 	.. section(finder, "local function GF_NormalizeProfessionName", "local function GF_CompactMapKeys")
 	.. section(finder, "local function GF_IsValidVendorSource", "local function GF_HasAnySourceEnabled")
 	.. section(finder, "local function GF_GetDungeonLeafName", "local function GF_ResolveFooterImage")
@@ -821,6 +822,168 @@ sendState({stored = 17, effective = 17, era = 2, next = 18})
 check(not ZGV.ItemScore:GetBISAnnotation(105, 1, 1, "MAGE").future, "the Ruby Sanctum list is current at tier 17")
 IP.state = nil
 check(ZGV.ItemScore:GetBISAnnotation(100, 1, 1, "MAGE") == nil, "an unknown state shows no list")
+
+------------------------------------------------------------------------
+-- Inspect sessions reuse the existing parser with isolated target answers.
+------------------------------------------------------------------------
+
+local nativeName, nativeGUID = UnitName, UnitGUID
+local inspectNames = {party1="Altbot", party2="Otherbot", party3=string.rep("Ä", 12)}
+UnitName = function(unit) return inspectNames[unit] or nativeName(unit) end
+UnitGUID = function(unit) return inspectNames[unit] and ("0xB" .. unit:sub(-1)) or "0xA1" end
+local ownerState, ownerAccess, ownerQuests = IP.state, IP.access, IP.quests
+local ownerProfile, ownerDualWield, ownerError = IP.profile, IP.dualWield, IP.error
+local ownerWatchAt, ownerMode = IP.watchAt, ZGV.db.profile.ip_mode
+IP.bridge, IP.caps = "ready", {IP_PROGRESS_V1=true}
+local beforeUnsupported = #sent
+check(not IP:ForInspect("party1", function() end), "inspect requires the target capability before sending")
+IP.caps.IP_TARGET_V1, IP.bridge = true, "unsupported"
+check(not IP:ForInspect("party1", function() end), "inspect requires a ready bridge before sending")
+check(#sent == beforeUnsupported, "unsupported inspect never sends a target request")
+IP.bridge, IP.watchAt, ZGV.db.profile.ip_mode = "ready", nil, "off"
+IP.state = {ip=true, strict=true, effective=18, stored=18, account="N", gm=false, era=2, maxLevel=80}
+IP.access, IP.quests = {[409]="GGGG"}, {[901]={status="R", generation=IP.generation, at=GetTime()}}
+IP.profile, IP.dualWield, IP.error = "owner_profile", false, "OWNER_ERROR"
+local targetChanges = 0
+local view = IP:ForInspect("party1", function() targetChanges = targetChanges + 1 end)
+check(view and lastMessage() == "GET~IP_STATE~" .. view.watchToken .. "~BOT~Altbot", "inspect asks about its selected bot without WATCH")
+check(view:Mode() == "on" and view:TierCheck(8) == "unknown" and IP:Mode() == "off",
+	"the owner's disabled mode never disables the target's personal gates")
+check(not view.state and not view.access and not view.profile and view.dualWield == nil and not view.error,
+	"inspect never inherits the owner's state, access, profile or error")
+check(view.quests ~= IP.quests and view.queued ~= IP.queued and view.inflight ~= IP.inflight and view.requests ~= IP.requests,
+	"target quest, queue and request tables are independent")
+check(view.watchToken ~= IP.watchToken and not view.watchAt, "target tokens and watch lifecycle are independent")
+local targetToken = view.watchToken
+server("IP_TARGET~" .. targetToken .. "~combat~1", "Foreign")
+check(not view.profile, "foreign target profile replies are ignored")
+server("IP_STATE~" .. targetToken .. "~1~1~1~7~7~0~0~8~0~B~0~80")
+server("IP_TARGET~" .. targetToken .. "~combat~1")
+check(view.profile == "combat" and view.dualWield and view.state.era == 0, "inspect gets native effective profile and its own earned era")
+check(IP.state.effective == 18 and view:Gated() and view:TierCheck(8) == "locked",
+	"bot-account flag does not bypass strict personal progression or mutate the owner")
+local accessToken = lastMessage():match("^GET~IP_ACCESS~(zip%d+)~BOT~Altbot$")
+check(accessToken, "target access uses the same existing endpoint")
+framed("IP_ACCESS", accessToken, {"409:A---", "532:G---"})
+check(view.access[409] == "A---" and view.access[532] == "G---" and IP.access[409] == "GGGG",
+	"access is stored only for the inspected bot")
+local beforeTargetQuest = #sent
+check(not view:Quest(901), "the owner's completed quest never becomes a target answer")
+advance(1)
+local questToken
+for index=beforeTargetQuest+1,#sent do
+	questToken = questToken or message(index):match("^GET~IP_QUESTS~(zip%d+)~901~BOT~Altbot$")
+end
+check(questToken and #sent > beforeTargetQuest, "target quest queries use the batched endpoint")
+framed("IP_QUESTS", questToken, {"901:A"})
+check(view:Quest(901).status == "A" and IP.quests[901].status == "R", "target quest state never becomes owner state")
+local ownerToken = IP.watchToken
+local beforeQuiet = #sent
+advance(5)
+check(#sent == beforeQuiet, "an unchanged open inspect session does not poll or renew a target WATCH")
+local nextView = IP:ForInspect("party2", function() end)
+check(view.closed and nextView.targetGUID == "0xB2", "switching inspected units closes the old session")
+server("IP_STATE~" .. targetToken .. "~1~1~1~18~18~0~2~0~0~B~0~80")
+server("IP_TARGET~" .. targetToken .. "~bear~0")
+check(nextView.state == nil and nextView.profile == nil, "late state and profile replies cannot populate a new target")
+view:OnMessage("MBOT", "IP_TARGET~" .. targetToken .. "~bear~0", player.name)
+check(view.profile == "combat", "a closed target parser ignores even its own matching late token")
+nextView.closed = true
+IP.target = nil
+local beforeClosed = #sent
+nextView:QueueQuest(902)
+advance(11)
+check(#sent == beforeClosed, "closed target callbacks never send more requests")
+check(IP.watchToken == ownerToken, "target sessions do not replace the owner's watch token")
+
+-- Successful state/profile answers do not hide an unanswered access timeout.
+local timeoutChanges = 0
+local timed = IP:ForInspect("party1", function() timeoutChanges = timeoutChanges + 1 end)
+server("IP_STATE~" .. timed.watchToken .. "~1~1~1~7~7~0~0~8~0~B~0~80")
+server("IP_TARGET~" .. timed.watchToken .. "~combat~1")
+local timedAccess = lastMessage():match("^GET~IP_ACCESS~(zip%d+)~BOT~Altbot$")
+local changesBeforeTimeout = timeoutChanges
+advance(10.25)
+check(timed.error == "TIMEOUT" and timed.requests[timedAccess] == nil and timeoutChanges > changesBeforeTimeout,
+	"a target access timeout releases the request and notifies its visible view")
+timed.closed = true
+local missing = IP:ForInspect("party1", function() end)
+server("IP_STATE~" .. missing.watchToken .. "~1~0~1~0~0~0~255~0~0~B~0~80")
+advance(10.25)
+check(missing.error == "TIMEOUT", "an absent effective target profile times out even when state arrived")
+missing.closed = true
+
+local errorChanges = 0
+local denied = IP:ForInspect("party2", function() errorChanges = errorChanges + 1 end)
+server("ERR~GET~IP_STATE~" .. denied.watchToken .. "~NOT_CONTROLLED")
+check(denied.error == "NOT_CONTROLLED" and not next(denied.requests) and errorChanges == 1,
+	"a refused target request settles once and notifies its view")
+denied.closed = true
+
+-- The native quest endpoint also distinguishes completion when IP is disabled.
+local retryChanges = 0
+local limited = IP:ForInspect("party1", function() retryChanges = retryChanges + 1 end)
+server("IP_STATE~" .. limited.watchToken .. "~1~0~1~0~0~0~255~0~0~B~0~80")
+server("IP_TARGET~" .. limited.watchToken .. "~combat~1")
+check(not limited:Quest(903), "target quest state is requested on realms without IP")
+local function questRequest(target)
+	for token, request in pairs(target.requests) do if request.kind == "IP_QUESTS" then return token end end
+end
+advance(0.5)
+for attempt=1,3 do
+	local token = questRequest(limited)
+	check(token, "a rate-limited target quest is retried")
+	server("ERR~GET~IP_QUESTS~" .. token .. "~RATE_LIMIT")
+	check(not limited.error, "transient target rate limits wait for bounded retries")
+	advance(2.5)
+end
+local limitedToken = questRequest(limited)
+check(limitedToken, "the final rate-limit retry is sent")
+local changesBeforeError = retryChanges
+server("ERR~GET~IP_QUESTS~" .. limitedToken .. "~RATE_LIMIT")
+check(limited.error == "RATE_LIMIT" and retryChanges > changesBeforeError and not limited.inflight[903],
+	"exhausted target rate limits settle and notify instead of retrying forever")
+local beforeLimitQuiet = #sent
+advance(2.5)
+check(#sent == beforeLimitQuiet, "exhausted target rate limits stop sending")
+limited.closed = true
+
+-- Twelve multibyte name characters consume their real URL-encoded wire budget.
+local batched = IP:ForInspect("party3", function() end)
+local suffix = "~BOT~" .. string.rep("%C3%84", 12)
+check(lastMessage() == "GET~IP_STATE~" .. batched.watchToken .. suffix, "target names use bytewise URL encoding")
+server("IP_STATE~" .. batched.watchToken .. "~1~0~1~0~0~0~255~0~0~B~0~80")
+server("IP_TARGET~" .. batched.watchToken .. "~combat~1")
+local batchStart = #sent
+for id=10000001,10000130 do batched:QueueQuest(id) end
+advance(0.25)
+check(#sent - batchStart <= 6 and next(batched.queued), "target flushes preserve the native per-slice batch cap")
+advance(1.25)
+local seen, batches = {}, 0
+for index=batchStart+1,#sent do
+	local text = message(index)
+	check(#text <= 240 and text:sub(-#suffix) == suffix, "target batches fit the native wire budget including their suffix")
+	local token, ids = text:match("^GET~IP_QUESTS~(zip%d+)~([%d,]+)~BOT~")
+	check(token and ids, "target batches retain the native quest-list request shape")
+	local entries = {}
+	for id in ids:gmatch("%d+") do
+		check(not seen[id], "target batching sends each queued quest once")
+		seen[id], entries[#entries+1] = true, id .. ":A"
+	end
+	check(#entries <= 32, "target batches preserve the native quest count limit")
+	framed("IP_QUESTS", token, entries)
+	batches = batches + 1
+end
+local total = 0
+for _ in pairs(seen) do total = total + 1 end
+check(total == 130 and batches > 6 and not next(batched.queued) and not next(batched.inflight),
+	"bounded target batch continuations send and settle every queued quest")
+batched.closed = true
+IP.target = nil
+IP.state, IP.access, IP.quests = ownerState, ownerAccess, ownerQuests
+IP.profile, IP.dualWield, IP.error = ownerProfile, ownerDualWield, ownerError
+IP.watchAt, ZGV.db.profile.ip_mode = ownerWatchAt, ownerMode
+UnitName, UnitGUID = nativeName, nativeGUID
 
 ------------------------------------------------------------------------
 -- Gear Advisor talent state

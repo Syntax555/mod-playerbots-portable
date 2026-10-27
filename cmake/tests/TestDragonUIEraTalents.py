@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import tempfile
 
-from FixtureSupport import fork_change, git_apply, prepared_core, run_fixture
+from FixtureSupport import fork_change, git_apply, prepared_core, run_fixture, unpatched
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,9 +34,12 @@ def dragon_chunks(source: Path, multibot: Path) -> dict[str, str]:
         + section(shell, 'local function onShow()', 'local function onDragStart(win)') + 'return onShow, onHide\n'
     tabs = header + 'local L = addon.L\n' + section((talents / 'tab_strip.lua').read_text(), 'local TAB_PREFIX',
                                                      '-- Spec rename cog') + 'return tabClicked\n'
-    bot = section((multibot / 'UI/MultiBotTalentFrame.lua').read_text(),
-                  'function MultiBot.OpenEraTalentInspect(', 'local function getTalentFrameAceGUI(')
-    return {'window': window, 'tabs': tabs, 'bot': bot,
+    bot_source = (multibot / 'UI/MultiBotTalentFrame.lua').read_text()
+    bot = bot_source[:bot_source.index('local function getTalentFrameAceGUI(')]
+    every = (multibot / 'Core/MultiBotEvery.lua').read_text()
+    button_start = every.index('pFrame.addButton("Talent", 304')
+    button = every[button_start:every.index('\n\t--', button_start)]
+    return {'window': window, 'tabs': tabs, 'bot': bot, 'bot_button': button,
             **{name: str(talents / filename) for name, filename in (
                 ('namespace', 'namespace.lua'), ('entry', 'entry_points.lua'),
                 ('live', 'live_view.lua'), ('canvas', 'tree_canvas.lua'), ('footer', 'footer_bar.lua'),
@@ -143,7 +146,11 @@ GetCVar=function(name) return cvars[name] end
 SetCVar=function(name,value) cvars[name]=value end
 PlaySound=function() end
 SetButtonPulse=function() end
-UpdateMicroButtons=function() end
+UpdateMicroButtons=function()
+  if TalentMicroButton then
+    TalentMicroButton:SetButtonState(PlayerTalentFrame and PlayerTalentFrame:IsShown() and "PUSHED" or "NORMAL")
+  end
+end
 InCombatLockdown=function() return false end
 IsLoggedIn=function() return true end
 ResetGroupPreviewTalentPoints=function() end
@@ -151,14 +158,15 @@ GetActiveTalentGroup=function() return 1 end
 local petTalents=false
 GetNumTalentGroups=function(_,pet) if pet then return petTalents and 1 or 0 end return 1 end
 local playerLevel=15
-local units={player="0x0000000000000001",party1="0x0000000000000002",party2="0x0000000000000003"}
+local units={player="0x0000000000000001",party1="0x0000000000000002",party2="0x0000000000000003",party3="0x0000000000000004"}
 UnitGUID=function(unit) return units[unit] end
 UnitExists=function(unit) return units[unit]~=nil end
-UnitName=function(unit) return unit=="player" and "Testi" or (unit=="party1" and "Mey" or "Godric") end
+UnitName=function(unit) return ({player="Testi",party1="Mey",party2="Godric",party3="Visitor"})[unit] end
 GetUnitName=function(unit) return UnitName(unit) end
 UnitLevel=function(unit) return unit=="player" and playerLevel or 20 end
 UnitClass=function(unit) return "Class",unit=="player" and ownClass or "WARRIOR" end
 CanInspect=function(unit) return canInspect and UnitExists(unit) end
+CheckInteractDistance=function() return true end
 GetTime=function() return now end
 SetPortraitTexture=function() end
 PanelTemplates_TabResize=function() end
@@ -294,8 +302,31 @@ for line in io.lines(addonDir.."EraTalents.toc") do
   if file then dofile(addonDir..file:gsub("\\","/")) end
 end
 local ET=EraTalents
-MultiBot={auto={},talent=Object(),toUnit=function(name) return name=="Mey" and "party1" or "party2" end}
+local talentButtons, unitFrames = {}, {}
+MultiBot={auto={},index={actives={}},talent=Object(),L=function(key) return key end,
+  toUnit=function(name) return name=="Mey" and "party1" or name=="Godric" and "party2" or "player" end,
+  frames={MultiBar={frames={Units={frames=unitFrames,buttons={}}}}}}
+MultiBot.talent.doClear=function() end
+for _,name in ipairs({"Mey","Godric"}) do
+  local button=Object()
+  button.state=false
+  button.getName=function() return name end
+  button.getClass=function() return "Warrior" end
+  button.setEnable=function() button.state=true; return button end
+  button.setDisable=function() button.state=false; return button end
+  talentButtons[name]=button
+  unitFrames[name]={getButton=function(key) assert(key=="Talent"); return button end}
+  assert(loadstring('local pFrame=...\n'..chunks.bot_button))({addButton=function(key)
+    assert(key=="Talent"); return button
+  end})
+end
+-- The compact SelfBot toolbar has no bot talent tool.
+unitFrames.Testi={getButton=function() return nil end}
 assert(loadstring(chunks.bot))()
+local function clickBotTalents(name)
+  local button=assert(talentButtons[name])
+  button.doLeft(button)
+end
 fire("PLAYER_LOGIN"); fire("PLAYER_ENTERING_WORLD")
 assert(sent[#sent]=="HELLO")
 local win=DragonUI_TalentFrame
@@ -345,6 +376,9 @@ for _,open in ipairs({function() press("N") end,function() TalentMicroButton:Cli
   function() ET.TogglePanel() end,function() win:Show() end}) do
   open()
   assert(win:IsShown() and not panel() and painted.external,"every opener uses DragonUI's historical canvas")
+  assert(TalentMicroButton.SetButtonStateArgs[1]=="PUSHED","own talent window presses the player microbutton")
+  assert(not unitFrames.Testi.getButton("Talent") and not talentButtons.Mey.state and not talentButtons.Godric.state,
+    "own talent routes leave every MultiBot talent button released")
   assert(not PlayerTalentFrame:IsShown(),"stock talent frame stays hidden")
   reset()
 end
@@ -496,9 +530,22 @@ playerLevel=9; press("N")
 assert(not win:IsShown() and notices[1]==FEATURE_BECOMES_AVAILABLE_AT_LEVEL:format(10),"talents remain level-gated")
 playerLevel=15; reset()
 
--- MultiBot's unchanged opener uses DragonUI and consumes server permission one rank at a time.
-assert(MultiBot.OpenEraTalentInspect("Mey",true),"MultiBot accepts historical bot inspect")
+-- The bot's actual toolbar button uses DragonUI and spends only server-authorized points.
+clickBotTalents("Mey")
 assert(win:IsShown() and ns.inspectUnit=="party1" and not panel(),"bot opens the same DragonUI window")
+assert(TalentMicroButton.SetButtonStateArgs[1]=="NORMAL","inspecting a bot does not press the player's talent microbutton")
+assert(talentButtons.Mey.state and not talentButtons.Godric.state,
+  "opening bot talents presses only that bot's MultiBot button")
+ns.OpenTalents()
+assert(not ns.inspectUnit and win:IsShown() and TalentMicroButton.SetButtonStateArgs[1]=="PUSHED",
+  "returning to own talents while open presses the player's microbutton")
+assert(not talentButtons.Mey.state and not talentButtons.Godric.state,
+  "returning to the player's own talents releases the bot button")
+ns.ShowInspect("party1")
+assert(ns.inspectUnit=="party1" and win:IsShown() and TalentMicroButton.SetButtonStateArgs[1]=="NORMAL",
+  "switching the open own window to inspect releases the player's microbutton")
+assert(talentButtons.Mey.state and not talentButtons.Godric.state,
+  "switching the open window back to bot inspection selects that bot's button")
 assert(nodeCount()==0,"bot waits without showing native ranks")
 reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":1")
 local botNode=assert(nodes()[warrior])
@@ -548,21 +595,45 @@ count=#sent; ns.NodeClicked(retiredBot,"LeftButton")
 assert(#sent==count,"stale painted bot class/era cannot send a purchase")
 nodes()[mage]:Click()
 assert(sent[#sent]=="ILEARN "..units.party1.." "..mage,"TBC bot purchase uses its own historical talent ID")
-assert(MultiBot.OpenEraTalentInspect("Mey",true) and not win:IsShown(),"same bot talent button closes DragonUI")
+clickBotTalents("Mey")
+assert(not win:IsShown(),"same bot talent button closes DragonUI")
+assert(TalentMicroButton.SetButtonStateArgs[1]=="NORMAL","closing inspected talents keeps the player's microbutton released")
+assert(not talentButtons.Mey.state and not talentButtons.Godric.state,
+  "closing bot talents releases every MultiBot talent button")
 reply("IEDIT "..units.party1.." 1 99")
 assert(not win:IsShown(),"late replies do not reopen the window")
-assert(MultiBot.OpenEraTalentInspect("Mey",true) and win:IsShown() and nodeCount()==0,"reopening waits for fresh bot state")
+clickBotTalents("Mey")
+assert(win:IsShown() and nodeCount()==0,"reopening waits for fresh bot state")
 assert(not ET.inspect.cache[units.party1],"closing inspect drops cached bot permissions")
-assert(MultiBot.OpenEraTalentInspect("Godric",true),"switching bot retargets existing window")
+clickBotTalents("Godric")
+assert(win:IsShown() and ns.inspectUnit=="party2","switching bot retargets existing window")
+assert(not talentButtons.Mey.state and talentButtons.Godric.state,
+  "switching inspected bots releases the previous bot's button")
 reply("ISYNC "..units.party1.." 0 1 1 "..warrior..":3")
 assert(nodeCount()==0,"late previous-target replies do not populate new bot")
 reply("ISYNC "..units.party2.." 0 0 0")
 assert(win:IsShown() and not painted.external and nodeCount()==3,"native inspect target keeps DragonUI's native renderer")
+win:Hide()
+assert(not talentButtons.Godric.state and TalentMicroButton.SetButtonStateArgs[1]=="NORMAL",
+  "closing DragonUI directly releases the inspected bot and player buttons")
+ns.ShowInspect("party2")
+assert(talentButtons.Godric.state and not talentButtons.Mey.state,
+  "reopening the same inspected character restores only its bot button")
 ns.EnterEditor({}); ns.LoadOntoCharacter({})
 assert(nativeBuildReads==0,"native inspected target cannot bypass own historical profile guards")
 local staleCount=#sent
 ns.NodeClicked(botNode,"LeftButton")
 assert(#sent==staleCount,"retired historical nodes do not fall through to native actions")
+InspectUnit("party3"); InspectFrameTab3:Click()
+assert(ns.inspectUnit=="party3" and win:IsShown() and TalentMicroButton.SetButtonStateArgs[1]=="NORMAL",
+  "the native inspect talent tab keeps a human inspection separate from own talents")
+assert(not talentButtons.Mey.state and not talentButtons.Godric.state,
+  "inspecting a human releases the previous bot's talent button")
+press("N")
+assert(not ns.inspectUnit and win:IsShown() and TalentMicroButton.SetButtonStateArgs[1]=="PUSHED",
+  "the talent key returns from a human inspection to the player's own trees")
+assert(not talentButtons.Mey.state and not talentButtons.Godric.state,
+  "own talents after human inspection leave bot buttons released")
 reset()
 canInspect=false
 assert(not MultiBot.OpenEraTalentInspect("Mey",true) and not win:IsShown(),"normal inspect refusal is preserved")
@@ -574,6 +645,8 @@ press("K")
 assert(win:IsShown() and ns.GlyphView(),"earned Wrath restores DragonUI glyph page")
 reset(); press("N")
 assert(not painted.external and ns.depth==11 and FixtureBuildDropdown:IsShown(),"Wrath restores native depth and profile controls")
+assert(not unitFrames.Testi.getButton("Talent") and not talentButtons.Mey.state and not talentButtons.Godric.state,
+  "native own talents never select a MultiBot talent button")
 local sentBefore=#sent
 ns.NodeClicked(retiredNode,"LeftButton")
 assert(#sent==sentBefore,"retired hidden historical node cannot call native learn after Wrath transition")
@@ -607,20 +680,40 @@ def main() -> None:
     parser.add_argument('--era-source', type=Path, default=prepared_core(ROOT) / 'modules/mod-era-talents')
     parser.add_argument('--dragon-source', type=Path, default=ROOT / '.module-cache/prepared-source-addons/DragonUI')
     parser.add_argument('--multibot-source', type=Path, default=ROOT / '.module-cache/prepared-addons/MultiBot')
+    parser.add_argument('--no-fork-reversion', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='dragonui-era-talents-') as temporary:
         directory = Path(temporary)
-        era, dragon = directory / 'era', directory / 'dragon'
+        era, dragon, multibot = directory / 'era', directory / 'dragon', directory / 'multibot'
         dragon_addon = dragon / 'DragonUI'
         shutil.copytree(args.era_source / 'client-addon', era / 'client-addon')
         shutil.copytree(args.dragon_source / 'modules/talents', dragon_addon / 'modules/talents')
+        for filename in ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'):
+            destination = multibot / filename
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(args.multibot_source / filename, destination)
         subprocess.run(['git', 'init', '-q', str(era)], check=True)
         subprocess.run(['git', 'init', '-q', str(dragon)], check=True)
-        chunks = dragon_chunks(dragon_addon, args.multibot_source)
+        subprocess.run(['git', 'init', '-q', str(multibot)], check=True)
+        if not args.no_fork_reversion:
+            dragon_controls = fork_change('DragonUI', 'dragonui-control-ownership',
+                                          paths=('DragonUI/modules/talents/',))
+            bot_controls = fork_change('MultiBot', 'multibot-control-ownership',
+                                       paths=('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'))
+            for path, patch in ((dragon, dragon_controls), (multibot, bot_controls)):
+                unpatched(path, patch)
+                git_apply(path, patch)
+        chunks = dragon_chunks(dragon_addon, multibot)
         addon = era / 'client-addon/EraTalents'
         for enabled in (True, False):
             run(addon, chunks, directory, enabled=enabled)
         mutations = (
+            (dragon_addon / 'modules/talents/entry_points.lua', ' and not ns.inspectUnit and TalentMicroButton then',
+             ' and TalentMicroButton then'),
+            (dragon_addon / 'modules/talents/live_view.lua', '        ns.Repaint()\n        UpdateMicroButtons()\n',
+             '        ns.Repaint()\n'),
+            (dragon_addon / 'modules/talents/live_view.lua',
+             '    if ns.win and ns.win:IsShown() then UpdateMicroButtons() end\n', ''),
             (addon / 'EraTalents.lua', '  if ET.InitDragonUI then ET.InitDragonUI() end\n', ''),
             (addon / 'DragonUIGlyphs.lua', '      if Blocked() then return Refuse() end\n', ''),
             (addon / 'DragonUIGlyphs.lua', 'if on and Blocked() then', 'if false then'),
@@ -654,6 +747,31 @@ def main() -> None:
             path.write_text(original.replace(before, after, 1))
             run(addon, chunks, directory, enabled=True, expect_failure=True)
             path.write_text(original)
+        for label, before in (
+                ('selected bot button', '    if name then setTalentButtonEnabled(name, true) end\n'),
+                ('previous bot release',
+                 '    if eraTalentBot and eraTalentBot ~= name then setTalentButtonEnabled(eraTalentBot, false) end\n'),
+                ('own view handoff',
+                 '        if type(ns.LeaveInspect) == "function" then hooksecurefunc(ns, "LeaveInspect", syncEraTalentButtons) end\n')):
+            if before not in chunks['bot']:
+                raise AssertionError('Expected MultiBot inspect synchronization: ' + before)
+            print('Checking MultiBot mutation: ' + label, flush=True)
+            mutated = dict(chunks, bot=chunks['bot'].replace(before, '', 1))
+            run(addon, mutated, directory, enabled=True, expect_failure=True)
+        opener = 'if MultiBot.OpenEraTalentInspect and MultiBot.OpenEraTalentInspect(pButton.getName(), true) then return end'
+        assert opener in chunks['bot_button']
+        run(addon, dict(chunks, bot_button=chunks['bot_button'].replace(opener, '', 1)),
+            directory, enabled=True, expect_failure=True)
+        if args.no_fork_reversion:
+            return
+        for label, path, patch in (
+                ('DragonUI control ownership', dragon, dragon_controls),
+                ('MultiBot control ownership', multibot, bot_controls)):
+            print('Checking reverted ' + label, flush=True)
+            git_apply(path, patch, '--reverse')
+            run(addon, dragon_chunks(dragon_addon, multibot), directory, enabled=True, expect_failure=True)
+            git_apply(path, patch)
+            run(addon, dragon_chunks(dragon_addon, multibot), directory, enabled=True)
         color_patch = fork_change('mod-era-talents', 'mod-era-talents-dragonui-colors',
                                   paths=('client-addon/EraTalents/DragonUI.lua',))
         print('Checking reverted historical talent colors', flush=True)
@@ -663,17 +781,22 @@ def main() -> None:
         run(addon, chunks, directory, enabled=True)
         for component, change, path in (
                 ('mod-era-talents', 'mod-era-talents-dragonui-view', era),
-                ('DragonUI', 'dragonui-era-talents', dragon)):
-            # Revert the later adapter edit before undoing its original integration.
+                ('DragonUI', 'dragonui-era-talents', dragon),
+                ('MultiBot', 'multibot-era-talent-inspect', multibot)):
+            # Later changes touch the original integrations, so remove them first.
             if component == 'mod-era-talents':
-                git_apply(era, color_patch, '--reverse')
-            patch = fork_change(component, change, paths=('client-addon/',) if component == 'mod-era-talents' else ())
+                later_patch, paths = color_patch, ('client-addon/',)
+            elif component == 'DragonUI':
+                later_patch, paths = dragon_controls, ('DragonUI/modules/talents/',)
+            else:
+                later_patch, paths = bot_controls, ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua')
+            git_apply(path, later_patch, '--reverse')
+            patch = fork_change(component, change, paths=paths)
             print(f'Checking reverted {change}', flush=True)
             git_apply(path, patch, '--reverse')
-            run(addon, dragon_chunks(dragon_addon, args.multibot_source), directory, enabled=True, expect_failure=True)
+            run(addon, dragon_chunks(dragon_addon, multibot), directory, enabled=True, expect_failure=True)
             git_apply(path, patch)
-            if component == 'mod-era-talents':
-                git_apply(era, color_patch)
+            git_apply(path, later_patch)
         print('Removed integration, glyph and bot-authority guards all fail the regression fixture')
 
 

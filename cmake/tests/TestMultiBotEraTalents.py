@@ -228,14 +228,22 @@ UIErrorsFrame={AddMessage=function() talentErrors=talentErrors+1 end}
 local units={party1="0x0000000000000002",party2="0x0000000000000003",player="0x0000000000000001"}
 UnitGUID=function(unit) return units[unit] end
 UnitExists=function(unit) return units[unit]~=nil end
-UnitName=function(unit) return unit=="player" and "Master" or "Altbot" end
+UnitName=function(unit) return unit=="player" and "Master" or unit=="party2" and "Otherbot" or "Altbot" end
 UnitLevel=function() return 60 end
 local allowed=true
 CanInspect=function(unit) return allowed and UnitExists(unit) end
 CheckInteractDistance=function() return true end
 wipe=function(t) for key in pairs(t) do t[key]=nil end end
 local hooks={}
-hooksecurefunc=function(name,fn) hooks[name]=fn end
+hooksecurefunc=function(owner,name,callback)
+  if type(owner)=="string" then hooks[owner]=name; return end
+  local original=owner[name]
+  owner[name]=function(...)
+    local result=original(...)
+    callback(...)
+    return result
+  end
+end
 HideUIPanel=function(frame) frame:Hide(); if frame==InspectFrame then InspectTalentFrame:Hide() end end
 local calls=0
 local unitLevel=60
@@ -272,10 +280,22 @@ local ET=EraTalents
 ET.InitInspect()
 ET.CheckGeneration("a1b2c3d4")
 ET.Learn=function() error("read-only bot view cannot learn talents") end
-local selected="Altbot"
-local button
-button={state=false,getName=function() return selected end,getClass=function() return "Priest" end,setDisable=function() return button end,setEnable=function() end}
-MultiBot={index={actives={}},frames={MultiBar={frames={Units={buttons={},frames={}}}}},auto={talent=true},talent={name="Altbot",doClear=function() end,Hide=function() end,renderTalentBuild=function() error("fixed Wrath tree cannot render a historical bot") end,getTalentsBuildOptions=function() return {} end},toUnit=function(name) return name=="Altbot" and "party1" or name=="Otherbot" and "party2" end,L=function(key) return key end}
+local states={Altbot=false,Otherbot=false}
+local function unitButton(name)
+  local button={getName=function() return name end,getClass=function() return "Priest" end}
+  button.setEnable=function() states[name]=true; return button end
+  button.setDisable=function() states[name]=false; return button end
+  return setmetatable(button,{__index=function(_,key) if key=="state" then return states[name] end end})
+end
+local ownButtons={Altbot=unitButton("Altbot"),Otherbot=unitButton("Otherbot")}
+local unitFrames={}
+for name,button in pairs(ownButtons) do
+  local owned=button
+  unitFrames[name]={getButton=function(key) assert(key=="Talent"); return owned end,
+    addButton=function(key) assert(key=="Talent"); return owned end}
+end
+local button=ownButtons.Altbot
+MultiBot={index={actives={}},frames={MultiBar={frames={Units={buttons={},frames=unitFrames}}}},auto={talent=true},talent={name="Altbot",doClear=function() end,Hide=function(self) if ownButtons[self.name] then ownButtons[self.name].setDisable() end end,renderTalentBuild=function() error("fixed Wrath tree cannot render a historical bot") end,getTalentsBuildOptions=function() return {} end},toUnit=function(name) return name=="Altbot" and "party1" or name=="Otherbot" and "party2" end,L=function(key) return key end}
 dofile(multibot.."UI/MultiBotTalentFrame.lua")
 __BUTTON__
 __SET_TALENTS__
@@ -285,6 +305,11 @@ ET.state.serverGen=nil; ET.state.clientGen=nil
 InspectUnit("party1")
 button.doLeft(button)
 assert(InspectTalentFrame:IsShown(),"MultiBot's talent button must open the talent tab rather than equipment")
+assert(states.Altbot and not states.Otherbot,"only the inspected bot talent button is pressed")
+InspectSwitchTabs(1)
+assert(not states.Altbot,"the bot talent button releases on the equipment tab")
+InspectSwitchTabs(3)
+assert(states.Altbot,"returning to inspected talents restores the bot button")
 assert(suppressed() and ET.inspectStatus:IsShown(),"a bot request before the first GEN must not reveal native Wrath talents")
 for _,record in ipairs(packets) do if record[1]=="0" and record[2]=="5" then ET.OnAddonMsg("ERATAL",record[3]) end end
 assert(suppressed() and (not ET.inspectView or not ET.inspectView.frame:IsShown()),"a historical reply waits for generation validation")
@@ -379,14 +404,15 @@ end
 end
 button.doLeft(button)
 -- Mixed party targets discard a late reply for the previously inspected GUID.
-selected="Otherbot"; button.doLeft(button)
+button=ownButtons.Otherbot; button.doLeft(button)
 assert(ET.inspect.current==UnitGUID("party2") and MultiBot.talent.name=="Otherbot")
+assert(not states.Altbot and states.Otherbot,"changing inspected bots moves the talent button state")
 local before=calls; MultiBot.talent.setTalents()
 assert(calls==before and ET.inspect.current==UnitGUID("party2"),"a delayed retry cannot reopen the previous bot")
 ET.OnAddonMsg("ERATAL",packets[1][3]); assert(ET.inspect.cache[UnitGUID("party1")]==nil)
 ET.OnAddonMsg("ERATAL","IEDIT "..UnitGUID("party1").." 1 51")
 assert(ET.inspect.cache[UnitGUID("party1")]==nil,"late edit permissions cannot authorize a different selected bot")
-selected="Altbot"; close(); button.doLeft(button)
+button=ownButtons.Altbot; close(); button.doLeft(button)
 for _,record in ipairs(packets) do if record[1]=="0" and record[2]=="5" then ET.OnAddonMsg("ERATAL",record[3]) end end
 assert(ET.inspectView.frame:IsShown())
 -- MPQ generation mismatch or missing data suppresses both trees, never an incorrect fallback.
@@ -407,6 +433,7 @@ ET.RefreshInspect(); assert(suppressed() and not ET.inspectView.frame:IsShown(),
 -- The button toggles the stock inspect frame; closing wipes state and restores stock children.
 button.doLeft(button)
 assert(not InspectFrame:IsShown() and ET.inspect.current==nil and next(ET.inspect.cache)==nil and not suppressed())
+assert(not states.Altbot and not states.Otherbot,"closing inspection releases bot talent buttons")
 local closedCalls=calls
 MultiBot.talent.setTalents()
 assert(not InspectFrame:IsShown() and calls==closedCalls,"a stale retry must not reopen closed inspection")
@@ -441,9 +468,11 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
                    *, expect_failure: bool = False) -> None:
     every = (bot / 'Core/MultiBotEvery.lua').read_text()
     start = every.index('pFrame.addButton("Talent", 304')
-    button = every[start:every.index('\n\t-- BOUTON SETTALENTS', start)]
-    button = 'local pFrame={addButton=function() return button end}\n' + button
+    button = every[start:every.index('\n\t--', start)]
+    button = 'for _,pFrame in pairs(unitFrames) do\n' + button + '\nend\n'
     frame = (bot / 'UI/MultiBotTalentFrame.lua').read_text()
+    assert 'window.frame:HookScript("OnHide", syncTalentButtonStateOnHide)' in frame
+    assert 'setTalentButtonEnabled(talentFrame.name, false)' in frame
     start = frame.index('    MultiBot.talent.setTalents = function()')
     setter = frame[start:frame.index('\n    function MultiBot.talent.updateTalentArrowState', start)]
     fixture = LUA_FIXTURE.replace('__BUTTON__', button).replace('__SET_TALENTS__', setter)
@@ -476,7 +505,12 @@ def client_fixture(era: Path, bot: Path, packets: list[list[str]], directory: Pa
                                'the era tree sits above the toplevel Inspect frame',
                                "the era tree follows the Inspect frame's strata on every show",
                                'partial ranks are not presented as a complete tree',
-                               'rank limits validate matching client structure')
+                               'rank limits validate matching client structure',
+                               'only the inspected bot talent button is pressed',
+                               'the bot talent button releases on the equipment tab',
+                               'returning to inspected talents restores the bot button',
+                               'changing inspected bots moves the talent button state',
+                               'closing inspection releases bot talent buttons')
             if not any(message in result.stderr for message in expected_errors):
                 raise AssertionError('Mutation failed for an unrelated fixture error: ' + result.stderr)
         else:
@@ -496,6 +530,7 @@ def main() -> None:
                         default=prepared_core(ROOT) / 'modules/mod-era-talents')
     parser.add_argument('--addon-source', type=Path,
                         default=ROOT / '.module-cache/prepared-addons/MultiBot')
+    parser.add_argument('--no-fork-reversion', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='multibot-era-inspect-') as temporary:
         directory = Path(temporary)
@@ -508,11 +543,26 @@ def main() -> None:
         (bot / 'Core').mkdir()
         for file in ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'):
             shutil.copyfile(args.addon_source / file, bot / file)
-        unpatched(bot, BOT_PATCH)
-        git_apply(bot, BOT_PATCH)
+        if not args.no_fork_reversion:
+            controls = fork_change('MultiBot', 'multibot-control-ownership',
+                                   paths=('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'))
+            unpatched(bot, controls)
+            unpatched(bot, BOT_PATCH)
+            git_apply(bot, BOT_PATCH)
+            git_apply(bot, controls)
         packets = native_fixture(args.module_source, directory)
         print('Native ISYNC: all authored classes, 19 earned tiers, mixed leader stages/levels, inspect gates and transition state passed')
         client_fixture(era, bot, packets, directory)
+        button_source = bot / 'UI/MultiBotTalentFrame.lua'
+        safe_buttons = button_source.read_text()
+        for before, after in (
+                ('    if name then setTalentButtonEnabled(name, true) end\n', ''),
+                ('    if eraTalentBot and eraTalentBot ~= name then setTalentButtonEnabled(eraTalentBot, false) end\n', ''),
+                ('        hooksecurefunc(era, "RefreshInspect", syncEraTalentButtons)\n', '')):
+            assert before in safe_buttons
+            button_source.write_text(safe_buttons.replace(before, after, 1))
+            client_fixture(era, bot, packets, directory, expect_failure=True)
+        button_source.write_text(safe_buttons)
         inspect = era / 'client-addon/EraTalents/Inspect.lua'
         safe_inspect = inspect.read_text()
         talents = era / 'client-addon/EraTalents/TalentUI.lua'
@@ -566,9 +616,13 @@ def main() -> None:
         frame.write_text(safe_frame.replace(native_guard, '', 1))
         client_fixture(era, bot, packets, directory, expect_failure=True)
         frame.write_text(safe_frame)
-        git_apply(bot, BOT_PATCH, '--reverse')
-        client_fixture(era, bot, packets, directory, expect_failure=True)
-        git_apply(bot, BOT_PATCH)
+        if not args.no_fork_reversion:
+            git_apply(bot, controls, '--reverse')
+            client_fixture(era, bot, packets, directory, expect_failure=True)
+            git_apply(bot, BOT_PATCH, '--reverse')
+            client_fixture(era, bot, packets, directory, expect_failure=True)
+            git_apply(bot, BOT_PATCH)
+            git_apply(bot, controls)
         print('Reverted MultiBot and unsafe EraTalents generation/retry mutations all fail the regression fixture')
 
 

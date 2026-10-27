@@ -148,7 +148,7 @@
     {
       "name": "MultiBot",
       "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
-      "revision": "5b027685163298ada43431b0377797827206e07a",
+      "revision": "6a43fd688c3a2657028be707ea75f3e2fac7636c",
       "upstream": {
         "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
         "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f"
@@ -165,7 +165,8 @@
         "multibot-vendor-purchases": "5ab9f9b92695c32eeb0b137ed43d53e5b15bcdcf",
         "multibot-library-load-order": "4ce9a460ca9637af2a6ebf057c9b16b165dd7e6f",
         "multibot-spellbook-items": "03e291a36e1f368abf54ca0bbc756d8d47847410",
-        "multibot-combat-profiles": "541c815266855c5f9445d0c698f0be7f30c4157e"
+        "multibot-combat-profiles": "541c815266855c5f9445d0c698f0be7f30c4157e",
+        "multibot-control-ownership": "6a43fd688c3a2657028be707ea75f3e2fac7636c"
       }
     }
   ],
@@ -230,7 +231,7 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "ac2d10d3431f77028c2309dc9c74272eacbe7879",
+      "revision": "00e15e78ad005b53c342b226eddf859e9a33a6c3",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
         "revision": "cde60f02cffc4576cfcbc620c104dd3aee685285"
@@ -239,7 +240,8 @@
       "interface": 30300,
       "toc": "DragonUI.toc",
       "forkChanges": {
-        "dragonui-era-talents": "34c820d523f1f8f2972bfe417ced3825ddcb51e1"
+        "dragonui-era-talents": "34c820d523f1f8f2972bfe417ced3825ddcb51e1",
+        "dragonui-control-ownership": "00e15e78ad005b53c342b226eddf859e9a33a6c3"
       }
     },
     {
@@ -261,7 +263,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "258ee399fffc38307b760faf899e1a3bef6a1dff",
+      "revision": "1633821cf1cf4221326cb2e42c905da676054faa",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718"
@@ -272,7 +274,8 @@
       "forkChanges": {
         "zygor-individual-progression": "1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea",
         "zygor-incremental-gearfinder": "84787533d8a16b7c5cd063b84ac1ceb28361fd34",
-        "zygor-druid-gear-profiles": "258ee399fffc38307b760faf899e1a3bef6a1dff"
+        "zygor-druid-gear-profiles": "258ee399fffc38307b760faf899e1a3bef6a1dff",
+        "zygor-inspected-altbot-gearfinder": "1633821cf1cf4221326cb2e42c905da676054faa"
       }
     }
   ]
