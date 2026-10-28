@@ -120,16 +120,14 @@ NPC entry/location, complete status/condition output, `.ip get` output and realm
 mode. Use these read-only checks; quest add/complete/reward/remove and IP setters
 are not diagnostic steps.
 
-## Verified sources
+## Sources and limits
 
-The [locked sources](module-versions.md) supply the
-[command handler](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/src/server/scripts/Commands/cs_quest.cpp),
-[acceptance checks](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/src/server/game/Entities/Player/PlayerQuest.cpp),
-[command permissions/help](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/data/sql/base/db_world/command.sql)
-and [reason strings](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/data/sql/updates/db_world/2026_02_15_02.sql).
-IP provides the [read-only progression handler](https://github.com/Syntax555/mod-individual-progression/blob/2f10fb0ad85a580517fdc97565684b3eba47b9d1/src/cs_individualProgression.cpp)
-and its [command defaults](https://github.com/Syntax555/mod-individual-progression/blob/2f10fb0ad85a580517fdc97565684b3eba47b9d1/data/sql/world/base/cs_individualProgression.sql).
-Local [historical quest](https://github.com/Syntax555/mod-individual-progression/commit/1ba29350bfabed582ad25b8c56f151862d1ebb12),
-[Frostmane Hold](https://github.com/Syntax555/mod-individual-progression/commit/f85cf6b4c87381566b816bbfb7e3a81ec46335f3) and
-[earned milestone](https://github.com/Syntax555/mod-individual-progression/commit/2e1453bbbed2c38b2564e5354c9de8798877f3ce)
-adaptations define the examples and progression limits.
+The [locked core and IP sources](module-versions.md) define command permissions,
+quest acceptance checks and the milestone chain. Local command database overrides
+can change permissions. Historical quest conditions come from Individual
+Progression's class-quest SQL; Era Talents separately gates spell learning/use.
+
+These diagnostics describe server state and acceptance checks. They do not
+certify a quest's NPCs, objectives or scripts; see
+[class-quest scope](class-quests.md#source-and-scope) and
+[outstanding gameplay validation](todo.md#gameplay-validation).

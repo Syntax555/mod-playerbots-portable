@@ -6,7 +6,7 @@ not raise their level or generate resources.
 
 ## Resident level caps
 
-The default reserves about 35% of random bots for earned level caps:
+The portable profile reserves about 35% of random bots for earned level caps:
 
 | Cap | Share of the population |
 | --- | ---: |
@@ -19,8 +19,8 @@ The default reserves about 35% of random bots for earned level caps:
 | 79 | 5% |
 | Continue individual progression | 65% |
 
-Assigned bots must earn their cap through normal XP. At the cap they can still
-quest, farm, earn gold and honor, improve equipment and join eligible activities.
+Assigned bots must earn their cap through normal XP. At the cap they can
+quest, farm, earn gold and honor, improve gear and join eligible activities.
 Further XP is blocked without the Wrath XP-off flag or a separate XP-disabled
 battleground queue. Level-69/79 residents must earn TBC/Wrath before crossing
 level 60/70.
@@ -28,7 +28,8 @@ level 60/70.
 Assignment uses a stable character GUID bucket and persists across restarts.
 These are approximate population shares, not exact online counts or faction
 quotas. Existing bots above their assigned cap keep their levels and continue
-progression. Human characters and account alts receive no automatic caps.
+progression. Human characters, SelfBots and controlled account alts receive no
+automatic caps.
 
 ## Change the distribution
 
@@ -89,8 +90,9 @@ Playerbots.RandomBotAutoJoinBG = 0
 
 Bots fill a real player's eligible queue; autonomous all-bot matches and
 battleground testing mode are disabled. Native faction and team minimums apply.
-Recruitment and leveling take time, and bots can be offline or busy. A population
-target of 2,500 does not guarantee a match in every era and bracket.
+Recruitment and leveling take time, and bots can be offline or busy. The
+configured 2,500-bot target has not been load-tested and does not guarantee a
+match in every era and bracket.
 
 ## Match rules
 
@@ -126,5 +128,7 @@ SelfBot enabled keeps these human queue rights.
 Bots do not fill Strand, random battlegrounds or arenas. The pinned AI lacks
 Strand tactics, and its arena gathering uses teleport shortcuts, so those bot
 paths are disabled. These human queues need ordinary participants. Other
-battleground tactics and pathfinding also depend on upstream AI; see the
-[configuration reference](configuration.md#supported-scope).
+battleground tactics and pathfinding depend on upstream AI. Source fixtures
+cover eligibility and selected era rules; full live matches across every era
+and bracket remain [unverified](todo.md#gameplay-validation). See
+[supported scope](configuration.md#supported-scope).

@@ -1,71 +1,75 @@
 # Combat profiles and equipment
 
-MultiBot's **Select combat profile** button offers **Automatic** and the
-specializations available for that bot's class. Install the matching MultiBot
-addon and server. This menu changes combat behavior and equipment preferences;
-it does not buy talents, switch dual-specialization slots or grant abilities.
-An active SelfBot has the same selector in its compact MultiBot toolbar.
+MultiBot's **Select combat profile** menu offers **Automatic** and the bot's
+class specializations. An active SelfBot has the selector in its compact
+toolbar. Install the matching [MultiBot addon](addons.md) and server.
 
-In automatic mode, Playerbots reads the character's current talent distribution,
-including its Vanilla or TBC EraTalents tree. A specialization change refreshes
-the class strategies and role support outside combat. This includes tank or
-damage assistance, positioning, healing, cleansing, blessings, totems and pets
-where the existing class AI supports them. A manually selected profile remains
-selected across relogs and AI resets. Select **Automatic** to follow talents
-again. Selecting the current profile reapplies it and checks carried equipment.
+Choose a profile while the character is alive, outside combat and not being
+teleported. The choice refreshes native class strategies, role support and
+owned bag equipment. It does not spend talents, switch dual-specialization
+slots, teach abilities or grant equipment. Controlled altbot and SelfBot talent
+points remain for their owner to spend.
 
-The choice applies to controlled altbots and active SelfBots. It leaves their
-talent points for their owner to spend. A manually chosen profile still needs
-the character's normally learned abilities and appropriate equipment; selecting
-a role does not supply them. Travel, loot, formation and instance strategies
-are retained when the class profile changes.
+**Automatic** reads the current talent distribution, including Vanilla/TBC
+EraTalents trees. A manual choice persists across relogs and AI resets; choose
+Automatic to follow talents again. Selecting the current choice reapplies it.
+Travel, loot, formation and instance strategies are retained.
 
-Profiles reuse the available Playerbots class rotations. Its rogue AI uses the
-same native assassination rotation for assassination and subtlety profiles;
-combat uses its own rotation. Shared damage buttons can look the same across
-different specializations even when their native rotations differ.
-Ungrouped healing SelfBots retain Playerbots' solo damage support: holy damage
-for priests, elemental for shamans and retribution for paladins. Grouped
-SelfBots use their selected healing rotation. The selected profile still drives
-their role and equipment preferences.
+## Class support
+
+Profiles select existing Playerbots strategies and their healing, cleansing,
+blessing, totem, pet and positioning support. The primary native strategies are:
+
+| Class | Profile → native combat strategy |
+| --- | --- |
+| Warrior | Arms → `arms`; Fury → `fury`; Protection → `prot` |
+| Paladin | Holy → `holy`; Protection → `prot`; Retribution → `ret` |
+| Hunter | Beast Mastery → `bm`; Marksmanship → `mm`; Survival → `surv` |
+| Rogue | Assassination → `assassin`; Combat → `combat`; Subtlety → `assassin` |
+| Priest | Discipline → `disc`; Holy → `holy heal`; Shadow → `shadow` |
+| Death Knight | Blood → `blood` with tank assistance; Frost → `frost`; Unholy → `unholy` |
+| Shaman | Elemental → `ele`; Enhancement → `enh`; Restoration → `resto` |
+| Mage | Arcane → `arcane`; Fire → `fire`; Frost → `frost` |
+| Warlock | Affliction → `affli`; Demonology → `demo`; Destruction → `destro` |
+| Druid | Balance → `balance`; Feral Cat → `cat`; Feral Bear → `bear`; Restoration → `resto` |
+
+These are native mappings, not separate newly implemented rotations. Subtlety
+shares assassination's rotation. Automatic Fury uses Arms until Whirlwind is
+learned; automatic Fire can select `frostfire` when Frostfire Bolt and Ice Shards
+are known. A feral druid without Cat Form uses Bear support. Shared damage
+buttons can look alike even when the underlying strategies differ.
+
+Ungrouped healing SelfBots retain native solo damage support: holy damage for
+priests, elemental for shamans and retribution for paladins. Grouped SelfBots
+use the selected healing rotation. Their profile still determines role and gear
+preferences. Random Death Knights are disabled by the portable profile; the
+class mapping remains available for eligible controlled characters.
 
 ## Equipment
 
-The same profile drives Playerbots' specialization and role queries used by its
-item scoring. After applying a profile outside combat, the bot checks equipment
-already in its bags with the native equipment rules and stat weights. Protection
-warriors and paladins prefer an owned, usable one-handed weapon and shield when
-both are available. Weapons, armor restrictions, levels, skills and inventory
-space still follow the core's normal checks.
+The effective profile drives native specialization, role and item scoring.
+Applying it checks usable equipment already in bags. Protection warriors and
+paladins prefer an owned one-handed weapon and shield when both are usable.
+Normal level, skill, armor, weapon and inventory checks still apply. The check
+does not buy items, learn weapon skills or retrieve bank items.
 
-The operation does not create items or gold, buy vendor equipment, learn weapon
-skills or retrieve items from the bank. Ordinary automatic equipping of new loot
-continues to follow the server's existing setting. The native stat weights are
-an equipment heuristic, not a guarantee of the optimal raid loadout for every
-encounter or talent combination.
-
-Loot rolls use the same native item classification as ordinary automatic
-equipping. Different random-property variants of one item are compared by
-their own stats. `Playerbots.LootNeedRollLevel = 2` permits Need for a suitable
-upgrade; native loot-method restrictions can still refuse Need. Zygor's
-source suggestions use the same selected combat profile with its own
-stat-priority weights.
+Ordinary new-loot equipping follows `Playerbots.AutoEquipUpgradeLoot = 1`.
+Loot rolls use the same native item classification; random-property variants
+are scored by their own stats. The portable setting
+`Playerbots.LootNeedRollLevel = 2` allows Need on a suitable upgrade, subject to
+the core's loot-method restrictions. Zygor uses the selected profile with its
+own stat-priority weights for source suggestions. Neither scoring system
+guarantees the optimal equipment for every encounter.
 
 ## Random bots and historical talents
 
-Random bots retain the configured PvE specialization mix and spend only their
-earned, unspent talent points. Authored build orders cover all nine historical
-classes in Vanilla and TBC, with separate feral cat and bear choices. The chosen
-feral role remains stable when both builds include Thick Hide.
+Random bots use the configured PvE specialization mix and spend earned,
+unspent points. Authored Vanilla/TBC build orders cover the nine historical
+classes, with separate stable cat/bear choices. Existing allocations remain;
+leveling adds points without free respecs. Trainer prices, learned abilities,
+paid respecs and each character's earned era remain authoritative. See
+[historical talents](era-talents.md).
 
-The TBC feral orders use a 0/44/17 PvE distribution, with different leveling
-priorities for cat and bear. The build reference is the
-[TBC feral PvE guide](https://www.wowhead.com/tbc/guide/classes/druid/feral/dps-talent-builds-pve).
-TBC Shadow priests prioritize Shadowform at 31 spent points and Vampiric Touch
-at 41. Existing allocations are retained; ordinary leveling adds points rather
-than granting free respecs. Other authored builds retain their existing PvE
-priorities. Build quality depends on level, available spells, gear and content;
-these orders are not a claim that one distribution is best in every situation.
-
-Normal trainer prices, paid respecs, learned abilities and each character's own
-earned era remain authoritative. See [historical talents](era-talents.md).
+Source fixtures cover profile selection, native strategy mappings, ownership
+and equipment gates. Live coverage across every class, era and gear combination
+remains [outstanding](todo.md#gameplay-validation).

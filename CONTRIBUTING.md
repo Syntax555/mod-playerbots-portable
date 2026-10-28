@@ -7,8 +7,9 @@ Report problems through
 Include the `revision` from the server's `portable-release.json`, the client
 build, the affected activity, relevant configuration and a short reproduction.
 Attach relevant excerpts from `logs/` with account passwords removed; copy the
-folder before restarting the realm, because every server start overwrites its
-logs.
+folder before restarting the realm, because each server start, including an
+automatic restart, overwrites that server's log files. State whether the issue
+was reproduced in game, in a source fixture or only during compilation.
 
 For quest availability or historical class-quest reports, follow the
 [quest diagnostics](docs/quest-diagnostics.md) and include the affected character's
@@ -63,11 +64,11 @@ Commit to the fork's configured default branch. Addon pushes check the addon
 and replace its asset in the fork's Latest release. For the core, modules and
 addons, the server manifest's `revision` is the exact fork commit to build.
 `upstream` records the original project and the original revision imported
-last; retain that provenance when pinning a local change. `forkChanges` names
-the commit of each fixture-covered change. The fixtures revert and reapply
-that commit's diff, so add each new
-covered change there together with its fixture and keep the recorded commits
-reachable. Never rewrite a commit the server pins.
+last; retain that provenance when pinning a local change. `forkChanges` records
+fixture-covered commits. Add each covered runtime change with its regression
+fixture and mutation check, and keep those commits reachable. Fixtures load the
+production source; selected fixtures also revert the recorded commit to check
+that the regression case fails. Never rewrite a commit the server pins.
 
 For a source update, compare the original project's history with the recorded
 `upstream.revision`, merge the chosen upstream commit into the fork's branch
@@ -81,15 +82,19 @@ data changes. See [dependency updates](docs/module-versions.md#updating-dependen
 
 Before committing, run targeted local checks for the changed files and their
 affected callers, configuration and integrations, as the
-[build guide](docs/building.md#integration-checks) describes. Compile each changed
-C++ file against `.module-cache/prepared-core` and run only the relevant
+[build guide](docs/building.md#integration-checks) describes. Inspect the actual
+source diff, compile each changed C++ file against `.module-cache/prepared-core`
+and run only the relevant
 `cmake/tests/Test*.py` fixtures directly. Run
 `python3 cmake/tests/run_fixtures.py check` when fixture or CI wiring changes.
+Documentation-only changes, including a fork pin whose source diff is only
+documentation, need the affected documentation checks.
 The complete suite runs separately in GitHub Actions on code pushes and before
 manual builds; do not repeat the full suite or unrelated checks locally.
 
-New fixtures go into `GAMEPLAY` in `cmake/tests/run_fixtures.py`, or into the
-checks workflow when they need its build outputs.
+Wire new fixtures into `cmake/tests/run_fixtures.py` or the checks workflow in
+the job that supplies their dependencies. In this server repository, validated
+changes go directly to `main` unless the task calls for another branch.
 
 ## Documentation and releases
 
@@ -99,7 +104,8 @@ technical details in the linked guides. The server ZIP contains `README.md`,
 `THIRD_PARTY_NOTICES.md` and `docs/` without `building.md` and the upstream
 proposals in `docs/upstream/`, so those files link to them and this guide by
 their GitHub URLs; the documentation check in the gameplay fixtures enforces
-this.
+this. Run `python3 cmake/tests/TestDocumentation.py` before a documentation
+commit. Documentation-only pushes skip CI, so this local check is required.
 
 Release notes use [.github/RELEASE_TEMPLATE.md](.github/RELEASE_TEMPLATE.md),
 which accepts the fields `{repository_url}`, `{source_url}`, `{commit_url}` and

@@ -2,7 +2,24 @@
 
 The launcher creates missing active configurations from full templates and its
 embedded profiles. Active server files live in `configs/`; module files live in
-`configs/modules/`. Edit these active files with the servers stopped.
+`configs/modules/`. Edit these active `.conf` files with the servers stopped;
+`.conf.dist` files are templates. Paths below are relative to the active
+[data folder](updating.md#where-your-data-lives).
+
+| Active file | Settings |
+| --- | --- |
+| `configs/worldserver.conf` | Rates, server ports, logging and core gameplay |
+| `configs/authserver.conf` | Authentication listener and login database |
+| `configs/modules/playerbots.conf` | Bots, population, natural progression, combat and integrated `RaidClear.*` |
+| `configs/modules/individualProgression.conf` | Character milestones, era access and historical rules |
+| `configs/modules/mod_era_talents.conf` | Historical trees and earned glyph access |
+| `configs/modules/MultiBotBridge.conf` | MultiBot and addon/server integrations |
+| `configs/modules/mod_dungeon_clear.conf` | Autonomous dungeon parties and player-led clears |
+| `configs/modules/mod_lfg_progression.conf` | Earned-era guards for optional Dungeon Finder |
+| `configs/modules/mod-quest-loot-party.conf` | Shared quest-item loot |
+| `configs/modules/mod_world_buff_bots.conf` | Optional timed Vanilla buffs |
+| `configs/modules/mod_era_events.conf` | Outdoor era events |
+| `mysql/my.cnf` | Generated MySQL settings, unless an existing/custom option file is selected |
 
 Normal startup merges profile updates automatically. A setting follows a new
 default only while its active value still matches the previous managed default.
@@ -75,7 +92,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Free factory equipment, money and supplies | Disabled |
 | Level, quest and leader-progress synchronization | Disabled |
 | Routine free talent resets / spell grants | Disabled |
-| Ordinary paid training and earned talent allocation | Enabled |
+| Ordinary paid training / autonomous talent allocation | Enabled; SelfBot and controlled altbot points remain owner controlled |
 | Autonomous vendor, repair, training, supply and bag visits | Enabled; paid with the bot's own gold |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
 | Automatic use of earned loot upgrades | Enabled |
@@ -103,7 +120,8 @@ Smart activity scaling reduces distant solo activity as tick time rises, while
 nearby/grouped bots and combat stay active. A target of 2,500 requires
 substantial server resources and does not imply every bot is available in every
 level, faction or era. Lower `Playerbots.MinRandomBots` and
-`Playerbots.MaxRandomBots` to fit the host.
+`Playerbots.MaxRandomBots` to fit the host; the 2,500-bot load has not been
+validated in game.
 
 `Playerbots.LearnFlightPathsWithMaster = 1` lets controlled altbots and recruited
 random bots learn the flight point you visit when you speak to its flight master.
@@ -177,13 +195,11 @@ Quest Loot Party changes only eligible normal-quality quest-item distribution.
 Players and bots must still loot the corpse; drop rolls, ordinary equipment loot,
 quest prerequisites and earned progression remain in place.
 
-MultiBot trainer actions require ordinary NPC range and paid core transactions.
-Under natural progression, explicit purchases use the bot's current money and
-the core's trainer price, including reputation discounts. Autonomous bot
-spending retains its AI budget. Personal bank actions require banker range and
-validated storage operations. Free preset talent writes, SelfBot autogear and
-maintenance grants are blocked under natural progression. Token checks do not
-waive NPC exchange reputation, materials or quest requirements.
+MultiBot purchases use the bot's own gold, ordinary NPC range and core pricing,
+including reputation discounts. Bank actions require banker range. Free preset
+talent writes, SelfBot autogear and maintenance grants are blocked; NPC exchange
+reputation, material and quest requirements still apply. See
+[client addons](addons.md) and [combat profiles](combat-profiles.md) for controls.
 
 ## Historical rules and shared settings
 

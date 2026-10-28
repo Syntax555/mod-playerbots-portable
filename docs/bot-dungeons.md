@@ -1,35 +1,38 @@
 # Bot dungeons and raids
 
-Bots clear instances with Dungeon Clear, Raid Clear and Playerbots' own
-encounter tactics. Under natural progression they act only as ordinary players
-can: they walk real routes, open objects without a lock or with their own key,
-talk to NPCs, fight and loot. They earn their own keys and items; teleports,
-free resurrections and encounter shortcuts are refused.
+Dungeon Clear coordinates routes and objectives; Playerbots and its integrated
+Raid Clear provide combat tactics. Under natural progression, bots walk real
+routes, use ordinary interactions and fight and loot with their own earned
+levels, equipment, keys and progression. Teleports, grants, artificial combat
+recovery and unaudited event shortcuts are refused.
 
 ## Autonomous parties
 
-Five nearby random bots form a party: a tank, a healer and three damage
-dealers of one faction. They use their own earned level, equipment and
-progression, walk to the entrance and attempt the dungeon through ordinary
-combat and loot. A human party leader is optional. Controlled companions,
-SelfBot characters and existing player groups are not recruited.
+Five nearby random bots of one faction form a tank, healer and three damage
+dealers. Controlled altbots, SelfBot characters and existing player groups are
+not recruited. All members need the dungeon's own earned era, level band and
+native entry eligibility; a leader or another character cannot unlock it.
+Vanilla, TBC and Wrath level caps are 60, 70 and 80.
 
-All members must have the dungeon's earned era and a level within its band.
-Vanilla, TBC and Wrath parties use level caps of 60, 70 and 80. Each bot's own
-rewarded progression determines its era; the tank's level or another character
-on the account does not unlock it. The tank must be near the outdoor entrance,
-and navigation data must provide a real route. The coordinator does not summon
-distant bots or generate equipment, money, keys, attunements or missing group
-members. A large bot population does not guarantee that a suitable party forms
-near an entrance.
+The tank must be near the outdoor entrance and navigation must provide a real
+route. Bots walk to the physical portal, and the run starts only when all five
+enter the same instance normally. The coordinator supplies no distant members,
+equipment, keys, attunements, gold or summons. A large population alone does not
+guarantee a suitable nearby party. Autonomous parties enter normal dungeons,
+not heroics or raids.
 
 ### Dungeons
 
-Entrance and exit portals, level bands and faction come from the world data.
-A band is the Dungeon Finder's recommended level range, extended by
-`LevelSpread` within the dungeon's entry range and earned-era level cap.
-The dungeon record determines the era even when a TBC or Wrath entrance is in
-Kalimdor. Portals inside a capital admit only that capital's faction.
+World data supplies entrances, exits and faction restrictions. Level bands use
+Finder recommendations extended by `LevelSpread`, within native entry ranges
+and the earned-era cap. A dungeon's era comes from its record, including TBC or
+Wrath entrances in Kalimdor. Capital portals admit that capital's faction.
+
+Configured ids are candidates. Required objectives and conditional controllers
+that own pulling or movement must pass the event audit, even if upstream marks
+them optional. Keys, special locks, unaudited item acquisition and unsupported
+controllers can refuse a map. The startup log reports each configured route's
+acceptance or refusal for the installed world data.
 
 ### Vanilla routes
 
@@ -55,169 +58,79 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Scholomance | 2 | 60 | Enabled |
 | Stratholme: Main Gate, Service Entrance | 40, 274 | 60 | Not enabled: required ziggurat and movement controllers are unaudited |
 
-A dungeon is enabled when its required Dungeon Clear objectives and conditional
-controllers for pulling or movement use audited ordinary actions. Unsupported
-controllers cannot be treated as dispensable simply because upstream marks
-them optional. Events requiring scripted shortcuts, unaudited item acquisition
-or locked objects without an audited ordinary interaction prevent automatic
-recruitment for that map.
 
-Blackfathom Deeps requires movement through disconnected mesh sections. The
-native party jump, swimming-chain and pool-exit controllers have no audited
-ordinary path, so autonomous recruitment is refused. Player-led groups can
-enter normally; bots refuse those movement shortcuts and may need the player
-to complete the affected sections.
+Blackfathom Deeps has disconnected mesh sections. Its authored party jumps,
+swimming chains, pool exits and fall recovery have no audited ordinary route.
+Stratholme's ziggurats and trap-alley controllers also remain unaudited. Both
+maps refuse autonomous recruitment. Player-led groups can enter normally, but
+bots refuse those controllers and may need ordinary player assistance.
 
-Stratholme's ziggurat controllers and trap-alley movement also lack audited
-ordinary handling. Both entrances remain available to player-led groups,
-with autonomous recruitment refused.
+The following handlers use ordinary actions; their presence does not establish
+a complete verified clear:
 
-For Wailing Caverns, the party backtracks to the ramp by Anacondra's platform
-and walks the native patrol route to Serpentis and back from Verdan. Each leg
-requires a complete navigation-mesh path to the intended floor, with every
-spline segment checked. Bots follow the same checkpoints, and each leg waits
-for every member to arrive; humans walk there themselves. Missing mesh, partial
-routes and unsafe gaps stop the objective; bots do not cross the drops by
-jumping or relocation.
+| Instance | Supported action | Material limit |
+| --- | --- | --- |
+| Wailing Caverns | Checked ramp routes and native Disciple of Naralex escort after the four Fanglords | Every member needs a complete safe path. Completion needs Mutanus kill credit and the native departure marker; missing/reset NPCs or the 15-minute attempt limit block the objective. |
+| The Deadmines | Open the native gunpowder chest, loot owned powder and use it on the cannon | Native item, lock and range checks apply. Missing powder, restricted loot, bags above the 80% safeguard or missing paths can stall; another member's powder is not borrowed. |
+| Uldaman | Use the Keepers and Archaedas altars through the ordinary object action | The native five-second channel, group ownership, interruptions and encounter reset apply. Ironaya still needs the group's own Staff of Prehistoria; autonomous acquisition is unaudited. |
+| Zul'Farrak | Walk into Zum'rah's area and submit the normal area trigger | Paused/cancelled clears cannot activate it. The Troll Cage still needs the Executioner's Key, and Gahz'rilla's special-lock gong is unaudited. |
+| Blackrock Depths | Gather everyone inside Ring of Law and submit the ordinary area trigger | Human members enter themselves. Completion waits for native encounter state, including Grimstone's final walk. Wipe cooldown and missing-member/path guards remain. |
 
-After the four Fanglords are defeated, the party gathers at the Disciple of
-Naralex and starts his normal gossip escort. The native SmartAI controls its
-pace, ambushes, cleansing channel, ritual waves, Mutanus and Naralex's awakening.
-Bots follow over checked paths and protect the Disciple through ordinary combat.
-Completion requires Mutanus's kill credit and the native post-dialogue departure
-marker; a spawned boss or missing NPC is not success. An unsafe follower path
-pauses the clear. Missing, dead or reset NPCs block or require an ordinary retry,
-and the escort has a finite fifteen-minute attempt budget. The tank's escort
-action takes priority over starting food or drink, so long fights can exhaust
-its resources.
+Blackrock Depths' Shadowforge Lock still needs its own key. Rocknot's ale-run
+hooks remain refused under natural progression, including their fallback
+quest-credit calls. A player can buy the ale and complete the normal turn-ins;
+bots do not manufacture missing mugs or count an unpaid turn-in. Karazhan's
+conditional library-pit rescue also remains refused.
 
-Fixtures cover the native data contracts, routes, prerequisites and interruption
-guards. Complete Wailing Caverns runs still need in-game validation, especially
-the joins to the ramp, group spacing, combat and recovery between waves. A long
-pause can miss the short departure-marker window before the NPCs despawn; the
-objective then remains blocked instead of inferring completion. Automatic
-recruitment still depends on the installed world-data audit, ordinary entry
-checks and usable navigation data.
-
-For the Deadmines, the tank opens the Defias Gunpowder chest with its native
-opening spell, takes the powder through Playerbots' normal loot handling and
-walks back to use the carried item on the Defias Cannon. The core checks the
-item, lock, cast and interaction range and consumes the powder. Only the Iron
-Clad Door's cannon-open state completes the objective. No quest is required
-for this chest in the pinned world data. Its native ambushes still occur.
-
-This item action alone is admitted by the event audit. Missing or unavailable
-powder, bags above Playerbots' 80% usage safeguard, custom loot restrictions, a
-blocked chest or missing navigation can still stall the run. Powder in another
-character's bags is not borrowed.
-A player carrying it can fire the cannon normally. Complete autonomous Deadmines
-runs, the chest detour and combat interruptions still need in-game validation.
-
-In player-led Uldaman clears, bots walk to and use the Altar of the Keepers and
-the Altar of Archaedas through Playerbots' ordinary object action. The pinned
-core requires one participant to channel for five seconds; it checks the ritual
-owner's group and removes interrupted channels. Bots wait for the native fight
-to finish, avoid another ritual while keepers are awake or Archaedas is active,
-and retry through ordinary use after an interruption or encounter reset. Missing
-objects, blocked paths or the core's refusal of a missing ritual owner or an
-unrelated group can stall the objective.
-
-Automated fixtures cover the ritual, interaction guards and retries; complete
-Uldaman runs and recovery still need in-game validation. Autonomous recruitment
-remains refused because acquiring the Staff of Prehistoria for Ironaya's
-keystone has no audited acquisition driver. A player-led group must bring its
-own staff and open the seal through the normal interaction.
-
-In player-led Zul'Farrak clears, the tank walks into Witch Doctor Zum'rah's
-actual wake-up area and submits the ordinary area-trigger action. The core's
-SmartAI activates the encounter; no quest or item is required for this trigger
-in the pinned data. An already hostile boss continues through normal combat,
-and a native reset allows another ordinary activation. Paused or cancelled
-clears do not start the encounter. Missing navigation, an unavailable boss or
-a refused native trigger can stall the clear.
-
-Fixtures cover physical arrival, interaction guards and retries. Complete
-Zul'Farrak runs and recovery still need in-game validation. Autonomous
-recruitment remains refused: the Troll Cage requires the Executioner's Key,
-and the separate Gahz'rilla gong needs audited handling of its special lock.
-A player-led group must meet those objects' own requirements through normal
-interactions; Zum'rah's activation does not open them.
-
-In player-led Blackrock Depths clears, the Ring of Law objective gathers the
-group inside the arena's actual trigger volume. Bots walk there over checked
-mesh paths; human members enter themselves. The tank submits the ordinary
-area-trigger action only after everyone arrives. The core starts Grimstone,
-spawns the waves and boss, controls the gates and awards encounter credit.
-The objective waits for the core's exact completed state, including Grimstone's
-final walk after the boss dies. An empty arena between waves is not completion.
-
-An already running event continues through normal combat. After a native reset,
-the group gathers again and the core enforces its two-minute post-wipe cooldown.
-A cancelled or paused bot clear does not submit a queued arena start.
-Missing paths, dead or absent members can stall a new start. Fixtures cover the
-spatial trigger, group guards, retries and completion checks; complete Ring of
-Law and Blackrock Depths runs still need in-game validation. Autonomous parties
-remain refused because the separate Shadowforge Lock objective requires a key.
+Automated fixtures cover selected native data contracts, interactions, routes,
+interruptions and retries. Complete runs, group spacing, combat and recovery
+still need in-game validation. In Wailing Caverns, a long pause can miss the
+short departure-marker window and leave the objective blocked.
 
 ### TBC and Wrath routes
 
-The default configuration also lists all 16 normal TBC and 16 normal Wrath
-Dungeon Finder entries. Heroic, raid, random-queue and holiday entries are
-excluded. The event audit admits candidates; actual world data, entrances,
-object locks and navigation can further restrict them.
+The profile lists all 16 normal TBC and 16 normal Wrath Finder entries. Heroic,
+raid, random-queue and holiday entries are excluded. The event audit admits
+these candidates; actual entrances, locks, world data and navigation can further
+restrict them:
 
 | Era | Candidate routes | Refused event routes |
 | --- | --- | --- |
 | TBC | Hellfire Ramparts, Blood Furnace, Mana-Tombs, Auchenai Crypts, Sethekk Halls, Shadow Labyrinth, Botanica, Magisters' Terrace | Shattered Halls, Slave Pens, Underbog, Steamvault, Escape from Durnholde, Black Morass, Mechanar, Arcatraz |
 | Wrath | Utgarde Keep, Ahn'kahet, Nexus, Forge of Souls | Utgarde Pinnacle, Azjol-Nerub, Oculus, Halls of Lightning, Halls of Stone, Culling of Stratholme, Drak'Tharon Keep, Gundrak, Violet Hold, Trial of the Champion, Pit of Saron, Halls of Reflection |
 
-Refused routes require event, escort, vehicle, item or movement handling that
-the earned integration cannot perform through ordinary actions. For example,
-Trial of the Champion needs its arena controller, and Drak'Tharon Keep needs
-an unaudited Novos controller. They remain available to player-led groups.
-Steamvault's required access-panel objective needs an opening lock type that
-the ordinary event click does not implement. Special opening, closing or
-blasting spells do not count as a plain unlocked interaction in the event audit.
 
-Entry rules still apply to candidate routes. Individual Progression admits
-Magisters' Terrace from tier 12 and The Forge of Souls from tier 16; the core
-checks attunements, lockouts and instance limits. Before
-recruiting, the coordinator asks the portal's own checks for every member, so
-bots that cannot enter are not invited.
-
-The worldserver log lists every configured dungeon at startup as enabled or
-not enabled with its reason. That log is authoritative for the installed world
-data. Complete autonomous runs have not been verified in-game; automated checks
-cover the coordinator, era boundaries, event audit and selected handlers.
+Refused maps need unaudited event, escort, vehicle, item or movement handling.
+For example, Steamvault's access panel requires a special opening lock;
+Drak'Tharon Keep needs a Novos controller; Trial of the Champion needs its arena
+controller. They remain available to player-led groups, with earned-play guards
+active. Magisters' Terrace requires tier 12 and Forge of Souls tier 16 under
+Individual Progression. Every member also keeps native attunements, lockouts
+and instance limits.
 
 ## Player-led clears
 
-With a real player in the group, playing normally or as SelfBot, the tank bot
-can lead a clear in any dungeon or raid the group entered through the normal
-portal checks. Start it with `dc on` in party chat or `.dc on`; `dc off` ends
-it. Altbots and SelfBot characters keep their own equipment and progression.
+With a real player in the group, playing normally or as SelfBot, a tank bot can
+lead a clear after the party enters through the normal portal checks. Use
+`.dc on` or `dc on` in party chat to start and `.dc off` to stop. `.dc pause`
+pauses/resumes, `.dc status` reports progress and `.dc bosses` lists objectives.
+The tank must be under bot control; controlled characters keep their own
+progression and equipment.
 
 The optional [DungeonClear addon](addons.md#optional-upstream-addons) opens its
-control panel with `/dc`, showing the boss list, run status and controls. Install
-it separately from its upstream project. If a start request appears to do
-nothing, `.dc on` in chat exposes server refusals that the addon may omit.
+panel with `/dc`; install it separately. If a start appears to do nothing,
+`.dc on` exposes server refusals the addon may omit.
 
-Scripted events run only through ordinary actions. An optional event the bots
-cannot perform is skipped. A required one stalls the clear: perform the action
-yourself and the clear continues, or skip the objective with `dc skip`.
+A required unsupported event stalls for ordinary player interaction; an optional
+one may be skipped. `.dc skip` advances the objective list without opening
+locked objects or awarding native encounter credit.
 
 ## Raids
 
-Raid Clear, included in Playerbots, adds boss and trash mechanics for Onyxia's
-Lair, Molten Core, Blackwing Lair,
-Zul'Gurub and both Ahn'Qiraj raids: kill order, main and off-tank roles, spacing
-and positioning against the bosses' abilities. They apply on these maps whether
-you lead the raid or a player-led clear walks it from boss to boss, alongside
-Playerbots' own raid strategies. Autonomous parties do not enter raids.
-
-`Playerbots.ApplyInstanceStrategies = 1` enables every raid strategy registered
-by Playerbots. The shipped profile keeps this enabled and adds no per-raid
-disable overrides.
+Raid Clear supplies Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and
+both Ahn'Qiraj raids with kill order, tank roles, positioning and encounter
+actions. It works alongside Playerbots' registered strategies, enabled by
+`Playerbots.ApplyInstanceStrategies = 1`:
 
 | Era | Registered Playerbots raid tactics |
 | --- | --- |
@@ -225,86 +138,69 @@ disable overrides.
 | TBC | Karazhan, Gruul's Lair, Magtheridon's Lair, Serpentshrine Cavern, Tempest Keep, Hyjal Summit, Black Temple, Zul'Aman |
 | Wrath | Onyxia's Lair, Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavon, Ulduar, Icecrown Citadel, Ruby Sanctum |
 
-Raid Clear's six registrations add Onyxia's Lair, Molten Core, Blackwing Lair,
-Zul'Gurub, Ruins of Ahn'Qiraj and Temple of Ahn'Qiraj mechanics within the same
-Playerbots module. A registered strategy does not establish a complete verified
-raid clear. Restored Vanilla Naxxramas remains unverified; Sunwell and Trial of
-the Crusader have no dedicated Playerbots registration in this pin.
 
-Under natural progression only an equipped Onyxia Scale Cloak protects against
-Shadow Flame, and Suppression Devices are disarmed only by rogues casting
-Disarm Trap. Raid entry keeps native attunements and Individual Progression
-requirements. Molten Core's runes must be doused with Aqual Quintessence; bots
-do not douse them.
-Hunters must earn Tranquilizing Shot. Natural progression also keeps a bot's
-own crowd control in place when its formerly mind-controlled target returns
-to the raid; it does not cancel those auras artificially.
-Raid difficulty does not scale to the number of players or bots present;
-smaller raids face the same creature stats and encounter requirements.
+A registration does not establish a complete verified raid clear. Restored
+Vanilla Naxxramas is unverified; Sunwell and Trial of the Crusader have no
+dedicated Playerbots registration in this pin. Autonomous parties do not raid,
+and raid difficulty does not scale with the number of players or bots.
 
-Onyxia's Lair has a registered Raid Clear strategy for map 249 alongside
-Playerbots' `onyxia` strategy. The implementation covers Deep Breath movement
-from the server's spell positions, Fireball spacing, tank positioning and
-threat during the restored level-60 encounter. Playerbots' whelp action selects both
-native whelps (`11262`) and Individual Progression's Vanilla whelps (`301001`),
-retains a living, non-evading current whelp and skips evading targets.
+Native attunements and each character's progression remain required. Only an
+equipped Onyxia Scale Cloak protects against Shadow Flame; only rogues knowing
+Disarm Trap disarm Suppression Devices. Hunters earn Tranquilizing Shot, and
+Molten Core runes need Aqual Quintessence; bots do not douse them. Natural
+progression does not cancel a bot's crowd control artificially when a formerly
+mind-controlled target returns to the raid.
 
-These are code and fixture checks; a complete Onyxia clear has not been
-verified in game. Each character still needs its own progression and native
-entry requirements, including the Drakefire Amulet where required. EraTalents
-keeps each bot's own historical spells and talents; ordinary attack and spell
-checks still apply. The remaining encounter tests are listed in the
+Onyxia's map 249 tactics cover Deep Breath spell positions, Fireball spacing,
+tank positioning and threat in the restored level-60 encounter. Whelp targeting
+includes native and restored Vanilla whelps and skips evading targets. A full
+Onyxia clear remains unverified; each character still needs its native entry
+requirements, including the Drakefire Amulet where required. See the
 [gameplay validation checklist](todo.md#gameplay-validation).
 
 ## Travel and encounters
 
-Entrance and return travel use Dungeon Clear's existing route planner over the
-native navigation mesh. The party shares one calculated route per journey and
-bots follow it in short sections, each checked from the bot's current position
-before movement. After a fight, looting or another interruption a bot rejoins
-the nearest point of the route; a new route is calculated only when no point is
-within reach or the travel destination changes. Sections crossing water use the
-bot's swim speed. Missing navigation and unsafe sections stop the attempt.
+Parties share a route calculated over the native navigation mesh. Each bot's
+short movement sections are checked from its current position; water sections
+use its swim speed. After interruptions a bot rejoins a reachable route point.
+Missing mesh, unsafe sections or a missing member stop progress.
 
-Each bot must reach the entrance and pass the ordinary instance-entry handler;
-the run starts after all five arrive in the same instance. If the portal
-refuses a member, the attempt stops and that bot is not recruited for the
-dungeon again for two hours or until its level or progression changes. Entering
-and leaving uses the physical dungeon portal. The ordinary Dungeon Finder is not used to
-teleport the party.
+If an entrance refuses a member, the attempt stops and that bot is excluded from
+that dungeon for two hours or until its level/progression changes. Failed
+recruitment, wipes, timeouts and objectives stalled for five minutes stop an
+autonomous attempt. Ordinary corpse, loot and paid-upkeep rules remain in force.
+Encounter or navigation failures are not converted into completed runs.
 
-Natural progression rejects movement shortcuts, artificial combat recovery and
-item grants. Missing routes, failed recruitment, wipes, timeouts and objectives
-that stall for five minutes stop an autonomous attempt. Corpses, loot
-eligibility and paid character upkeep remain subject to the core's rules.
-Encounter tactics and real navigation can still fail; the module does not turn
-such failures into completed runs.
-
-Natural progression disables `.dc lab run` and `.dc lab batch`, including
-their background test-party provisioning. Lab status and stop remain available.
+Natural progression blocks provisioned `.dc test` starts/plans and `.dc lab run`
+or `.dc lab batch`, including background party provisioning. Lab status and stop
+remain available.
 
 ## Configuration
 
-Edit `configs/modules/mod_dungeon_clear.conf` with the server stopped:
+Edit `configs/modules/mod_dungeon_clear.conf` with the server stopped.
 
-```ini
-DungeonClear.Enable = 1
-DungeonClear.AutonomousParties.Enable = 1
-DungeonClear.AutonomousParties.MaxConcurrent = 2
-DungeonClear.AutonomousParties.Dungeons = "4,1,6,8,10,12,16,14,18,165,163,164,20,22,24,272,26,273,28,30,276,34,32,36,2,38,40,274,136,137,138,140,146,147,148,149,150,151,170,171,172,173,174,198,202,203,204,206,207,208,209,214,216,218,220,225,245,251,253,255"
-DungeonClear.AutonomousParties.LevelSpread = 3
-```
+| Setting | Shipped default | Purpose |
+| --- | --- | --- |
+| `DungeonClear.Enable` | `1` | Module master switch; restart required |
+| `DungeonClear.AutonomousParties.Enable` | `1` | Recruit nearby random-bot parties |
+| `DungeonClear.AutonomousParties.MaxConcurrent` | `2` | Concurrent parties, range 1–8 |
+| `DungeonClear.AutonomousParties.LevelSpread` | `3` | Extend recommended level bands, range 0–10 |
+| `DungeonClear.AutonomousParties.Dungeons` | Normal Vanilla, TBC and Wrath candidate ids | Remove an id to exclude a route; the event audit still applies |
 
-The simultaneous-party limit accepts 1–8. `Dungeons` lists Dungeon Finder ids;
-remove an id to keep autonomous parties out of that dungeon. `LevelSpread`
-accepts 0–10. Set the autonomous-party switch to `0` to stop automatic
-recruitment. The strict travel and gameplay guards require
-`Playerbots.NaturalProgression = 1` in `configs/modules/playerbots.conf`.
-Automatic parties also require Individual Progression's strict default earned
-chain. A realm with a disabled or custom progression chain does not use level
-or account progress as a substitute.
+The [native configuration template](https://github.com/Syntax555/mod-dungeon-clear/blob/master/conf/mod_dungeon_clear.conf.dist)
+lists all settings. Native autonomy defaults to off with ids `4,12`; the
+portable profile enables the broader candidate list. Natural guards require
+`Playerbots.NaturalProgression = 1` in `configs/modules/playerbots.conf` and
+Individual Progression's strict default earned chain; custom or disabled
+progression does not substitute levels or account progress.
 
-Raid Clear's tactics are set in `configs/modules/playerbots.conf`:
+The portable profile disables `DungeonClear.DungeonQueueFill.Enable`,
+`BgQueueFill.Enable`, `StrandedRecovery`, `PostCombatRez`,
+`UnreachableCombatPurgeSecs` and `SpectateEnable`. `LootMinQuality = 0` keeps
+ordinary corpse loot. Updates preserve custom route lists, autonomy switches
+and limits; unchanged managed defaults follow the current profile.
+
+Raid Clear settings live in `configs/modules/playerbots.conf`:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -320,52 +216,37 @@ Raid Clear's tactics are set in `configs/modules/playerbots.conf`:
 | `RaidClear.OnyxiasLair.Enable` | `1` | Onyxia tactics for the native and restored level-60 encounters on map 249 |
 | `RaidClear.RuinsOfAhnQiraj.Enable`, `RaidClear.TempleOfAhnQiraj.Enable` | `1` | Ahn'Qiraj 20- and 40-player encounter tactics |
 
-`Playerbots.ApplyInstanceStrategies = 1` in `configs/modules/playerbots.conf`
-keeps Playerbots' own encounter strategies active alongside Raid Clear.
 
-The file's comments say Suppression Devices need the "raid" bot cheat or a
-rogue. Under natural progression bot cheats have no effect: only a bot that
-knows Disarm Trap turns a device off, and only an equipped Onyxia Scale Cloak
-protects against Shadow Flame.
-
-Updates extend an unchanged managed dungeon list and preserve custom lists,
-autonomy switches and party limits. For an existing custom list, add the desired
-normal Dungeon Finder ids explicitly; an entry must still pass the event audit.
-
-Random bots run while at least one real player session is connected through
-`Playerbots.DisabledWithoutRealPlayer = 1`. Login begins after a 30-second delay;
-bots log out after the last session has ended for 60 seconds. SelfBot enabled on
-a human player's character still counts as a real session. Independent parties
-can run while that player is elsewhere in the world. Adjust
-`Playerbots.MinRandomBots` and `Playerbots.MaxRandomBots` for the host's
-capacity. A population limit of `0` prevents random-bot parties; updates preserve
-custom population settings.
+Random bots run while a real session is connected. Login begins after 30
+seconds; they log out 60 seconds after the last real session ends. A player's
+SelfBot session still counts. Adjust population to the host using the
+[population settings](configuration.md#bots-and-population); a population of
+zero prevents autonomous parties.
 
 ## Optional Dungeon Finder
 
-The Dungeon Finder is disabled by default with `DungeonFinder.OptionsMask = 0`
-in `configs/worldserver.conf`. Automatic bot queues are also disabled through
-`Playerbots.RandomBotJoinLfg = 0` in `configs/modules/playerbots.conf`, keeping
-autonomous parties on the physical travel path.
+The Finder is disabled with `DungeonFinder.OptionsMask = 0` in
+`configs/worldserver.conf`; automatic bot queues are disabled with
+`Playerbots.RandomBotJoinLfg = 0` in `configs/modules/playerbots.conf`.
+Autonomous Dungeon Clear parties use physical travel independently of it.
 
-LFG Progression is always included and enabled by default. If you enable the
-Finder, keep `LfgProgression.Enable = 1` in
-`configs/modules/mod_lfg_progression.conf`. It checks every participant's own
-earned expansion, including bots, and retains native quest, item, achievement,
-class and instance restrictions. Random dungeon selection uses the lowest
-earned expansion in the group; each join refreshes every member's access checks.
-Use `.lfgprogress` to see each online group member's earned expansion and the
-requirements for the next expansion. Queue messages explain a remapped random
-selection or a later-era restriction; native level, attunement and gear checks
-still apply. The module does not form autonomous parties, navigate or run
-encounters.
+LFG Progression is always compiled and enabled. If you opt into the Finder,
+keep `LfgProgression.Enable = 1` in `configs/modules/mod_lfg_progression.conf`.
+Each participant, including invited companions and random bots, retains its own
+earned era and native level, class, quest, item, achievement, attunement and
+instance locks. Each join refreshes all online members' locks. A later-era
+random selection is remapped to the group's lowest earned era. Missing Death
+Knight starting-chain quests are never granted.
+
+Use `.lfgprogress` to inspect online group members' effective eras and expansion
+requirements. TBC begins at tier 8 and Wrath at tier 13 in the shipped chain;
+the realm ceiling still applies. Queue messages explain era refusals and
+remapping, while the client retains its generic required-quest tooltip.
+LFG Progression does not navigate or run encounters; complete queue and chat
+behavior still needs in-game validation.
 
 Keep `IndividualProgression.DisableRDF = 0` in
-`configs/modules/individualProgression.conf`: setting it to `1` forces specific
-dungeon queues (mask `4`) rather than disabling the Finder. Updates preserve
-deliberately enabled Finder queues and personal LFG settings, including on
-installations without a saved profile baseline.
-
-Source revisions and fork changes are recorded in
-[build provenance](module-versions.md). See [configuration](configuration.md)
-for population and module defaults.
+`configs/modules/individualProgression.conf`: `1` forces specific queues (mask
+`4`) instead of disabling the Finder. Updates preserve deliberate Finder and
+LFG customizations, including installations without a saved profile baseline.
+See [configuration](configuration.md) and [source versions](module-versions.md).

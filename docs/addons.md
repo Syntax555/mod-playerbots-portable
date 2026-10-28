@@ -1,135 +1,120 @@
 # Client addons
 
-Use a WoW **3.3.5a client, build 12340**. Addons for Retail or the current
-Classic clients use different APIs, even when their content covers the same era.
-The 3.3.5a addon interface version is `30300`.
+Use **WoW 3.3.5a, build 12340** (Interface `30300`). Retail and current Classic
+addons target different APIs, even for the same content era. Close WoW
+completely before replacing files: `/reload` does not discover new addon
+folders or refresh TOC metadata.
 
 ## Matching client packages
 
-Close WoW completely before installing or replacing client files. The
-server's [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
-contains the EraTalents client pack; each optional addon comes from the Latest
-release of its [fork](#addon-forks).
+The server's [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
+provides the required EraTalents client pack. Optional addons come from their
+own [forks](#addon-forks).
 
-| Package | Installation |
+| Package | Installation and controls |
 | --- | --- |
-| [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | Required for every player: historical talents, spell data and German text. Install both `Interface/AddOns/EraTalents/` and `Data/patch-V.mpq`. |
-| [MultiBot Chatless](https://github.com/Syntax555/MultiBot-Chatless/releases/latest/download/MultiBot-Chatless-latest.zip) | Optional bot controls. Install `Interface/AddOns/MultiBot/`; open with `/mb`, and settings with `/mbopt`. |
-| [DragonUI](https://github.com/Syntax555/DragonUI/releases/latest/download/DragonUI-latest.zip) | Optional interface. Install both `DragonUI/` and `DragonUI_Options/` in `Interface/AddOns/`; open settings with `/dui`. With the current EraTalents package, Vanilla/TBC characters open their historical tree from DragonUI's talent key, micro-button and `/talents`, and the spellbook lists the character's own trainer spells; see [Era Talents](era-talents.md#dragonui). |
-| [Questie-335 installer](https://github.com/Syntax555/Questie/releases/latest/download/Questie-335-latest.zip) | Optional quest addon with bot progress integration. Extract and run `Install-Questie.cmd`; Internet access is required. Choose the client's `Interface/AddOns/` folder; see [installation](questie-playerbots.md#installation). |
-| [Zygor IP installer](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest/download/Zygor-IP-latest.zip) | Optional guide viewer that follows each character's Individual Progression tier. Extract and run `Install-Zygor.cmd`; Internet access is required. Choose the client's `Interface/AddOns/` folder; see [installation](zygor-progression.md#installation). |
+| [EraTalents client pack](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/EraTalents-client-latest.zip) | Required: copy both `Interface/AddOns/EraTalents/` and `Data/patch-V.mpq`; see [matching client files](era-talents.md#install-the-matching-client-files). |
+| [MultiBot Chatless](https://github.com/Syntax555/MultiBot-Chatless/releases/latest/download/MultiBot-Chatless-latest.zip) | Install its `MultiBot/` folder in `Interface/AddOns/`. Open controls with `/mb`, settings with `/mbopt`. |
+| [DragonUI](https://github.com/Syntax555/DragonUI/releases/latest/download/DragonUI-latest.zip) | Install both `DragonUI/` and `DragonUI_Options/` in `Interface/AddOns/`. Open settings with `/dui`. |
+| [Questie-335 installer](https://github.com/Syntax555/Questie/releases/latest/download/Questie-335-latest.zip) | Extract outside WoW, close WoW, run `Install-Questie.cmd`; see [installation](questie-playerbots.md#installation). |
+| [Zygor IP installer](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest/download/Zygor-IP-latest.zip) | Extract outside WoW, close WoW, run `Install-Zygor.cmd`; see [installation](zygor-progression.md#installation). |
 
-Each addon folder must directly contain its matching `.toc` file. Avoid nested
-archive folders and mixed files from different versions. Back up existing addon
-folders before replacement; keep account and character `SavedVariables`.
-See [EraTalents installation](era-talents.md#install-the-matching-client-files)
-for the matching addon/MPQ generation and locale checks.
+Each addon folder must directly contain its matching `.toc` file. Back up
+existing folders outside `Interface/AddOns/` before replacement; preserve
+account and character SavedVariables in `WTF/`. Avoid nested archive folders
+and mixed versions. The Questie and Zygor ZIPs contain installers, not addon
+files: they need Internet access and Windows PowerShell 5.1 or later, verify
+their exact source commit, and back up existing addon folders automatically.
 
-With the matching addons loaded, MultiBot's talent button opens the selected
-bot's Vanilla or TBC trees and allocated ranks in DragonUI's talent window
-when its talent module is enabled, or in the Blizzard inspect window with
-EraTalents otherwise. Wrath uses the native inspect view. For an altbot
-you control in your group, click historical talents to spend its earned points.
-The server validates each purchase against that bot's own era and prerequisites.
-Other characters remain read-only; normal inspect access and range still apply.
-The separate MultiBot talent window and its Custom/Glyph tabs are not opened
-through this route. On a realm with native trees (`EraTalents.Enable = 0`), the
-server sends no EraTalents data and the button keeps MultiBot's talent window.
-The selected bot's talent button stays pressed while its inspect view is open;
-the player's talent micro-button follows the player's own talent window.
-Install both updated addons together; mixed addon or MPQ generations cannot
-supply a reliable historical view.
+## Bot controls and historical UI
 
-The **Select combat profile** button offers automatic talent-based strategy
-selection and explicit class profiles, including tank, healer and damage
-specializations. It also checks the bot's carried gear against that profile.
-See [combat profiles and equipment](combat-profiles.md) for behavior and limits.
+With matching EraTalents and MultiBot versions, a selected bot's talent button
+opens its historical Vanilla/TBC tree in DragonUI's talent window, or the
+Blizzard inspect window with EraTalents otherwise. Wrath uses native inspect.
+For a controlled altbot in your group, clicks spend that bot's earned points;
+other characters remain read-only. Server prerequisites, ordinary inspect
+access and range apply. This route does not open MultiBot's separate
+Custom/Glyph tabs. With `EraTalents.Enable = 0`, the server sends no historical
+data and MultiBot keeps its own talent window. See
+[historical talents](era-talents.md#dragonui).
 
-DragonUI's spellbook supports Clique bindings for learned player spells when
-Clique is installed.
+The **Select combat profile** button offers automatic talent detection and
+manual class profiles. Carried equipment is checked against the selected
+profile; see [combat profiles and equipment](combat-profiles.md). No profile
+creates gear. In an altbot's MultiBot inventory, **Buy** routes merchant clicks
+to that bot while the inventory remains in Buy mode. The bot needs vendor
+access, its own gold and space. Leaving Buy mode, switching bots or closing
+the inventory cancels pending purchases.
 
-For vendor purchases, open the altbot's MultiBot inventory, select **Buy** and
-click an item in the merchant window. While that inventory is visible in Buy
-mode, purchases use the selected bot's own gold and inventory. The bot must be
-able to interact with the vendor. Leaving Buy mode, changing bots or closing
-the inventory cancels pending purchase confirmations and quantity selection.
+DragonUI's talent controls, spellbook and level-up notice follow the player's
+own earned era and trainer spells with the matching EraTalents package. Its
+spellbook supports Clique bindings for learned player spells when Clique is
+installed.
 
-Use the matching Questie-335 installer for the complete bot quest integration;
-the ordinary upstream download does not include all local adaptations. The
-installer downloads its commit of the Questie fork from GitHub and checks every
-file before installing it. Its server support is included in the prebuilt
-server, so no source build is needed.
-Static quest locations and availability can differ under Individual Progression
-or custom quest rules. See [Questie bot progress](questie-playerbots.md) for
-supported behavior and remaining live validation.
+Questie shows group bots' quest counters automatically. Its native upstream
+integration supplies progress and bindings; this fork retains connected-roster
+and mandatory snapshot-GUID checks, requiring the matching bridge. Database
+markers can differ from Individual Progression's quest versions. See
+[Questie bot progress](questie-playerbots.md).
+
+Zygor guides, Gear Finder and Talent Advisor follow each character's tier. Its
+inspect Gear Finder uses a controlled altbot's own equipment, combat profile
+and progression from the equipment tab. It recommends earned sources without
+granting items. The bundled Talent Advisor stays inactive for EraTalents
+characters; disable the whole `ZygorGuidesViewerRM` addon and reload when
+isolating talent or protected-action conflicts. See
+[Zygor Individual Progression](zygor-progression.md).
 
 ## Addon forks
 
-The adapted addons live in forks of their original projects. Every push to a
-fork's branch checks the addon and replaces its asset in that fork's Latest
-release, so addon changes reach players without a server build:
+Each fork publishes a rolling Latest asset after its checks pass. The server's
+[manifest](../versions.lock.json) pins the tested commit; Latest may be newer.
+Installed addons record their commit in `SOURCE_REVISION.txt`. Their READMEs
+cover installation, supported behavior, updates, provenance and licenses.
 
 | Addon | Fork and branch | Latest asset |
 | --- | --- | --- |
-| MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), `main` | [MultiBot-Chatless-latest.zip](https://github.com/Syntax555/MultiBot-Chatless/releases/latest) |
-| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), `main` | [DragonUI-latest.zip](https://github.com/Syntax555/DragonUI/releases/latest) |
-| Questie-335 | [Syntax555/Questie](https://github.com/Syntax555/Questie), `335` | [Questie-335-latest.zip](https://github.com/Syntax555/Questie/releases/latest), an installer |
-| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | [Zygor-IP-latest.zip](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest), an installer |
-| EraTalents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), `main` | [EraTalents-addon-latest.zip](https://github.com/Syntax555/azerothcore-mod-era-talents/releases/latest), the addon without the MPQ |
+| MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), `main` | `MultiBot-Chatless-latest.zip` |
+| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), `main` | `DragonUI-latest.zip` |
+| Questie-335 | [Syntax555/Questie](https://github.com/Syntax555/Questie), `335` | `Questie-335-latest.zip` (installer) |
+| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | `Zygor-IP-latest.zip` (installer) |
+| EraTalents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), `main` | `EraTalents-addon-latest.zip` (addon only) |
 
-Each fork's README lists its changes compared to the original project. The
-server pins a tested commit of each fork; a fork's Latest can be newer than the
-server's pin. The EraTalents addon ZIP is meant for trying addon changes: the
-merged `Data/patch-V.mpq` must match the server's data generation, so players
-install the server's EraTalents client pack. Installed addons record their
-commit in `SOURCE_REVISION.txt`.
+The EraTalents addon-only ZIP is for trying addon changes. Players need the
+server's client pack because `Data/patch-V.mpq` must match its data generation.
+Addon updates alone do not require a server build. Full UI and addon-combination
+coverage is not established by source checks; see
+[open validation](todo.md#gameplay-validation).
 
 ## Optional upstream addons
 
-These links identify suitable client projects and their limits. They are
-installed separately; compatibility with every HD client or addon combination
-requires in-game testing.
+Install these separately. Compatibility with every HD client and addon
+combination requires in-game testing; server progression remains authoritative.
 
-| Addon | Source and installation | Progression limits |
-| --- | --- | --- |
-| GearScore2 | [cozawariat/gearscore2](https://github.com/cozawariat/gearscore2), the 3.3.5a project with interface `30300`. Install as `Interface/AddOns/GearScore2/GearScore2.toc`; open settings with `/gs2`. | Treat gear scores as estimates. Wrath scoring and talent assumptions do not establish accurate Vanilla/TBC historical recommendations. Use one GearScore-family addon at a time. |
-| DungeonClear | [jrad7/mod-dungeon-clear-addon](https://github.com/jrad7/mod-dungeon-clear-addon), the 3.3.5a companion interface. Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. | Controls and displays server-side runs. Party formation, travel and earned access remain server rules. Spectate is disabled in the default profile; `.dc on` in chat can expose refusal messages omitted by the UI. |
+| Addon | Installation and limits |
+| --- | --- |
+| [GearScore2](https://github.com/cozawariat/gearscore2) | Install as `Interface/AddOns/GearScore2/GearScore2.toc`; settings: `/gs2`. Use one GearScore-family addon at a time. Wrath scoring does not establish historical Vanilla/TBC recommendations. |
+| [DungeonClear](https://github.com/jrad7/mod-dungeon-clear-addon) | Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. It controls server runs; formation, travel and earned access remain server rules. Spectate is disabled by default; `.dc on` can show refusals omitted by the UI. |
 
-Quest addons use their own databases. Server rules and each character's
-progression determine quest availability; map markers can differ when addon
-data does not match. See [server adaptations](adaptations.md) for the
-distribution's gameplay changes.
-
-Install Zygor Guides Viewer Remaster with the matching Zygor IP installer; the
-ordinary upstream download does not follow Individual Progression. Its guides,
-Gear Finder and Talent Advisor then use each character's own tier; see
-[Zygor Individual Progression](zygor-progression.md). The bundled Talent
-Advisor wraps the global `LearnTalent` function and the Blizzard learn button
-only while it may advise the character, which excludes EraTalents characters.
-Disable the whole `ZygorGuidesViewerRM` addon and reload when isolating talent
-or protected-action conflicts.
-
-The addons in the upstream table are separate downloads. Their code, guides, images and
-libraries have separate licensing terms; a public repository or viewer license
-does not automatically authorize repackaging every included file. Addon-only
-updates do not require compiling server modules.
+Dependencies retain their own terms; a viewer license does not automatically
+license every bundled guide, image or library. See
+[third-party notices](../THIRD_PARTY_NOTICES.md).
 
 ## Blocked interactions and Lua errors
 
-A client message that an addon blocked an action concerns the client's UI and
-protected functions. It does not by itself identify a server configuration bug.
-Capture the action and error before changing server rules:
+A blocked-action message concerns protected client UI functions. Capture the
+failure before changing server settings:
 
 1. Run `/console scriptErrors 1` and `/console taintLog 2`, then `/reload`.
-2. Reproduce the failure once. Record the exact action and complete first Lua
-   error, then close WoW and retain `Logs/taint.log` and `Logs/FrameXML.log`.
-3. Compare with only the matching EraTalents addon enabled. Add MultiBot, then
-   each optional addon individually, reloading after each change. Keep the
-   matching EraTalents MPQ installed and preserve `SavedVariables`.
+2. Reproduce once and record the action and complete first Lua error. Close
+   WoW and keep `Logs/taint.log` and `Logs/FrameXML.log` if present.
+3. Compare with only the matching EraTalents addon enabled, then add MultiBot
+   and other addons one at a time, reloading after each change. Keep the
+   matching MPQ and preserve SavedVariables.
 4. Turn detailed logging off with `/console taintLog 0` and, if desired,
    `/console scriptErrors 0`.
 
-Taint can spread between addons and Blizzard frames. An addon name in the final
-blocked-action message is a clue; the earlier log entries and a reproducible
-addon comparison are needed to establish the cause. Missing Blizzard
-`Interface/FrameXML/` files also warrant checking the HD client's UI patches.
+Taint can spread between addons and Blizzard frames. The final named addon is
+a clue; earlier log entries and a reproducible comparison establish the cause.
+Missing Blizzard `Interface/FrameXML/` files also warrant checking client UI
+patches.

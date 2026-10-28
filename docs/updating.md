@@ -7,16 +7,15 @@ HTTPS, compares managed files and downloads only changed files from the server
 ZIP. Each downloaded file must match its SHA-256 hash before installation.
 
 The launcher stages the update, replaces managed server files and restarts itself.
-SQL migrations run during normal database/server startup, without resetting the
-existing databases. New configuration defaults are merged automatically.
+SQL migrations run during normal database/server startup, and managed
+configuration defaults merge where the previous default is still in use.
+Keep a stopped-realm backup before updating an established realm: file rollback
+does not undo SQL migrations applied after startup.
 
 ## Progress, restarts and shutdown
 
-The console reports file checks, download, verification and installation as
-separate stages. Counters and progress bars use checked files, unpacked download
-bytes or installed files, depending on the stage. Metadata requests and other
-operations without a known total show activity and elapsed time. Redirected
-output uses readable status lines and periodic activity messages.
+The console reports file checks, download, verification and installation, with
+progress counters or activity messages while work continues.
 
 While the realm runs, the launcher restarts MySQL, authserver or worldserver two
 seconds after it exits or crashes. This includes the worldserver console's
@@ -33,8 +32,9 @@ before moving or changing files.
 
 The launcher keeps active configurations in `configs/`, databases in
 `mysql/data/`, logs in `logs/` and the downloaded server data in `data/`. These
-folders are normally inside the server folder. Back up `configs/` and
-`mysql/data/` together with the realm stopped.
+folders are normally inside the server folder. MySQL settings normally live in
+`mysql/my.cnf`; an existing `my.cnf` or `my.ini` is reused. Custom paths and
+launcher options can put files elsewhere.
 
 If the server folder is not writable, for example under `C:\Program Files`, the
 launcher prints `Running in packaged mode. Working directory: ...` and keeps
@@ -59,6 +59,23 @@ change only where the active value still matches the previous default, with a
 `.backup.*` copy of each changed file; see
 [configuration updates](configuration.md).
 
+## Backups and recovery
+
+Press Ctrl+C and wait for the launcher, authserver, worldserver and MySQL to
+exit before copying database files. Copying a running `mysql/data/` directory
+does not produce a reliable backup. The simplest complete backup is a copy of
+the stopped server folder, plus any data or configuration kept at custom paths.
+Include `configs/` with its `.portable-profiles.json` and `realm-phase.txt`, the
+MySQL configuration and data, and the matching server release. Keep a backup
+outside the folder being updated.
+
+Configuration `.backup.*` files protect settings; they are not database backups.
+To revert after SQL migrations, restore the matching database, configuration and
+server backup together. Replacing only older executables does not reverse a
+database update. Existing levels, tiers, items and gold are preserved without
+verifying how they were obtained; see
+[realm updates](changing-expansions.md#updating-an-existing-realm).
+
 ## Moving the server folder
 
 Stop the realm completely, then move the entire server folder to a writable
@@ -78,8 +95,8 @@ adjust `SourceDirectory` in the active authserver/worldserver configs yourself.
 
 To install or replace the server files manually:
 
-1. Choose a writable server folder. For an existing realm, back up the databases
-   and `configs/`, then stop the launcher, database and servers completely.
+1. Choose a writable server folder. For an existing realm, stop the launcher,
+   database and servers completely, then make a [backup](#backups-and-recovery).
 2. Download the latest
    [server ZIP](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip)
    and verify it against
@@ -87,7 +104,8 @@ To install or replace the server files manually:
 3. Extract the ZIP into the server folder, replacing bundled files. Preserve an
    existing realm's configurations, database data directories and downloaded
    server data.
-4. Run `startup.exe` normally. The launcher manages setup and automatic server updates.
+4. Run `startup.exe` normally and allow database updates to finish. The launcher
+   manages setup and future server updates.
 
 The selected realm mode is preserved; see
 [realm updates](changing-expansions.md#updating-an-existing-realm).
@@ -98,7 +116,9 @@ The server updater does not install client addons or modify a WoW client. Each
 player installs the EraTalents client pack of the same release as the server
 manually; see [client installation](era-talents.md#install-the-matching-client-files).
 The optional MultiBot, DragonUI, Questie and Zygor addons are updated from
-their [forks' Latest releases](addons.md#addon-forks).
+their [forks' Latest releases](addons.md#addon-forks). Close WoW before replacing
+client files; the EraTalents addon and `Data/patch-V.mpq` must belong to the same
+generation as the server.
 
 ## Server data and the client cache
 
@@ -108,10 +128,9 @@ version when a client session connects. A changed version refreshes the client's
 cache of server query responses, such as quest, item, creature and gameobject
 templates. Sending the same version again does not request another refresh.
 
-The bundled migration `2026_10_21_00_portable_client_cache.sql` sets the database
-cache version to `20261021` for the distribution's quest and item data. The native
-SQL updater records its filename and hash in `acore_world.updates`; unchanged
-files are skipped on subsequent starts. A higher administrator-managed database
+The bundled migration sets a stable cache version for the distribution's quest
+and item data. The native SQL updater records applied migrations and skips
+unchanged files on subsequent starts. A higher administrator-managed database
 version is preserved. Login, ordinary restart and configuration reload do not
 increment the version.
 
@@ -133,50 +152,15 @@ query responses needs only the cache version. Keep `WTF/`, addon SavedVariables,
 active server configurations and databases; deleting them is not part of a cache
 update.
 
-### Reproduce a data update and an unchanged restart
+To inspect the installed cache version, query the world database:
 
-Use a stopped test copy of an existing realm, with its configurations and
-databases backed up. Keep `ClientCacheVersion = 0` for the database-driven check.
-
-1. Start the old copy with `startup.exe --no-update` and record these world
-   database queries, then stop the realm with Ctrl+C:
-
-   ```sql
-   SELECT cache_id FROM version;
-   SELECT ID, RewardDisplaySpell, RewardSpell FROM quest_template WHERE ID = 5634;
-   SELECT name, hash, state FROM updates
-     WHERE name = '2026_10_21_00_portable_client_cache.sql';
-   ```
-
-   For the unmodified pinned world database, the cache ID is `17`. The cache
-   migration is absent before installation. Quest 5634's stock reward pair is
-   `13908, 19338`; an already migrated realm can have `948081, 948090` already.
-2. Install the matching server release in the test copy using the normal
-   [update steps](#manual-installation), preserving its data and configuration.
-   Start normally. The SQL log applies the cache migration once, the queries
-   show cache ID `20261021` and one migration row with a nonempty hash, and the
-   startup log reports `Client cache version set to: 20261021`. The historical
-   quest migration changes the stock reward pair to `948081, 948090`; its guards
-   preserve custom reward values. Reconnect WoW to receive the version.
-3. Run `.reload config` as a GM (or `reload config` in the server console),
-   then stop and start the same installed release with `--no-update`. Repeat
-   the queries. The ID, migration hash and reward values stay the same; the
-   cache migration is not applied again. Reconnecting receives the same ID.
-
-The source fixture reproduces the migration and unchanged restart with the real
-core SQL updater and cache functions, using isolated data:
-
-```bash
-cmake -P cmake/PrepareModules.cmake
-python3 cmake/tests/TestClientCacheVersion.py
+```sql
+SELECT cache_id FROM version;
 ```
 
-For future changes to client-cached server data, ship a new world SQL migration
-with a fresh, stable `version.cache_id` alongside the data change. Retain previous
-migrations so established realms receive the new one. The SQL updater's hash
-tracking alone does not update the cache version. Changes confined to AI,
-loot, spawns or rates do not require a client cache bump; changes to client files
-still require their corresponding client package.
+Compare it with `Client cache version set to:` in the worldserver startup log.
+For source changes to cached server data, see the
+[build guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md#client-cache-changes).
 
 ## Offline startup and failed updates
 
@@ -204,6 +188,12 @@ After a completed update or successful rollback, a failure to remove temporary
 update files reports a warning and retries on the next start without blocking
 the realm.
 
+If an update reports a running process or a locked file, stop the other launcher
+and the realm's authserver, worldserver and MySQL, then retry. Windows may keep
+an executable locked while its process exits. The updater refuses replacement
+when it cannot establish that the relevant processes have stopped; keep its
+recovery files intact.
+
 ## Launcher options
 
 Run `startup.exe --help` for the same list.
@@ -213,19 +203,22 @@ Run `startup.exe --help` for the same list.
 | `--no-update` | Start without checking Latest for a server update. |
 | `--show-expansion` | Show the realm mode and level cap, then exit. |
 | `--set-expansion <mode>` | Select `individual`, `vanilla`, `tbc` or `wotlk` with configuration backups, then exit; stop the realm first. See [realm ceilings](changing-expansions.md#optional-realm-ceilings). |
-| `--port <port>` | MySQL port for new configurations (default 3306). An existing realm uses the port of its `LoginDatabaseInfo` setting. |
+| `--port <port>` | MySQL process port and the port written to missing configurations (default 3306). Without this flag, follows the first local `LoginDatabaseInfo` in authserver/worldserver configs. Existing config files are not rewritten. |
 | `--auth-port <port>` | Authserver port written to a newly created `authserver.conf` (default 3724). |
 | `--timeout <seconds>` | Time to wait for MySQL to become ready (default 30). |
 | `--download-data-only` | Download and extract the server data, then exit. |
 | `--data-url <url>` | Download the server data archive from another URL. |
 | `--skip-data-check` | Do not check for or download the server data. |
-| `--init-only` | Create missing configurations, initialize and set up the database, then exit without starting the game servers. |
+| `--init-only` | Create missing configurations, initialize MySQL and run the database/user creation script, then exit. Core/module SQL imports and migrations require a normal server start. |
 | `--skip-sql` | Skip the bundled script that creates the AzerothCore databases and database user. |
-| `--mysql-dir <path>` | MySQL installation to use (default: the bundled `mysql/`). |
+| `--mysql-dir <path>` | MySQL installation to use; normally the bundled `mysql/`, with `MYSQL_ROOT` and executable search as fallbacks. |
 | `--data-dir <path>` | MySQL data directory (default: `mysql/data/` in the data folder). |
-| `--mysql-cnf <path>` | MySQL configuration file (default: the generated `mysql/my.cnf` in the data folder). |
+| `--mysql-cnf <path>` | Existing MySQL option file to use. Otherwise an existing `my.cnf`/`my.ini` is detected, or `mysql/my.cnf` is created in the data folder. |
 
 For example, `.\startup.exe --timeout 120` waits longer on a slow disk.
 To move an existing realm to another MySQL port, stop it and change the port in
 every `*DatabaseInfo` setting under `configs/`; the launcher follows that
-setting on the next start.
+setting on the next start. `--port` alone does not change an existing realm's
+server connections. Authserver uses `RealmServerPort` in `authserver.conf`;
+worldserver uses `WorldServerPort` in `worldserver.conf` (default 8085). The
+shipped servers bind to `127.0.0.1` for local play.

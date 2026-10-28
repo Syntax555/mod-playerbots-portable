@@ -77,26 +77,17 @@ The earned tier selects each character's experience rules: Vanilla before tier
 | Quest money at the era cap | Quest XP at level 60 × 6.25 copper | Quest XP at level 70 × 6 copper | Core conversion at 80 |
 | Recruit-a-Friend | Unavailable | Unavailable | Unavailable |
 
-Apart from bonus effects, kill XP, exploration XP, party sharing and rested XP
-below the cap follow the same rules in every era. Raid groups receive no party
-XP bonus, including outside raid maps. Online rest in an inn or city accrues at
-the same base rate as offline rest there; the respective `Rate.Rest.*` settings
-still apply. An era quest value is reduced
-by the character's levels above the quest's level in that era, since patch
-2.3.0 lowered many quest levels. TBC-era characters receive the 1.12 value where the TBC DB has
-no usable 2.4.3 value: quests that withhold their money at the maximum level
-and the few quests whose stored value is ten times too high. Quests without a
-historical value keep their 3.3.5 value, and
-`IndividualProgression.QuestXPFix = 0` keeps 3.3.5 quest values in every era.
-Repeating a quest that does not reset daily, weekly or monthly gives no XP.
-Individual Progression re-arms four Vanilla turn-ins
-(`RepeatableVanillaQuestsXP`), such as Troll Necklace Bounty and Morrowgrain;
-each turn-in pays the character's era value. Recruit-a-Friend triple XP, level
-grants, summons and reputation bonus are off realm-wide.
+Kill XP, exploration XP, party sharing and rested XP below the cap otherwise
+follow shared core rules. Raid groups receive no party XP bonus. Online rest in
+an inn/city uses the same base accrual as offline rest there, with the configured
+`Rate.Rest.*` multipliers.
 
-Thrallmar's and Honor Hold's Favor grant their 5% experience bonus once per
-award in Hellfire Peninsula and its instances. Kill XP uses the linked aura;
-quest and exploration XP use the core's zone bonus.
+Historical quest XP is reduced for the character's levels above the quest's
+historical level. Missing or unusable TBC values fall back to Vanilla; quests
+without a historical value keep Wrath values. `IndividualProgression.QuestXPFix = 0`
+keeps Wrath quest values in every era. Non-resetting repeatable quests give no XP,
+except the four Vanilla turn-ins re-armed by `RepeatableVanillaQuestsXP`.
+Recruit-a-Friend XP, level grants, summons and reputation bonuses are disabled.
 
 Limits:
 
@@ -126,7 +117,7 @@ conflicts with the level-1 policy. Existing death knights retain native class
 talents. Bot death knight login is disabled in the default profile.
 
 About 5% of random bots are assigned each earned cap at 19, 29, 39, 49, 59, 69
-and 79; the remaining 65% continue progression. Every bot levels from 1, and
+and 79; the remaining 65% continue progression. New random bots level from 1, and
 level-69/79 residents must first earn TBC/Wrath. See
 [earned bot brackets](earned-bot-brackets.md) to adjust or release these caps.
 

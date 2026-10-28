@@ -37,11 +37,9 @@ realm ceiling. Quests retired by those markers stay unavailable. A quest already
 in the log can still be turned in through native quest rules; its historical
 spell reward remains subject to the character's race, class, level and era.
 
-The client patch retains the server's native Wrath mana costs for Desperate
-Prayer and Devouring Plague. A dataset contract identifies the twelve affected
-records and permits only `ManaCost` and `ManaCostPct` restoration from the
-checksum-verified Wrath source. The client package records each change in
-`SOURCE_MANIFEST.json`.
+The client patch preserves native Wrath mana costs for Desperate Prayer and
+Devouring Plague; historical versions use separate spell records. Package
+provenance records the source data and adjusted client fields.
 
 TBC also includes historical racial spells learned directly through paid
 training, without a quest prerequisite:

@@ -33,10 +33,10 @@ events. Realm-wide Ahn'Qiraj phasing is refused, including GM requests: ringing
 the gong starts an encounter for the earned tier without opening it to other
 characters. Ordinary quest and boss requirements remain in place.
 
-The profile disables automatic victory payouts. Strict mode also blocks these
-gold, reputation and mailed-item grants if reward settings are customized,
-because standing in the event's zone does not establish contribution. Normal
-creature loot still uses native kill, eligibility and looting rules.
+Automatic victory gold, reputation and mailed-item payouts are clamped to zero
+at runtime, including customized reward settings. Standing in the event's zone
+does not establish contribution. Normal creature loot still uses native kill,
+eligibility and looting rules; attendance grants no progression or quest credit.
 
 ## Configuration
 
@@ -60,6 +60,11 @@ Edit `configs/modules/mod_era_events.conf` with the servers stopped.
 `.era start <aq|si|legion|zombie>` and `.era stop <aq|si|legion|zombie>`.
 Starting an event manually skips its timer and player minimum, while keeping
 its earned-tier and realm-ceiling requirements.
+
+The [native configuration template](https://github.com/Syntax555/wow-mod-era-events/blob/main/conf/mod_era_events.conf.dist)
+lists a two-player minimum and upstream reward/realm-wide examples. The portable
+profile uses one real player and zero payouts/realm-wide duration; the fork also
+refuses those grants and realm-wide phasing at runtime.
 
 The separate [World Buff Bots](world-buffs.md) module offers optional Vanilla
 buff timers, disabled by default in favor of native quest events. Era Events'

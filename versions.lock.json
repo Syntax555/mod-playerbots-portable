@@ -3,7 +3,7 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "dc4d2647696c2d4729a8fc507fbe27e82d289ad5",
+    "revision": "977edf6dba5451a460feb0cbc034c23c4b1511ee",
     "upstream": {
       "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
       "revision": "3f2969ddb0da42b48b4fca050c02b19163ba1e20"
@@ -30,7 +30,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "686617ac530f58748f9c53c4dd99e96e2842d6db",
+      "revision": "9753af1a1ee78101ace2c19f3ada9927355ef592",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
@@ -53,7 +53,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "2f10fb0ad85a580517fdc97565684b3eba47b9d1",
+      "revision": "57e7ba9fdd7612db0297ef2a9f3310a3163b8574",
       "upstream": {
         "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
         "revision": "4933d455d2f611eed50c74c68c78832df4ed37a3"
@@ -77,7 +77,7 @@
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "10b305cad830574c21b4928a7250e952d76fa503",
+      "revision": "7d83fd8a6fc5fc5dafc2c001ed491c4ef50390cb",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
         "revision": "7fb6ebdefb8038af2676c280214f8a15c843b347"
@@ -91,7 +91,7 @@
     {
       "name": "mod-quest-loot-party",
       "url": "https://github.com/Syntax555/mod-quest-loot-party.git",
-      "revision": "25ee77143d2d6bd8682edb55daf05a2d49fb996d",
+      "revision": "b558cd259a959ac333aa923191b464af9201f44c",
       "upstream": {
         "url": "https://github.com/pangolp/mod-quest-loot-party.git",
         "revision": "c3955915c76d5a22a9d25a44482345d368a8de82"
@@ -101,7 +101,7 @@
     {
       "name": "mod-world-buff-bots",
       "url": "https://github.com/Syntax555/mod-world-buff-bots.git",
-      "revision": "ce0984a2896040547f15105ad066cf8c8ea9ec99",
+      "revision": "6fe255ec85049fdd32031bc4aa7d1fc3109551d0",
       "upstream": {
         "url": "https://github.com/Rockhopper1776/mod-world-buff-bots.git",
         "revision": "baae5656aa6a375e103bc83da8262f2061dbfcb6"
@@ -113,7 +113,7 @@
     {
       "name": "mod-lfg-progression",
       "url": "https://github.com/Syntax555/wow-mod-lfg-progression.git",
-      "revision": "7ed58ca9b0ac3cd491867a451816aa5da1f088f2",
+      "revision": "451486aaeff9b8488f98ab20cb85b6ab3cd47945",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
         "revision": "2615e82902cf92c0e7dd93dd6c2472d7b40fe14a"
@@ -126,7 +126,7 @@
     {
       "name": "mod-era-events",
       "url": "https://github.com/Syntax555/wow-mod-era-events.git",
-      "revision": "cc538768704420c5f6fe96e83f2229eb8ebe1ccc",
+      "revision": "910af62c3a478bc90051c1058c8770516bfa887f",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
         "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1"
@@ -139,7 +139,7 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Syntax555/mod-multibot-bridge.git",
-      "revision": "a718f3e3407daded6b17b3c7bd4fd2cc02b03b39",
+      "revision": "2f365795c1a1ac4514821f5492b4b1c00ce30723",
       "upstream": {
         "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
         "revision": "ebfa01a129dd4c441b2527e42dcc37b6da95e6c2"
@@ -158,7 +158,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "0ec31c8f326577e401eb5beddbbb48262a1d4c19",
+      "revision": "845da9c6672b34549bd2300b167109210994e0a3",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -189,7 +189,7 @@
     {
       "name": "MultiBot",
       "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
-      "revision": "3b84ccc4d1571ef139333c45e76ce1f82f1bf816",
+      "revision": "6c585f3d76c27e6591622dd3e8554d67ab9ccfcf",
       "upstream": {
         "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
         "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f"
@@ -274,7 +274,7 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "41426f19fa1d49ea439a611fc63aa3c1189bf6e2",
+      "revision": "8c5bc18ddfc9117257f2ce57db1e1a3c8866e5ff",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
         "revision": "fd8281a2fa2190bdd95bab95f2a15119a636ce43"
@@ -290,7 +290,7 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "78bb17aecb019a6fa60903b8dcf44b740d214876",
+      "revision": "848c61db6bb732282152a26cc220753ac352b928",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
         "revision": "30222ccb0821e6d8cdd8fe8d24334b5f9846bca7"
@@ -305,7 +305,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "3d085a73c02ab22324de48d85d0c023efd2f8497",
+      "revision": "fcf17c77528ca3318b82e235216df7cfdc253f26",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"

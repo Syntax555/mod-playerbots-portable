@@ -1,7 +1,6 @@
 # Historical talents with earned progression
 
-[Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents), built from
-[its fork](https://github.com/Syntax555/azerothcore-mod-era-talents), provides
+[The Era Talents fork](https://github.com/Syntax555/azerothcore-mod-era-talents) provides
 historical trees for players and bots according to their own earned progression.
 Level, group leadership and another character's account progress cannot select
 a later era.
@@ -12,7 +11,7 @@ a later era.
 | Tiers 8–12 | TBC Classic 2.5.4, nine original classes | One per level from 10; up to 61 at 70 |
 | Tier 13+ | Native Wrath | Normal core rules |
 
-The talent window and server effects change together. Historical passives,
+The server validates the historical talents shown by the addon. Historical passives,
 abilities and selected class spell variants are supported. Other combat formulas
 and class subsystems still use the Wrath core. TBC Classic 2.5.4 includes later
 balance changes, including paladin seals, and is not exact original 2.4.3 balance.
@@ -48,15 +47,15 @@ world/DBC support. Client and server share a generation marker recorded in
 /run print(GetSpellInfo(932999))
 ```
 
-The result should contain `EraTalents Gen` and the package generation in every
-client locale. If the addon reports a stale generation, install the matching
-addon/MPQ pair and fully restart the client.
+The result should contain `EraTalents Gen` and the package generation. If the
+addon reports a stale generation, install the matching addon/MPQ pair and fully
+restart the client.
 
-To try an addon change without a server build, the fork's
+For an addon update, the fork's
 [Latest release](https://github.com/Syntax555/azerothcore-mod-era-talents/releases/latest)
-offers `EraTalents-addon-latest.zip` with the `EraTalents/` folder of its
-`main` branch. It contains no MPQ; keep the MPQ of the client pack that matches
-the server.
+offers `EraTalents-addon-latest.zip` from its `main` branch. It contains no
+MPQ. Check compatibility and keep the MPQ of the client pack matching the
+server; the combined server client pack is the normal installation route.
 
 ### Client language
 
@@ -72,47 +71,29 @@ and module text follows the translations available in those components.
 
 ### DragonUI
 
-[DragonUI](https://github.com/NeticSoul/DragonUI)'s talent module replaces the
-talent window; install it from its
-[fork's Latest release](https://github.com/Syntax555/DragonUI/releases/latest). EraTalents works with it automatically; the module can stay
-enabled:
+Install `DragonUI` and `DragonUI_Options` from
+[the DragonUI fork's Latest package](https://github.com/Syntax555/DragonUI/releases/latest)
+into `Interface/AddOns/`. DragonUI and EraTalents have separate addon versions;
+use compatible versions of both and retain the MPQ matching the server.
 
-- For a Vanilla or TBC character, the talent key, the micro-button and
-  `/talents` open the historical trees inside DragonUI's talent window, with
-  its talent nodes, prerequisite connections and search. Vanilla uses seven
-  rows and TBC nine; ranks, remaining points and learning use EraTalents data.
-  Learned partial ranks are gold when no point can be spent; reachable talents
-  remain green while the owner can buy another rank.
-- DragonUI keeps the pet tree (`/pettalents` opens it) and characters on
-  native Wrath trees. Its glyph page opens once the character has earned
-  Wrath; before that the glyph key, the glyph tab and using a glyph show a
-  notice instead.
-- Inspecting a character with a historical tree shows it read-only in the
-  same DragonUI talent window. MultiBot's talent button opens that window for
-  the selected bot; controlled group altbots can spend their earned points
-  there. Other targets keep DragonUI's native inspect view. Without DragonUI,
-  historical trees use EraTalents' own window and the standard inspect tab.
-- DragonUI's spellbook shows the spells still to learn, and its level-up
-  notice the new class spells, from the character's own class trainer list on
-  this server. The list follows the earned era, talents and class quests and
-  shows level, base cost and any required talent or spell.
-- The level-up notice lists riding at this realm's trainer levels and leaves
-  out dungeons, raids and heroic modes of a later expansion than the
-  character's earned era. Raid progression and attunements still apply on
-  entry. DragonUI's own fixed lines remain: Dungeon Finder and glyphs at 15,
-  dual specialization at 40 and glyph slots at 30, 50, 70 and 80.
-- With MultiBot, a bot's spellbook opens in DragonUI's book while DragonUI's
-  spellbook module is enabled: the same window, General and class tabs,
-  two-page spreads, talent-tree sections, search and paging, filled with the
-  bot's spells and the trainer spells it can still learn on this server, with
-  their level and cost. Left-click casts, right-click creates a macro and
-  shift-click adds the spell to MultiBot's skip list or removes it. Switching
-  DragonUI's spellbook module on or off also moves an open bot book to the
-  selected interface; a reload is not required.
+With DragonUI's talent module enabled, the normal talent key, micro-button and
+`/talents` open your earned-era trees in its native window. Historical inspect
+views are read-only, except for manual purchases for an owned, grouped altbot
+within inspect range. Native Wrath and pet trees retain DragonUI's normal view.
+Before earned Wrath, the glyph tab/key and glyph use show a notice.
 
-Update DragonUI and the EraTalents addon together from their forks' Latest
-releases. Keep the MPQ from the client package matching your server's data
-generation. Disabling DragonUI's talent module also restores the standard route.
+DragonUI's spellbook and level-up notice use your own server trainer list,
+including earned-era, talent and class-quest requirements. The notice filters
+later-expansion instances and uses the realm's riding levels. Some fixed
+DragonUI notices retain native level thresholds; they do not establish server
+eligibility for Dungeon Finder, glyphs or dual specialization.
+
+MultiBot bot spellbooks also open inside DragonUI's book with the bot's known
+spells and eligible trainer lessons. Their casts and skip-list changes retain
+MultiBot's server controls. Disabling DragonUI's spellbook module moves an open
+bot book to MultiBot's fallback window; enabling it moves the book back without
+a reload. Without DragonUI's talent module, EraTalents supplies its own historical
+talent window and stock inspect overlay.
 
 ## Points, training, respecs and glyphs
 
@@ -186,12 +167,13 @@ server updates, realm ceilings and preserved progress, and install the matching
 client package for each player.
 
 Historical activation converts incompatible native talent/spell state for the
-character's earned era and makes its earned points available in that tree.
-Valid custom allocations persist on relog. Owned glyphs remain stored. Broad
-upstream spellbook cleanup SQL is not applied.
+character's earned era. Valid custom allocations persist on relog and owned
+glyphs remain stored. Broad upstream spellbook cleanup SQL is not applied.
 
-GM/console diagnostics `.eratalents status` and `.eratalents doctor` inspect an
-online character. Administrative learn/reset commands require GM privileges.
+GM/console diagnostics `.eratalents status [character]` and
+`.eratalents doctor [character]` inspect an online character. Administrative
+learn/reset commands change state and are not diagnostic steps. Complete in-game
+class and UI coverage remains [validation work](todo.md#gameplay-validation).
 
 ## Building the client package
 

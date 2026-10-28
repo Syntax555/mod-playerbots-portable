@@ -1,7 +1,7 @@
 # World buffs
 
 The default profile uses the core's quest-triggered world-buff events.
-Automatic simulated turn-ins through
+Timed simulated events through
 [World Buff Bots](https://github.com/Syntax555/mod-world-buff-bots) are
 disabled. Playerbots' synthetic world-buff supplies are also disabled by
 natural progression. No client addon is required.
@@ -33,7 +33,7 @@ altbots, random bots and SelfBot characters alike.
 | Rallying Cry of the Dragonslayer, spell 22888 | Stormwind | 120 minutes | Native aura conditions and lower-level stat scaling |
 | Spirit of Zandalar, spell 24425 | Stranglethorn Vale | 120 minutes | Individual Progression's Zul'Gurub entry tier, 3 by default; native aura conditions |
 
-All timer recipients must be alive, in the world, outside GM mode, at most
+All simulator recipients must be alive, in the world, outside GM mode, at most
 level 63 and in the Vanilla era after applying the realm's
 `IndividualProgression.ProgressionLimit` ceiling (tiers 0–7 with the shipped
 unlimited progression). Spirit of Zandalar also
@@ -72,7 +72,7 @@ other consumables follow their ordinary acquisition rules.
 
 Edit `configs/modules/mod_world_buff_bots.conf` with the servers stopped.
 
-| Setting | Default | Purpose |
+| Setting | Shipped default | Purpose |
 | --- | --- | --- |
 | `WorldBuffBots.Enable` | `0` | Opt into simulated Vanilla events |
 | `WorldBuffBots.BaseMinutes` / `VarianceMinutes` | `90` / `60` | Repeat interval and random variation |
@@ -95,10 +95,12 @@ the default progression chain and an empty `CustomProgression`. With an inactive
 or custom chain, the simulator supplies no Vanilla buffs because the tier numbers
 no longer establish the required era.
 
-The launcher adds missing module configuration. A saved, unchanged managed
-`WorldBuffBots.Enable = 1` follows the new default of `0` on update; custom
-values and existing values without a saved baseline are preserved. For a
-quest-only existing realm, stop the servers and set `WorldBuffBots.Enable = 0`
-in its active configuration. See [configuration updates](configuration.md) and
-[server adaptations](adaptations.md) for the integration rules. Exact source
-revisions and fork changes are recorded in [the manifest](../versions.lock.json).
+The [native configuration template](https://github.com/Syntax555/mod-world-buff-bots/blob/main/conf/mod_world_buff_bots.conf.dist)
+enables the simulator; the portable profile overrides its master switch to `0`.
+The launcher adds missing configuration, updates unchanged managed values and
+preserves custom values and existing values without a saved baseline. For
+quest-only behavior, set `WorldBuffBots.Enable = 0` in the active configuration.
+See [configuration updates](configuration.md), [server adaptations](adaptations.md)
+and [source versions](module-versions.md). Automated fixtures cover earned-era
+and recipient guards; native event parity and complete in-game delivery remain
+part of [gameplay validation](todo.md#gameplay-validation).

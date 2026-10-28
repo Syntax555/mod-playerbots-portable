@@ -9,8 +9,10 @@ development or custom configurations.
 
 - Windows 10/11 x64.
 - Visual Studio 2022 with the Desktop development with C++ workload.
-- CMake 3.25 or newer, Go 1.27.3 or newer, Python 3.12 or newer, PowerShell 7 and Git.
-- Boost 1.92 or newer, MySQL Server 8.0 x64 and OpenSSL 3 x64.
+- CMake 3.22 or newer, Go 1.27.3 or newer, Python 3.12 or newer, PowerShell 7 and Git.
+- Boost 1.92, MySQL Server 8.0 x64 and OpenSSL 3 x64. Use the release workflow's
+  [dependency versions](module-versions.md#bundled-runtime) for
+  a build with the shipped runtime.
 
 Use the Visual Studio generator and x64 dependencies throughout.
 
@@ -30,6 +32,7 @@ cmake -B build -S . `
   -DBOOST_ROOT_DIR="C:/local/boost_1_92_0"
 $env:CMAKE_BUILD_PARALLEL_LEVEL = '2'
 $env:CL_MPCount = '2'
+$env:UseStructuredOutput = 'false'
 cmake --build build --config Release --parallel 2
 pwsh -File scripts/CopyWindowsRuntime.ps1 -DistDir dist
 pwsh -File scripts/CopyDependencyLicenses.ps1 -DistDir dist `
@@ -86,11 +89,10 @@ multiply the number of active compiler processes.
 Windows compiles only within RAM plus page files. If the build stops with
 `fatal error C1060: compiler is out of heap space`, enlarge the page file or
 lower `CL_MPCount` to `1`, then run the same build command again; compiled
-objects are kept. The release workflow adds a 32 GB page file before compiling,
-keeps compiler diagnostics as plain text (`UseStructuredOutput=false`) and
-retries a memory failure with one parallel project, and with one compiler
-worker when the modules project failed. A final step reports peak commit and
-page-file use.
+objects are kept. Keep `UseStructuredOutput=false` to avoid MSBuild's background
+structured-diagnostic reader exhausting memory. The release workflow prepares
+extra page-file capacity and retries compiler memory failures with less
+parallelism.
 
 To generate the native server projects before starting the full C++ build:
 
@@ -98,9 +100,8 @@ To generate the native server projects before starting the full C++ build:
 cmake --build build --target azerothcore-configure --config Release
 ```
 
-The release workflow uses their `PrepareForBuild;ResourceCompile` targets to
-check both `authserver` and `worldserver` resource commands before compiling
-C++.
+The release workflow checks both servers' Windows resources before the C++
+compile. Passing these checks does not establish that the full build passes.
 
 ## Reproducible dependencies
 
@@ -144,23 +145,34 @@ For example, a combat-profile change uses
 | Changed area | Targeted local checks |
 | --- | --- |
 | Go launcher | Format changed files; run tests, vet and staticcheck for affected packages, including Windows checks where affected. |
-| Core and module fork pins | Compile changed C++ files against the prepared sources and run the relevant native and integration fixtures. |
+| Core and module fork pins | Inspect the actual source diff; compile changed C++ files against the prepared sources and run the relevant native and integration fixtures. A documentation-only fork change needs documentation checks. |
 | Addon forks | Check changed Lua files and affected addon behavior, then run the relevant server integration fixtures against the new pin. |
 | Packaging and release | Run affected Python test modules and PowerShell fixtures, Ruff for changed Python files and actionlint for workflow changes. |
 | Documentation | Run `python3 cmake/tests/TestDocumentation.py` for links, anchors and stated versions. |
 | Fixture or CI wiring | Run `python3 cmake/tests/run_fixtures.py check`. |
 
 GitHub Actions runs the complete checks separately on code pushes and before a
-manual build. The native suite runs in four disjoint CI jobs, with per-fixture
-timings; the MultiBot Lua and packaged-client fixtures run in the client job.
-The wiring check fails when a fixture does not run in CI or the workflow matrix
-does not cover every gameplay shard exactly once. Fixtures refuse to run under
-`python -O`, which would skip their assert checks.
+manual build. Use ordinary Python execution: fixtures refuse `python -O`, which
+would skip their assertions. The checks include launcher behavior on Windows,
+native gameplay fixtures, generated MPQ mechanics and locales, addon integration,
+package inventories, dependency notices and update recovery.
 
-The checks workflow also verifies historical spell mechanics in the generated
-MPQ, client locales, dependency notices, package inventories and update
-recovery. Historical class source revisions are recorded separately from the
-module pins in `versions.lock.json`.
+## Client cache changes
+
+When changing client-cached server query data, such as quest or item templates,
+ship a new world SQL migration assigning a fresh, stable `version.cache_id`.
+Keep previous migrations so established realms receive the new one; the SQL
+updater's filename/hash tracking alone does not refresh client caches. Preserve
+explicit `ClientCacheVersion` overrides and higher administrator-managed database
+versions. See [runtime behavior](updating.md#server-data-and-the-client-cache).
+
+Run the affected data fixtures and `python3 cmake/tests/TestClientCacheVersion.py`
+against the prepared sources. On a backed-up test realm, compare the database's
+`SELECT cache_id FROM version;` and the worldserver startup log before and after
+the migration, then reconnect the client. An unchanged restart must retain the
+same ID and skip the migration. Changes confined to AI, loot, spawns or rates do
+not require a client cache bump. DBC/MPQ or addon changes need matching client
+files installed separately.
 
 ## Automated builds
 
@@ -176,25 +188,14 @@ server and client packages only when started manually: open
 choose **Run workflow** and select the branch. It runs the complete checks
 first, compiles only after all of them pass and verifies the assembled archives.
 Actions records the checks and source commit for each build. A manual build of
-another branch produces build artifacts without publishing, and packaged guides
-and release-note links follow with the next manual build of `main`.
+another branch produces build artifacts without publishing. Packaged guides
+update with the next manual build of `main`.
 
-Fast launcher, lint and packaging checks run first. The Windows launcher tests,
-historical client build and four native gameplay jobs then run in parallel.
-All checks, builds and archive verifications must succeed before the publication
-workflow can select that run; a failing check stops a manual build before
-compilation. Every workflow file is checked by the pinned actionlint version.
-Checkouts do not persist Git credentials; the publisher sets `GH_TOKEN`
-explicitly for the steps that call the GitHub API.
-
-The [publication workflow](../.github/workflows/publish-latest.yml) runs
-[publish_latest.py](../scripts/publish_latest.py) after a successful manual
-build of `main`.
-
-The public
-[Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
-contains the matching verified packages. Build artifacts are also available from
-eligible successful Actions runs.
+The [publication workflow](../.github/workflows/publish-latest.yml) selects a
+successful manual build of `main` only after all checks, builds and archive
+verifications pass. A failing precheck stops the build before compilation. The
+public [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
+contains matching verified packages; successful runs also retain build artifacts.
 
 Manual builds of a branch run one at a time: a running build always finishes,
 and a newer request replaces any waiting build so the newest commit builds
@@ -205,21 +206,14 @@ for publication.
 The selected build is published when its commit is still part of `main` and is
 not older than the current Latest.
 
-Publication generates `UPDATE_MANIFEST.json` from the verified final server ZIP,
-recording each file's size and SHA-256 hash. Latest contains four ZIPs, this
-update manifest and `SHA256SUMS.txt`, which covers all five payloads. GitHub
-refuses the Actions token tag and release changes at commits whose workflow
-files differ from `main`, so selection skips those builds before downloading
-their artifacts; publication checks this again before making changes. The newer
-matching build publishes. Publication publishes and verifies the
-replacement under its staging tag while the previous release still serves tag
-`latest`, then moves `latest` to the build commit, deletes the previous release
-and moves the replacement to `latest`; it creates no additional version tags. If
-a run stops between the last two steps, `releases/latest/download` serves the
-replacement, but the launcher's update check fails until the job is re-run or
-the next build publishes. Drafts and unused temporary tags of failed runs are
-removed when the next publication starts, and a release left under a temporary
-tag is removed by the next successful publication.
+Publication generates `UPDATE_MANIFEST.json` with each managed server file's
+size and SHA-256 hash, plus `SHA256SUMS.txt` for the release payloads. It uploads
+and verifies the replacement before moving the rolling `latest` tag and release;
+previous downloads remain available until then. If publication stops during the
+final tag/release handoff, rerun **Publish Latest** or publish the next verified
+build. The launcher starts the installed release when the remote update is
+temporarily unavailable. Publication selection and recovery are implemented in
+[publish_latest.py](../scripts/publish_latest.py).
 
 The executables are currently unsigned. Windows Smart App Control may block
 them; package checksums and automated build checks do not replace a trusted

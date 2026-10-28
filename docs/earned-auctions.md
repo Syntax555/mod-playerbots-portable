@@ -1,113 +1,13 @@
 # Earned auction-house trading
 
-Autonomous random bots sell surplus from their own bags and buy useful equipment
-or supplies with their own gold. Purchases and sales use normal auction fees,
-ownership checks and mail delivery. The server adds no generated auction stock
-or artificial buyers.
-
-Trading requires natural progression, earned auctions and a random bot without a
-player master. As at the auction window, bots below the core's
-`LevelReq.Auction` do not trade at auctioneers; they still collect auction mail
-and sell surplus to vendors. Bots walk to an auctioneer or mailbox and reach
-ordinary interaction range. Combat, flight, battlegrounds, dungeons, teleport,
-trading and blocked movement prevent market trips.
-
-## What bots can trade
-
-Sellers keep quest items, needed equipment, reagents of learned class spells,
-supplies and the last pet-food reserve for their own hunter pets, including
-dismissed and stabled pets and pets temporarily unsummoned by a mount. Food
-must match an owned pet's diet. Random bots do not craft, so they keep
-profession materials only within Playerbots' ordinary stack limits; SelfBots
-and altbots keep the reagents of their learned recipes.
-Equipped, bound, conjured, temporary and otherwise ineligible items are not
-listed. Each listing transfers an existing whole stack and pays its normal
-deposit from the bot's balance. Automatic vendor selling also protects these
-essentials under natural progression. Natural upkeep does not disenchant, so a
-random bot with Enchanting sells outgrown bound gear that a vendor buys. In a
-guild led by a player it keeps rare and better gear, as it would from
-disenchanting.
-
-Buyers select useful equipment, supplies or gathering tools (mining picks,
-skinning knives and fishing poles) while reserving money for ordinary upkeep.
-Bags follow the vendor bag rules: a general bag for an empty bag slot or, with a
-free backpack slot, a larger one in place of the smallest general bag. Quivers,
-ammo pouches and profession bags stay equipped, quivers are not bought, and no
-bag is bought while the bot carries an unequipped upgrade. A won bag waits in
-the mail until the backpack has room for it. Each purchase costs at most a
-quarter of the current balance and must fit the available category budget. Bots
-cannot buy their own or same-account auctions. They wait while an outstanding
-bid or an uncollected won item exists, except when the core's ownership limit
-prevents taking the won item. Other bots' auctions are eligible because the
-buyer pays and the seller gives up the actual item.
-
-A bot maintains at most 20 listings, at most two of the same item, and attempts
-at most two new listings and one purchase per visit. The purchase goes to the
-most useful offer: gear upgrades, then ammunition, consumables and gathering
-tools; within a kind, the offer cheapest against its valuation limit. An auction
-whose buyout is missing or not acceptable takes the core's minimum bid instead
-when it ends within two visit intervals, unless a player leads it. Bots list for
-the 12-hour duration, which `Rate.Auction.Time` scales.
-
-An item that returns unsold or is refused a listing on two occasions is not
-listed again for a week, or for three listing durations if that is longer.
-Stacks returning within one listing duration count as one occasion. The bot
-sells such stock to a vendor instead. A completed sale of the item clears that
-record. The record is kept in server memory, so a restart forgets it.
-
-## Pricing and travel
-
-A bot undercuts the cheapest comparable buyout in the whole house by one copper
-per item. Comparable offers have the same item and random property and belong
-to another account. Without one, the buyout is three times the vendor sell price
-per item. The starting bid is four fifths of the buyout and always above the
-stack's vendor value.
-
-Buyouts stay between twice the vendor sell price and the higher of the vendor's
-price per item or six times the vendor sell price. A bot lists only when the
-sale, after the house cut, beats vendoring the stack by at least the deposit.
-A market at or below twice the vendor sell price refuses the listing. Buyers use
-the same upper valuation limit. This heuristic does not reproduce every rare
-item's player market value.
-
-Solo bots from level 10, or `LevelReq.Auction` if higher, can plan a trip to a
-compatible or neutral auctioneer on the same map and phase within 5,000 yards.
-They need eligible surplus or at least one silver available after purchase
-reserves. Nearby auctioneers and mailboxes are searched within 150 yards.
-
-A trip has a ten-minute budget including its final approach. New plans wait
-fifteen minutes. Failed routes, unavailable NPCs, timeouts and unreachable
-nearby auctioneers or mailboxes postpone the visit for fifteen minutes and
-return the bot to ordinary activity, including repairs, sales and training. The
-last unreachable mailbox or auctioneer is then skipped for an hour, so another
-can serve, and a failed turn passes to the other visit kind. On an auctioneer
-turn without a nearby auctioneer, a distant market in reach comes before a
-nearby mailbox. Trading depends on pathfinding and NPC availability. Bots may
-vendor surplus when bags reach 80% usage or their budget cannot cover the
-neutral auction house's deposit for the stack. Stock whose ordinary price cannot
-repay that house's deposit and cut is vendored.
-
-## Mail delivery
-
-Bought and won items, sale proceeds, outbid bids and expired auctions use normal
-auction mail and delivery delays. Bots visit a mailbox and process at most 20
-auction receipts per visit through the core handlers. Other mail is left alone;
-undelivered, expired and COD mail is skipped.
-
-If bags are full, attachments remain in mail until space is available. Money can
-be collected with full bags. A receipt is deleted only after its money and all
-attachments have been retrieved successfully. A won item refused by a unique-item
-or ownership-category limit stays in mail without blocking other purchases. If
-the owned count drops, ordinary collection can retrieve it again; inventory and
-bank ownership limits still apply to every new purchase.
-
-Natural progression blocks bot mail-send and mail-management shortcuts even if
-`Playerbots.BotSendMailEnabled` is re-enabled. Earned auction collection has
-its own ordinary mailbox path. Human mail remains available.
+Autonomous random bots sell surplus from their own bags and buy useful items
+with their own gold. Normal auction deposits, fees, ownership checks and mail
+delivery apply. The server generates neither auction stock nor artificial
+buyers. SelfBots and player-controlled companions do not run this market loop.
 
 ## Configuration
 
-The active Playerbots file is `configs/modules/playerbots.conf`:
+The portable defaults in `configs/modules/playerbots.conf` are:
 
 ```ini
 Playerbots.NaturalProgression = 1
@@ -117,23 +17,96 @@ Playerbots.BotSendMailEnabled = 0
 ```
 
 `EarnedAuctionInterval` is in seconds, clamped to 60–3,600. Auctioneer and mailbox
-visits alternate with a stable per-bot stagger of up to 119 additional seconds.
-Busy bots or distant markets can take longer. Set `EarnedAuctions = 0` to stop
-autonomous trading; existing auctions and mail keep their normal lifecycle.
+visits alternate, with up to 119 seconds of stable per-bot staggering. Busy bots
+and travel can take longer. Set `Playerbots.EarnedAuctions = 0` to stop trading;
+existing auctions and mail keep their ordinary lifecycle. Updates preserve
+custom settings; see [updating](updating.md).
 
-## Updates and market limits
+## What bots trade
 
-Server updates preserve custom auction settings, databases and characters. See
-the [update guide](updating.md) for automatic updates, manual installation and
-configuration backups.
+Sellers keep needed equipment, quest items, supplies, learned class-spell
+reagents and the last suitable food reserve for owned hunter pets, including
+stabled or temporarily unsummoned pets. Random bots do not craft; profession
+materials follow native stack reserves. Human-controlled characters keep their
+learned-recipe reagents. Equipped, bound, conjured, temporary and other
+ineligible items are not listed. A listing transfers an existing whole stack
+and pays its deposit.
 
-Existing items and money are preserved without verifying their origin; see
-[realm updates](changing-expansions.md#updating-an-existing-realm). A fresh
-natural-progression realm starts with normal character-creation items and no
-auction-stock grants.
+Buyers seek gear upgrades, ammunition, consumables, bags and gathering tools.
+They reserve upkeep money; a purchase costs at most a quarter of the current
+balance and must fit its category budget. Bags fill an empty slot or replace
+the smallest general bag when backpack space permits. Specialized bags remain
+equipped; quivers are not bought, and a carried unequipped bag upgrade prevents
+another purchase.
+
+Bots cannot buy their own or same-account auctions. Outstanding bids or
+uncollected won items normally pause purchases; a won item blocked by a unique
+ownership limit does not. Other bots' listings are eligible: the buyer pays for
+the actual item the seller gives up.
+
+| Limit | Value |
+| --- | --- |
+| Active listings per bot | 20 |
+| Listings of one item and random property | 2 |
+| New listings per visit | 2 |
+| Purchases per visit | 1 |
+| Auction duration | 12 hours, scaled by `Rate.Auction.Time` |
+
+Buyers prefer upgrades, then ammunition, consumables and gathering tools, using
+relative value within each category. If buyout is unavailable or too expensive,
+they can place the core's minimum bid on auctions ending within two visit
+intervals, unless a player holds the leading bid.
+
+## Pricing and unsold stock
+
+Bots undercut the cheapest comparable buyout from another account by one copper
+per item; comparable items share the item ID and random property. Without a
+comparable offer, buyout is three times vendor sell value. The starting bid is
+at least four fifths of buyout and above vendor value.
+
+Buyout stays between twice vendor sell value and the higher of vendor purchase
+price per item or six times vendor sell value. A sale after the house cut must
+beat vendoring by at least the deposit. Buyers use the same upper valuation.
+This heuristic cannot reproduce every rare item's player market value.
+
+After two unsold returns or listing refusals, that item variant is vendored
+instead of relisted for a week, or three listing durations if longer. Returns within one
+listing duration count once; a completed sale clears the record. Restarting
+forgets this in-memory record. Bots can also vendor surplus when bags reach
+80% usage or deposits are unaffordable or uneconomic. Natural upkeep does not
+disenchant; ordinary surplus protection also applies to vendor sales.
+
+## Travel and mail delivery
+
+Bots walk to auctioneers and mailboxes and use normal interaction range.
+Auctioneer trading respects `LevelReq.Auction`. Solo bots can plan market trips
+from level 10, or the configured auction level if higher, to a compatible or
+neutral auctioneer on the same map and phase within 5,000 yards. They need
+eligible surplus or at least one silver after reserves. Nearby searches cover
+150 yards. Combat, flight, battlegrounds, dungeons, teleporting, trading and
+blocked movement prevent trips.
+
+A trip has ten minutes including its final approach; new plans and failed trips
+wait fifteen minutes. An unreachable auctioneer or mailbox is skipped for an
+hour so another can serve. Failure returns the bot to ordinary repairs, sales,
+training and travel. Availability still depends on navigation and NPCs.
+
+Mailboxes process at most 20 auction receipts per visit through normal core
+handlers. Other mail, COD, undelivered and expired mail are left alone. Full
+bags leave attachments in mail while permitting money collection. A receipt is
+deleted only after all attachments and money are retrieved. Won items blocked
+by ownership limits remain until ordinary collection becomes possible.
+
+Natural progression refuses bot mail-send and mail-management shortcuts even
+if `Playerbots.BotSendMailEnabled` is re-enabled. Earned auction collection uses
+the ordinary mailbox path; human mail remains available.
+
+## Market limits
 
 A fresh market can remain sparse while bots level, earn loot and gold, and
-reach a town. Sellers need deposits and buyers need useful affordable listings.
-There is no guaranteed stock, demand, subsidy or complete autonomous crafting
-economy. AI and pathfinding limits can interrupt trading; see the
-[configuration reference](configuration.md#supported-scope).
+reach towns. No stock, demand, subsidies or autonomous crafting economy are
+guaranteed. Existing items and money are preserved without checking their
+origin; see [realm updates](changing-expansions.md#updating-an-existing-realm).
+AI and pathfinding limits can interrupt trading; see
+[supported scope](configuration.md#supported-scope). Source fixtures cover
+market rules, not a fully observed long-running player economy.

@@ -20,4 +20,4 @@ First startup requires Internet access and can take time while preparing data an
 
 [Setup and features]({source_url}/README.md) · [Updates]({source_url}/docs/updating.md) · [Configuration]({source_url}/docs/configuration.md) · [Server adaptations]({source_url}/docs/adaptations.md) · [Client installation]({source_url}/docs/era-talents.md) · [Licenses]({source_url}/THIRD_PARTY_NOTICES.md)
 
-Source: [{revision}]({commit_url}). The server ZIP contains its dependency manifest, applied patches and license notices.
+Source: [{revision}]({commit_url}). The server ZIP contains its dependency manifest and source/license notices.

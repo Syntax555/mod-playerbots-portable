@@ -1,318 +1,165 @@
 # Zygor Individual Progression
 
-Zygor Guides Viewer Remaster follows each character's own Individual
-Progression tier through the changes of its
-[fork](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK). The server reports the tier, quest
-availability and instance access through the MultiBot Bridge; the addon only
-reads them. It cannot award, change or bypass progression, and an unknown
-state never unlocks content.
+The [Zygor fork](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK)
+adapts guides, Gear Finder and Talent Advisor to each character's own earned
+Individual Progression tier. It reads progression, quest availability and
+instance access through the server's MultiBot Bridge. It grants no gear or
+progression and changes no server access rules.
 
 ## Installation
 
-Use WoW **3.3.5a, build 12340**, the server from the
-[Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
-and the Zygor IP installer from the
-[Zygor fork's Latest release](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest).
-The prebuilt server includes the bridge support; no server setting is needed.
+Use **WoW 3.3.5a, build 12340** and the matching
+[server Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+The prebuilt server includes bridge support; no new server setting is needed.
 
 1. Download [Zygor-IP-latest.zip](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest/download/Zygor-IP-latest.zip)
-   and extract it to a folder outside your WoW installation.
-2. Close WoW completely. Run `Install-Zygor.cmd` and enter your client's
-   `Interface/AddOns/` folder when prompted. Internet access is required; the
-   installer uses Windows PowerShell and does not require administrator rights.
-3. Start WoW and enable Zygor Guides Viewer in the addon list. Disable a
-   separate `ZygorGuidesViewer` or `ZygorTalentAdvisor` addon; the installer
-   warns when it finds one.
+   and extract it to a writable folder outside WoW.
+2. Close WoW completely. Run `Install-Zygor.cmd` and select the client's
+   `Interface/AddOns/` folder. Internet access and Windows PowerShell 5.1 or
+   later are required; no administrator rights are needed.
+3. Start WoW and enable Zygor Guides Viewer. Disable separate
+   `ZygorGuidesViewer` or `ZygorTalentAdvisor` addons; `ZygorGuidesViewerRM`
+   includes the advisor, and the installer warns about duplicates.
 
-The installer downloads the commit of the fork's `main` branch it was built
-from directly from GitHub. It accepts the archive only when every file of its
-`ZygorGuidesViewerRM/` folder matches the SHA-256 hash of that commit and checks
-the TOC's interface and files. It backs up an existing `ZygorGuidesViewerRM/`
-folder before replacement and records the installed revision in
-`SOURCE_REVISION.txt` and `SOURCE_MANIFEST.json`. Account and character
-SavedVariables, including Zygor's settings, are preserved. The release ZIP
-contains only the installer and the file list.
+The ZIP contains an **installer, not the addon**. It downloads the exact fork
+commit it was built from, verifies every addon file against SHA-256 hashes and
+checks the TOC. The installed path is
+`Interface/AddOns/ZygorGuidesViewerRM/ZygorGuidesViewerRM.toc`. Existing addon
+files are backed up, and account and character SavedVariables in `WTF/` are
+preserved. Use the same steps for updates. `SOURCE_REVISION.txt` and
+`SOURCE_MANIFEST.json` identify the installed source.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-Zygor.ps1 -AddOnsPath 'C:\Games\WoW\Interface\AddOns'
 ```
 
-## Guide behaviour
+The installer retains the addon's notices. Its MIT license covers tooling only;
+the viewer's unspecified-version `GPL` metadata does not license every guide,
+image or library. See [third-party notices](../THIRD_PARTY_NOTICES.md).
 
-The **Progress** options panel (`/zgprogress`) and `/zygorip` show the mode,
-the saved and usable tier, the realm ceiling, the experience cap and the next
-milestone of the default chain. `/zygorip refresh` asks the server again.
+## Guide behavior
 
-| Mode | Behaviour |
+Open **Progress** with `/zgprogress` or inspect state with `/zygorip`.
+`/zygorip refresh` requests new server data. The panel shows the saved and
+usable tiers, realm ceiling, experience cap and next default-chain milestone.
+Integration text is available in English and German.
+
+| Mode | Behavior |
 | --- | --- |
-| Automatic (default) | Follows the server when it reports Individual Progression. Without a bridge, or on a realm without the module, guides behave as on an ordinary realm. |
-| On | As Automatic, but later content stays locked while no server answer is available. |
-| Off | No Individual Progression limits. |
+| Automatic (default) | Follow server progression; without bridge support or Individual Progression, use ordinary realm behavior. |
+| On | Keep later content locked while no server answer is available. |
+| Off | Disable the addon's progression filters; server rules still apply. |
 
-Until the server's first answer arrives, later content counts as unknown. A
-client that gets no bridge answer after three probes, about a minute, uses the
-mode's behaviour without a bridge.
+Before the first answer, later content is unknown. Three unanswered probes,
+about a minute, select the mode's behavior without bridge support. Normal
+player views follow the server's account exclusions and GM bypass; the
+inspected-bot view always follows that bot's personal progression.
 
-Gates apply to normal accounts. Bot and excluded accounts and game master mode
-are not limited, as on the server. Content is classified as available, locked
-or unknown; locked and unknown content is never presented as available.
+- **Quest steps and goals:** hide only for lasting server refusals, such as a
+  progression marker, hidden giver, class/race, disabled or outleveled quest,
+  or an already taken alternative. Missing level, reputation, skill,
+  prerequisites or reset keeps the step. Active and completed quests stay.
+- **Guides and chains:** zone, experience-cap and instance checks filter
+  suggestions and hold the next guide with a reason. Outland needs tier 8,
+  Quel'Danas 12 and Northrend 13. TBC race starting zones open earlier for
+  Draenei and Blood Elves; other races' account unlock is not visible to the
+  addon, so it uses tier 8. Manual loading can still show a locked guide with
+  its warning.
+- **Milestones:** *Individual Progression\Milestone Chain* follows the default
+  chain and the realm ceiling. While progression filters apply, decisions
+  including *Bang a Gong!*,
+  *Chaos and Destruction* and *Into the Breach* are never accepted or turned in
+  automatically.
+- **Other guides:** reputation, profession, mount, pet, achievement, daily,
+  event and Gold Guide routes use the same quest, zone and instance checks.
+  Their own requirements remain guide steps; navigation is unchanged.
+- **Talent Advisor:** its builds cover native Wrath trees only. It stays
+  inactive for EraTalents characters and, while progression filters apply,
+  before Wrath or while the era is unknown. It leaves the native `LearnTalent`
+  function and learn button
+  in place in those cases.
 
-- **Quests.** A step is skipped and a goal hidden only when the server reports
-  its quest unavailable for a lasting reason: a progression marker condition,
-  a quest giver hidden at this tier, class, race, a disabled quest, an
-  outleveled quest, a taken alternative or a breadcrumb whose follow-up is
-  taken. A missing level, reputation, skill, previous quest or reset keeps the
-  step. Quests in the quest log and completed quests are always kept. Goal
-  tooltips name the reason and the tier a quest needs or retired at.
-- **Guides.** A guide needs the tier of the zones it travels to: Outland 8,
-  Isle of Quel'Danas 12 and Northrend 13, as Individual Progression's map gate
-  decides. The TBC race starting zones need no tier for Draenei and Blood
-  Elves; other races are treated as tier 8 because their account unlock is not
-  visible to the client. A leveling guide that starts at the character's
-  experience cap (60 before tier 8, 70 before tier 13) is locked, and so is a
-  guide entering an instance that Individual Progression's map gate refuses.
-- **Guide chains.** A finished guide does not switch to a next guide this
-  character cannot follow; a final step names the guide and the reason.
-  Loading such a guide manually prints the reason once. The guide browser's
-  suggestions leave such guides out, and its details show the reason.
-- **Milestones.** *Individual Progression\\Milestone Chain* lists the default
-  chain; each step completes from the server's tier, and milestones above the
-  realm ceiling are replaced by a note.
-- **Gear Finder.** Dungeon and raid loot counts as current only when the earned
-  tier opens the content's era and Wrath phase and the server reports the
-  instance accessible in its difficulty. Content behind a later tier is a
-  *next tier* or *later tier* source. Disabled, unmapped and unverified sources,
-  such as outdoor world bosses, are neither current nor future. Currency
-  vendors follow their era. Crafted gear needs an earned era and a recipe the
-  character knows or a trainer recipe; other recipe sources are not verified.
-  The stat weights follow the character's talents: for an EraTalents
-  character, the most-spent tab of its Vanilla or TBC tree. Before Wrath,
-  without EraTalents data, the class's leveling build applies and can be
-  chosen in the gear options. Druid Restoration uses healing weights; Feral
-  uses Thick Hide ranks as a tank/DPS heuristic. Hybrid Feral builds can select
-  `/zygortank` or `/zygordps`; `/zygorrole auto` restores automatic selection.
-  These are the viewer's Wrath stat-priority weights, not historically optimized
-  Vanilla or TBC simulations. The finder opens while its gear scan continues
-  in the background; progression changes invalidate stale results.
-- **Best-in-slot lists.** The Wrath lists apply from tier 13; tier 13 opens T7
-  and each later tier the next list. Earlier eras get no annotation.
-- **Talent Advisor.** The bundled advisor knows only the native Wrath trees.
-  It stays inactive, with the native `LearnTalent` function and learn button,
-  for EraTalents characters, before the earned Wrath era and while the era is
-  unknown. It makes no suggestions, popups or automatic learning then.
-- **Quest automation.** *Bang a Gong!*, *Chaos and Destruction* and *Into the
-  Breach* decide progression and are never accepted or turned in automatically.
-- **Gold Guide.** Farming and gathering routes follow the same zone and
-  instance checks.
+## Gear Finder
 
-Text is available in English and German.
+Dungeon and raid sources count as current only when the earned era and Wrath
+phase allow them and the server reports the instance difficulty accessible.
+Later tiers are labeled *next tier* or *later tier*. Disabled, unmapped or
+unverified sources, including outdoor world bosses, are unavailable.
+Currency vendors follow their era. Crafted sources require the earned era and
+a known or trainer recipe; other recipe sources are unverified. Wrath
+best-in-slot annotations start at tier 13 and advance with tiers 14–17.
+
+For players with EraTalents, weights use the most-spent historical talent tab.
+Before Wrath without historical data, the class's leveling profile applies.
+Druid Restoration uses healing weights; Feral uses Thick Hide ranks as a
+bear/cat heuristic. `/zygortank`, `/zygordps` and `/zygorheal` select a role;
+`/zygorrole auto` restores automatic selection. These remain the viewer's Wrath
+stat priorities, with no claim of optimized Vanilla/TBC simulation. Scans run
+in short slices while the window is open; progression changes invalidate
+stale results.
 
 ### Inspected altbots
 
-Open a controlled altbot's Blizzard or DragonUI inspect window and click its
-Zygor button to use the same Gear Finder for that bot. The bot must be online,
-in your group and within ordinary inspect range. This view needs matching
-server and addon versions with the inspected-bot bridge support. If this support
-is unavailable, clicking the button reports it. The framed button is shown only
-on the equipment pane; changing to another tab closes the bot's Gear Finder.
+Open a controlled altbot's Blizzard or DragonUI inspect window. On the
+**equipment tab**, click its Zygor button to open that bot's Gear Finder. The
+bot must be online, in your group and within normal inspect range. Matching
+server support is required; otherwise the button reports it unavailable.
+Changing inspect tabs, closing the window or selecting another character
+closes the view and cancels pending results.
 
-Recommendations use the bot's class, level, equipped items, effective combat
-profile and personal progression. Dungeon access and quest availability are
-read from the server for that bot. Source coverage follows Zygor's installed
-dungeon, quest-reward and vendor tables; unknown access stays unavailable.
-Quest sources need a known giver spawn whose map and Individual Progression
-visibility rules permit the bot's own earned stage; unverified or differently
-phased locations stay unknown. Other scripted NPC visibility conditions are not
-evaluated by this interface.
-Crafting and profession-dependent recommendations require information about
-the bot's learned recipes and are not included in this view.
+Recommendations use that bot's class, level, equipment, effective combat
+profile and personal progression, with server checks for its quests and
+instances. Quest sources require a known giver spawn whose map and progression
+visibility permit the bot's stage. Unknown, differently phased or unverified
+sources stay unavailable; other scripted NPC visibility is not evaluated.
+Crafting and profession-dependent recommendations are excluded because the
+bot's learned recipes are not reported.
 
-The existing finder processes its scan in short slices while the view is open.
-Changing or closing the inspected character cancels its pending results.
-The player's Gear Finder, talent advice and equipment settings remain personal.
-Bot loot rolls and equipping use Playerbots' native item evaluation; Zygor's
-display scores retain the viewer's stat-priority weights described above.
+This view leaves the player's profile, talent advice and settings personal.
+It recommends sources without granting items or buying them. Actual bot loot
+rolls and equipping use Playerbots' native evaluation, which can differ from
+Zygor's displayed scores.
 
-### Feature review
+## Server interface and limits
 
-| Feature | Upstream behaviour | Progression risk | Server source | Integration | Unknown state | Off or other realms | Verification | Limit |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Leveling steps | Level and quest chain data | Quests of later tiers or hidden givers | `IP_QUESTS` | Skip steps, hide goals | Step kept | Unchanged | Fixture | Unspawned or differently scripted givers count as visible |
-| Guide chains | `next` switches at the end | TBC at 60, Wrath at 70 | `IP_STATE`, `IP_ACCESS` | Hold with reason | Held | Unchanged | Fixture | Zones outside the table need no tier |
-| Guide browser | Level, class and chain suggestions | Later-tier guides suggested | Same | Suggestions filtered, reason shown | Filtered | Unchanged | Fixture | Manual selection stays possible |
-| Dungeons and raids | Level and attunement | Locked raids shown as current | `IP_ACCESS` | Future or unknown source | Not current | Unchanged | Fixture | Locks and group rules not reported |
-| Gear Finder phases | All Wrath phases on 3.3.5a | Later raid tiers | `IP_STATE` | Phase per tier 13–17 | Inactive | Unchanged | Fixture | Wrath phases only |
-| Gear Finder weights | Spec from native talent points, retried while empty | Endless rescans for historical trees | EraTalents, `IP_STATE` | Historical tab points | Native retry | Unchanged | Fixture | Cat/bear heuristic; Wrath stat weights |
-| Vendors and crafting | Expansion filters | Later-era currency and recipes | `IP_STATE` | Era gate, known or trainer recipes | Not current | Unchanged | Fixture | Recipe drops not verified |
-| Best-in-slot | Wrath phase lists | Later raid lists as current | `IP_STATE` | Rank from tier | No annotation | Unchanged | Fixture | Wrath lists only |
-| Talent Advisor | Wraps `LearnTalent`, Wrath builds | Wrong trees, automatic spending | `IP_STATE`, EraTalents | Inactive outside Wrath | Inactive | Unchanged | Fixture | Wrath builds only |
-| Quest automation | Auto accept and turn-in | Progression decisions | — | Transition quests manual | Manual | Unchanged | Fixture | — |
-| Gold Guide routes | Skill and level | Routes in locked zones | Same as guides | Route validity | Invalid | Unchanged | Fixture | Auction data is the player's own scan |
-| Questie and MultiBot | Separate addons | — | Bridge | Unchanged | — | — | Upstream suites | — |
+The bridge's `IP_PROGRESS_V1` capability provides `IP_STATE`, `IP_QUESTS` and
+`IP_ACCESS` on `MBOT`. They read the sending character's state; WATCH renews
+state subscriptions every 60 seconds for a 180-second lease. Quest requests
+are batched to at most 32 IDs. Messages fit the 255-byte addon budget, and
+oversized replies are refused as a whole.
 
-Reputation, profession, mount, pet, achievement, daily and event guides use the
-same quest, zone and instance checks. Their own requirements remain the
-guides' steps. The module does not change navigation and adds no route,
-teleport or purchase.
+`IP_TARGET_V1` accepts the same read-only requests for a controlled altbot.
+The requester must be its current master, share its group and be within native
+inspect distance. Random bots, SelfBots and other players are not valid
+targets. Target requests do not support WATCH and share the requester's budget
+of 20 requests per two seconds. At most 512 requester states are retained;
+idle state expires after 180 seconds or logout.
 
-### Upstream revision
+Instance answers include progression gates and native level, key, quest and
+achievement requirements. They omit raid-group membership, instance locks and
+the hourly instance limit. Native group-leader requirements follow the current
+leader. Player quest-source checks cannot fully evaluate unspawned, area-phased
+or differently scripted givers. Unknown state does not prove availability, and
+imported guides can still differ from server data. A custom progression chain
+does not acquire an invented default milestone or era mapping.
 
-The fork is based on `ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK`; see
-[dependencies](module-versions.md). The fell-lucas fork adds party goal sync
-(`Sync.lua`, AceComm and LibDeflate) on an older base. It is not included: it
-shares goal progress between party members and does not concern progression.
+## Source and verification
 
-## Server progression interface
+The [manifest](../versions.lock.json) records the fork and imported upstream
+revisions and retained adaptations. The [fork README](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK)
+links viewer documentation, licensing, installer tooling and contribution
+instructions. See the [contributing guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md)
+for source updates. After preparing pinned sources, the affected checks are:
 
-`IP_PROGRESS_V1` in the bridge's `HELLO` capabilities advertises three requests.
-Their ordinary forms concern the sending character:
-
-```text
-GET~IP_STATE~token[~WATCH|~UNWATCH]
-GET~IP_QUESTS~token~questId,questId,...
-GET~IP_ACCESS~token
+```bash
+python3 cmake/tests/TestIpProgressBridge.py
+python3 cmake/tests/TestZygorProgression.py
 ```
 
-Replies are self-sender addon whispers on the `MBOT` prefix. Errors use the
-bridge's `ERR~GET~<request>~token~reason` format.
-
-`IP_TARGET_V1` additionally accepts the same requests for a controlled altbot:
-
-```text
-GET~IP_STATE~token~BOT~urlEncodedName
-GET~IP_QUESTS~token~questId,questId,...~BOT~urlEncodedName
-GET~IP_ACCESS~token~BOT~urlEncodedName
-```
-
-The requester must be the bot's current master, share its group and be within
-the native inspect distance. Random bots, SelfBots and other players are not
-valid targets. Target requests share the requester's normal budget and do not
-support `WATCH` or `UNWATCH`. Replies use the same formats and the requester's
-addon whisper channel. A target `IP_STATE` is followed by:
-
-```text
-IP_TARGET~token~effectiveCombatProfile~canDualWield
-```
-
-The profile is the bot's native automatic or selected combat profile;
-`canDualWield` is `0` or `1`. The client keeps these answers in the active inspect
-view and rejects replies from an earlier view. A strict target view follows
-the bot's personal era even when the reported account is a bot account.
-For target quest-source requests, `U` also covers an unverified giver location,
-and `IP_QUEST_GIVER_HIDDEN` also covers givers outside the bot's map access.
-
-### State
-
-```text
-IP_STATE~token~1~ip~strict~stored~effective~limit~era~next~nextMet~account~gm~maxLevel
-```
-
-| Field | Meaning |
-| --- | --- |
-| `ip` | `1` when Individual Progression is enabled; `0` on other realms, with the remaining progression fields at their defaults. |
-| `strict` | `1` for the strict default milestone chain. |
-| `stored` | Highest rewarded marker quest 66001–66018. |
-| `effective` | `stored` clamped to the realm tier limit, as the module's own gates use it. |
-| `limit` | `IndividualProgression.ProgressionLimit`; `0` means none. |
-| `era` | `0` Vanilla, `1` TBC, `2` Wrath, `255` unavailable or custom chain. |
-| `next` | The next strict milestone; tier 11 is skipped and `0` follows tier 18. |
-| `nextMet` | `1` when the next milestone is a quest (tiers 4, 5 and 8) that is already rewarded. |
-| `account` | `N` normal, `B` bot account, `X` excluded from Individual Progression. |
-| `gm` | `1` while game master mode bypasses the module's gates. |
-| `maxLevel` | The realm's `MaxPlayerLevel`. |
-
-Boss credits saved for later milestones are not reported: their player setting
-getter stores a missing entry, which a read-only request must not do.
-
-`WATCH` subscribes the token for 180 seconds; the client renews it every 60
-seconds. The server compares the watched state once per second and sends a new
-`IP_STATE` with the watch token only when it changes. `UNWATCH` with the same
-token ends the subscription; another token cannot.
-
-### Quest availability
-
-```text
-IP_QUESTS_BEGIN~token~count
-IP_QUESTS~token~entry,entry,...
-IP_QUESTS_END~token~count
-```
-
-Each entry is `questId:status`. `R`, `I`, `C` and `F` are the character's
-rewarded, incomplete, complete and failed quest status, `U` an unknown quest,
-`A` an available quest, and `L<hex>` an unavailable quest with these reasons:
-
-| Bit | Reason | Bit | Reason |
-| --- | --- | --- | --- |
-| `1` | Disabled quest | `800` | A previous chain quest is active |
-| `2` | Class | `1000` | Breadcrumb whose target is taken |
-| `4` | Race | `2000` | Active breadcrumb for this quest |
-| `8` | Level too low | `4000` | Daily, weekly, monthly or seasonal reset |
-| `10` | Level too high | `8000` | Quest conditions |
-| `20` | Skill | `10000` | A progression marker condition |
-| `40` | Reputation | `20000` | Every quest giver is hidden by progression |
-| `80` | Previous quest | `40000` | Quest log full |
-| `100` | Timed quest active | | |
-| `200` | Exclusive alternative taken | | |
-| `400` | A later chain quest is taken | | |
-
-A marker condition adds `:+n` when the quest needs tier `n` or `:-n` when tier
-`n` retired it. The checks are the core's `CanTakeQuest` checks and the
-quest-available conditions, called without client messages, as
-[quest diagnostics](quest-diagnostics.md) reads them. A giver counts as hidden
-only when every spawn of every quest starter uses one of the module's tier
-visibility scripts and that script hides it from this character. Unspawned,
-area-phased and differently scripted givers count as visible. At most 32 quest
-IDs fit one request.
-
-### Instance access
-
-`IP_ACCESS` uses the same framing. Each entry is `mapId:` followed by one code
-per difficulty 0–3:
-
-| Code | Meaning |
-| --- | --- |
-| `A` | The portal's checks accept the character. |
-| `G` | Individual Progression's map gate refuses: a missing milestone or its key or attunement rule. |
-| `R` | A native access requirement is missing: level, item, quest or achievement. |
-| `D` | The map or difficulty is disabled. |
-| `-` | The difficulty does not exist. |
-
-Individual Progression's map gate runs without a session, so it sends no text
-and moves no ship passenger. The native requirements run without reports. Raid
-group membership, instance locks and the hourly instance limit are not part of
-the answer. Native requirements marked for the group leader follow the current
-leader, as the portal does.
-
-### Limits
-
-Each character may send 20 requests per two seconds; at most 512 characters are
-tracked, and their state ends 180 seconds after the last request or when the
-session closes. Packets stay within the 255-byte addon message budget; a reply
-that cannot be framed is refused with `PACKET_TOO_LARGE` instead of truncated.
-A realm without the module answers `ip=0`, every quest without progression
-reasons and every map without the progression gate.
-
-## Verification
-
-`python3 cmake/tests/TestIpProgressBridge.py` compiles the actual endpoint, its
-[progression unit](https://github.com/Syntax555/mod-multibot-bridge/commit/7395bc38459a2dcc11777a1801e0a75235570a5a) and
-Individual Progression's own progression functions against native-shaped
-doubles. It compares every visibility rule with the module's scripts, checks
-that the native checks it calls send no messages, and rejects 27 mutations of
-its gates.
-
-`python3 cmake/tests/TestZygorProgression.py` loads the
-[fork's addon files](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/commit/1cb7b6e9fefe7bc448fd00b5e15fd23248d6f3ea) with Lua
-5.1 and the bridge's wire format: discovery, state validation, quest batching,
-step and goal gating, guide chains, the milestone guide, quest automation, the
-Gear Finder, best-in-slot lists and the Talent Advisor. It ties the zone,
-experience, instance, difficulty, milestone and reason tables to Individual
-Progression's, the bridge's and the core's sources, rejects every mutation of
-these gates and runs the upstream Zygor regression suite on the fork's addon.
-
-The fork's Latest workflow tests the PowerShell installer with Windows
-PowerShell 5.1 and pwsh: file-by-file verification, rejected archives, TOC
-checks, backup, rollback and preserved SavedVariables. Before publishing, it
-installs the commit from GitHub with the packaged installer and compares every
-installed file with that commit's file list. None of these tests starts a realm
-or a WoW client.
+These exercise production bridge and addon logic with doubles, compare gates
+to the pinned server sources and reject mutations of the checks. The fork's
+Latest workflow checks Lua and the installer, including file verification,
+backup, rollback and preserved SavedVariables. These checks do not start a
+realm or client. Guide routes, inspect interaction, UI responsiveness and
+other addon combinations still need live validation; see
+[open validation](todo.md#gameplay-validation).

@@ -1,232 +1,117 @@
 # Questie Playerbots progress
 
-Questie can display server-controlled group bots through its existing quest
-communication, without a WoW client for each bot. The MultiBot Bridge supplies
-the bots' real active quest logs. Questie uses `InsertQuestDataPacket`,
-`remoteQuestLogs`, tooltip registration and `QuestiePartyObjectives` for both
-bot and ordinary player data.
+Questie-335 displays authorized group bots' own quest counters without a WoW
+client for each bot. The server's MultiBot Bridge reads their active quest logs;
+Questie renders the results through its normal communication, tooltips and
+party objectives. The tracker remains the local player's tracker.
 
 ## Installation
 
-Use WoW **3.3.5a, build 12340**, the server from the
-[Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
-and the Questie installer from the
-[Questie fork's Latest release](https://github.com/Syntax555/Questie/releases/latest).
-The prebuilt server includes the MultiBot Bridge integration. You need no
-compiler, Git, Python, additional server module or new server setting.
+Use **WoW 3.3.5a, build 12340** and the matching
+[server Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
+The prebuilt server includes the bridge; no additional module, compiler or new
+server setting is required.
 
-1. Install or update the [server package](https://github.com/Syntax555/mod-playerbots-portable/releases/latest/download/mod-playerbots-portable-latest.zip)
-   using the normal [update guide](updating.md), then restart the server.
+1. Update and restart the server using the [update guide](updating.md).
 2. Download [Questie-335-latest.zip](https://github.com/Syntax555/Questie/releases/latest/download/Questie-335-latest.zip)
-   and extract it to a folder outside your WoW installation.
-3. Close WoW completely. Run `Install-Questie.cmd` and enter your client's
-   `Interface/AddOns/` folder when prompted. Internet access is required; the
-   installer uses Windows PowerShell and does not require administrator rights.
-4. After installation succeeds, start WoW and enable Questie-335 in the addon list.
+   and extract it to a writable folder outside WoW.
+3. Close WoW completely. Run `Install-Questie.cmd` and select the client's
+   `Interface/AddOns/` folder. Internet access and Windows PowerShell 5.1 or
+   later are required; no administrator rights are needed.
+4. Start WoW, enable Questie-335, and invite bots normally. In `/questie`, enable
+   **Show party quest objectives** for markers from quests you do not share.
 
-The installer downloads the commit of the fork's `335` branch it was built
-from directly from GitHub and installs it only when every file matches the
-SHA-256 hash of that commit. It backs up an existing `Questie-335/` folder
-before replacement and preserves account and character SavedVariables. The installed TOC must be
-`Interface/AddOns/Questie-335/Questie-335.toc`; do not rename it or nest another
-folder. The fork adds shared bot-roster reuse and snapshot identity checks to
-the native upstream progress integration.
+The ZIP contains an **installer, not the addon**. It downloads the exact fork
+commit it was built from, verifies every file against SHA-256 hashes and
+installs `Interface/AddOns/Questie-335/Questie-335.toc`. Existing addon files are
+backed up; account and character SavedVariables in `WTF/` are preserved. Use
+the same steps for updates. The installed `SOURCE_REVISION.txt` and
+`SOURCE_MANIFEST.json` identify the source.
 
-To select the addon directory from a PowerShell prompt in the extracted folder:
+For a noninteractive installation from the extracted folder:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-Questie.ps1 -AddOnsPath 'C:\Games\WoW\Interface\AddOns'
 ```
 
-The release ZIP contains the installer and the file list; the addon files are
-downloaded separately and retain their existing terms and notices.
+MultiBot is optional for controls. The separate upstream `mod-questie-bridge`
+provides other server information and is not required for bot quest progress.
+The installer retains the addon's existing notices; its MIT license applies
+only to the installation tooling. See [third-party notices](../THIRD_PARTY_NOTICES.md).
 
-MultiBot Chatless may remain installed for bot controls. Its code and protocol
-requests are unchanged. `mod-questie-bridge` provides separate optional server
-information and is not required for bot quest progress.
+## Supported behavior
 
-Log in with Questie enabled and invite controlled altbots normally. Discovery,
-initial snapshots and subscriptions happen automatically, including after
-`/reload`. No chat command or quest-window interaction starts synchronization.
+Discovery, complete quest snapshots and WATCH subscriptions start
+automatically after login, `/reload` and group changes. The server checks
+watched bots once per second and sends a new snapshot only when state changes.
+Quest acceptance, objective progress, completion, failure, turn-in and
+abandonment update the bot's remote active log. Ordinary player clients keep
+their independent QuestieComms data.
 
-## Display and data flow
+NPC, item, gameobject and map-icon tooltips show individual group counts.
+Party-only objective markers support groups of at most five; shared quests use
+Questie's normal map icons and group tooltips. Rehover an open tooltip if its
+contents have not redrawn.
 
-1. Questie probes `MBOT` with `HELLO~1` and reads the capability packets.
-2. It requests every online group member by name. The bridge returns quest
-   data only for visible, authorized, server-controlled bots in the same group.
-   A real player remains on ordinary QuestieComms communication.
-3. The bridge reads active quest slots, native `QuestStatusData` counters,
-   template target IDs and required counts. Kill and spell-target credits use
-   `CreatureOrGOCount`; delivery objectives use `ItemCount`. Exploration/event,
-   player-kill, money and reputation objectives use their native state.
-4. Questie maps IDs to its database objective indices, including kill-credit
-   roots and alternative targets. Quest versions from Individual Progression
-   can require other items or targets than Questie's database. When the
-   database leaves as many objectives of a type as remain unmatched, they are
-   paired in order and the bot reports Questie's objective, as a Questie
-   client does, so its count appears on the same creatures as your own
-   progress. When you have the same quest, group members' tooltip lines use
-   your quest log's objective text, as map icon tooltips do; otherwise they
-   use Questie's name. Complete snapshots replace only the bot's
-   previously applied data; absent quests remove its old registrations.
-5. The bridge checks watched bots once per second after the map-update barrier.
-   It sends a new authoritative snapshot when state changes, including quest
-   acceptance, progress, completion, failure, turn-in and abandonment.
+Questie maps server target IDs, credit aliases and counters to its database
+objectives. Where custom quest versions leave an equal number of unmatched
+objectives of one type, they are paired in order. Shared quests can use the
+local quest log's objective text. Questie's database can still differ from
+Individual Progression: missing locations cannot be invented, and ID-less
+money, event and player-kill goals do not create entity tooltip lookups. Quests
+without objectives retain active-log membership but have no separate status
+display. The server's quest status remains authoritative.
 
-NPC, item, gameobject and map-icon tooltips show group members' individual
-counts. The native tracker remains the local player's tracker. Enable Questie's
-**Show party quest objectives** option to draw objectives of other members'
-quests that the local player does not have; the upstream feature is limited
-to groups of at most five. Shared quests retain Questie's normal map icons and
-group tooltip data. An open tooltip may need to be hovered again to redraw.
+## Access and compatibility
 
-The server's objective order is not assumed to match Questie's corrected
-database order. Unknown objectives retain their server counts safely, but
-objectives missing from Questie's database cannot acquire invented map
-locations. ID-less event, money and player-kill goals do not create entity
-tooltip lookups. The server quest status remains authoritative.
-Questie's native communication model attaches status to objectives; quests with
-no objectives retain active-log membership but have no separate status display.
+The bridge accepts only visible, authorized, server-controlled bots in the
+requester's group. Real players and SelfBots are excluded. This interface reads
+quest state and runs no bot commands.
 
-## MBOT protocol
+The native upstream integration includes snapshots, lease renewal, special
+objectives, cleanup and Questie's binding header. This fork additionally reuses
+the connected roster for discovery and cleanup, excludes the local player from
+requests, and **requires each snapshot's GUID to match the watched group
+member**. Use the matching MultiBot Bridge: its BEGIN message carries the
+core's `ObjectGuid::ToString()` form (`GUID Full: 0x… Type: Player Low: …`),
+which the client normalizes and compares with `UnitGUID`. Missing, malformed or
+mismatched identity is rejected; compatibility with bridges that omit GUIDs is
+not provided by this fork.
 
-Prefix: `MBOT`; separator: `~`; decimal integers; status: `I`, `C` or `F`.
-The existing request uses a raw bot name and a validated request token:
+The client also rejects stale tokens, malformed or incomplete snapshots and
+unexpected senders. Group departure, logout or lost access clears prior bot
+data while preserving data later supplied by an ordinary Questie client.
+Partial replies expire and retry. An unanswered bridge probe has three retries
+30 seconds apart; after those fail, another group change is needed to probe
+again. Normal Questie features remain usable without bridge support.
 
-```text
-GET~QUEST_PROGRESS~Botname~token
-GET~QUEST_PROGRESS~Botname~token~WATCH
-GET~QUEST_PROGRESS~Botname~token~UNWATCH
-```
+WATCH leases last 180 seconds and renew every 60 seconds. The server permits
+40 watched bots per requester and 512 requester states, with 80 requests per
+two seconds and one snapshot request per bot per second. Messages respect the
+255-byte addon wire budget; an oversized snapshot is refused as a whole.
 
-`QUEST_PROGRESS_V1` advertises snapshots; `QUEST_PROGRESS_PUSH_V1` advertises
-WATCH updates. Each complete response uses:
+## Source and verification
 
-```text
-QUEST_PROGRESS_BEGIN~encodedName~token~guid
-QUEST_PROGRESS_QUEST~encodedName~token~questId~status
-QUEST_PROGRESS_OBJECTIVE~encodedName~token~questId~type~index~id~current~required~finished
-QUEST_PROGRESS_END~encodedName~token
-```
+The [manifest](../versions.lock.json) pins the Questie and MultiBot Bridge
+forks. The [merged upstream integration](https://github.com/Aldori15/Questie/commit/30222ccb0821e6d8cdd8fe8d24334b5f9846bca7)
+provides the native progress and binding behavior; `forkChanges` identifies the
+retained roster and GUID checks. Fork source, installation tooling and update
+instructions are linked in the [Questie README](https://github.com/Syntax555/Questie/tree/335).
+Follow the [contributing guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md)
+for fork changes. To prepare the pinned sources, run
+`cmake -P cmake/PrepareModules.cmake`; a local addon export is available in
+`.module-cache/prepared-source-addons/Questie-335/`.
 
-Names in responses use the bridge's percent encoding. BEGIN carries the core's
-`ObjectGuid::ToString()` representation; the addon compares its hexadecimal
-GUID with the watched group member's `UnitGUID` before applying the snapshot.
-The explicit `finished` flag (`0` or `1`) is a trailing extension.
-Types are `m` (creature or credit
-target), `o` (gameobject), `i` (item), `e` (event), `p` (player kills), `g`
-(money in copper) and `r` (reputation). Reputation values can be negative.
-An unavailable target ID is `0`. Indices identify objectives inside a quest,
-not Questie's database positions.
-
-Responses go only to the requesting player's client as self-sender addon
-whispers. Pushes reuse the WATCH token and the same complete-snapshot framing.
-All packets are checked against the 255-byte wire budget, including `MBOT`
-and its tab separator, before BEGIN is sent. An oversized snapshot is rejected
-instead of being truncated. Errors use the existing
-`ERR~GET~QUEST_PROGRESS~token~reason` format.
-
-## Access, limits and lifecycle
-
-The existing bridge visibility rules, same-group check and Playerbots security
-check all apply. Real players and SelfBots are excluded from this endpoint.
-The bridge reads state and executes no bot commands. Stored subscriptions use
-GUIDs and retain no `Player*` pointers between updates.
-
-Each requester can watch at most 40 bots; at most 512 requester states are
-retained. Requests are limited to 80 per two seconds per requester and one
-snapshot request per bot per second. WATCH leases last 180 seconds; the adapted
-addon renews them every 60 seconds. Unchanged polling sends no packets, and
-multiple observers share the bot snapshot built during each poll.
-
-Group departure, loss of bot access and logout invalidate subscriptions and
-clear the bot's prior client data. The addon also rejects stale tokens,
-non-group senders, malformed snapshots and incomplete frames. Partial replies
-expire and requests retry. An unanswered bridge probe is retried three times
-at 30-second intervals, and the addon probes again only when the group
-changes; realms without the bridge therefore see no further addon traffic,
-and Questie works as usual. Cleanup preserves tables subsequently
-written by ordinary QuestieComms, including when a character gains a real
-client. Questie's native integration handles lease renewal, cleanup and special
-objectives. The fork also reuses the connected group roster and validates each
-snapshot against the watched group member's GUID.
-
-## Source builds
-
-For development, [versions.lock.json](../versions.lock.json) pins the
-AzerothCore/Playerbots sources and the Questie fork. The server integration is the
-[MultiBot Bridge fork commit](https://github.com/Syntax555/mod-multibot-bridge/commit/968512c15f260a7130c17faa1b1cb30ef165bcb4) and
-the client uses the [native Questie progress integration](https://github.com/Aldori15/Questie/commit/438000dba6352b2123f882e74ded745889b890d6).
-The manifest names the retained fork changes. From the source checkout:
-
-```bash
-cmake -P cmake/PrepareModules.cmake
-```
-
-The generated `.module-cache/prepared-core` contains the pinned
-`modules/mod-multibot-bridge` fork sources. Build and install the server using
-the normal [build instructions](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md),
-then restart it. Copying a C++ source file into an installed server does not
-update its executable.
-
-With WoW closed, back up the old addon folder outside `Interface/AddOns/` and
-replace `Interface/AddOns/Questie-335/` with
-`.module-cache/prepared-source-addons/Questie-335/`. Keep SavedVariables and the
-`Questie-335.toc` filename. This prepared export is for local installation;
-the fork's installer downloads its commit from GitHub instead. Addon changes are
-committed to the fork's `335` branch, whose Latest installer then installs
-them; see [contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md#changing-the-server).
-
-## Verification
-
-The automated fixtures compile the actual bridge snapshot, serialization and
-subscription code and exercise the actual Lua Questie integration. Their
-mutation checks remove important gates to confirm the fixtures detect broken
-behavior. Run after source preparation:
+For a behavior change, run the affected checks after source preparation:
 
 ```bash
 python3 cmake/tests/TestQuestProgressBridge.py
 python3 cmake/tests/TestQuestiePlayerbots.py
-python3 cmake/tests/TestClientAddonPatches.py
-python3 cmake/tests/run_fixtures.py check
-python3 cmake/tests/run_fixtures.py gameplay
 ```
 
-The Lua fixture requires Lua 5.1 and the C++ fixture a C++20 compiler. The
-fork's Latest workflow tests the installer with Windows PowerShell 5.1 and
-pwsh, including its integrity checks, rollback and preservation of existing
-client files, and installs each published commit from GitHub before releasing
-it.
-Fixture coverage does not replace a live realm test. Check these cases with
-the matching server and addon:
-
-| Action | Expected result |
-| --- | --- |
-| Share a quest with a bot | Its own counts appear in group tooltips. |
-| Kill a quest target with the bot | Counts update automatically, normally within about one second. |
-| Use two bots with different counts | Both values remain assigned to their own names. |
-| Complete or fail a quest | Updated status and objective counts reach Questie. |
-| Turn in or abandon a quest | It disappears from that bot's active remote log. |
-| Remove or log out a bot | Its registrations and WATCH are removed. |
-| Add a real Questie player | Their normal QuestieComms data continues independently. |
-| Use kill-credit, gameobject and ID-less event goals | Counts remain valid without Lua or server errors. |
-| Reload, reconnect or log in again | Discovery and snapshots restart automatically. |
-| Advance several bots simultaneously | All snapshots remain associated with the correct bot and token. |
-
-Live UI behavior, Windows linking and sustained realm load require validation
-on an installed server and client. No claim of a completed in-game run follows
-from the standalone fixtures.
-
-## Implementation files
-
-| Files | Responsibility |
-| --- | --- |
-| [MultiBot Bridge fork commit](https://github.com/Syntax555/mod-multibot-bridge/commit/968512c15f260a7130c17faa1b1cb30ef165bcb4) | Updates upstream `src/MultiBotBridge.cpp`: native snapshots, MBOT capabilities, access checks and WATCH lifecycle. |
-| [Native Questie progress integration](https://github.com/Aldori15/Questie/commit/438000dba6352b2123f882e74ded745889b890d6) | `QuestiePlayerbots.lua`, `QuestieCommsData.lua` and `QuestiePartyObjectives.lua`: native comms ingestion, lifecycle, credit aliases and existing map rendering. The pinned fork adds connected-roster reuse and snapshot identity checks. |
-| `versions.lock.json`, `cmake/PrepareModules.cmake` | Pin the MultiBot Bridge and Questie forks and reproducibly prepare the core, module sources and source-only addons. |
-| [`.github/` of the Questie fork](https://github.com/Syntax555/Questie/tree/335/.github) | Package and test the installer, which downloads the fork's commit and installs it with backup and rollback, and publish it as the fork's Latest release. |
-| `cmake/tests/TestQuestProgressBridge.py`, `cmake/tests/QuestProgressBridgeFixture.cpp` | Compile and exercise production server logic and mutation checks. |
-| `cmake/tests/TestQuestiePlayerbots.py`, `cmake/tests/QuestiePlayerbotsFixture.lua` | Run production Questie comms and map logic under Lua 5.1 with client API doubles and mutation checks. |
-| `cmake/tests/TestClientAddonPatches.py`, `cmake/tests/TestDocumentation.py` | Verify source-only preparation, package separation and pinned documentation. |
-| `cmake/tests/run_fixtures.py`, `.github/workflows/checks.yml` | Run server and client regression fixtures in CI. |
-| `README.md`, `docs/addons.md`, `docs/adaptations.md`, `docs/module-versions.md`, `docs/todo.md`, `docs/questie-playerbots.md` | Downloads, installation, behavior, protocol, source inventory and remaining live validation. |
+These exercise production C++ and Lua logic with native-shaped doubles and
+mutation checks. The fork also checks the installer, backup, rollback and
+preserved client files before publishing. They do not start a realm or client.
+Live objective pins and tooltips, turn-in and abandonment, reconnects,
+disconnect/group-departure cleanup and sustained load still need validation
+with the matching server and addon; see [open validation](todo.md#gameplay-validation).
