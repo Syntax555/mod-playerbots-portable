@@ -9,16 +9,12 @@ import tempfile
 import unittest
 
 from FixtureSupport import (
-    fork_change,
-    git_apply,
     multibot_sources,
     prepared_core,
-    unpatched,
 )
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = fork_change("MultiBot", "multibot-spellbook-items")
 SOURCE = None
 LUA = None
 FILES = ("Core/MultiBotComm.lua", "UI/MultiBotSpell.lua", "UI/MultiBotSpellBookFrame.lua")
@@ -105,10 +101,6 @@ class MultiBotSpellbookTests(unittest.TestCase):
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
         multibot_sources(cls.directory, FILES, SOURCE)
-        unpatched(cls.directory, PATCH)
-        cls.pristine_comm = cls.directory / "pristine-MultiBotComm.lua"
-        shutil.copyfile(cls.directory / FILES[0], cls.pristine_comm)
-        git_apply(cls.directory, PATCH)
         cls.comm = cls.directory / FILES[0]
         cls.spell = (cls.directory / FILES[1]).read_text()
         cls.frame = (cls.directory / FILES[2]).read_text()
@@ -136,16 +128,21 @@ assert(MultiBot.spells.Mey[2050] == false and overlay.buttons.C02.checked == fal
 '''
         result = self.run_lua(body)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        pristine = self.run_lua(body, self.pristine_comm)
-        self.assertNotEqual(pristine.returncode, 0, "the unpatched dispatcher must drop four-field items")
-        self.assertIn("every bridge item is a spell: 0", pristine.stderr)
+        text = self.comm.read_text()
+        line = '    spellId, rest = splitOnce(spellId or "", "~")'
+        self.assertIn(line, text)
+        mutated = self.directory / "missing-field-split.lua"
+        mutated.write_text(text.replace(line, '    rest = ""'))
+        rejected = self.run_lua(body, mutated)
+        self.assertNotEqual(rejected.returncode, 0, "dropping the native field split must fail")
+        self.assertIn("every bridge item is a spell: 0", rejected.stderr)
 
     def test_ignore_state_is_required_for_the_checkboxes(self):
         text = self.comm.read_text()
-        line = '        MultiBot.spells[name][spellId] = ignored ~= "1"\n'
+        line = 'trim(botName), trim(rest or "") == "1")'
         self.assertIn(line, text)
         mutated = self.directory / "mutated-MultiBotComm.lua"
-        mutated.write_text(text.replace(line, ""))
+        mutated.write_text(text.replace(line, 'trim(botName), false)'))
         result = self.run_lua('''
 local token = request("Mey")
 item("Mey", token, 2050, 1)
@@ -154,14 +151,22 @@ assert(overlay.buttons.C01.checked == false, "an ignored spell is unchecked")
         self.assertNotEqual(result.returncode, 0, "dropping the bridge's skip-list state must fail")
         self.assertIn("an ignored spell is unchecked", result.stderr)
 
-    def test_three_field_items_and_other_requests_stay_compatible(self):
+    def test_malformed_items_and_other_requests_do_not_change_the_spellbook(self):
         result = self.run_lua('''
 local token = request("Mey")
 item("Mey", token, 139)
+item("Mey", token, 139, "yes")
 item("Mey", "stale", 585, 0)
 item("Other", token, 2050, 0)
-assert(MultiBot.spellbook.index == 1 and MultiBot.spells.Mey[139] == true, "a legacy item without a flag is used")
+assert(MultiBot.spellbook.index == 0 and MultiBot.spells.Mey[139] == nil, "malformed skip-list flags are rejected")
 assert(MultiBot.spells.Mey[585] == nil and MultiBot.spells.Other == nil, "other requests are ignored")
+item("Mey", token, 139, 1)
+assert(MultiBot.spellbook.index == 1 and MultiBot.spells.Mey[139] == false)
+finish("Mey", token)
+local nextToken = request("Mey")
+assert(MultiBot.spellbook.index == 0 and next(MultiBot.spells.Mey) == nil, "refresh clears the old skip list")
+item("Mey", nextToken, 139, 0)
+assert(MultiBot.spells.Mey[139] == true and overlay.buttons.C01.checked == true)
 ''')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

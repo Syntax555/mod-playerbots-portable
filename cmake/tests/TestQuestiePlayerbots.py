@@ -15,7 +15,8 @@ from FixtureSupport import fork_history, function, prepared_core
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ("Modules/Network/QuestiePlayerbots.lua", "Modules/Network/QuestieComms.lua",
          "Modules/Network/QuestieCommsData.lua", "Modules/Network/QuestiePartyObjectives.lua",
-         "Modules/Quest/QuestieQuest.lua", "Modules/Quest/QuestieQuestPrivates.lua")
+         "Modules/Quest/QuestieQuest.lua", "Modules/Quest/QuestieQuestPrivates.lua",
+         "Modules/QuestieEventHandler.lua", "tools/tests/test_group_roster_quest_sync.lua")
 SOURCE = None
 LUA = None
 
@@ -50,6 +51,37 @@ class QuestiePlayerbotsTests(unittest.TestCase):
     def test_native_comms_and_lifecycle(self):
         result = self.run_fixture()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def run_group_roster_fixture(self):
+        return subprocess.run([LUA, FILES[7]], cwd=self.directory, text=True,
+                              capture_output=True, check=False, timeout=20)
+
+    def test_native_group_roster_lifecycle(self):
+        result = self.run_group_roster_fixture()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_native_group_roster_regressions_are_detected(self):
+        mutations = (
+            (FILES[6], "previousMembers >= 2 and currentMembers > previousMembers", "false",
+             "new party member quest-log request"),
+            (FILES[6], "    _PruneDepartedGroupMembers()\n", "",
+             "departed member cleanup"),
+            (FILES[1], "        QuestieComms.data:RemovePlayer(name)\n", "",
+             "departed member tooltip cleanup"),
+            (FILES[1], "if not next(players) then", "if false then",
+             "empty remote quest cleanup"),
+        )
+        for relative, before, after, label in mutations:
+            with self.subTest(label=label):
+                path = self.directory / relative
+                source = self.pristine[relative]
+                self.assertIn(before, source)
+                path.write_text(source.replace(before, after))
+                try:
+                    result = self.run_group_roster_fixture()
+                    self.assertNotEqual(result.returncode, 0, f"Fixture accepted {label} regression")
+                finally:
+                    path.write_text(source)
 
     def test_native_upstream_and_retained_fork_changes_are_ancestors(self):
         revision = self.addon["revision"]
@@ -88,7 +120,7 @@ class QuestiePlayerbotsTests(unittest.TestCase):
             (FILES[0], "not bridgeUnsupported and helloRetries", "helloRetries", "unsupported bridge probing"),
             (FILES[0], "helloRetries < MAX_HELLO_RETRIES\n", "true\n", "bounded bridge probing"),
             (FILES[0], "request.watch and isBridgePush", "isBridgePush", "push token requires WATCH"),
-            (FILES[0], "and snapshot.guid and snapshot.guid == GetCurrentGroupMembers()[botName]", "",
+            (FILES[0], "and validIdentity then", "then",
              "in-flight roster identity"),
             (FILES[0], "return guid:lower()", "return guid", "native GUID casing"),
             (FILES[0], "and objective.type == objectiveType", "", "per-type objective indices"),

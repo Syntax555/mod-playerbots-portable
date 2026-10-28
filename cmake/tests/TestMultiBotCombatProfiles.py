@@ -76,17 +76,9 @@ def main() -> None:
         result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30)
         assert result.returncode != 0, 'Reverted control ownership survived the selector fixture'
         assert 'SelfBot toolbar has no combat-profile selector' in result.stderr, result.stderr
-        patch = fork_change('MultiBot', 'multibot-combat-profiles', paths=tuple(path for path in FILES[:-1] if path != 'Core/MultiBotEvery.lua'))
-        git_apply(addon, patch, '--reverse')
-        git_apply(addon, controls)
-        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30)
-        assert result.returncode != 0, 'Reverted combat-profile fork change survived the selector fixture'
-        assert 'test_combat_profiles.lua:' in result.stderr, result.stderr
-        git_apply(addon, controls, '--reverse')
-        git_apply(addon, patch)
         git_apply(addon, controls)
         subprocess.run(command, check=True, timeout=30)
-        print('MultiBot combat-profile fork change is covered by the real selector fixture')
+        print('MultiBot profiles: production mutations and retained strategy/control commit reversions passed')
 
 
 if __name__ == '__main__':

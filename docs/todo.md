@@ -63,7 +63,8 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Validate MultiBot startup, vendor purchases and talent learning: preserved
   settings, correct bot gold/items, quantities and confirmations, no owner
   purchase on bridge failure, one earned talent rank per click and read-only
-  behavior after losing group/control/range.
+  behavior after losing group/control/range. Include SelfBot state confirmations,
+  group orders and event-driven inventory refresh across map changes.
 - [ ] Check [DragonUI/EraTalents](era-talents.md#dragonui) on the live client:
   talent key, buttons and `/talents`; seven-row Vanilla/nine-row TBC trees,
   ranks/connections/tooltips, spec and glyph tabs, hunter pet trees and target
@@ -71,8 +72,9 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Test the native trainer catalogue and bot spellbook across all eras:
   learned/unlearned entries, cost/level, class/talent sections, cast/macro/skip,
   search, paging and single/two-page layouts. Toggle DragonUI's spellbook live
-  from both login states. Check Clique parent restoration and D3D9/D3D9Ex art.
-- [ ] Verify [Questie](questie-playerbots.md) after the DB refresh: simultaneous
+  from both login states, then change UI scale with the bot book open.
+  Check Clique parent restoration and D3D9/D3D9Ex art.
+- [ ] Verify [Questie](questie-playerbots.md) with the native roster integration: simultaneous
   bots, kill-credit/event goals, turn-in/abandonment, WATCH renewal, token/GUID
   isolation, mixed real clients and disconnect/rejoin cleanup. Shared item
   tooltip counts and a bot-only quest's party marker were observed with one

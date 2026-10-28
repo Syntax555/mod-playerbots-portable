@@ -44,7 +44,8 @@ profile; see [combat profiles and equipment](combat-profiles.md). No profile
 creates gear. In an altbot's MultiBot inventory, **Buy** routes merchant clicks
 to that bot while the inventory remains in Buy mode. The bot needs vendor
 access, its own gold and space. Leaving Buy mode, switching bots or closing
-the inventory cancels pending purchases.
+the inventory cancels pending purchases. Inventory, outfit and trainer requests
+require the bot and player to be in the same map instance.
 
 DragonUI's talent controls, spellbook and level-up notice follow the player's
 own earned era and trainer spells with the matching EraTalents package. Its
@@ -52,8 +53,8 @@ spellbook supports Clique bindings for learned player spells when Clique is
 installed.
 
 Questie shows group bots' quest counters automatically. Its native upstream
-integration supplies progress and bindings; this fork retains connected-roster
-and mandatory snapshot-GUID checks, requiring the matching bridge. Database
+integration supplies progress, roster refresh, identity checks and bindings.
+Use the matching bridge for the tested server integration. Database
 markers can differ from Individual Progression's quest versions. See
 [Questie bot progress](questie-playerbots.md).
 

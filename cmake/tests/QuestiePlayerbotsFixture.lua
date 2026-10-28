@@ -144,7 +144,7 @@ begin("Tankbot",tank); finish("Tankbot",tank)
 assert(not entry("Tankbot") and entry("Healbot") and entry("Human"), "quest turn-in removed another member")
 assert(comms.data:GetTooltip("m_101")[100].Tankbot == nil)
 
--- Every snapshot belongs to the current watched unit, including native push tokens.
+-- Supplied identity must match the current watched unit, including native push tokens.
 for _, guid in ipairs({"", "0x2", "Player-1-00000001", guids.Owner, guids.Healbot,
     "GUID Full: " .. guids.Owner .. " Type: Player Low: 1"}) do
     begin("Tankbot",tank,guid); quest("Tankbot",tank,100)
@@ -180,6 +180,13 @@ connected.Tankbot = true
 begin("Tankbot",tank,guids.Tankbot); quest("Tankbot",tank,100)
 objective("Tankbot",tank,100,"m",1,101,2,10); finish("Tankbot",tank)
 assert(entry("Tankbot").fulfilled == 2, "native client GUID was rejected")
+begin("Tankbot",tank); finish("Tankbot",tank)
+
+-- Native compatibility permits older bridges that omit identity, while every
+-- explicitly supplied identity still has to match the watched character.
+receive("QUEST_PROGRESS_BEGIN~Tankbot~"..tank); quest("Tankbot",tank,100)
+objective("Tankbot",tank,100,"m",1,101,3,10); finish("Tankbot",tank)
+assert(entry("Tankbot").fulfilled == 3, "legacy bridge without a GUID was rejected")
 begin("Tankbot",tank); finish("Tankbot",tank)
 
 -- Reject spoofed, unsolicited, mismatched, oversized and malformed snapshots atomically.

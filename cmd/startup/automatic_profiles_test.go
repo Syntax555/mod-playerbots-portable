@@ -35,6 +35,35 @@ func TestManagedProfileWithoutBaselinePreservesExistingKeys(t *testing.T) {
 	}
 }
 
+func TestManagedPlayerbotsIgnoredQuestsKeepsCustomList(t *testing.T) {
+	profile, err := configProfiles.ReadFile("profiles/playerbots.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := string(profile)
+	previous := strings.Replace(current, "Playerbots.IgnoredQuests = \"\"\n", "", 1)
+	if previous == current {
+		t.Fatal("profile does not supply the native ignored-quest default")
+	}
+	for _, custom := range []string{"", "Playerbots.IgnoredQuests = \"11,22\"\n"} {
+		updated, err := mergeManagedProfile(previous+custom, previous, current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := custom
+		if expected == "" {
+			expected = "Playerbots.IgnoredQuests = \"\"\n"
+		}
+		if !strings.Contains(updated, expected) || strings.Count(updated, "Playerbots.IgnoredQuests =") != 1 {
+			t.Fatalf("missing default or overwritten custom quest IDs: %q", updated)
+		}
+		again, err := mergeManagedProfile(updated, current, current)
+		if err != nil || again != updated {
+			t.Fatalf("ignored-quest migration is not idempotent: %v", err)
+		}
+	}
+}
+
 func TestManagedProfileUsesFirstDuplicateLikeServer(t *testing.T) {
 	// AzerothCore applies the first assignment and ignores later duplicates.
 	managed, err := mergeManagedProfile("Managed = 10\nManaged = 99\n", "Managed = 10\n", "Managed = 30\n")

@@ -69,14 +69,13 @@ requester's group. Real players and SelfBots are excluded. This interface reads
 quest state and runs no bot commands.
 
 The native upstream integration includes snapshots, lease renewal, special
-objectives, cleanup and Questie's binding header. This fork additionally reuses
-the connected roster for discovery and cleanup, excludes the local player from
-requests, and **requires each snapshot's GUID to match the watched group
-member**. Use the matching MultiBot Bridge: its BEGIN message carries the
-core's `ObjectGuid::ToString()` form (`GUID Full: 0x… Type: Player Low: …`),
-which the client normalizes and compares with `UnitGUID`. Missing, malformed or
-mismatched identity is rejected; compatibility with bridges that omit GUIDs is
-not provided by this fork.
+objectives, connected-roster discovery, cleanup and Questie's binding header.
+It excludes the local player from requests. The matching MultiBot Bridge's
+BEGIN message carries the core's `ObjectGuid::ToString()` form
+(`GUID Full: 0x… Type: Player Low: …`), which the client normalizes and compares
+with `UnitGUID`. Malformed or mismatched supplied identities are rejected.
+Legacy bridges may omit the optional GUID; current-roster, sender and token
+checks still apply.
 
 The client also rejects stale tokens, malformed or incomplete snapshots and
 unexpected senders. Group departure, logout or lost access clears prior bot
@@ -93,9 +92,9 @@ two seconds and one snapshot request per bot per second. Messages respect the
 ## Source and verification
 
 The [manifest](../versions.lock.json) pins the Questie and MultiBot Bridge
-forks. The [merged upstream integration](https://github.com/Aldori15/Questie/commit/30222ccb0821e6d8cdd8fe8d24334b5f9846bca7)
-provides the native progress and binding behavior; `forkChanges` identifies the
-retained roster and GUID checks. Fork source, installation tooling and update
+forks. The [upstream integration](https://github.com/Aldori15/Questie/commit/4c7df0caf0c86ddacf8ae31cb7489189c6d811ce)
+provides progress, roster refresh, identity checks and bindings without a
+separate client implementation. Fork source, installation tooling and update
 instructions are linked in the [Questie README](https://github.com/Syntax555/Questie/tree/335).
 Follow the [contributing guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md)
 for fork changes. To prepare the pinned sources, run

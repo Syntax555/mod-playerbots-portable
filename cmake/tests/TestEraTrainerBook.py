@@ -956,7 +956,7 @@ IsLoggedIn = function() return true end
 StaticPopup_Visible = function() return nil end
 GetAddOnMetadata = function() return "2.5" end
 NotifyInspect, ClearInspectPlayer = function() end, function() end
-tinsert, tremove = table.insert, table.remove
+tinsert, tremove, strmatch = table.insert, table.remove, string.match
 strsplit = function(separator, value)
   local keys = {}; for key in value:gmatch("[^" .. separator .. "]+") do keys[#keys + 1] = key end
   return unpack(keys)
@@ -970,6 +970,10 @@ if withDragon then
   -- The native registry and book produce the running flag, combat queue and lifecycle callbacks.
   local addon = { _dir = "Interface\\AddOns\\DragonUI\\", atlasinfo = {}, L = {},
                   db = { profile = { modules = { spellbook = { enabled = false, scale = 0.8 } } } } }
+  for _, file in ipairs({ "LibStub/LibStub.lua", "CallbackHandler-1.0/CallbackHandler-1.0.lua", "AceEvent-3.0/AceEvent-3.0.lua" }) do
+    assert(loadfile(dragonDir .. "/libs/" .. file))()
+  end
+  addon.core = LibStub("AceEvent-3.0"):Embed({})
   addon.Debug = function() end
   addon.Error = function(_, ...) error(table.concat({ ... }, " ")) end
   assert(loadfile(dragonDir .. "/core/api.lua"))("DragonUI", addon)
@@ -1053,6 +1057,15 @@ assert(empty.font == "fixture-font" and empty.fontSize == 16
   and empty.textColor[3] == DragonUI.SpellbookModule.INK[3], "bot labels use DragonUI's own font helper and ink")
 assert(book.title.text == "Zauberbuch von Botty", "the book names the bot")
 assert(sent[#sent] == "BOOK 0x2", "the bot's trainer book is requested by its GUID")
+assert(book.wide, "the bot book uses two pages on the large screen")
+UIParent.width, UIParent.height = 800, 600
+DragonUI.core:SendMessage("DRAGONUI_UI_SCALE_CHANGED")
+assert(not book.wide and book:IsShown() and pressed and not nativeVisible,
+  "DragonUI's scale message refits the open bot book through its native scale handler")
+UIParent.width, UIParent.height = 1920, 1080
+DragonUI.core:SendMessage("DRAGONUI_UI_SCALE_CHANGED")
+assert(book.wide and book:IsShown() and pressed and not nativeVisible,
+  "restoring screen space refits the same open bot book without changing its owner")
 assert(book.tabs[GENERAL].text == "Allgemein" and book.tabs[CLASS].text == "Krieger",
   "DragonUI's two tabs: the general book and the bot's class")
 assert(book.tabs[GENERAL].point[4] < book.tabs[CLASS].point[4], "the general tab comes first, as in DragonUI")
@@ -1216,6 +1229,8 @@ MUTATIONS = [
 
 # (label, file, old, new, with DragonUI) in the bot spellbook.
 BOT_MUTATIONS = [
+    ('native scale handler', 'BotBook.lua',
+     '  if type(book.ApplyScale) == "function" then hooksecurefunc(book, "ApplyScale", Render) end\n', '', True),
     ('disabled login installs hooks', 'BotBook.lua', 'or not book or spellbook._eraBotBook',
      'or not DragonBookOn() or spellbook._eraBotBook', True),
     ('live enable handoff', 'BotBook.lua', '{ "RefreshSpellbookSystem", "RestoreSpellbookSystem" }',

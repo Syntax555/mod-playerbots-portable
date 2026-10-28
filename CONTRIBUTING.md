@@ -8,7 +8,8 @@ Include the `revision` from the server's `portable-release.json`, the client
 build, the affected activity, relevant configuration and a short reproduction.
 Attach relevant excerpts from `logs/` with account passwords removed; copy the
 folder before restarting the realm, because each server start, including an
-automatic restart, overwrites that server's log files. State whether the issue
+automatic restart, overwrites its standard log files. Optional MultiBot Bridge
+file logging retains its rotating log across restarts. State whether the issue
 was reproduced in game, in a source fixture or only during compilation.
 
 For quest availability or historical class-quest reports, follow the

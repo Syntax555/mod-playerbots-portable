@@ -35,6 +35,14 @@ budget = (module / 'Ai/Base/Value/BudgetValues.cpp').read_text()
 ai = (module / 'Bot/PlayerbotAI.cpp').read_text()
 baseline = pinned_source('mod-multibot-bridge', 'src/MultiBotBridge.cpp')
 
+# A selected trainer is usable only through a bot in the requester's own map.
+local_lookup = function(bridge,
+    'Player* FindLocalVisibleEquipmentBot(Player* requester, std::string const& botName)\n{')
+assert 'Map const* const map = requester->GetMap();' in local_lookup
+assert 'for (auto const& reference : map->GetPlayers())' in local_lookup
+assert 'candidate->GetName() != wanted' in local_lookup
+assert 'mgr->GetPlayerBot(candidate->GetGUID()) == candidate' in local_lookup
+
 fixture = r'''
 #include <algorithm>
 #include <array>
@@ -422,9 +430,10 @@ bool TryParseUint32Field(std::string const& text, uint32 lower, uint32 upper, ui
     return true;
 }
 Player* controlledBot = nullptr;
-Player* FindBotByName(Player*, std::string const& name)
+Player* FindLocalVisibleEquipmentBot(Player* requester, std::string const& name)
 {
-    return controlledBot && controlledBot->name == name ? controlledBot : nullptr;
+    return requester && requester->IsInWorld() && controlledBot && controlledBot->name == name &&
+        controlledBot->map == requester->map ? controlledBot : nullptr;
 }
 std::vector<std::string> responses;
 void SendAddonPacket(Player*, ChatMsg, std::string const& kind, std::string const& payload)
@@ -733,7 +742,7 @@ void SecurityAndInteractionGuards()
             case 2: s.bot.sessionAvailable = false; break;
             case 3: s.bot.inWorld = false; break;
             case 4: s.bot.x = INTERACTION_DISTANCE + 1; break;
-            case 5: s.bot.map = 2; break;
+            case 5: s.bot.map = 2; s.requester.map = 2; break;
             case 6: s.bot.alive = false; break;
             case 7: s.npc.alive = false; break;
             case 8: s.npc.reaction = REP_UNFRIENDLY; break;

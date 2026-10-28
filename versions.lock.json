@@ -139,10 +139,10 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Syntax555/mod-multibot-bridge.git",
-      "revision": "2f365795c1a1ac4514821f5492b4b1c00ce30723",
+      "revision": "112d970b6ba19e56b52c859a80afe4d0c6d36719",
       "upstream": {
         "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
-        "revision": "ebfa01a129dd4c441b2527e42dcc37b6da95e6c2"
+        "revision": "9f0e8ba767c65f7959a615f70e61ec0980266780"
       },
       "forkChanges": {
         "mod-multibot-bridge-natural-progression": "16f52887235a3190d2b5e346faed3db0e63ac465",
@@ -158,7 +158,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "845da9c6672b34549bd2300b167109210994e0a3",
+      "revision": "4a25787a92e42ebe3893c61cdf5cddf939a67765",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -181,7 +181,8 @@
         "mod-era-talents-dragonui-colors": "a88ef30407c152f2d2209fd4bc49b22cebdee369",
         "mod-era-talents-bot-book-native-helpers": "5d4b03d46ebf54118f33f1f01f89bdf4082327c1",
         "era-bot-spellbook-split-header": "d29b75c1b3615a1baa77c54a6cdc936023bec384",
-        "mod-era-talents-dragonui-live-book": "0ec31c8f326577e401eb5beddbbb48262a1d4c19"
+        "mod-era-talents-dragonui-live-book": "0ec31c8f326577e401eb5beddbbb48262a1d4c19",
+        "mod-era-talents-bot-book-ui-scale": "4a25787a92e42ebe3893c61cdf5cddf939a67765"
       }
     }
   ],
@@ -189,10 +190,10 @@
     {
       "name": "MultiBot",
       "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
-      "revision": "6c585f3d76c27e6591622dd3e8554d67ab9ccfcf",
+      "revision": "f7b7a596c376646388df1a815bdfa13f1d1622f0",
       "upstream": {
         "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
-        "revision": "80148dff3f3a25a56d38dba0ecbd4f165b8c1d3f"
+        "revision": "020210ba849c972903128c8db37e150d076cf2a0"
       },
       "archiveName": "MultiBot-Chatless",
       "interface": 30300,
@@ -205,7 +206,6 @@
         "multibot-role-strategies": "58ea73b503cac3fd3a8ca840e53b06e847cf07e2",
         "multibot-vendor-purchases": "5ab9f9b92695c32eeb0b137ed43d53e5b15bcdcf",
         "multibot-library-load-order": "4ce9a460ca9637af2a6ebf057c9b16b165dd7e6f",
-        "multibot-spellbook-items": "03e291a36e1f368abf54ca0bbc756d8d47847410",
         "multibot-combat-profiles": "541c815266855c5f9445d0c698f0be7f30c4157e",
         "multibot-control-ownership": "6a43fd688c3a2657028be707ea75f3e2fac7636c",
         "multibot-rogue-strategy-state": "5af530724160e1761cb805b573cbfd0400f06502",
@@ -274,10 +274,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "8c5bc18ddfc9117257f2ce57db1e1a3c8866e5ff",
+      "revision": "d94b06538e7af8cf0ef38c0cd871e2a80a1db075",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "fd8281a2fa2190bdd95bab95f2a15119a636ce43"
+        "revision": "6cfcd75a2e5762637322fd495cd4302b203b77df"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -290,17 +290,14 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "848c61db6bb732282152a26cc220753ac352b928",
+      "revision": "2f555ab1d06cb9b0289c4252c405a49a7696e1d6",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "30222ccb0821e6d8cdd8fe8d24334b5f9846bca7"
+        "revision": "4c7df0caf0c86ddacf8ae31cb7489189c6d811ce"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",
-      "forkChanges": {
-        "questie-playerbots-roster": "98274deeeac1f3e882bedc1281bc13015e1f95cf",
-        "questie-playerbots-guid": "78bb17aecb019a6fa60903b8dcf44b740d214876"
-      }
+      "forkChanges": {}
     },
     {
       "name": "ZygorGuidesViewerRM",

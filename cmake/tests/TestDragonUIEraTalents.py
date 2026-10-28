@@ -41,7 +41,8 @@ def dragon_chunks(source: Path, multibot: Path) -> dict[str, str]:
     every = (multibot / 'Core/MultiBotEvery.lua').read_text()
     button_start = every.index('pFrame.addButton("Talent", 304')
     button = every[button_start:every.index('\n\t--', button_start)]
-    return {'window': window, 'atlas': str(source / 'utils/atlas.lua'), 'tabs': tabs, 'bot': bot, 'bot_button': button,
+    return {'window': window, 'atlas': str(source / 'utils/atlas.lua'), 'libs': str(source / 'libs'),
+            'tabs': tabs, 'bot': bot, 'bot_button': button,
             **{name: str(talents / filename) for name, filename in (
                 ('namespace', 'namespace.lua'), ('entry', 'entry_points.lua'),
                 ('live', 'live_view.lua'), ('canvas', 'tree_canvas.lua'), ('footer', 'footer_bar.lua'),
@@ -123,6 +124,7 @@ hooksecurefunc=function(a,b,c)
 end
 wipe=function(t) for key in pairs(t) do t[key]=nil end; return t end
 tinsert=table.insert
+strmatch=string.match
 min,max=math.min,math.max
 UIParent=Object("UIParent")
 UISpecialFrames={}
@@ -257,6 +259,10 @@ function methods:SetAlpha(a) self.alpha=a end
 
 local timers={}
 local addon={L=setmetatable({},{__index=function(_,k) return k end}),_dir=""}
+for _,file in ipairs({"LibStub/LibStub.lua","CallbackHandler-1.0/CallbackHandler-1.0.lua","AceEvent-3.0/AceEvent-3.0.lua"}) do
+  assert(loadfile(chunks.libs.."/"..file))()
+end
+addon.core=LibStub("AceEvent-3.0"):Embed({})
 function addon:SafeExecute(_,_,fn,...) return fn(...) end
 function addon:After(_,fn) timers[#timers+1]=fn end
 function addon:IsModuleEnabled(name) return name=="talents" and moduleEnabled end
@@ -275,7 +281,8 @@ local nativeBuildReads=0
 ns.TreeData=function() nativeBuildReads=nativeBuildReads+1 end
 ns.BuildBucket=function() nativeBuildReads=nativeBuildReads+1; return {} end
 ns.CommittedRanks=function() return {} end
-ns.ApplyScale=function() end
+local scales=0
+ns.ApplyScale=function() scales=scales+1 end
 ns.BuildDropdown=function(parent) return CreateFrame("Button","FixtureBuildDropdown",parent) end
 ns.PaintGlyphs=function() end
 for _,name in ipairs({"InstallGlyphEvents","InstallOrbEvents","InstallSharing","PlaceCatcher"}) do ns[name]=function() end end
@@ -366,6 +373,9 @@ if not moduleEnabled then
   return
 end
 assert(win and TM.applied,"DragonUI applies on login")
+local scalesBefore=scales
+addon.core:SendMessage("DRAGONUI_UI_SCALE_CHANGED")
+assert(scales==scalesBefore+1,"the native UI scale message reaches the talent canvas")
 reply("GEN a1b2c3d4"); reply("SYNC 2 0 0")
 press("N")
 assert(win:IsShown() and not panel() and not painted.external and ns.depth==11,"native Wrath keeps the native DragonUI tree")
@@ -704,6 +714,8 @@ def main() -> None:
         dragon_addon = dragon / 'DragonUI'
         shutil.copytree(args.era_source / 'client-addon', era / 'client-addon')
         shutil.copytree(args.dragon_source / 'modules/talents', dragon_addon / 'modules/talents')
+        for library in ('LibStub', 'CallbackHandler-1.0', 'AceEvent-3.0'):
+            shutil.copytree(args.dragon_source / 'libs' / library, dragon_addon / 'libs' / library)
         (dragon_addon / 'utils').mkdir()
         shutil.copyfile(args.dragon_source / 'utils/atlas.lua', dragon_addon / 'utils/atlas.lua')
         for filename in ('UI/MultiBotTalentFrame.lua', 'Core/MultiBotEvery.lua'):

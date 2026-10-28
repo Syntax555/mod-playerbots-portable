@@ -141,7 +141,7 @@ account for gameplay. For a fresh realm or changed expansion ceiling, follow
 [realm migration](docs/changing-expansions.md#updating-an-existing-realm).
 
 When reporting a problem, copy `logs/` **before restarting**: each server start,
-including automatic restarts, overwrites the server logs. Include the
+including automatic restarts, overwrites the standard server logs. Include the
 `revision` from `portable-release.json` and a short reproduction; see
 [reporting problems](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md#reporting-problems).
 
