@@ -1,10 +1,11 @@
-"""Check upstream Playerbots crash, chat and RPG quest-giver guards.
+"""Check upstream Playerbots crash, chat, RPG and ignored-quest guards.
 
 The production chat hooks, queued command dispatch, RPG quest-giver search and
 smart item destruction run against small engine stubs. Destroyed items are
 freed at once, as AzerothCore frees unsaved items, and the fixture runs under
-AddressSanitizer. Mutation checks restore each removed guard or the previous
-item loop and confirm that the fixture rejects it.
+AddressSanitizer. Ignored quest configuration reloads use the native parser and
+quest selection gates. Mutation checks remove the guards or restore the previous
+item loop and confirm that the fixture rejects them.
 """
 
 import argparse
@@ -30,7 +31,8 @@ def declaration(source, opening):
 parser = argparse.ArgumentParser(description=__doc__)
 source_argument(parser, help='prepared Playerbots src directory')
 args = parser.parse_args()
-module = args.source or prepared_core(Path(__file__).resolve().parents[2]) / 'modules/mod-playerbots/src'
+core = prepared_core(Path(__file__).resolve().parents[2])
+module = args.source or core / 'modules/mod-playerbots/src'
 ai_header = (module / 'Bot/PlayerbotAI.h').read_text()
 ai_source = (module / 'Bot/PlayerbotAI.cpp').read_text()
 security = (module / 'Mgr/Security/PlayerbotSecurity.h').read_text()
@@ -451,3 +453,157 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-upstream-fixes-') as
         if not build(temporary, mutated, 'mutant').returncode:
             raise SystemExit(f'Playerbots upstream fixes fixture did not reject: {label}')
         print(f'Playerbots upstream fixes mutation rejected: {label}')
+
+
+# The ignored list replaces the previous value on a bot configuration reload.
+# Compile its real parser and selection gates so removed IDs become eligible again.
+config = (module / 'PlayerbotAIConfig.cpp').read_text()
+initialize = function(config, 'bool PlayerbotAIConfig::Initialize()')
+load_ignored = re.search(r'(?:    IgnoredQuests.clear\(\);\n)?    LoadSet<std::set<uint32>>\([^\n]+IgnoredQuests\);', initialize)
+assert load_ignored, 'IgnoredQuests configuration must load through the native set parser'
+assert 'std::set<uint32> IgnoredQuests;' in (module / 'PlayerbotAIConfig.h').read_text()
+assert 'Playerbots.IgnoredQuests = ""' in (module.parent / 'conf/playerbots.conf.dist').read_text()
+helpers = (module / 'Util/Helpers.cpp').read_text()
+quest = (module / 'Ai/Base/Actions/QuestAction.cpp').read_text()
+player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
+assert 'uint8 GetLevel() const' in (core / 'src/server/game/Entities/Unit/Unit.h').read_text()
+assert 'uint32 getIntConfig(ServerConfigs index) const' in (core / 'src/server/game/World/World.h').read_text()
+ignored_parts = {
+    'parser': '\n'.join([
+        function(helpers, 'std::vector<std::string>& split(std::string const s, char delim,'),
+        function(helpers, 'std::vector<std::string> split(std::string const s, char delim)'),
+        'template <class T>\n' + function(config, 'void LoadSet('),
+    ]),
+    'load': load_ignored.group(0),
+    'quest_level': function(player_header, 'int32 GetQuestLevel(Quest const* quest) const'),
+    'band': re.search(r'static constexpr int32 GREY_QUEST_LEVEL_BAND = \d+;',
+                      (module / 'Ai/Base/Actions/QuestAction.h').read_text()).group(0),
+    'accept': function(quest, 'bool QuestAction::CanAcceptQuest('),
+    'worth': function(rpg, 'bool NewRpgBaseAction::IsQuestWorthDoing('),
+}
+ignored_source = r'''
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <set>
+#include <sstream>
+#include <string>
+#include <vector>
+using uint8 = std::uint8_t;
+using uint32 = std::uint32_t;
+using int32 = std::int32_t;
+PARSER
+struct ConfigMgr
+{
+    std::string current;
+    template<class T> T GetOption(char const* key, char const* fallback)
+    {
+        assert(std::string(key) == "Playerbots.IgnoredQuests" && !*fallback);
+        return current;
+    }
+} manager;
+auto* sConfigMgr = &manager;
+struct Config
+{
+    std::set<uint32> IgnoredQuests;
+    void Reload()
+    {
+LOAD
+    }
+} sPlayerbotAIConfig;
+struct Quest
+{
+    uint32 id = 1;
+    int32 level = 20;
+    bool repeatable = false, seasonal = false;
+    uint32 GetQuestId() const { return id; }
+    int32 GetQuestLevel() const { return level; }
+    bool IsRepeatable() const { return repeatable; }
+    bool IsSeasonal() const { return seasonal; }
+};
+struct Player
+{
+    uint8 level = 20;
+    bool eligible = true;
+    uint8 GetLevel() const { return level; }
+    QUEST_LEVEL
+    bool CanTakeQuest(Quest const*, bool showError) const { assert(!showError); return eligible; }
+};
+struct World
+{
+    uint32 getIntConfig(int key) const { assert(key == 0); return 10; }
+} world;
+auto* sWorld = &world;
+constexpr int CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF = 0;
+struct QuestAction
+{
+    BAND
+    static bool CanAcceptQuest(Player*, Quest const*);
+};
+struct NewRpgBaseAction
+{
+    Player* bot;
+    bool IsQuestWorthDoing(Quest const*);
+};
+ACCEPT
+WORTH
+int main()
+{
+    Player player;
+    Quest first{1}, second{2};
+    NewRpgBaseAction rpg{&player};
+    auto accepted = [&](Quest const& quest) { return QuestAction::CanAcceptQuest(&player, &quest); };
+    auto worth = [&](Quest const& quest) { return rpg.IsQuestWorthDoing(&quest); };
+    sPlayerbotAIConfig.Reload();
+    assert(sPlayerbotAIConfig.IgnoredQuests.empty() && accepted(first) && worth(first));
+    manager.current = "1,1";
+    sPlayerbotAIConfig.Reload();
+    assert(sPlayerbotAIConfig.IgnoredQuests == std::set<uint32>({1}));
+    assert(!accepted(first) && !worth(first) && accepted(second) && worth(second));
+    manager.current = "2";
+    sPlayerbotAIConfig.Reload();
+    assert(accepted(first) && worth(first) && !accepted(second) && !worth(second));
+    manager.current.clear();
+    sPlayerbotAIConfig.Reload();
+    assert(sPlayerbotAIConfig.IgnoredQuests.empty() && accepted(second) && worth(second));
+    player.eligible = false;
+    assert(!accepted(first));
+    player.eligible = true;
+    player.level = 31;
+    assert(!accepted(first) && !worth(first));
+    assert(!QuestAction::CanAcceptQuest(nullptr, &first) && !QuestAction::CanAcceptQuest(&player, nullptr));
+    std::cout << "Ignored quests: current configuration replaces old IDs and preserves native eligibility\n";
+}
+'''
+
+
+def build_ignored(directory, parts):
+    text = ignored_source
+    for key, value in parts.items():
+        text = text.replace(key.upper(), value)
+    source_path = directory / 'ignored.cpp'
+    source_path.write_text(text)
+    executable = directory / 'ignored'
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    str(source_path), '-o', str(executable)], check=True)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
+
+
+with tempfile.TemporaryDirectory(prefix='portable-playerbot-ignored-quests-') as temporary:
+    temporary = Path(temporary)
+    result = build_ignored(temporary, ignored_parts)
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Ignored quests fixture failed (exit {result.returncode})')
+    for label, key, old, new in (
+        ('removed IDs remain ignored', 'load', 'IgnoredQuests.clear();', ''),
+        ('ignored quest accepted', 'accept', ' || sPlayerbotAIConfig.IgnoredQuests.contains(quest->GetQuestId())', ''),
+        ('ignored quest selected for RPG', 'worth', '    if (sPlayerbotAIConfig.IgnoredQuests.contains(quest->GetQuestId()))\n        return false;\n', ''),
+    ):
+        mutated = dict(ignored_parts)
+        mutated[key] = ignored_parts[key].replace(old, new)
+        assert mutated[key] != ignored_parts[key], label
+        if not build_ignored(temporary, mutated).returncode:
+            raise SystemExit(f'Ignored quests fixture did not reject: {label}')
+        print(f'Ignored quests mutation rejected: {label}')

@@ -58,11 +58,14 @@ CORE_FIXTURES = (
 )
 
 MODULE_FIXTURES = {
-    "mod-playerbots": ("TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay"),
+    "mod-playerbots": (
+        "TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay",
+        "TestPlayerbotUpstreamFixes",
+    ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
     ),
-    "mod-dungeon-clear": ("TestEarnedDungeonParties", "TestEarnedDungeonEvents"),
+    "mod-dungeon-clear": ("TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonLabGates"),
     "mod-quest-loot-party": ("TestProfileKeys",),
     "mod-world-buff-bots": ("TestWorldBuffEvents",),
     "mod-lfg-progression": ("TestLfgProgression", "TestWorldStartupData"),

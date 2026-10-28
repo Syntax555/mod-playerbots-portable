@@ -106,7 +106,9 @@ enabled:
   two-page spreads, talent-tree sections, search and paging, filled with the
   bot's spells and the trainer spells it can still learn on this server, with
   their level and cost. Left-click casts, right-click creates a macro and
-  shift-click adds the spell to MultiBot's skip list or removes it.
+  shift-click adds the spell to MultiBot's skip list or removes it. Switching
+  DragonUI's spellbook module on or off also moves an open bot book to the
+  selected interface; a reload is not required.
 
 Update DragonUI and the EraTalents addon together from their forks' Latest
 releases. Keep the MPQ from the client package matching your server's data

@@ -8,7 +8,13 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-from FixtureSupport import fork_change, git_apply, multibot_sources, unpatched
+from FixtureSupport import (
+    fork_change,
+    fork_history,
+    git_apply,
+    multibot_sources,
+    unpatched,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,11 +68,12 @@ class ClientAddonLoadingTests(unittest.TestCase):
             ["git", "-C", str(ROOT / ".module-cache/client-addon-Questie-335"),
              "show", f"{addon['revision']}:Bindings.xml"], check=True, capture_output=True).stdout
         (cls.questie / "Bindings.xml").write_bytes(source)
-        patch = fork_change("Questie-335", "questie-binding-header")
-        unpatched(cls.questie, patch)
-        cls.original_bindings = (cls.questie / "Bindings.xml").read_text()
-        git_apply(cls.questie, patch)
         cls.bindings = (cls.questie / "Bindings.xml").read_text()
+        upstream = addon["upstream"]
+        history = fork_history("Questie-335", upstream["url"], upstream["revision"], 1)
+        cls.upstream_bindings = subprocess.run(
+            ["git", "-C", str(history), "show", f"{upstream['revision']}:Bindings.xml"],
+            check=True, capture_output=True, text=True).stdout
 
     def load_libraries(self, toc):
         paths = [line.strip().replace("\\", "/") for line in toc.splitlines()]
@@ -97,14 +104,16 @@ class ClientAddonLoadingTests(unittest.TestCase):
                     for binding in ET.fromstring(source).findall("Binding")]
 
         self.assertEqual(len(actions(self.bindings)), 3)
-        self.assertEqual(actions(self.bindings), actions(self.original_bindings))
+        self.assertEqual(actions(self.bindings), actions(self.upstream_bindings))
+        self.assertEqual(self.bindings, self.upstream_bindings)
         self.assert_unique_header(self.bindings)
 
-    def test_original_questie_headers_are_rejected(self):
-        self.assertNotEqual(self.original_bindings, self.bindings)
-        self.assertEqual(self.original_bindings.count('header="QUESTIE"'), 3)
+    def test_duplicate_questie_headers_are_rejected(self):
+        mutated = self.bindings.replace('name="QUESTIE_TOGGLE_TRACKER"',
+                                        'name="QUESTIE_TOGGLE_TRACKER" header="QUESTIE"')
+        self.assertNotEqual(mutated, self.bindings)
         with self.assertRaises(AssertionError):
-            self.assert_unique_header(self.original_bindings)
+            self.assert_unique_header(mutated)
 
 
 if __name__ == "__main__":

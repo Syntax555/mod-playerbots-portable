@@ -39,7 +39,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Wailing Caverns | 1 | 17–23 | Enabled with checked ramp paths and the native Disciple escort |
 | The Deadmines | 6 | 17–23 | Enabled with the ordinary gunpowder and cannon actions |
 | Shadowfang Keep | 8 | 18–24 | Enabled |
-| Blackfathom Deeps | 10 | 21–27 | Enabled |
+| Blackfathom Deeps | 10 | 21–27 | Not enabled: the route crosses disconnected navigation mesh |
 | The Stockade | 12 | 22–28 | Alliance only |
 | Razorfen Kraul | 16 | 24–30 | Enabled |
 | Gnomeregan | 14 | 25–31 | Enabled |
@@ -53,7 +53,7 @@ Kalimdor. Portals inside a capital admit only that capital's faction.
 | Lower Blackrock Spire | 32 | 57–60 | Enabled |
 | Dire Maul: East, West, North | 34, 36, 38 | 55–60, 58–60, 60 | Enabled |
 | Scholomance | 2 | 60 | Enabled |
-| Stratholme: Main Gate, Service Entrance | 40, 274 | 60 | Enabled |
+| Stratholme: Main Gate, Service Entrance | 40, 274 | 60 | Not enabled: required ziggurat and movement controllers are unaudited |
 
 A dungeon is enabled when its required Dungeon Clear objectives and conditional
 controllers for pulling or movement use audited ordinary actions. Unsupported
@@ -61,6 +61,16 @@ controllers cannot be treated as dispensable simply because upstream marks
 them optional. Events requiring scripted shortcuts, unaudited item acquisition
 or locked objects without an audited ordinary interaction prevent automatic
 recruitment for that map.
+
+Blackfathom Deeps requires movement through disconnected mesh sections. The
+native party jump, swimming-chain and pool-exit controllers have no audited
+ordinary path, so autonomous recruitment is refused. Player-led groups can
+enter normally; bots refuse those movement shortcuts and may need the player
+to complete the affected sections.
+
+Stratholme's ziggurat controllers and trap-alley movement also lack audited
+ordinary handling. Both entrances remain available to player-led groups,
+with autonomous recruitment refused.
 
 For Wailing Caverns, the party backtracks to the ramp by Anacondra's platform
 and walks the native patrol route to Serpentis and back from Verdan. Each leg

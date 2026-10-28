@@ -30,10 +30,10 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "6be95a7feedcac026ade14a51e78e31edb47bbb1",
+      "revision": "686617ac530f58748f9c53c4dd99e96e2842d6db",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
-        "revision": "80f2afa04543871245d22ee0a314e78e29f2feb0"
+        "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
       },
       "forkChanges": {
         "mod-playerbots-natural-progression": "2a50914f4731316f7431ce11711c37970e1d9b7e",
@@ -46,7 +46,8 @@
         "mod-playerbots-loot-roll-policy": "03fa84b4320be8abc2318dcd2b2eb3964c83355c",
         "mod-playerbots-raid-clear-natural-progression": "2130d76c5a5a23b3c090ca2ef6e3c5847128e84c",
         "mod-playerbots-raid-clear-windows-identifiers": "057818adc8e807ff28e1b457e24a05772a9344ac",
-        "mod-playerbots-combat-profiles": "cea4febb77ef9d25c27dda7807d20b7533552d22"
+        "mod-playerbots-combat-profiles": "cea4febb77ef9d25c27dda7807d20b7533552d22",
+        "mod-playerbots-ignored-quest-reload": "686617ac530f58748f9c53c4dd99e96e2842d6db"
       }
     },
     {
@@ -76,14 +77,15 @@
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "bf490e9da7e0aae033d25173229e4abfdec7015d",
+      "revision": "10b305cad830574c21b4928a7250e952d76fa503",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-        "revision": "fcb680fb279cd25696e7f848fad72c5d41282032"
+        "revision": "7fb6ebdefb8038af2676c280214f8a15c843b347"
       },
       "forkChanges": {
         "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
-        "mod-dungeon-clear-build-warnings": "8297c0afbdde6010c4ef91906b584da9d09c1f16"
+        "mod-dungeon-clear-build-warnings": "8297c0afbdde6010c4ef91906b584da9d09c1f16",
+        "mod-dungeon-clear-earned-shortcut-guards": "10b305cad830574c21b4928a7250e952d76fa503"
       }
     },
     {
@@ -156,7 +158,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "c0276a5342f25469b167e6bfe36c22ff7f36c6c6",
+      "revision": "0ec31c8f326577e401eb5beddbbb48262a1d4c19",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -178,7 +180,8 @@
         "mod-era-talents-combat-profiles": "e804e85d19649977eb56e0ace5fb1b53c6d3dfa5",
         "mod-era-talents-dragonui-colors": "a88ef30407c152f2d2209fd4bc49b22cebdee369",
         "mod-era-talents-bot-book-native-helpers": "5d4b03d46ebf54118f33f1f01f89bdf4082327c1",
-        "era-bot-spellbook-split-header": "d29b75c1b3615a1baa77c54a6cdc936023bec384"
+        "era-bot-spellbook-split-header": "d29b75c1b3615a1baa77c54a6cdc936023bec384",
+        "mod-era-talents-dragonui-live-book": "0ec31c8f326577e401eb5beddbbb48262a1d4c19"
       }
     }
   ],
@@ -271,10 +274,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "362b26d26aa4c1e5b916243f0ab4b0b2038fc9fb",
+      "revision": "41426f19fa1d49ea439a611fc63aa3c1189bf6e2",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "834bd108fba6a5068ef652ae2656f324c0128aa0"
+        "revision": "fd8281a2fa2190bdd95bab95f2a15119a636ce43"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -287,26 +290,25 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "98274deeeac1f3e882bedc1281bc13015e1f95cf",
+      "revision": "78bb17aecb019a6fa60903b8dcf44b740d214876",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "d695e9048e6df8b48d36a6db9436d82ca3bbbd87"
+        "revision": "30222ccb0821e6d8cdd8fe8d24334b5f9846bca7"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",
       "forkChanges": {
-        "questie-playerbots-progress": "438000dba6352b2123f882e74ded745889b890d6",
-        "questie-binding-header": "ff1b8fdf21e587da377bfd7e224ea1d1821e2480",
-        "questie-playerbots-roster": "98274deeeac1f3e882bedc1281bc13015e1f95cf"
+        "questie-playerbots-roster": "98274deeeac1f3e882bedc1281bc13015e1f95cf",
+        "questie-playerbots-guid": "78bb17aecb019a6fa60903b8dcf44b740d214876"
       }
     },
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "de9461efb1b4720dc36c2fc9daa6e21e485414c3",
+      "revision": "3d085a73c02ab22324de48d85d0c023efd2f8497",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-        "revision": "9087c457e20fb96e73e5b362dd6fc50324b75718"
+        "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
       },
       "path": "ZygorGuidesViewerRM",
       "interface": 30300,

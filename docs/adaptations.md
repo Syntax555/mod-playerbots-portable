@@ -119,9 +119,10 @@ their installation sources are listed in [client addons](addons.md).
 
 The [Questie Playerbots integration](questie-playerbots.md) sends authorized
 group bots' native quest counters through the MultiBot Bridge. Questie uses
-its existing group tooltips and optional party map objectives. A small change
-in the Questie fork handles special objectives, WATCH renewal and stale-data
-cleanup. Run the Questie-335 installer from the fork's Latest release. It
+its existing group tooltips and optional party map objectives. Native Questie
+handles special objectives, WATCH renewal and stale-data cleanup; the fork
+reuses the connected bot roster and checks snapshot identity. Run the
+Questie-335 installer from the fork's Latest release. It
 downloads that commit of the fork from GitHub and verifies every file; the
 prebuilt server includes its MultiBot Bridge support.
 

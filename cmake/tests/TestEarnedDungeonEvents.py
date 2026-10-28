@@ -92,7 +92,7 @@ int main(){
  assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::MoveTo,0,0,7)));
  assert(DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,1)));
  assert(DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,5)));
- for(uint32 hook:{0u,2u,40u})assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,hook)));
+ for(uint32 hook:{0u,2u,40u,63u,64u,65u})assert(!DcEarnedEvents::StepAllowed(step(EventStepKind::Custom,0,0,hook)));
  // Locks: a click opens no lock or a profession-free open lock; keys open item locks.
  sLockStore.rows={{1,lock(1,{{LOCK_KEY_SKILL,LOCKTYPE_OPEN}})},{2,lock(2,{{LOCK_KEY_ITEM,5000}})},{3,lock(3,{{LOCK_KEY_SKILL,LOCKTYPE_PICKLOCK}})},{4,lock(4,{{LOCK_KEY_SPELL,1234}})},{5,lock(5,{{LOCK_KEY_ITEM,5000},{LOCK_KEY_SKILL,LOCKTYPE_PICKLOCK}})}};
  Player bot;GameObject go;
@@ -106,6 +106,12 @@ int main(){
  // Map audit: every required normal objective must consist of ordinary keyless steps.
  objectMgr.templates={{10,{0}},{11,{1}},{12,{2}}};
  assert(audited(1));
+ // Blackfathom's disconnected navigation remains unaudited even when custom
+ // world data omits its optional movement objectives from the roster.
+ assert(!audited(48));
+ conditional[48]={event("Pool exit",{step(EventStepKind::Custom,0,0,63)},false)};
+ assert(!audited(48));
+
  // Encounter bosses alone carry no event; the roster-added objective decides.
  spawned[9]={{"Mennu the Betrayer",0,0}};assert(audited(9));
  roster[9]={{"Drop down past Mennu",0,1}};events[{9,1}]=event("Drop down past Mennu",{step(EventStepKind::MoveTo),step(EventStepKind::TeleportParty)});assert(!audited(9));
@@ -251,6 +257,7 @@ def main():
         subprocess.run([compiler, *flags, str(work/'fixture.cpp'), '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True, timeout=TIMEOUT)
         mutations = [
+            ('Blackfathom movement audit bypass', 'if (mapId == 48)', 'if (false)'),
             ('off-mesh jump step', 'case EventStepKind::MoveTo:\n                return step.hookId == 0;', 'case EventStepKind::Jump:\n            case EventStepKind::MoveTo:\n                return step.hookId == 0;'),
             ('custom hook on a walk', 'return step.hookId == 0;', 'return true;'),
             ('arbitrary custom shortcut', 'return step.hookId == 1 || step.hookId == 5;', 'return true;'),

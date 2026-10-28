@@ -164,6 +164,13 @@ pass.
   and normal recovery.
   Remove a failing dungeon from the default list until it is fixed. Confirm bot
   logout after the last real player session ends.
+- [ ] Audit ordinary navigation through Blackfathom Deeps before admitting
+  autonomous parties. Cover the disconnected entrance, swimming sections and
+  pool exit with complete checked paths, without relocation or authored
+  movement shortcuts. Player-led access remains available.
+- [ ] Audit Stratholme's required ziggurat controllers and ordinary movement
+  through the trap alley before admitting either entrance for autonomous
+  parties. Keep normal player-led access and earned movement guards.
 - [ ] Verify complete Wailing Caverns clears in-game: backtrack from Skum to
   Anacondra's platform, climb the native patrol ramp to Serpentis and return
   from Verdan over the ramp to the Disciple. Check every member's actual path,
@@ -254,11 +261,10 @@ pass.
   guards; the [checked upstream sources](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/upstream/README.md#integration-status)
   still need all four local fixes. Pin compatible accepted fixes before removing
   only their corresponding local hunks.
-- [ ] Follow the Questie Playerbots integration upstream in
-  [Aldori15/Questie#172](https://github.com/Aldori15/Questie/pull/172), which
-  carries the fork's change and its regression test. After it is accepted,
-  merge upstream into the fork's `335` branch, pin the merge and point
-  `forkChanges` at the accepted commit before rerunning the Questie fixtures.
+- [x] Use the native Questie Playerbots progress integration and binding
+  header from the original `335` branch. Keep the connected roster reuse and
+  snapshot identity checks in the fork; test the native progress integration
+  without a second local copy of its change.
 
 ## Core and module forks
 

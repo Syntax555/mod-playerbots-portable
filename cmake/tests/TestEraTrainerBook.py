@@ -665,15 +665,48 @@ assert(nativeSlots:find("card.entry = entry", 1, true), "native card entry contr
 local made = {}
 local widgetMethods = {}
 for _, key in ipairs({ "SetAllPoints", "ClearAllPoints", "SetPoint", "RegisterForClicks", "EnableMouseWheel", "EnableKeyboard",
-                        "SetFrameLevel", "SetFrameStrata" }) do widgetMethods[key] = function() end end
+                        "SetFrameLevel", "SetClampedToScreen" }) do widgetMethods[key] = function() end end
+local function syncVisibility(frame)
+  local visible = frame:IsVisible() ~= nil
+  if visible ~= frame.visible then
+    frame.visible = visible
+    local handler = frame.scripts[visible and "OnShow" or "OnHide"]
+    if handler then handler(frame) end
+  end
+  for _, child in ipairs(frame.children) do syncVisibility(child) end
+end
 local function widget(parent)
-  local frame = { parent = parent, scripts = {}, shown = true }
+  local frame = { parent = parent, scripts = {}, hooks = {}, children = {}, shown = true }
+  if parent then parent.children[#parent.children + 1] = frame end
   function frame:GetParent() return self.parent end
-  function frame:IsVisible() return self.shown and 1 or nil end
-  function frame:Show() self.shown = true end
-  function frame:Hide() self.shown = false end
+  function frame:IsShown() return self.shown and 1 or nil end
+  function frame:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) and 1 or nil end
+  frame.visible = frame:IsVisible() ~= nil
+  function frame:Show() self.shown = true; syncVisibility(self) end
+  function frame:Hide() self.shown = false; syncVisibility(self) end
+  function frame:SetParent(nextParent)
+    if self.parent then
+      for index, child in ipairs(self.parent.children) do
+        if child == self then table.remove(self.parent.children, index); break end
+      end
+    end
+    self.parent = nextParent
+    if nextParent then nextParent.children[#nextParent.children + 1] = self end
+    syncVisibility(self)
+  end
+  function frame:GetWidth() return 120 end
+  function frame:GetLeft() return 100 end
+  function frame:GetRight() return self.right or 600 end
+  function frame:SetFrameStrata(strata) self.strata = strata end
   function frame:SetScript(key, callback) self.scripts[key] = callback end
-  function frame:HookScript(key, callback) self.scripts[key] = callback end
+  function frame:HookScript(key, callback)
+    local original = self.scripts[key]
+    self.hooks[key] = (self.hooks[key] or 0) + 1
+    self.scripts[key] = function(...)
+      if original then original(...) end
+      callback(...)
+    end
+  end
   return setmetatable(frame, { __index = widgetMethods })
 end
 CreateFrame = function(_, _, parent) local frame = widget(parent); made[#made + 1] = frame; return frame end
@@ -684,13 +717,25 @@ end
 local bindings, repainted = {}, 0
 Clique = { AddBinding = function(_, binding) bindings[#bindings + 1] = binding end,
            GetCapturedKey = function(_, key) return key == "LeftButton" and "BUTTON1" end }
-CliqueConfig = widget()
+UIParent = widget()
+UIParent.right = 1920
+local nativeTabParent, nativeConfigParent = widget(UIParent), widget(UIParent)
+CliqueSpellTab = widget(nativeTabParent)
+local nativeTabShows = 0
+CliqueSpellTab:SetScript("OnShow", function() nativeTabShows = nativeTabShows + 1 end)
+CliqueConfig = widget(nativeConfigParent)
 CliqueConfig.page1 = widget(CliqueConfig)
 CliqueConfig.bindAlert = widget(CliqueConfig)
+CliqueConfig.ShowWithSpellBook = function(self) self:Show() end
+HideUIPanel = function(window) window:Hide() end
+IsAddOnLoaded = function(name) return name == "Clique" end
 SpellButton1 = widget()
 SpellButton1.shown = false
 CliqueConfig.UpdateList = function() repainted = repainted + 1 end
-local cliqueBook = { root = widget(), IsOpen = function() return true end, Level = function() return 6 end,
+local cliqueRoot = widget(UIParent)
+local cliqueBook = { root = cliqueRoot, IsOpen = function() return cliqueRoot:IsShown() ~= nil end,
+                    Level = function() return 6 end,
+                    Locked = function() return false end,
                     PaintCard = function(card, entry) card.entry = entry end, ApplyScale = function() end }
 addon.SpellbookModule = cliqueBook
 assert(loadfile(dragonDir .. "/modules/spellbook/book_clique.lua"))("DragonUI", addon)
@@ -708,18 +753,43 @@ assert(#bindings == 1, "Clique cannot bind an unlearned trainer card")
 card.entry.grey, card.entry.passive = false, true
 bindingOverlay.scripts.OnClick(bindingOverlay, "LeftButton")
 assert(#bindings == 1, "Clique cannot bind a passive card")
-CliqueConfig.page1.shown = false
-CliqueConfig.page1.scripts.OnHide(CliqueConfig.page1)
+CliqueConfig.page1:Hide()
 assert(not bindingOverlay.shown, "closing Clique's binding page removes its interception overlay")
-print("DragonUI Clique: native card hooks, binding data and inactive-card guards passed")
+cliqueBook.AdoptSideTab()
+CliqueConfig:ShowWithSpellBook()
+assert(CliqueSpellTab:GetParent() == cliqueBook.root and CliqueSpellTab._duiOwnParent == nativeTabParent,
+  "adopting Clique's tab keeps the parent Clique gave it")
+assert(CliqueConfig:GetParent() == cliqueBook.root and CliqueConfig._duiOwnParent == nativeConfigParent
+  and CliqueConfig:IsShown() and CliqueConfig._duiDocked,
+  "docking Clique keeps its own parent and shows its window beside the native book")
+cliqueBook.root:Hide()
+cliqueBook.ReleaseClique()
+assert(CliqueSpellTab:GetParent() == nativeTabParent and CliqueConfig:GetParent() == nativeConfigParent
+  and not CliqueConfig:IsShown() and not CliqueConfig._duiDocked,
+  "release hides Clique's window and returns both widgets to their own parents")
+cliqueBook.root:Show()
+cliqueBook.AdoptSideTab()
+CliqueConfig:ShowWithSpellBook()
+local tabShowsBefore = nativeTabShows
+CliqueSpellTab:Hide()
+CliqueSpellTab:Show()
+assert(CliqueSpellTab:GetParent() == cliqueBook.root and CliqueSpellTab.hooks.OnShow == 1
+  and nativeTabShows == tabShowsBefore + 1,
+  "re-enabling reuses Clique's tab and preserves its handler with one placement hook")
+assert(CliqueConfig:GetParent() == cliqueBook.root and CliqueConfig._duiOwnParent == nativeConfigParent
+  and CliqueConfig:IsShown() and CliqueConfig._duiDocked,
+  "re-enabling docks the same Clique window without replacing its original parent")
+cliqueBook.ReleaseClique()
+print("DragonUI Clique: native card bindings, inactive-card guards and live parent handoffs passed")
 '''
 
 BOT_FIXTURE = r'''
 local multibotDir, eraDir, packets, withDragon, dragonDir, withoutInk = ...
 -- Widgets: a recording object whose scripts run like the client's.
 local methods = {}
+local frames = {}
 local function Object(name, kind)
-  local object = setmetatable({ name = name, kind = kind, scripts = {}, shown = true, enabled = true }, {
+  local object = setmetatable({ name = name, kind = kind, scripts = {}, events = {}, shown = true, enabled = true }, {
     __index = function(self, key)
       if methods[key] then return methods[key] end
       return function() end
@@ -728,6 +798,8 @@ local function Object(name, kind)
 end
 function methods:SetScript(name, handler) self.scripts[name] = handler end
 function methods:GetScript(name) return self.scripts[name] end
+function methods:RegisterEvent(event) self.events = self.events or {}; self.events[event] = true end
+function methods:UnregisterEvent(event) self.events[event] = nil end
 function methods:Show()
   if self.shown then return end
   self.shown = true
@@ -787,6 +859,7 @@ CreateFrame = function(kind, name, parent)
   frame.shown = false
   if kind == "Frame" and not name then frame.shown = true end
   if name then _G[name] = frame end
+  frames[#frames + 1] = frame
   return frame
 end
 UIParent = Object("UIParent")
@@ -877,16 +950,36 @@ MultiBot.spellbook = { spells = {}, index = 0, frames = { Overlay = overlay }, n
 assert(loadfile(multibotDir .. "/UI/MultiBotSpell.lua"))()
 assert(loadstring(PAYLOAD_METHODS))()
 
-local spellbookOn = false
+local combat = false
+InCombatLockdown = function() return combat end
+IsLoggedIn = function() return true end
+StaticPopup_Visible = function() return nil end
+GetAddOnMetadata = function() return "2.5" end
+NotifyInspect, ClearInspectPlayer = function() end, function() end
+tinsert, tremove = table.insert, table.remove
+strsplit = function(separator, value)
+  local keys = {}; for key in value:gmatch("[^" .. separator .. "]+") do keys[#keys + 1] = key end
+  return unpack(keys)
+end
+hooksecurefunc = function(owner, key, callback)
+  if type(owner) == "string" then owner, key, callback = _G, owner, key end
+  local original = assert(owner[key])
+  owner[key] = function(...) original(...); callback(...) end
+end
 if withDragon then
-  -- DragonUI's real spellbook layout and search code and its German strings.
-  local addon = { _dir = "Interface\\AddOns\\DragonUI\\", SpellbookModule = {}, atlasinfo = {}, L = {} }
+  -- The native registry and book produce the running flag, combat queue and lifecycle callbacks.
+  local addon = { _dir = "Interface\\AddOns\\DragonUI\\", atlasinfo = {}, L = {},
+                  db = { profile = { modules = { spellbook = { enabled = false, scale = 0.8 } } } } }
+  addon.Debug = function() end
+  addon.Error = function(_, ...) error(table.concat({ ... }, " ")) end
+  assert(loadfile(dragonDir .. "/core/api.lua"))("DragonUI", addon)
+  assert(loadfile(dragonDir .. "/core/reload.lua"))("DragonUI", addon)
+  assert(loadfile(dragonDir .. "/modules/spellbook/book_core.lua"))("DragonUI", addon)
   assert(loadfile(dragonDir .. "/utils/atlas.lua"))("DragonUI", addon)
   for line in io.lines(dragonDir .. "/Locales/deDE.lua") do
     local key, value = line:match('^L%["(.-)"%]%s*=%s*"(.-)"%s*$')
     if key then addon.L[key] = value end
   end
-  addon.IsModuleEnabled = function(_, name) return name ~= "spellbook" or spellbookOn end
   bit = { band = function(a, b)
     local result, place = 0, 1
     while a > 0 and b > 0 do
@@ -899,7 +992,15 @@ if withDragon then
     assert(loadfile(dragonDir .. "/modules/spellbook/" .. file))("DragonUI", addon)
   end
   if withoutInk then addon.SpellbookModule.InkLabel = nil end
-  addon.SpellbookModule.Config = function() return { scale = 0.8 } end
+  local book = addon.SpellbookModule
+  -- Only the unused player's widgets are doubled; the lifecycle and bot renderer run their sources.
+  book.BuildWindow = function() book.root = CreateFrame("Frame", "FixturePlayerBook", UIParent) end
+  for _, action in ipairs({ "BuildCards", "BuildControls", "BuildSecure", "InstallAccess", "InstallClique", "ListenToBars",
+                            "ApplyScale", "QueueBindings", "PlaceMicroCatcher", "HideActionGrids", "ReleaseClique" }) do
+    book[action] = function() end
+  end
+  book.CloseBook = function() book.root:Hide() end
+  book.Rebuild = function() book.dirty = {} end
   addon.CharacterPanel = { ReskinTab = function(tab) tab.dragonSkin = true end }
   DragonUI = addon
   DragonUI_NineSlice = { ApplyLayout = function() end, GetLayout = function() return {} end }
@@ -911,11 +1012,6 @@ local ET = EraTalents
 local L = ET.L
 ET.state = { ranks = {} }
 ET.InitBotBook()
-if withDragon then
-  assert(not MultiBot.spellbook._eraBotBook, "with DragonUI's spellbook off MultiBot keeps its own spellbook")
-  spellbookOn = true
-  ET.InitBotBook()
-end
 
 local function collect(ids)
   local book = MultiBot.spellbook
@@ -932,10 +1028,20 @@ if not withDragon or withoutInk then
   print("EraTalents bot spellbook: MultiBot's own window without DragonUI")
   return
 end
+assert(MultiBot.spellbook._eraBotBook, "a disabled compatible book is ready for live enable")
+local show, handlers = MultiBot.spellbook.Show, #ET.bookHandlers
+ET.InitBotBook()
+assert(MultiBot.spellbook.Show == show and #ET.bookHandlers == handlers,
+  "initialization installs the wrappers and lifecycle hooks once")
 collect({ 6673, 12294, 900002 })
+assert(multibotShown == 1 and nativeVisible and EraTalentsBotBookFrame == nil and pressed,
+  "disabled at login uses MultiBot's own window")
+assert(DragonUI:SetModuleEnabled("spellbook", true) and DragonUI.SpellbookModule.applied,
+  "the native registry enables the book without another EraTalents initialization")
 local book = EraTalentsBotBookFrame
 local CLASS, GENERAL = 1, 2
-assert(multibotShown == 0 and book:IsShown() and pressed, "with DragonUI the bot's spellbook opens as a book")
+assert(multibotShown == 1 and not nativeVisible and book:IsShown() and pressed,
+  "live enable hands the open MultiBot book to DragonUI")
 assert(book.art.wood.atlas == "spellbook-header-left-half"
   and book.art.woodRight.atlas == "spellbook-header-right-half" and book.art.woodRight:IsShown()
   and book.art.wood.point[3] == "TOP" and book.art.wood.point[4] == 0,
@@ -1056,17 +1162,37 @@ book.mode:Click()
 assert(book.pageText.text == "Seite 2/3" and #cards() == 27, "single-page mode shows one page per spread")
 assert(not book.art.woodRight:IsShown() and book.art.wood.point[3] == "TOPRIGHT" and book.art.wood.point[4] == -8,
   "the single-page bot book stretches only its left header half")
-spellbookOn = false
-MultiBot.spellbook:Show()
-assert(multibotShown == 1 and nativeVisible and not book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
-  "after disabling DragonUI's spellbook MultiBot opens its own window and closes the bot book")
-spellbookOn = true
-MultiBot.spellbook:Show()
-assert(multibotShown == 1 and not nativeVisible and book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
-  "after enabling DragonUI's spellbook the bot book replaces MultiBot's open window")
+assert(DragonUI:SetModuleEnabled("spellbook", false) and not DragonUI.SpellbookModule.applied,
+  "the native registry restores the disabled book immediately")
+assert(multibotShown == 2 and nativeVisible and not book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
+  "disabling DragonUI's spellbook hands the open bot book to MultiBot")
+assert(DragonUI:SetModuleEnabled("spellbook", true), "the native registry re-enables the existing book")
+assert(multibotShown == 2 and not nativeVisible and book:IsShown() and MultiBot.spellbook:IsVisible() and pressed,
+  "enabling DragonUI's spellbook hands the open MultiBot book back")
+combat = true
+assert(not DragonUI:SetModuleEnabled("spellbook", false) and DragonUI:IsModuleEnabled("spellbook")
+  and book:IsShown() and not nativeVisible, "combat leaves the running route intact until the native queue runs")
+assert(not DragonUI:SetModuleEnabled("spellbook", true) and not DragonUI.CombatQueue:HasPending("spellbook_toggle"),
+  "reverting a queued disable preserves the running bot book")
+assert(not DragonUI:SetModuleEnabled("spellbook", false), "a second combat disable can be queued")
+combat = false
+DragonUI_CombatQueueFrame.scripts.OnEvent(DragonUI_CombatQueueFrame, "PLAYER_REGEN_ENABLED")
+assert(not DragonUI:IsModuleEnabled("spellbook") and not book:IsShown() and nativeVisible and pressed,
+  "the native post-combat callback hands off the open bot book")
+DragonUI:SetModuleEnabled("spellbook", true)
+local nativeBook = DragonUI.SpellbookModule
+local epoch = nativeBook.epoch
+for _, frame in ipairs(frames) do
+  if frame.events and frame.events.SPELLS_CHANGED then frame.scripts.OnEvent(frame, "SPELLS_CHANGED") end
+end
+assert(nativeBook.epoch == epoch + 1, "live toggles keep one native spell-change listener")
 MultiBot.spellbook:Hide()
-assert(not book:IsShown() and not MultiBot.spellbook:IsVisible() and not pressed and disabled == 3,
+assert(not book:IsShown() and not MultiBot.spellbook:IsVisible() and not pressed,
   "MultiBot's hide closes the book and releases its button")
+DragonUI:SetModuleEnabled("spellbook", false)
+DragonUI:SetModuleEnabled("spellbook", true)
+assert(not book:IsShown() and not nativeVisible and not pressed,
+  "toggling the module keeps a closed bot book closed")
 print("EraTalents bot spellbook: DragonUI's book with the bot's spells, trainer spells, search and MultiBot's actions")
 '''
 
@@ -1090,6 +1216,12 @@ MUTATIONS = [
 
 # (label, file, old, new, with DragonUI) in the bot spellbook.
 BOT_MUTATIONS = [
+    ('disabled login installs hooks', 'BotBook.lua', 'or not book or spellbook._eraBotBook',
+     'or not DragonBookOn() or spellbook._eraBotBook', True),
+    ('live enable handoff', 'BotBook.lua', '{ "RefreshSpellbookSystem", "RestoreSpellbookSystem" }',
+     '{ "RestoreSpellbookSystem" }', True),
+    ('live disable handoff', 'BotBook.lua', '{ "RefreshSpellbookSystem", "RestoreSpellbookSystem" }',
+     '{ "RefreshSpellbookSystem" }', True),
     ('wide header joins at center', 'BotBook.lua', 'wide and "TOP" or "TOPRIGHT", wide and 0 or -8, -26',
      '"TOPRIGHT", -8, -26', True),
     ('single-page header hides right half', 'BotBook.lua',
@@ -1102,7 +1234,7 @@ BOT_MUTATIONS = [
     ('native window closes', 'BotBook.lua', '    if visible(self) then hide(self) end\n', '', True),
     ('native handoff button', 'BotBook.lua', '      SetSpellbookButton(self.name, true)\n', '', True),
     ('DragonUI handoff button', 'BotBook.lua', '  SetSpellbookButton(name, true)\n', '', True),
-    ('DragonUI only', 'BotBook.lua', 'if type(spellbook) ~= "table" or not DragonBookOn() or', 'if type(spellbook) ~= "table" or', False),
+    ('DragonUI only', 'BotBook.lua', 'if type(spellbook) ~= "table" or not book or', 'if type(spellbook) ~= "table" or', False),
     ('DragonUI spellbook on', 'BotBook.lua', 'or dragon:IsModuleEnabled("spellbook")', 'or true', True),
     ('bot book request', 'BotBook.lua', '  if guid then ET.RequestBook(guid) end\n', '', True),
     ('started chains', 'BotBook.lua', '      answer = answer or knownInChain(record[2])\n', '', True),
@@ -1223,7 +1355,12 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
             ('rank menu excludes variants', 'book_catalog.lua',
              '        if isRankText(rank) then', '        if true then'),
             ('Clique unlearned and passive cards', 'book_clique.lua',
-             'return entry ~= nil and not entry.grey and not entry.passive', 'return entry ~= nil'))):
+             'return entry ~= nil and not entry.grey and not entry.passive', 'return entry ~= nil'),
+            ('Clique tab parent restored', 'book_clique.lua', '        tab:SetParent(tab._duiOwnParent)\n', ''),
+            ('Clique window parent restored', 'book_clique.lua', '        config:SetParent(config._duiOwnParent)\n', ''),
+            ('Clique released window hidden', 'book_clique.lua',
+             '        config:Hide()\n        config:SetParent(config._duiOwnParent)',
+             '        config:SetParent(config._duiOwnParent)'))):
         dragon_copy = directory / f'dragon-catalog-{index}'
         for part in ('modules/spellbook', 'modules/levelupenhance'):
             shutil.copytree(DRAGONUI / part, dragon_copy / part)

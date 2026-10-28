@@ -9,16 +9,13 @@ import subprocess
 import tempfile
 import unittest
 
-from FixtureSupport import fork_change, git_apply, unpatched
+from FixtureSupport import fork_history, function, prepared_core
 
 
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ("Modules/Network/QuestiePlayerbots.lua", "Modules/Network/QuestieComms.lua",
          "Modules/Network/QuestieCommsData.lua", "Modules/Network/QuestiePartyObjectives.lua",
          "Modules/Quest/QuestieQuest.lua", "Modules/Quest/QuestieQuestPrivates.lua")
-# The fork commit also adds an upstream-style regression test outside the addon files.
-PATCH = fork_change("Questie-335", "questie-playerbots-progress", FILES)
-ROSTER_PATCH = fork_change("Questie-335", "questie-playerbots-roster", FILES)
 SOURCE = None
 LUA = None
 
@@ -41,10 +38,8 @@ class QuestiePlayerbotsTests(unittest.TestCase):
                 target.write_bytes(subprocess.run(
                     ["git", "-C", str(cache), "show", f"{addon['revision']}:{relative}"],
                     check=True, capture_output=True).stdout)
-        unpatched(cls.directory, ROSTER_PATCH)
-        unpatched(cls.directory, PATCH)
-        git_apply(cls.directory, PATCH)
-        git_apply(cls.directory, ROSTER_PATCH)
+        cls.addon = addon
+        cls.history = fork_history("Questie-335", addon["url"], addon["revision"], 64)
         cls.pristine = {relative: (cls.directory / relative).read_text() for relative in FILES}
 
     def run_fixture(self):
@@ -56,17 +51,46 @@ class QuestiePlayerbotsTests(unittest.TestCase):
         result = self.run_fixture()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_native_upstream_and_retained_fork_changes_are_ancestors(self):
+        revision = self.addon["revision"]
+        for commit in (self.addon["upstream"]["revision"], *self.addon["forkChanges"].values()):
+            with self.subTest(commit=commit):
+                result = subprocess.run(["git", "-C", str(self.history), "merge-base", "--is-ancestor",
+                                         commit, revision], capture_output=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+
+        result = subprocess.run(["git", "-C", str(self.history), "merge-base", "--is-ancestor",
+                                 "438000dba6352b2123f882e74ded745889b890d6",
+                                 self.addon["upstream"]["revision"]], capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, "Playerbots quest progress must come from imported upstream")
+
+    def test_native_bridge_guid_contract(self):
+        core = prepared_core()
+        bridge = (core / "modules/mod-multibot-bridge/src/MultiBotBridge.cpp").read_text()
+        packets = function(bridge, "std::vector<std::pair<std::string, std::string>> BuildQuestProgressPackets(")
+        self.assertIn('packets.emplace_back("QUEST_PROGRESS_BEGIN", header + kFieldSeparator + botGuid.ToString());',
+                      packets)
+        guid = function((core / "src/server/game/Entities/Object/ObjectGuid.cpp").read_text(),
+                        "std::string ObjectGuid::ToString() const")
+        self.assertIn('"GUID Full: 0x" << std::hex << std::setw(16)', guid)
+        self.assertIn('std::setfill(\'0\') << _guid << std::dec', guid)
+        self.assertIn('" Type: " << GetTypeName()', guid)
+        self.assertIn('" Low: " << GetCounter()', guid)
+
     def test_regressions_are_detected(self):
         mutations = (
             (FILES[0], "if name ~= playerName then", "if true then", "own-character roster exclusion"),
             (FILES[0], 'if name and UnitIsConnected("raid" .. i) then', "if name then", "connected raid roster"),
             (FILES[0], 'if name and UnitIsConnected("party" .. i) then', "if name then", "connected party roster"),
             (FILES[0], "        SyncGroupRoster()\n        return\n", "        return\n", "initial roster sync"),
-            (FILES[0], "local owned = token == current\n", "local owned = true\n", "request token ownership"),
-            (FILES[0], "token:sub(1, #TOKEN_PREFIX) ~= TOKEN_PREFIX", "true", "stale issued token"),
+            (FILES[0], "local owned = token == current or", "local owned = true or", "request token ownership"),
+            (FILES[0], 'token:match("^qpp%d+x%d+$") ~= nil', "true", "stale issued token"),
             (FILES[0], "not bridgeUnsupported and helloRetries", "helloRetries", "unsupported bridge probing"),
             (FILES[0], "helloRetries < MAX_HELLO_RETRIES\n", "true\n", "bounded bridge probing"),
-            (FILES[0], "request.watch and token and", "token and", "push token requires WATCH"),
+            (FILES[0], "request.watch and isBridgePush", "isBridgePush", "push token requires WATCH"),
+            (FILES[0], "and snapshot.guid and snapshot.guid == GetCurrentGroupMembers()[botName]", "",
+             "in-flight roster identity"),
+            (FILES[0], "return guid:lower()", "return guid", "native GUID casing"),
             (FILES[0], "and objective.type == objectiveType", "", "per-type objective indices"),
             (FILES[0], "or -position", "or -rawObjective.index", "per-type unknown counters"),
             (FILES[0], "indices[position] = FindSameTypeObjectiveIndex(",

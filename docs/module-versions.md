@@ -20,19 +20,19 @@ data.
 | Component | Source repository | Locked revision | Role |
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [Syntax555/azerothcore-wotlk](https://github.com/Syntax555/azerothcore-wotlk), fork of [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk) at `3f2969ddb0da` | `dc4d2647696c` | Core server, historical spell/accounting hooks and earned-era PvP rules |
-| Playerbots with Raid Clear | [Syntax555/wow-mod-playerbots](https://github.com/Syntax555/wow-mod-playerbots), fork of [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) at `80f2afa04543` | `6be95a7feedc` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
+| Playerbots with Raid Clear | [Syntax555/wow-mod-playerbots](https://github.com/Syntax555/wow-mod-playerbots), fork of [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) at `5283a13e0a5d` | `686617ac530f` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
 | Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression), fork of [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) at `4933d455d2f6` | `2f10fb0ad85a` | Earned content milestones and expansion access |
-| Dungeon Clear | [Syntax555/mod-dungeon-clear](https://github.com/Syntax555/mod-dungeon-clear), fork of [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) at `fcb680fb279c` | `bf490e9da7e0` | Autonomous earned-era parties and player-led clears without event shortcuts |
+| Dungeon Clear | [Syntax555/mod-dungeon-clear](https://github.com/Syntax555/mod-dungeon-clear), fork of [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) at `7fb6ebdefb80` | `10b305cad830` | Autonomous earned-era parties and player-led clears without event shortcuts |
 | Quest Loot Party | [Syntax555/mod-quest-loot-party](https://github.com/Syntax555/mod-quest-loot-party), fork of [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) at `c3955915c76d` | `25ee77143d2d` | Scoped party sharing of naturally dropped quest items |
 | World Buff Bots | [Syntax555/mod-world-buff-bots](https://github.com/Syntax555/mod-world-buff-bots), fork of [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) at `baae5656aa6a` | `ce0984a28960` | Optional timed Vanilla events with earned-era checks; disabled by default |
 | Era Events | [Syntax555/wow-mod-era-events](https://github.com/Syntax555/wow-mod-era-events), fork of [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) at `cf02786aceb5` | `cc5387687044` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
 | LFG Progression | [Syntax555/wow-mod-lfg-progression](https://github.com/Syntax555/wow-mod-lfg-progression), fork of [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) at `2615e82902cf` | `7ed58ca9b0ac` | Always included access guards for optional Dungeon Finder use |
 | MultiBot Bridge | [Syntax555/mod-multibot-bridge](https://github.com/Syntax555/mod-multibot-bridge), fork of [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) at `ebfa01a129dd` | `a718f3e3407d` | Server support for the MultiBot controls |
 | MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), fork of [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) at `80148dff3f3a` | `3b84ccc4d157` | Client bot controls and combat-profile selection |
-| Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `d695e9048e6d` | `98274deeeac1` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
-| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `9087c457e20f` | `de9461efb1b4` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
-| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `834bd108fba6` | `362b26d26aa4` | Shared talent renderer for historical player and bot trees, plus spellbook catalogue integration |
-| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `c0276a5342f2` | Historical server trees, authored random-bot builds and client addon |
+| Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `30222ccb0821` | `78bb17aecb01` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
+| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `d2aae8d0f1f3` | `3d085a73c02a` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
+| DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `fd8281a2fa21` | `41426f19fa1d` | Shared talent renderer for historical player and bot trees, plus spellbook catalogue integration |
+| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `0ec31c8f3265` | Historical server trees, authored random-bot builds and client addon |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
 | CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
 | CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records and 2.4.3 quest experience values |
@@ -111,8 +111,11 @@ Progression supplies read-only queue diagnostics using every group member's
 own earned era; it does not unlock content.
 
 Dungeon Clear includes route, encounter-loot and recovery improvements. Its
-new BRD and Upper Blackrock Spire event controllers remain subject to the
-earned-action audit; unaudited controllers do not enable autonomous routes.
+BRD, Upper Blackrock Spire, Blackfathom Deeps, Stratholme and Karazhan event
+controllers remain subject to the earned-action audit; unaudited controllers
+do not enable autonomous routes. Blackfathom Deeps' party movement across
+disconnected mesh, Stratholme's trap-alley relocation and Karazhan's library
+recovery shortcuts are refused under natural progression.
 Rocknot's ale event requires the bot's own mugs and native quest eligibility,
 without the upstream unpaid reward fallback.
 

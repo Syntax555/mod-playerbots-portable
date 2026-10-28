@@ -29,7 +29,8 @@ from directly from GitHub and installs it only when every file matches the
 SHA-256 hash of that commit. It backs up an existing `Questie-335/` folder
 before replacement and preserves account and character SavedVariables. The installed TOC must be
 `Interface/AddOns/Questie-335/Questie-335.toc`; do not rename it or nest another
-folder. The ordinary upstream download does not contain the complete adaptation.
+folder. The fork adds shared bot-roster reuse and snapshot identity checks to
+the native upstream progress integration.
 
 To select the addon directory from a PowerShell prompt in the extracted folder:
 
@@ -108,9 +109,11 @@ QUEST_PROGRESS_OBJECTIVE~encodedName~token~questId~type~index~id~current~require
 QUEST_PROGRESS_END~encodedName~token
 ```
 
-Names in responses use the bridge's percent encoding. The GUID in BEGIN and
-the explicit `finished` flag (`0` or `1`) are trailing extensions; the existing
-Questie parser accepts the original fields. Types are `m` (creature or credit
+Names in responses use the bridge's percent encoding. BEGIN carries the core's
+`ObjectGuid::ToString()` representation; the addon compares its hexadecimal
+GUID with the watched group member's `UnitGUID` before applying the snapshot.
+The explicit `finished` flag (`0` or `1`) is a trailing extension.
+Types are `m` (creature or credit
 target), `o` (gameobject), `i` (item), `e` (event), `p` (player kills), `g`
 (money in copper) and `r` (reputation). Reputation values can be negative.
 An unavailable target ID is `0`. Indices identify objectives inside a quest,
@@ -144,15 +147,17 @@ at 30-second intervals, and the addon probes again only when the group
 changes; realms without the bridge therefore see no further addon traffic,
 and Questie works as usual. Cleanup preserves tables subsequently
 written by ordinary QuestieComms, including when a character gains a real
-client. Unmodified upstream Questie can read ordinary snapshots, but needs the
-fork's change for lease renewal, robust cleanup and special objectives.
+client. Questie's native integration handles lease renewal, cleanup and special
+objectives. The fork also reuses the connected group roster and validates each
+snapshot against the watched group member's GUID.
 
 ## Source builds
 
 For development, [versions.lock.json](../versions.lock.json) pins the
-AzerothCore/Playerbots sources and the Questie fork. The integration is the
+AzerothCore/Playerbots sources and the Questie fork. The server integration is the
 [MultiBot Bridge fork commit](https://github.com/Syntax555/mod-multibot-bridge/commit/968512c15f260a7130c17faa1b1cb30ef165bcb4) and
-the [Questie fork commit](https://github.com/Syntax555/Questie/commit/438000dba6352b2123f882e74ded745889b890d6). From the source checkout:
+the client uses the [native Questie progress integration](https://github.com/Aldori15/Questie/commit/438000dba6352b2123f882e74ded745889b890d6).
+The manifest names the retained fork changes. From the source checkout:
 
 ```bash
 cmake -P cmake/PrepareModules.cmake
@@ -217,7 +222,7 @@ from the standalone fixtures.
 | Files | Responsibility |
 | --- | --- |
 | [MultiBot Bridge fork commit](https://github.com/Syntax555/mod-multibot-bridge/commit/968512c15f260a7130c17faa1b1cb30ef165bcb4) | Updates upstream `src/MultiBotBridge.cpp`: native snapshots, MBOT capabilities, access checks and WATCH lifecycle. |
-| [Questie fork commit](https://github.com/Syntax555/Questie/commit/438000dba6352b2123f882e74ded745889b890d6) | Updates `QuestiePlayerbots.lua`, `QuestieCommsData.lua` and `QuestiePartyObjectives.lua`: native comms ingestion, lifecycle, credit aliases and existing map rendering. |
+| [Native Questie progress integration](https://github.com/Aldori15/Questie/commit/438000dba6352b2123f882e74ded745889b890d6) | `QuestiePlayerbots.lua`, `QuestieCommsData.lua` and `QuestiePartyObjectives.lua`: native comms ingestion, lifecycle, credit aliases and existing map rendering. The pinned fork adds connected-roster reuse and snapshot identity checks. |
 | `versions.lock.json`, `cmake/PrepareModules.cmake` | Pin the MultiBot Bridge and Questie forks and reproducibly prepare the core, module sources and source-only addons. |
 | [`.github/` of the Questie fork](https://github.com/Syntax555/Questie/tree/335/.github) | Package and test the installer, which downloads the fork's commit and installs it with backup and rollback, and publish it as the fork's Latest release. |
 | `cmake/tests/TestQuestProgressBridge.py`, `cmake/tests/QuestProgressBridgeFixture.cpp` | Compile and exercise production server logic and mutation checks. |

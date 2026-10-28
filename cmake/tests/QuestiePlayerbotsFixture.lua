@@ -2,6 +2,8 @@ assert(_VERSION == "Lua 5.1", "exercise the Wrath Lua runtime")
 
 local modules, sent, printed, updates = {}, {}, {}, {}
 local now, roster, connected = 1, {"Tankbot", "Healbot", "Human"}, {}
+local guids = {Owner="0x0000000000000001", Tankbot="0x000000000000ABCD",
+    Healbot="0x0000000000000003", Human="0x0000000000000004"}
 local frame, raidRoster
 local function module(name)
     if not modules[name] then modules[name] = {private={}} end
@@ -19,6 +21,7 @@ function UnitName(unit)
     return roster[tonumber(unit:match("party(%d+)"))]
 end
 function UnitIsConnected(unit) return connected[UnitName(unit)] ~= false end
+function UnitGUID(unit) return guids[UnitName(unit)] end
 function GetNumPartyMembers() return raidRoster and 0 or #roster end
 function GetNumRaidMembers() return raidRoster and #raidRoster or 0 end
 function CreateFrame()
@@ -78,8 +81,10 @@ local function token(name)
     end
     error("No request for "..name)
 end
-local function begin(name, request)
-    receive("QUEST_PROGRESS_BEGIN~" .. name .. "~" .. request .. "~Player-1-00000001")
+local function begin(name, request, guid)
+    -- Native ObjectGuid::ToString is lowercase hex plus its type and low counter.
+    guid = guid or ("GUID Full: " .. guids[name]:lower() .. " Type: Player Low: " .. tonumber(guids[name]:sub(3),16))
+    receive("QUEST_PROGRESS_BEGIN~" .. name .. "~" .. request .. "~" .. guid)
 end
 local function quest(name, request, id, status)
     receive("QUEST_PROGRESS_QUEST~" .. name .. "~" .. request .. "~" .. id .. "~" .. (status or "I"))
@@ -138,6 +143,44 @@ assert(entry("Healbot").status == "F")
 begin("Tankbot",tank); finish("Tankbot",tank)
 assert(not entry("Tankbot") and entry("Healbot") and entry("Human"), "quest turn-in removed another member")
 assert(comms.data:GetTooltip("m_101")[100].Tankbot == nil)
+
+-- Every snapshot belongs to the current watched unit, including native push tokens.
+for _, guid in ipairs({"", "0x2", "Player-1-00000001", guids.Owner, guids.Healbot,
+    "GUID Full: " .. guids.Owner .. " Type: Player Low: 1"}) do
+    begin("Tankbot",tank,guid); quest("Tankbot",tank,100)
+    objective("Tankbot",tank,100,"m",1,101,9,10); finish("Tankbot",tank)
+    assert(not entry("Tankbot"), "foreign or malformed snapshot GUID was accepted")
+end
+begin("Tankbot","qpp7x0",guids.Owner); quest("Tankbot","qpp7x0",100)
+objective("Tankbot","qpp7x0",100,"m",1,101,9,10); finish("Tankbot","qpp7x0")
+assert(not entry("Tankbot"), "WATCH push accepted the owner's GUID")
+begin("Tankbot",tank); quest("Tankbot",tank,100)
+objective("Tankbot",tank,100,"m",1,101,9,10)
+begin("Tankbot",tank,guids.Owner); finish("Tankbot",tank)
+assert(not entry("Tankbot"), "invalid BEGIN retained a previous partial snapshot")
+begin("Tankbot",tank); quest("Tankbot",tank,100)
+objective("Tankbot",tank,100,"m",1,101,9,10)
+local tankGuid = guids.Tankbot
+guids.Tankbot = "0x0000000000000005"
+finish("Tankbot",tank)
+assert(not entry("Tankbot"), "in-flight snapshot survived a roster GUID change")
+guids.Tankbot = tankGuid
+begin("Tankbot",tank); quest("Tankbot",tank,100)
+objective("Tankbot",tank,100,"m",1,101,9,10)
+guids.Tankbot = nil
+finish("Tankbot",tank)
+assert(not entry("Tankbot"), "snapshot applied while the current unit GUID was unavailable")
+guids.Tankbot = tankGuid
+begin("Tankbot",tank); quest("Tankbot",tank,100)
+objective("Tankbot",tank,100,"m",1,101,9,10)
+connected.Tankbot = false
+finish("Tankbot",tank)
+assert(not entry("Tankbot"), "in-flight snapshot survived a disconnect")
+connected.Tankbot = true
+begin("Tankbot",tank,guids.Tankbot); quest("Tankbot",tank,100)
+objective("Tankbot",tank,100,"m",1,101,2,10); finish("Tankbot",tank)
+assert(entry("Tankbot").fulfilled == 2, "native client GUID was rejected")
+begin("Tankbot",tank); finish("Tankbot",tank)
 
 -- Reject spoofed, unsolicited, mismatched, oversized and malformed snapshots atomically.
 progress("Tankbot","qpb0x0",9)
