@@ -1,11 +1,16 @@
 """Regression checks for shared fixture sources, options, WDBC data and SQL rows."""
 
 import argparse
+import http.server
 import json
+import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -132,6 +137,59 @@ class ForkSourceTests(unittest.TestCase):
         refs = subprocess.run(['git', '-C', str(history), 'for-each-ref', '--format=%(objectname)',
                                'refs/portable-cache'], check=True, capture_output=True, text=True).stdout.splitlines()
         self.assertEqual({self.first, self.second}, set(refs))
+        self.assertEqual(history, fork_history('mod-fixture', str(self.repository / 'missing-remote'),
+                                              self.second, 2, self.repository))
+
+    def test_fork_history_retries_stalled_http_before_server_closes(self):
+        requested, release = threading.Event(), threading.Event()
+
+        class StalledResponse(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/x-git-upload-pack-advertisement')
+                self.send_header('Content-Length', '1024')
+                self.end_headers()
+                requested.set()
+                release.wait(45)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), StalledResponse)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            started = time.monotonic()
+            with (mock.patch.dict(os.environ, {'NO_PROXY': '127.0.0.1', 'no_proxy': '127.0.0.1'}),
+                  mock.patch('FixtureSupport.time.sleep', side_effect=RuntimeError('fetch retry')) as retry,
+                  self.assertRaisesRegex(RuntimeError, 'fetch retry')):
+                fork_history('stalled', f'http://127.0.0.1:{server.server_port}/repo.git',
+                             self.first, 2, self.repository)
+            self.assertTrue(requested.is_set(), 'Git must reach the local stalled HTTP response')
+            self.assertLess(time.monotonic() - started, 40, 'Git waited for the server instead of retrying')
+            retry.assert_called_once_with(1)
+        finally:
+            release.set()
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_fork_history_recovers_after_fetch_failure(self):
+        remote = self.repository / 'recovered-remote'
+        with mock.patch('FixtureSupport.time.sleep', side_effect=lambda _: shutil.copytree(self.history, remote)) as retry:
+            history = fork_history('recovered', str(remote), self.first, 2, self.repository)
+        retry.assert_called_once_with(1)
+        actual = subprocess.run(['git', '-C', str(history), 'show', f'{self.first}:src/shared.cpp'],
+                                check=True, capture_output=True, text=True).stdout
+        self.assertEqual('first\n', actual)
+
+    def test_fork_history_preserves_final_fetch_failure(self):
+        with (mock.patch('FixtureSupport.time.sleep') as retry,
+              self.assertRaises(subprocess.CalledProcessError) as failure):
+            fork_history('missing', str(self.repository / 'missing-remote'), self.first, 2, self.repository)
+        self.assertNotEqual(0, failure.exception.returncode)
+        self.assertIn(b'missing-remote', failure.exception.stderr)
+        self.assertEqual([mock.call(1), mock.call(2), mock.call(3), mock.call(4)], retry.call_args_list)
 
     def test_fork_changes_keep_scope_and_reversion_order(self):
         paths = ('src/shared.cpp',)

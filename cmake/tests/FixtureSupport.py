@@ -225,8 +225,9 @@ def fork_history(component, url, commit, depth, repository=REPOSITORY):
         if fetched():
             return history
         try:
-            # Persistent refs let subsequent fetches negotiate the objects already cached.
-            subprocess.run(['git', '-C', str(history), 'fetch', '--quiet', f'--depth={depth}', url,
+            # Let Git stop stalled HTTP transfers so retries do not leave transport children running.
+            subprocess.run(['git', '-c', 'http.lowSpeedLimit=1', '-c', 'http.lowSpeedTime=30',
+                            '-C', str(history), 'fetch', '--quiet', f'--depth={depth}', url,
                             f'{commit}:refs/portable-cache/{commit}'],
                            check=True, capture_output=True)
         except subprocess.CalledProcessError:
