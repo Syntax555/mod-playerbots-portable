@@ -364,7 +364,8 @@ def authored_sources(source):
     authored = ['#include "DungeonEventRegistry.h"', '#include <utility>']
     for signature in ('EventBuilder::EventBuilder(', 'EventStep& EventBuilder::Add(', 'EventBuilder& EventBuilder::Anchored(',
                       'EventBuilder& EventBuilder::Persistent(', 'EventBuilder& EventBuilder::StepsOwnMovement(',
-                      'EventBuilder& EventBuilder::Custom(', 'EventBuilder& EventBuilder::Timeout('):
+                      'EventBuilder& EventBuilder::Custom(', 'EventBuilder& EventBuilder::Timeout(',
+                      'DungeonEvent EventBuilder::Build() const'):
         authored.append(function(builder, signature))
     events = (source / 'Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsEvents.cpp').read_text()
     authored.append(re.search(r'constexpr uint32 BRD_RING_OF_LAW_HOOK\s*=\s*1;', events).group())
@@ -512,7 +513,8 @@ ObjectiveHookRegistry::HookTable const& Hooks(){static ObjectiveHookRegistry::Ho
         (work / 'HookDispatch.cpp').write_text(dispatch)
         (work / 'fixture.cpp').write_text(HARNESS)
         exe = work / ('fixture.exe' if os.name == 'nt' else 'fixture')
-        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work)]
+        native_includes = ['-I', str(core / 'deps/g3dlite/include')]
+        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work), *native_includes]
         if os.name != 'nt':
             flags += [*SANITIZER_FLAGS, '-no-pie']
         subprocess.run([compiler, *flags, str(work / 'fixture.cpp'), '-o', str(exe)], check=True)
@@ -577,7 +579,7 @@ ObjectiveHookRegistry::HookTable const& Hooks(){static ObjectiveHookRegistry::Ho
             ('earned Ring hook execution', 'HookDispatch.cpp', 'hookId != 1', 'true'),
             ('Ring delegate skipped', 'HookDispatch.cpp', 'return DcRingOfLaw::Run(bot);', 'return ObjectiveArriveResult::Done;'),
         ]
-        reject_mutants(work, mutations, lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory),
+        reject_mutants(work, mutations, lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory), *native_includes,
                        str(directory / 'fixture.cpp'), '-o', str(executable)], 'Ring of Law')
 
 

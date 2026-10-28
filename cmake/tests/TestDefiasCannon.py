@@ -372,6 +372,7 @@ def main():
         builder = registry.with_suffix('.cpp').read_text()
         authored = ['#include "DungeonEventRegistry.h"', '#include <utility>']
         for signature in ('EventBuilder::EventBuilder(', 'EventStep& EventBuilder::Add(',
+                          'DungeonEvent EventBuilder::Build() const',
                           'EventBuilder& EventBuilder::Anchored(', 'EventBuilder& EventBuilder::Persistent(',
                           'EventBuilder& EventBuilder::StepsOwnMovement(', 'EventBuilder& EventBuilder::CompleteWhenGOState(',
                           'EventBuilder& EventBuilder::MoveTo(', 'EventBuilder& EventBuilder::UseItemOnGO(',
@@ -390,7 +391,8 @@ def main():
         (work / 'AuthoredCannon.cpp').write_text('\n'.join(authored))
         (work / 'fixture.cpp').write_text(HARNESS)
         exe = work / ('fixture.exe' if os.name == 'nt' else 'fixture')
-        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work)]
+        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work),
+                 '-I', str(core / 'deps/g3dlite/include')]
         if os.name != 'nt':
             flags += [*SANITIZER_FLAGS, '-no-pie']
         subprocess.run([compiler, *flags, str(work / 'fixture.cpp'), '-o', str(exe)], check=True)
@@ -440,6 +442,7 @@ def main():
         reject_mutants(work, [(label, 'DcDefiasCannon.cpp', old, new) for label, old, new in mutations] +
                        [(label, 'AuthoredCannon.cpp', old, new) for label, old, new in authored_mutations],
                        lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory),
+                                                      '-I', str(core / 'deps/g3dlite/include'),
                                                       str(directory / 'fixture.cpp'), '-o', str(executable)],
                        'Defias cannon')
 

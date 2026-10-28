@@ -224,9 +224,6 @@ NATIVE_ROSTER_PATCH
 NATIVE_AUDIT_TYPES
 NATIVE_PROGRESS
 NATIVE_DRIVE_OUTCOME
-namespace G3D{struct Vector3{float x=0,y=0,z=0;Vector3()=default;Vector3(float a,float b,float c):x(a),y(b),z(c){}
-    Vector3 operator-(Vector3 const& v)const{return {x-v.x,y-v.y,z-v.z};}
-    float magnitude()const{return std::sqrt(x*x+y*y+z*z);}};}
 namespace Movement{using PointsArray=std::vector<G3D::Vector3>;}
 NATIVE_PATH_TYPES
 NATIVE_DATA_TYPES
@@ -552,7 +549,8 @@ def authored_sources(source):
     for signature in ('EventBuilder::EventBuilder(', 'EventStep& EventBuilder::Add(',
                       'EventBuilder& EventBuilder::Anchored(', 'EventBuilder& EventBuilder::Persistent(',
                       'EventBuilder& EventBuilder::StepsOwnMovement(', 'EventBuilder& EventBuilder::MoveTo(',
-                      'EventBuilder& EventBuilder::Timeout(', 'EventBuilder& EventBuilder::EscortCreature('):
+                      'EventBuilder& EventBuilder::Timeout(', 'EventBuilder& EventBuilder::EscortCreature(',
+                      'DungeonEvent EventBuilder::Build('):
         output.append(function(builder, signature))
     events = (source / 'Ai/Dungeon/DungeonClear/Data/Events/WailingCavernsEvents.cpp').read_text()
     output.append(function(events, 'void RegisterWailingCavernsEvents('))
@@ -725,7 +723,8 @@ def main():
     generated = generated.replace('NATIVE_DRIVE_OUTCOME', function(executor_header, 'enum class EventDriveOutcome') + ';')
     boss = (source / 'Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h').read_text()
     generated = generated.replace('NATIVE_BOSS_TYPES', function(boss, 'enum class DungeonAnchorKind') + ';' +
-                                  function(boss, 'struct DungeonBossInfo') + ';' + function(boss, 'inline uint32 BossOrderKey('))
+                                  function(boss, 'struct DcSpawnPoint') + ';' + function(boss, 'struct DungeonBossInfo') + ';' +
+                                  function(boss, 'inline uint32 BossOrderKey('))
     roster_header = (source / 'Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h').read_text()
     generated = generated.replace('NATIVE_ROSTER_PATCH', function(roster_header, 'struct BossRosterPatch') + ';')
     gate = (source / 'Ai/Dungeon/DungeonClear/Data/DcDifficultyGate.h').read_text()
@@ -755,7 +754,9 @@ def main():
         (work / 'AuthoredWC.cpp').write_text(authored)
         (work / 'fixture.cpp').write_text(ROUTE_TESTS + ESCORT_TESTS + AUTHORED_TESTS)
         exe = work / ('fixture.exe' if os.name == 'nt' else 'fixture')
-        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work)]
+        g3d_include = str(core / 'deps/g3dlite/include')
+        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers',
+                 '-I', str(work), '-I', g3d_include]
         if os.name != 'nt':
             flags += [*SANITIZER_FLAGS, '-no-pie']
         subprocess.run([compiler, *flags, str(work / 'fixture.cpp'), '-o', str(exe)], check=True)
@@ -848,7 +849,7 @@ def main():
             ('escort follower dispatch omitted', 'AuthoredWC.cpp', 'DcNaralexEscort::Follow(bot, tank) ||', ''),
         ]
         reject_mutants(work, mutations, lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory),
-                       str(directory / 'fixture.cpp'), '-o', str(executable)], 'Wailing Caverns')
+                       '-I', g3d_include, str(directory / 'fixture.cpp'), '-o', str(executable)], 'Wailing Caverns')
 
 
 if __name__ == '__main__':

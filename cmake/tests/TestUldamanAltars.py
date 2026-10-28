@@ -399,6 +399,7 @@ def authored_sources(source):
     builder = registry.with_suffix('.cpp').read_text()
     authored = ['#include "DungeonEventRegistry.h"', '#include <utility>']
     for signature in ('EventBuilder::EventBuilder(', 'EventStep& EventBuilder::Add(',
+                      'DungeonEvent EventBuilder::Build() const',
                       'EventBuilder& EventBuilder::Anchored(', 'EventBuilder& EventBuilder::Persistent(',
                       'EventBuilder& EventBuilder::StepsOwnMovement(', 'EventBuilder& EventBuilder::MoveTo(',
                       'EventBuilder& EventBuilder::ClearRadius(', 'EventBuilder& EventBuilder::Timeout(',
@@ -455,7 +456,8 @@ def main():
         (work / 'AuthoredAltars.cpp').write_text(authored)
         (work / 'fixture.cpp').write_text(HARNESS)
         exe = work / ('fixture.exe' if os.name == 'nt' else 'fixture')
-        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work)]
+        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work),
+                 '-I', str(core / 'deps/g3dlite/include')]
         if os.name != 'nt':
             flags += [*SANITIZER_FLAGS, '-no-pie']
         subprocess.run([compiler, *flags, str(work / 'fixture.cpp'), '-o', str(exe)], check=True)
@@ -497,7 +499,7 @@ def main():
             ('object entry used as GUID', 'NativeRitual.cpp', 'go->GetGUID().GetRawValue()', 'go->GetEntry()'),
         ]
         reject_mutants(work, mutations, lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory),
-                       str(directory / 'fixture.cpp'), '-o', str(executable)], 'Uldaman altars')
+                       '-I', str(core / 'deps/g3dlite/include'), str(directory / 'fixture.cpp'), '-o', str(executable)], 'Uldaman altars')
 
 
 if __name__ == '__main__':

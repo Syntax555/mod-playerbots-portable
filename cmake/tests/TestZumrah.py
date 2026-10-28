@@ -252,7 +252,8 @@ ObjectiveHookRegistry::HookTable const& Hooks(){static ObjectiveHookRegistry::Ho
     for signature in ('EventBuilder::EventBuilder(', 'EventStep& EventBuilder::Add(', 'EventBuilder& EventBuilder::Conditional(',
                       'EventBuilder& EventBuilder::Repeatable(', 'EventBuilder& EventBuilder::PanelBeforeBoss(',
                       'EventBuilder& EventBuilder::OwnsThePull(', 'EventBuilder& EventBuilder::StepsOwnMovement(',
-                      'EventBuilder& EventBuilder::Custom(', 'EventBuilder& EventBuilder::Timeout('):
+                      'EventBuilder& EventBuilder::Custom(', 'EventBuilder& EventBuilder::Timeout(',
+                      'DungeonEvent EventBuilder::Build() const'):
         authored.append(function(builder, signature))
     events = (source / 'Ai/Dungeon/DungeonClear/Data/Events/ZulFarrakEvents.cpp').read_text()
     constants = '\n'.join(re.findall(r'^    constexpr (?:uint32|float) ZF_(?:ZUMRAH|HOOK_WAKE_ZUMRAH)[^;]+;', events, re.MULTILINE))
@@ -410,7 +411,8 @@ def main():
         (work / 'AuthoredZumrah.cpp').write_text(authored)
         (work / 'fixture.cpp').write_text(HARNESS)
         executable = work / ('fixture.exe' if os.name == 'nt' else 'fixture')
-        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work)]
+        native_includes = ['-I', str(core / 'deps/g3dlite/include')]
+        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-Wno-missing-field-initializers', '-I', str(work), *native_includes]
         if os.name != 'nt':
             flags += [*SANITIZER_FLAGS, '-no-pie']
         subprocess.run([compiler, *flags, str(work / 'fixture.cpp'), '-o', str(executable)], check=True)
@@ -461,7 +463,7 @@ def main():
             ('native living trigger', 'NativeZumrah.cpp', '!player->IsAlive()', 'false'),
         ]
         reject_mutants(work, mutations,
-                       lambda directory, binary: [compiler, '-std=c++20', '-O1', '-I', str(directory),
+                       lambda directory, binary: [compiler, '-std=c++20', '-O1', '-I', str(directory), *native_includes,
                                                    str(directory / 'fixture.cpp'), '-o', str(binary)],
                        'Zumrah activation')
 
