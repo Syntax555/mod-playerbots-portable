@@ -1,10 +1,11 @@
-"""Keep parallel CI shards exhaustive and preserve the local full-suite command."""
+"""Keep CI shard coverage and fork fixture selection connected to the runner."""
 
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -105,6 +106,79 @@ class GameplayShardsTests(unittest.TestCase):
         body += f"\n  launcher:\n    steps:\n      - run: python3 {runner.GAMEPLAY_COMMAND}\n  checks:\n    {runner.CHECKS_CALL}\n"
         with patch.object(Path, "read_text", return_value=body):
             self.assertEqual([], runner.wiring_errors())
+
+
+class CoreFixturesTests(unittest.TestCase):
+    def test_core_runs_only_its_existing_checks(self):
+        self.assertTrue(runner.CORE_FIXTURES)
+        self.assertEqual(len(runner.CORE_FIXTURES), len(set(runner.CORE_FIXTURES)))
+        self.assertTrue({f"{name}.py" for name in runner.CORE_FIXTURES} <= runner.fixtures())
+        with (patch.object(runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run,
+              redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(0, runner.main(["core"]))
+        self.assertEqual(list(runner.CORE_FIXTURES), [Path(call.args[0][1]).stem for call in run.call_args_list])
+        self.assertIn(f"Core: all {len(runner.CORE_FIXTURES)} fixtures passed", output.getvalue())
+
+    def test_invalid_core_arguments_cannot_succeed(self):
+        for arguments in (("core", "--module", "mod-playerbots"), ("core", "--shard-count", "4")):
+            with (self.subTest(arguments=arguments), patch.object(runner.subprocess, "run") as run,
+                  redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error):
+                runner.main(list(arguments))
+            self.assertEqual(2, error.exception.code)
+            run.assert_not_called()
+
+    def test_failure_stops_the_core_checks(self):
+        with (patch.object(runner.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run,
+              redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(7, runner.main(["core"]))
+        run.assert_called_once()
+        self.assertIn("Core failed after", output.getvalue())
+
+    def test_wiring_rejects_a_missing_core_fixture(self):
+        with patch.object(runner, "CORE_FIXTURES", ("TestMissing",)):
+            self.assertIn("TestMissing.py is listed for the core but does not exist", runner.wiring_errors())
+
+
+class ModuleFixturesTests(unittest.TestCase):
+    def test_every_locked_module_has_existing_native_fixtures(self):
+        lock = json.loads((ROOT / "versions.lock.json").read_text())
+        self.assertEqual({entry["name"] for entry in lock["modules"]}, set(runner.MODULE_FIXTURES))
+        for module, selected in runner.MODULE_FIXTURES.items():
+            with self.subTest(module=module):
+                self.assertTrue(selected)
+                self.assertEqual(len(selected), len(set(selected)))
+                self.assertTrue({f"{name}.py" for name in selected} <= runner.fixtures())
+
+    def test_module_runs_only_its_native_checks(self):
+        for module, selected in runner.MODULE_FIXTURES.items():
+            with (self.subTest(module=module),
+                  patch.object(runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run,
+                  redirect_stdout(io.StringIO()) as output):
+                self.assertEqual(0, runner.main(["module", "--module", module]))
+            self.assertEqual(list(selected), [Path(call.args[0][1]).stem for call in run.call_args_list])
+            self.assertIn(f"Module {module}: all {len(selected)} fixtures passed", output.getvalue())
+
+    def test_invalid_module_arguments_cannot_succeed(self):
+        for arguments in (("module",), ("module", "--module", "unknown"),
+                          ("gameplay", "--module", "mod-playerbots"),
+                          ("check", "--module", "mod-playerbots"),
+                          ("module", "--module", "mod-playerbots", "--shard-count", "4")):
+            with (self.subTest(arguments=arguments), patch.object(runner.subprocess, "run") as run,
+                  redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error):
+                runner.main(list(arguments))
+            self.assertEqual(2, error.exception.code)
+            run.assert_not_called()
+
+    def test_failure_stops_the_module_checks(self):
+        with (patch.object(runner.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as run,
+              redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(7, runner.main(["module", "--module", "mod-playerbots"]))
+        run.assert_called_once()
+        self.assertIn("Module mod-playerbots failed after", output.getvalue())
+
+    def test_wiring_rejects_a_missing_module_fixture(self):
+        with patch.object(runner, "MODULE_FIXTURES", {"mod-playerbots": ("TestMissing",)}):
+            self.assertIn("TestMissing.py is listed for mod-playerbots but does not exist", runner.wiring_errors())
 
 
 if __name__ == "__main__":

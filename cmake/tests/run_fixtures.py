@@ -3,6 +3,8 @@
   python3 cmake/tests/run_fixtures.py check     fail when a fixture is not wired into CI
   python3 cmake/tests/run_fixtures.py gameplay  run the gameplay fixtures in order
   python3 cmake/tests/run_fixtures.py gameplay --shard-index 0 --shard-count 4
+  python3 cmake/tests/run_fixtures.py core
+  python3 cmake/tests/run_fixtures.py module --module mod-playerbots
 
 A fixture is wired when it is listed below or when the checks workflow names
 its path.
@@ -47,6 +49,30 @@ GAMEPLAY = (
     "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
 )
 
+# Fork CI prepares its current source with the portable dependencies before
+# running these checks. The portable checks still run the complete fixture set.
+CORE_FIXTURES = (
+    "TestEraCorePatches", "TestEraTalents", "TestEarnedEraPrices", "TestBattlegroundEraRules",
+    "TestEarnedArenaCore", "TestEraExperience", "TestWindowsResourceIncludes", "TestFormationMovement",
+    "TestCoreBuildWarnings", "TestCoreExperience",
+)
+
+MODULE_FIXTURES = {
+    "mod-playerbots": ("TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay"),
+    "mod-individual-progression": (
+        "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
+    ),
+    "mod-dungeon-clear": ("TestEarnedDungeonParties", "TestEarnedDungeonEvents"),
+    "mod-quest-loot-party": ("TestProfileKeys",),
+    "mod-world-buff-bots": ("TestWorldBuffEvents",),
+    "mod-lfg-progression": ("TestLfgProgression", "TestWorldStartupData"),
+    "mod-era-events": ("TestEraEvents", "TestWorldStartupData", "TestWorldUpdateOrder"),
+    "mod-multibot-bridge": (
+        "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestCombatProfileBridge",
+    ),
+    "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook"),
+}
+
 
 def fixtures() -> set[str]:
     return {path.name for path in TESTS.glob("Test*") if path.suffix in (".py", ".ps1") and path.is_file()}
@@ -76,6 +102,10 @@ def wiring_errors() -> list[str]:
     available = fixtures()
     errors = [f"{name}.py is listed as a gameplay fixture but does not exist"
               for name in GAMEPLAY if f"{name}.py" not in available]
+    errors += [f"{name}.py is listed for the core but does not exist"
+               for name in CORE_FIXTURES if f"{name}.py" not in available]
+    errors += [f"{name}.py is listed for {module} but does not exist"
+               for module, names in MODULE_FIXTURES.items() for name in names if f"{name}.py" not in available]
     wired = {name for name in available if f"cmake/tests/{name}" in workflow}
     if GAMEPLAY_COMMAND in workflow:
         wired |= {f"{name}.py" for name in GAMEPLAY} & available
@@ -106,11 +136,9 @@ def gameplay_fixtures(shard_index: int = 0, shard_count: int = 1) -> tuple[str, 
     return GAMEPLAY[shard_index::shard_count]
 
 
-def gameplay(shard_index: int = 0, shard_count: int = 1) -> int:
-    selected = gameplay_fixtures(shard_index, shard_count)
+def run(selected: tuple[str, ...], label: str, total: int) -> int:
     started = time.monotonic()
-    label = f"Gameplay shard {shard_index + 1}/{shard_count}"
-    print(f"{label}: {len(selected)}/{len(GAMEPLAY)} fixtures", flush=True)
+    print(f"{label}: {len(selected)}/{total} fixtures", flush=True)
     for name in selected:
         path = Path("cmake/tests") / f"{name}.py"
         print(f"::group::{name}", flush=True)
@@ -126,15 +154,30 @@ def gameplay(shard_index: int = 0, shard_count: int = 1) -> int:
     return 0
 
 
+def gameplay(shard_index: int = 0, shard_count: int = 1) -> int:
+    return run(gameplay_fixtures(shard_index, shard_count),
+               f"Gameplay shard {shard_index + 1}/{shard_count}", len(GAMEPLAY))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "gameplay"))
+    parser.add_argument("command", choices=("check", "gameplay", "core", "module"))
     parser.add_argument("--shard-index", type=int, default=0, help="zero-based gameplay shard index (default: 0)")
     parser.add_argument("--shard-count", type=int, default=1, help="number of gameplay shards (default: 1)")
+    parser.add_argument("--module", choices=MODULE_FIXTURES, help="module whose native fixtures should run")
     args = parser.parse_args(argv)
+    if args.command != "gameplay" and (args.shard_index != 0 or args.shard_count != 1):
+        parser.error("shard options apply only to gameplay")
+    if args.command == "module":
+        if args.module is None:
+            parser.error("--module is required for module fixtures")
+        selected = MODULE_FIXTURES[args.module]
+        return run(selected, f"Module {args.module}", len(selected))
+    if args.module is not None:
+        parser.error("--module applies only to module fixtures")
+    if args.command == "core":
+        return run(CORE_FIXTURES, "Core", len(CORE_FIXTURES))
     if args.command == "check":
-        if args.shard_index != 0 or args.shard_count != 1:
-            parser.error("shard options apply only to gameplay")
         return check()
     try:
         return gameplay(args.shard_index, args.shard_count)
