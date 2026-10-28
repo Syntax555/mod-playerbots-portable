@@ -10,8 +10,8 @@ TBC DB revision pinned in versions.lock.json, leaving out records that cannot
 hold the quest's value. custom_quest_xp_level holds the 1.12 quest level of
 Individual Progression's custom_quest_xp values from the pinned CMaNGOS Classic
 DB. Rows are written for quests the AzerothCore world database contains. Write
-the output into a patchwork work tree of
-mod-individual-progression-era-experience.patch.
+the output into the Individual Progression fork's
+data/sql/world/updates/2026_10_16_01_era_quest_xp.sql and commit it there.
 """
 
 from __future__ import annotations

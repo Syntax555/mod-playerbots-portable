@@ -23,8 +23,8 @@ PREFIX_BUILT = {
 }
 # Profile keys that no prepared source reads, each with the reason it is shipped.
 UNREAD = {
-    'EraTalents.AdvanceGossip': 'compatibility key; the earned-progression patch removes the force-advance '
-                                'gossip that read it, and 0 keeps an unpatched module closed',
+    'EraTalents.AdvanceGossip': 'compatibility key; the fork removes the force-advance gossip that read it, '
+                                'and 0 keeps the upstream module closed',
 }
 TOKENS = re.compile(r'"((?:\\.|[^"\\\n])*)"|\'(?:\\.|[^\'\\\n])*\'|//[^\n]*|/\*.*?\*/', re.DOTALL)
 ASSIGNMENT = re.compile(r'^\s*([A-Za-z][A-Za-z0-9_.]*)\s*=', re.MULTILINE)

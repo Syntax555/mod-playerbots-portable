@@ -224,7 +224,7 @@ def main():
     core = prepared_core(repo)
     source = args.source or core/'modules/mod-dungeon-clear/src'
     if not (source/'DcEarnedEvents.cpp').exists():
-        raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear patch first')
+        raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear sources first')
     native_contracts(core, source)
     compiler = cxx()
     registry = (source/'Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h').read_text()

@@ -132,7 +132,7 @@ GUIDs and retain no `Player*` pointers between updates.
 
 Each requester can watch at most 40 bots; at most 512 requester states are
 retained. Requests are limited to 80 per two seconds per requester and one
-snapshot request per bot per second. WATCH leases last 180 seconds; the patched
+snapshot request per bot per second. WATCH leases last 180 seconds; the adapted
 addon renews them every 60 seconds. Unchanged polling sends no packets, and
 multiple observers share the bot snapshot built during each poll.
 
@@ -151,16 +151,16 @@ fork's change for lease renewal, robust cleanup and special objectives.
 
 For development, [versions.lock.json](../versions.lock.json) pins the
 AzerothCore/Playerbots sources and the Questie fork. The integration is the
-[MultiBot Bridge patch](../patches/mod-multibot-bridge-quest-progress.patch) and
+[MultiBot Bridge fork commit](https://github.com/Syntax555/mod-multibot-bridge/commit/968512c15f260a7130c17faa1b1cb30ef165bcb4) and
 the [Questie fork commit](https://github.com/Syntax555/Questie/commit/438000dba6352b2123f882e74ded745889b890d6). From the source checkout:
 
 ```bash
 cmake -P cmake/PrepareModules.cmake
 ```
 
-The generated `.module-cache/prepared-core` contains the patched
-`modules/mod-multibot-bridge`. Build and install the server using the normal
-[build instructions](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md),
+The generated `.module-cache/prepared-core` contains the pinned
+`modules/mod-multibot-bridge` fork sources. Build and install the server using
+the normal [build instructions](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md),
 then restart it. Copying a C++ source file into an installed server does not
 update its executable.
 
@@ -216,9 +216,9 @@ from the standalone fixtures.
 
 | Files | Responsibility |
 | --- | --- |
-| `patches/mod-multibot-bridge-quest-progress.patch` | Updates upstream `src/MultiBotBridge.cpp`: native snapshots, MBOT capabilities, access checks and WATCH lifecycle. |
+| [MultiBot Bridge fork commit](https://github.com/Syntax555/mod-multibot-bridge/commit/968512c15f260a7130c17faa1b1cb30ef165bcb4) | Updates upstream `src/MultiBotBridge.cpp`: native snapshots, MBOT capabilities, access checks and WATCH lifecycle. |
 | [Questie fork commit](https://github.com/Syntax555/Questie/commit/438000dba6352b2123f882e74ded745889b890d6) | Updates `QuestiePlayerbots.lua`, `QuestieCommsData.lua` and `QuestiePartyObjectives.lua`: native comms ingestion, lifecycle, credit aliases and existing map rendering. |
-| `versions.lock.json`, `scripts/patchwork.py`, `cmake/PrepareModules.cmake` | Pin the Questie fork and reproducibly prepare the server patches and source-only addons. |
+| `versions.lock.json`, `cmake/PrepareModules.cmake` | Pin the MultiBot Bridge and Questie forks and reproducibly prepare the core, module sources and source-only addons. |
 | [`.github/` of the Questie fork](https://github.com/Syntax555/Questie/tree/335/.github) | Package and test the installer, which downloads the fork's commit and installs it with backup and rollback, and publish it as the fork's Latest release. |
 | `cmake/tests/TestQuestProgressBridge.py`, `cmake/tests/QuestProgressBridgeFixture.cpp` | Compile and exercise production server logic and mutation checks. |
 | `cmake/tests/TestQuestiePlayerbots.py`, `cmake/tests/QuestiePlayerbotsFixture.lua` | Run production Questie comms and map logic under Lua 5.1 with client API doubles and mutation checks. |

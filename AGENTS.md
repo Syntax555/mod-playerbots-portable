@@ -45,21 +45,18 @@ Sources, licenses and update instructions are in
   configuration over new logic. Check the pinned sources before writing a
   replacement. Do not call hooks with side effects to probe a decision.
 - Use upstream raid tactics wherever they exist. When pinned upstream code
-  covers a local implementation, remove the superseded code, patches and
-  fixtures; retain only missing functionality and earned-progression integration.
-- Core and module changes are ordered patches listed in `versions.lock.json`.
-  Never edit a `.patch` file by hand. Use `python3 scripts/patchwork.py open
-  patches/<name>.patch`, edit the printed work tree, then run
-  `python3 scripts/patchwork.py save <work tree>`; it checks the whole chain.
-  Keep patches functional: no reformatting, include reordering or unrelated
-  hunks.
-- Era Talents and the MultiBot, DragonUI, Questie and Zygor addons come from
-  forks listed in `CONTRIBUTING.md`. Change them by commits on the fork's
-  branch (Questie: `335`, otherwise `main`), then pin the commit in
-  `versions.lock.json` and name each fixture-covered commit under
-  `forkChanges`. Never rewrite fork history the server pins.
+  covers a local implementation, remove the superseded code and fixtures;
+  retain only missing functionality and earned-progression integration.
+- The core, all native server modules and the MultiBot, DragonUI, Questie and
+  Zygor addons come from forks listed in `CONTRIBUTING.md`. Read the fork's
+  `AGENTS.md` and change it by commits on its configured default branch, then
+  pin the commit in `versions.lock.json` and name each fixture-covered commit
+  under `forkChanges`. Keep `upstream` pointed at the
+  original project and the revision last imported. Never rewrite fork history
+  the server pins. Do not add source patches here. These product rules take
+  precedence over instructions inherited from the original upstream projects.
 - Do not bump a pinned revision blindly. Compare the upstream history, check
-  config key renames and removed APIs, refresh every affected patch and keep
+  config key renames and removed APIs, update affected fork code and keep
   the shipped profile keys effective.
 - Match the surrounding style, naming and comment density. Comments explain
   why, not what changed.
@@ -76,12 +73,12 @@ the full checks separately on code pushes and before manual builds.
 
 - Go launcher: format the changed Go files and run the affected package's tests,
   vet and staticcheck. Include the Windows checks when the change affects it.
-- Patches and dependency updates: `cmake -P cmake/PrepareModules.cmake`, compile
-  each changed C++ file against the prepared sources, then run the relevant
-  `cmake/tests/Test*.py` fixtures directly.
-- Fork changes: check changed Lua files and affected fork behavior, then run the
-  relevant server fixtures against the newly pinned commit. The fork's full
-  checks and Latest workflow run in GitHub Actions.
+- Fork and dependency updates: `cmake -P cmake/PrepareModules.cmake`, compile
+  each changed C++ file against the prepared sources or check changed Lua files,
+  then run the relevant `cmake/tests/Test*.py` fixtures against the new pin.
+  Run the fork's configured checks. Core and module fork CI runs selected server
+  fixtures; complete native builds and integration run in this server repository.
+  Addon Latest workflows publish their own client packages.
 - Packaging and release: run only the affected Python test modules and
   PowerShell fixtures. Run Ruff on changed Python files and actionlint for
   workflow changes.
@@ -127,5 +124,6 @@ leave it to CI rather than claiming it works.
 
 - One logical change per commit with an imperative summary under about 72
   characters and a short body explaining why.
-- Commit and push only validated work, directly to `main` unless asked
-  otherwise. Never leave a half-regenerated patch chain or failing fixtures.
+- In this server repository, commit and push only validated work, directly to
+  `main` unless asked otherwise. Never leave an incomplete source pin update or
+  failing fixtures.

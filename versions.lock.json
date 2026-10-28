@@ -2,124 +2,161 @@
   "schemaVersion": 1,
   "core": {
     "name": "azerothcore-wotlk",
-    "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-    "revision": "3f2969ddb0da42b48b4fca050c02b19163ba1e20",
-    "patches": [
-      "patches/azerothcore-era-shatter.patch",
-      "patches/azerothcore-era-corruption.patch",
-      "patches/azerothcore-era-heart-of-the-wild.patch",
-      "patches/azerothcore-era-sentry-totem.patch",
-      "patches/azerothcore-era-wand-specialization.patch",
-      "patches/azerothcore-era-molten-fury.patch",
-      "patches/azerothcore-era-respec-accounting.patch",
-      "patches/azerothcore-earned-riding-prices.patch",
-      "patches/azerothcore-earned-era-battleground-rules.patch",
-      "patches/azerothcore-earned-era-arena-matching.patch",
-      "patches/azerothcore-recruit-a-friend-grant-limit.patch",
-      "patches/azerothcore-windows-resource-includes.patch",
-      "patches/azerothcore-formation-minimum-velocity.patch",
-      "patches/azerothcore-build-warnings.patch",
-      "patches/azerothcore-experience-rules.patch"
-    ]
+    "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
+    "revision": "dc4d2647696c2d4729a8fc507fbe27e82d289ad5",
+    "upstream": {
+      "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
+      "revision": "3f2969ddb0da42b48b4fca050c02b19163ba1e20"
+    },
+    "forkChanges": {
+      "azerothcore-era-shatter": "1076b54f2319ec434c22cce2e0b901f694c275ed",
+      "azerothcore-era-corruption": "11b4c4c6045e6ee3a29d1efba72f66ba278c4d22",
+      "azerothcore-era-heart-of-the-wild": "db1e7bef684e13ef8f06c2df1d1064dac5eae0b8",
+      "azerothcore-era-sentry-totem": "c74c05dbf6e3a8a9d7e9b5bb8fee2b6fae1d8317",
+      "azerothcore-era-wand-specialization": "fe981d7a8f76a7c4ec10141776b8b3ea9b2e4008",
+      "azerothcore-era-molten-fury": "2d46207180172dd06929967d82472a74d345ca6d",
+      "azerothcore-era-respec-accounting": "c2cc8725ffa7ddd7118766b6be3b48ce339009b6",
+      "azerothcore-earned-riding-prices": "0ef37e7ffa2a3add5c33930913b5df8e79d158ca",
+      "azerothcore-earned-era-battleground-rules": "93d3d5e8ee61e5090e3d259e752c8b2626ac8f7b",
+      "azerothcore-earned-era-arena-matching": "64d500742049c65c57ef754c8938cebe9804b4e3",
+      "azerothcore-recruit-a-friend-grant-limit": "24a261d9a04fef004ee94cc3e6f09eed4a5a9d85",
+      "azerothcore-windows-resource-includes": "62f2ba333d3d5731a5295f56b670d4f6889a6d89",
+      "azerothcore-formation-minimum-velocity": "47a8d90f822f1c8f3a19dbca1ff2bac8044c6b45",
+      "azerothcore-build-warnings": "d2d9d0ff9d21f816c2d59622fd31ec38a160f5af",
+      "azerothcore-experience-rules": "b6f6bb7a4254e76d6b4e3a2ec9ee3f979fc25b2e"
+    }
   },
   "modules": [
     {
       "name": "mod-playerbots",
-      "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
-      "revision": "80f2afa04543871245d22ee0a314e78e29f2feb0",
-      "patches": [
-        "patches/mod-playerbots-natural-progression.patch",
-        "patches/mod-playerbots-earned-auctions.patch",
-        "patches/mod-playerbots-earned-bags.patch",
-        "patches/mod-playerbots-era-talents.patch",
-        "patches/mod-playerbots-earned-era-battlegrounds.patch",
-        "patches/mod-playerbots-master-flight-learning.patch",
-        "patches/mod-playerbots-quest-area-triggers.patch",
-        "patches/mod-playerbots-loot-roll-policy.patch",
-        "patches/mod-playerbots-raid-clear-natural-progression.patch",
-        "patches/mod-playerbots-raid-clear-windows-identifiers.patch",
-        "patches/mod-playerbots-combat-profiles.patch"
-      ]
+      "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
+      "revision": "6be95a7feedcac026ade14a51e78e31edb47bbb1",
+      "upstream": {
+        "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
+        "revision": "80f2afa04543871245d22ee0a314e78e29f2feb0"
+      },
+      "forkChanges": {
+        "mod-playerbots-natural-progression": "2a50914f4731316f7431ce11711c37970e1d9b7e",
+        "mod-playerbots-earned-auctions": "8a16e1e0ddab9706a561234da338fc30bb56ceb0",
+        "mod-playerbots-earned-bags": "7a4f09edf3035128f72dfe3389720407cdfd2e8d",
+        "mod-playerbots-era-talents": "5fe8ef5ab6b6098bfe4fb820b2c03590b3833525",
+        "mod-playerbots-earned-era-battlegrounds": "0596c6db35c7735bea77b6cbf401c483b31aeec3",
+        "mod-playerbots-master-flight-learning": "a191e0c567d974c67a634903ed84ade10d2732f2",
+        "mod-playerbots-quest-area-triggers": "d4993be88c77d0f3376b9ffb7cddce89da37edd8",
+        "mod-playerbots-loot-roll-policy": "03fa84b4320be8abc2318dcd2b2eb3964c83355c",
+        "mod-playerbots-raid-clear-natural-progression": "2130d76c5a5a23b3c090ca2ef6e3c5847128e84c",
+        "mod-playerbots-raid-clear-windows-identifiers": "057818adc8e807ff28e1b457e24a05772a9344ac",
+        "mod-playerbots-combat-profiles": "cea4febb77ef9d25c27dda7807d20b7533552d22"
+      }
     },
     {
       "name": "mod-individual-progression",
-      "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
-      "revision": "4933d455d2f611eed50c74c68c78832df4ed37a3",
-      "patches": [
-        "patches/mod-individual-progression-empty-account-filters.patch",
-        "patches/mod-individual-progression-earned-milestones.patch",
-        "patches/mod-individual-progression-earned-riding-prices.patch",
-        "patches/mod-individual-progression-earned-battlegrounds.patch",
-        "patches/mod-individual-progression-frostmane-hold.patch",
-        "patches/mod-individual-progression-historical-class-quests.patch",
-        "patches/mod-individual-progression-creature-era-modifiers.patch",
-        "patches/mod-individual-progression-era-experience.patch",
-        "patches/mod-individual-progression-client-cache.patch",
-        "patches/mod-individual-progression-submerge-binding.patch",
-        "patches/mod-individual-progression-startup-data.patch",
-        "patches/mod-individual-progression-cleanup-order.patch",
-        "patches/mod-individual-progression-netherstorm-updates.patch"
-      ]
+      "url": "https://github.com/Syntax555/mod-individual-progression.git",
+      "revision": "2f10fb0ad85a580517fdc97565684b3eba47b9d1",
+      "upstream": {
+        "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
+        "revision": "4933d455d2f611eed50c74c68c78832df4ed37a3"
+      },
+      "forkChanges": {
+        "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
+        "mod-individual-progression-earned-milestones": "2e1453bbbed2c38b2564e5354c9de8798877f3ce",
+        "mod-individual-progression-earned-riding-prices": "139b67189398156f2a8f5de934d031254433894e",
+        "mod-individual-progression-earned-battlegrounds": "cec427fd2ffc41fbf5ed74d69c08fa4bf52d7e51",
+        "mod-individual-progression-frostmane-hold": "f85cf6b4c87381566b816bbfb7e3a81ec46335f3",
+        "mod-individual-progression-historical-class-quests": "1ba29350bfabed582ad25b8c56f151862d1ebb12",
+        "mod-individual-progression-creature-era-modifiers": "6f395d0817a919b0458d69107607ac60b905e0e4",
+        "mod-individual-progression-era-experience": "370508a6ceae22857c43021280bc0184d27a2e9c",
+        "mod-individual-progression-client-cache": "a13ebd35f9103885de1bd6ea8f7b2d9d37d264f3",
+        "mod-individual-progression-submerge-binding": "55b020073ccb59353a662594b9ee4dcee46a1870",
+        "mod-individual-progression-startup-data": "c5acc6d985d5423c97dc079540446c9a0ac8f497",
+        "mod-individual-progression-cleanup-order": "0d3414ac63e0e339cf2907a4a96934f42dc33aee",
+        "mod-individual-progression-netherstorm-updates": "3ab83ec445111a983dece14d473c4ce018f8f683"
+      }
     },
     {
       "name": "mod-dungeon-clear",
-      "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-      "revision": "fcb680fb279cd25696e7f848fad72c5d41282032",
-      "patches": [
-        "patches/mod-dungeon-clear-earned-parties.patch",
-        "patches/mod-dungeon-clear-build-warnings.patch"
-      ]
+      "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
+      "revision": "bf490e9da7e0aae033d25173229e4abfdec7015d",
+      "upstream": {
+        "url": "https://github.com/jrad7/mod-dungeon-clear.git",
+        "revision": "fcb680fb279cd25696e7f848fad72c5d41282032"
+      },
+      "forkChanges": {
+        "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
+        "mod-dungeon-clear-build-warnings": "8297c0afbdde6010c4ef91906b584da9d09c1f16"
+      }
     },
     {
       "name": "mod-quest-loot-party",
-      "url": "https://github.com/pangolp/mod-quest-loot-party.git",
-      "revision": "c3955915c76d5a22a9d25a44482345d368a8de82"
+      "url": "https://github.com/Syntax555/mod-quest-loot-party.git",
+      "revision": "25ee77143d2d6bd8682edb55daf05a2d49fb996d",
+      "upstream": {
+        "url": "https://github.com/pangolp/mod-quest-loot-party.git",
+        "revision": "c3955915c76d5a22a9d25a44482345d368a8de82"
+      },
+      "forkChanges": {}
     },
     {
       "name": "mod-world-buff-bots",
-      "url": "https://github.com/Rockhopper1776/mod-world-buff-bots.git",
-      "revision": "baae5656aa6a375e103bc83da8262f2061dbfcb6",
-      "patches": [
-        "patches/mod-world-buff-bots-earned-era.patch"
-      ]
+      "url": "https://github.com/Syntax555/mod-world-buff-bots.git",
+      "revision": "ce0984a2896040547f15105ad066cf8c8ea9ec99",
+      "upstream": {
+        "url": "https://github.com/Rockhopper1776/mod-world-buff-bots.git",
+        "revision": "baae5656aa6a375e103bc83da8262f2061dbfcb6"
+      },
+      "forkChanges": {
+        "mod-world-buff-bots-earned-era": "de269376f10031158fefb7ddb0d6b14eb35a661f"
+      }
     },
     {
       "name": "mod-lfg-progression",
-      "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
-      "revision": "2615e82902cf92c0e7dd93dd6c2472d7b40fe14a",
-      "patches": [
-        "patches/mod-lfg-progression-earned-era.patch",
-        "patches/mod-lfg-progression-command-help.patch"
-      ]
+      "url": "https://github.com/Syntax555/wow-mod-lfg-progression.git",
+      "revision": "7ed58ca9b0ac3cd491867a451816aa5da1f088f2",
+      "upstream": {
+        "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
+        "revision": "2615e82902cf92c0e7dd93dd6c2472d7b40fe14a"
+      },
+      "forkChanges": {
+        "mod-lfg-progression-earned-era": "14e561a851287d1316ff61e076ac29783008a065",
+        "mod-lfg-progression-command-help": "27f80d2718ee0f0482588e6bc2b4c97b8c403d8a"
+      }
     },
     {
       "name": "mod-era-events",
-      "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
-      "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1",
-      "patches": [
-        "patches/mod-era-events-earned-progression.patch",
-        "patches/mod-era-events-startup-data.patch"
-      ]
+      "url": "https://github.com/Syntax555/wow-mod-era-events.git",
+      "revision": "cc538768704420c5f6fe96e83f2229eb8ebe1ccc",
+      "upstream": {
+        "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
+        "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1"
+      },
+      "forkChanges": {
+        "mod-era-events-earned-progression": "52e6b5d2f284acd2290a35253dc0f0ceafcf10aa",
+        "mod-era-events-startup-data": "75dffdcc834dd8307fc0f4800ddde532b32cef03"
+      }
     },
     {
       "name": "mod-multibot-bridge",
-      "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
-      "revision": "ebfa01a129dd4c441b2527e42dcc37b6da95e6c2",
-      "patches": [
-        "patches/mod-multibot-bridge-natural-progression.patch",
-        "patches/mod-multibot-bridge-era-talents.patch",
-        "patches/mod-multibot-bridge-trainer-money.patch",
-        "patches/mod-multibot-bridge-optional-presets.patch",
-        "patches/mod-multibot-bridge-quest-progress.patch",
-        "patches/mod-multibot-bridge-progression-state.patch",
-        "patches/mod-multibot-bridge-spellbook-display.patch",
-        "patches/mod-multibot-bridge-combat-profiles.patch"
-      ]
+      "url": "https://github.com/Syntax555/mod-multibot-bridge.git",
+      "revision": "a718f3e3407daded6b17b3c7bd4fd2cc02b03b39",
+      "upstream": {
+        "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
+        "revision": "ebfa01a129dd4c441b2527e42dcc37b6da95e6c2"
+      },
+      "forkChanges": {
+        "mod-multibot-bridge-natural-progression": "16f52887235a3190d2b5e346faed3db0e63ac465",
+        "mod-multibot-bridge-era-talents": "deac68b403acadac54cb70a5ff31b7094e3c9e34",
+        "mod-multibot-bridge-trainer-money": "e85cce04d9577e6dc77edcaf0ea31078156b7fa7",
+        "mod-multibot-bridge-optional-presets": "bb5f55556ef3c9d9199e449229a752832b83fbdc",
+        "mod-multibot-bridge-quest-progress": "968512c15f260a7130c17faa1b1cb30ef165bcb4",
+        "mod-multibot-bridge-progression-state": "7395bc38459a2dcc11777a1801e0a75235570a5a",
+        "mod-multibot-bridge-spellbook-display": "9e653f92929820fb33171ddd9f9f5ee796abfc96",
+        "mod-multibot-bridge-combat-profiles": "6073ac3cb7f09844af678b5d5c186381ee4a9d6b"
+      }
     },
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "d29b75c1b3615a1baa77c54a6cdc936023bec384",
+      "revision": "c0276a5342f25469b167e6bfe36c22ff7f36c6c6",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"

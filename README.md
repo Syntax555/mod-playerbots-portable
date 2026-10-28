@@ -9,7 +9,7 @@ An independently maintained **Windows x64 distribution** for World of Warcraft
 3.3.5a, integrating character-specific progression through Vanilla, The Burning
 Crusade and Wrath of the Lich King with
 [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk),
-[Playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) and community modules.
+[Playerbots](https://github.com/Syntax555/wow-mod-playerbots) and community modules.
 
 This project continues [Onur Aslan's portable server project](https://github.com/onur/mod-playerbots-portable)
 with earned-play integrations, historical client packages and automatic server
@@ -216,22 +216,24 @@ inventories and gold are preserved without verifying their origin. See
 
 ## Included modules
 
-These upstream projects provide the underlying systems. Their roles below
-include this distribution's local integration and defaults; see
+The maintained [core](https://github.com/Syntax555/azerothcore-wotlk) and module
+forks include this distribution's local integration. Their roles below include
+the shipped defaults; original projects and tested revisions are recorded in
+the manifest. See
 [server adaptations](docs/adaptations.md) and the pinned
 [source versions](docs/module-versions.md).
 
 | Module | Default role |
 | --- | --- |
-| [Playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) | Bot companions, natural progression, earned auction trading and integrated Raid Clear tactics. |
-| [Individual Progression](https://github.com/ZhengPeiRu21/mod-individual-progression) | Character-specific content milestones and expansion unlocks. |
-| [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | Earned-era talents and selected class spell variants for players and bots. |
-| [Quest Loot Party](https://github.com/pangolp/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
-| [World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) | Optional timed Vanilla buffs; disabled by default in favor of native quest events. |
-| [Era Events](https://github.com/buildthehomelab/wow-mod-era-events) | Outdoor AQ, Scourge, Legion and zombie encounters at each character's exact earned tier, with ordinary kill loot. |
-| [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | Always included earned-era access guards for the [optional Dungeon Finder](docs/bot-dungeons.md#optional-dungeon-finder), which is disabled by default. |
-| [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
-| [Dungeon Clear](https://github.com/jrad7/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
+| [Playerbots](https://github.com/Syntax555/wow-mod-playerbots) | Bot companions, natural progression, earned auction trading and integrated Raid Clear tactics. |
+| [Individual Progression](https://github.com/Syntax555/mod-individual-progression) | Character-specific content milestones and expansion unlocks. |
+| [Era Talents](https://github.com/Syntax555/azerothcore-mod-era-talents) | Earned-era talents and selected class spell variants for players and bots. |
+| [Quest Loot Party](https://github.com/Syntax555/mod-quest-loot-party) | Shared normal-quality quest-item loot for eligible party members. |
+| [World Buff Bots](https://github.com/Syntax555/mod-world-buff-bots) | Optional timed Vanilla buffs; disabled by default in favor of native quest events. |
+| [Era Events](https://github.com/Syntax555/wow-mod-era-events) | Outdoor AQ, Scourge, Legion and zombie encounters at each character's exact earned tier, with ordinary kill loot. |
+| [LFG Progression](https://github.com/Syntax555/wow-mod-lfg-progression) | Always included earned-era access guards for the [optional Dungeon Finder](docs/bot-dungeons.md#optional-dungeon-finder), which is disabled by default. |
+| [MultiBot Bridge](https://github.com/Syntax555/mod-multibot-bridge) | Server support for the MultiBot Chatless interface. |
+| [Dungeon Clear](https://github.com/Syntax555/mod-dungeon-clear) | Autonomous earned-era dungeon parties and player-led clears, with real travel, combat and loot. |
 
 Bot commands are documented in the
 [Playerbots wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands).
@@ -266,15 +268,16 @@ Commands that grant items, gear, pets, summons or mail are refused here; see
 | **Development** | |
 | [TODO and validation](docs/todo.md) | Open integration work, validation tasks and completion criteria. |
 | [Building from source](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md) | Windows build, client package and local checks. |
-| [Contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md) | Problem reports, patch and fork workflow, documentation and releases. |
+| [Contributing](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md) | Problem reports, fork workflow, documentation and releases. |
 
 ## Contributing
 
 [Report a problem](https://github.com/Syntax555/mod-playerbots-portable/issues)
 or propose a change; the
 [contributing guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md)
-lists what a report needs and how to change pinned sources. Addon changes are
-made in the [addon forks](docs/addons.md#addon-forks).
+lists what a report needs and how to change pinned sources. Core, module and
+addon changes are committed to their forks and integrated through tested server
+pins.
 
 Before committing, run targeted local checks for the changed files and their
 affected callers, configuration and integrations. The complete test suite runs

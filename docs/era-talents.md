@@ -194,10 +194,11 @@ online character. Administrative learn/reset commands require GM privileges.
 ## Building the client package
 
 Sources, the IP base client archive and StormLib are pinned in
-[the dependency manifest](../versions.lock.json). Era Talents is pinned as a
-commit of [its fork](https://github.com/Syntax555/azerothcore-mod-era-talents);
-preparation and packaging include the hashes of the remaining ordered local
-patches as part of build identity.
+[the dependency manifest](../versions.lock.json). The core and all native
+modules, including
+[Era Talents](https://github.com/Syntax555/azerothcore-mod-era-talents), are
+pinned as fork commits. Preparation and packaging use these exact source
+revisions as part of build identity.
 
 From a source checkout on Linux with Git, CMake 3.25 or newer, a C/C++ toolchain,
 Python 3/PyYAML, 7z, zlib and bzip2 development libraries:

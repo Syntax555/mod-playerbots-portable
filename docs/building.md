@@ -106,11 +106,11 @@ C++.
 
 [versions.lock.json](../versions.lock.json) pins the core, modules, addons and
 client-build dependencies. CMake fetches the locked core and module commits into
-`.module-cache/` and applies the ordered [patches](../patches) to managed source
-copies. No submodule initialization is required.
+`.module-cache/`. The core and all native modules are exported from their
+pinned fork commits. No submodule initialization is required.
 
-Subsequent configurations reuse the prepared module cache. A changed revision or
-patch rebuilds its managed copy, while unmarked directories are not overwritten.
+Subsequent configurations reuse the prepared module cache. A changed revision
+rebuilds its managed copy, while unmarked directories are not overwritten.
 Prepare these copies independently with:
 
 ```powershell
@@ -118,10 +118,9 @@ cmake -P cmake/PrepareModules.cmake
 ```
 
 Existing checkouts of `azerothcore-wotlk/` and `mod-playerbots/` from older
-versions are ignored and left untouched, including local edits. Patch work trees
-use the locked commits in `.module-cache/`.
+versions are ignored and left untouched, including local edits.
 
-The server bundle includes the source manifest, patches and applicable license
+The server bundle includes the source manifest and applicable license
 files or notices. Record the manifest when reporting a problem or sharing a
 custom build; the rolling download name alone does not identify its sources.
 
@@ -135,7 +134,7 @@ remain necessary for platform and encounter validation.
 
 Before committing, select local checks from the changed files and their affected
 callers, configuration and integrations. Run the relevant fixtures directly,
-rather than the complete suite or unrelated checks. For patch and dependency
+rather than the complete suite or unrelated checks. For fork and dependency
 updates, prepare the sources with `cmake -P cmake/PrepareModules.cmake` and compile
 each changed C++ file against `.module-cache/prepared-core` before its fixtures.
 For example, a combat-profile change uses
@@ -145,7 +144,7 @@ For example, a combat-profile change uses
 | Changed area | Targeted local checks |
 | --- | --- |
 | Go launcher | Format changed files; run tests, vet and staticcheck for affected packages, including Windows checks where affected. |
-| Patches and module pins | Compile changed C++ files against the prepared sources and run the relevant native and integration fixtures. |
+| Core and module fork pins | Compile changed C++ files against the prepared sources and run the relevant native and integration fixtures. |
 | Addon forks | Check changed Lua files and affected addon behavior, then run the relevant server integration fixtures against the new pin. |
 | Packaging and release | Run affected Python test modules and PowerShell fixtures, Ruff for changed Python files and actionlint for workflow changes. |
 | Documentation | Run `python3 cmake/tests/TestDocumentation.py` for links, anchors and stated versions. |

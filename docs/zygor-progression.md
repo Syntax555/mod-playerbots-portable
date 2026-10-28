@@ -295,7 +295,7 @@ reasons and every map without the progression gate.
 ## Verification
 
 `python3 cmake/tests/TestIpProgressBridge.py` compiles the actual endpoint, its
-[progression unit](../patches/mod-multibot-bridge-progression-state.patch) and
+[progression unit](https://github.com/Syntax555/mod-multibot-bridge/commit/7395bc38459a2dcc11777a1801e0a75235570a5a) and
 Individual Progression's own progression functions against native-shaped
 doubles. It compares every visibility rule with the module's scripts, checks
 that the native checks it calls send no messages, and rejects 27 mutations of

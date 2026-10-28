@@ -23,6 +23,7 @@ from FixtureSupport import (
     cxx,
     function,
     in_parallel,
+    pinned_source,
     prepared_core,
     run_fixture,
     source_argument,
@@ -42,12 +43,12 @@ args = parser.parse_args()
 repository = Path(__file__).resolve().parents[2]
 core = args.core or prepared_core(repository)
 module = args.module or core / 'modules/mod-world-buff-bots'
-baseline = args.baseline_repository or repository / '.module-cache/mod-world-buff-bots'
+baseline = args.baseline_repository
 revision = 'baae5656aa6a375e103bc83da8262f2061dbfcb6'
 lock = json.loads((repository / 'versions.lock.json').read_text())
 locked = next((m for m in lock['modules'] if m['name'] == 'mod-world-buff-bots'), None)
 if locked:
-    assert locked['revision'] == revision
+    assert locked.get('upstream', locked)['revision'] == revision
 
 # These are independent stock records, not simulator configuration or policy.
 # SpellDuration records 42/367 at Haeniken b21c949... are finite 60/120 minutes.
@@ -881,10 +882,14 @@ with tempfile.TemporaryDirectory(prefix='portable-world-buff-events-') as direct
         (temporary / name).write_text('#pragma once\n')
     production = (module / 'src/WorldBuffBots.cpp').read_text()
     loader = (module / 'src/world_buff_bots_loader.cpp').read_text()
-    baseline_source = subprocess.check_output(['git', '-C', str(baseline), 'show',
-                                              revision + ':src/WorldBuffBots.cpp'], text=True)
-    baseline_loader = subprocess.check_output(['git', '-C', str(baseline), 'show',
-                                              revision + ':src/world_buff_bots_loader.cpp'], text=True)
+    if baseline:
+        baseline_source = subprocess.check_output(['git', '-C', str(baseline), 'show',
+                                                  revision + ':src/WorldBuffBots.cpp'], text=True)
+        baseline_loader = subprocess.check_output(['git', '-C', str(baseline), 'show',
+                                                  revision + ':src/world_buff_bots_loader.cpp'], text=True)
+    else:
+        baseline_source = pinned_source('mod-world-buff-bots', 'src/WorldBuffBots.cpp')
+        baseline_loader = pinned_source('mod-world-buff-bots', 'src/world_buff_bots_loader.cpp')
     mutations = (
         ('city-area-cast', '            if (player->AddAura(spellId, player))\n                ++appliedCount;',
          '            player->CastSpell(player, spellId, true);\n            ++appliedCount;',

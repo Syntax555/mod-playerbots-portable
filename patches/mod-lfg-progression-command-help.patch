@@ -1,9 +1,0 @@
-diff --git a/data/sql/db-world/updates/mod_lfg_progression_2026_10_24_00_command_help.sql b/data/sql/db-world/updates/mod_lfg_progression_2026_10_24_00_command_help.sql
-new file mode 100644
-index 0000000..0c9bcbf
---- /dev/null
-+++ b/data/sql/db-world/updates/mod_lfg_progression_2026_10_24_00_command_help.sql
-@@ -0,0 +1,3 @@
-+-- The read-only progress command is available to players; keep a customized entry.
-+INSERT IGNORE INTO `command` (`name`, `security`, `help`) VALUES
-+('lfgprogress', 0, 'Syntax: .lfgprogress\nShows the earned expansion of each online group member, which member sets the group\'s Dungeon Finder era, and the requirements for the next expansion.');

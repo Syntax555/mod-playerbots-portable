@@ -1,10 +1,10 @@
 # Server adaptations
 
-This distribution combines pinned upstream projects with local integration
-patches and an earned-play configuration. This guide describes its supported
-behavior. [Dependencies and build provenance](module-versions.md) and
-[versions.lock.json](../versions.lock.json) identify exact revisions and ordered
-patches; packaged source manifests also record their hashes.
+This distribution combines pinned core, module and addon forks with an
+earned-play configuration. This guide describes its supported behavior.
+[Dependencies and build provenance](module-versions.md) and
+[versions.lock.json](../versions.lock.json) identify exact fork revisions and
+upstream origins; packaged source manifests also record artifact hashes.
 
 ## Launcher and distribution
 
@@ -47,15 +47,15 @@ in the default profile.
 Settings and scope are documented in [configuration](configuration.md),
 [bot brackets and PvP](earned-bot-brackets.md) and
 [auction trading](earned-auctions.md). The exploration and loot integrations are
-implemented in [area-trigger handling](../patches/mod-playerbots-quest-area-triggers.patch)
-and [roll policy](../patches/mod-playerbots-loot-roll-policy.patch).
+implemented in [area-trigger handling](https://github.com/Syntax555/wow-mod-playerbots/commit/d4993be88c77d0f3376b9ffb7cddce89da37edd8)
+and [roll policy](https://github.com/Syntax555/wow-mod-playerbots/commit/03fa84b4320be8abc2318dcd2b2eb3964c83355c).
 
 See [bot dungeons](bot-dungeons.md) for recruitment, supported instances and
 travel requirements. LFG Progression supplies earned-era access guards for the
 optional Dungeon Finder; it does not navigate or run encounters.
 
 See [world buffs](world-buffs.md) for native events, optional timers and the
-[world-event integration](../patches/mod-world-buff-bots-earned-era.patch).
+[world-event integration](https://github.com/Syntax555/mod-world-buff-bots/commit/de269376f10031158fefb7ddb0d6b14eb35a661f).
 
 See [era world events](world-events.md) for outdoor encounters, tier requirements
 and schedules. Events require the default Individual Progression chain.
@@ -75,15 +75,15 @@ and schedules. Events require the default Individual Progression chain.
 | Shared experience rules | Raid groups receive no party XP bonus on any map. Online rest in inns and cities uses the same base accrual rate as offline rest there, with the respective configured multipliers. Thrallmar's and Honor Hold's Favor grant their 5% XP bonus once per award. |
 | Formation movement | Formation velocity falls back to the creature's native walking speed when the computed movement velocity is effectively zero. Ordinary movement calculations remain in use. |
 
-Source: [era creature modifiers](../patches/mod-individual-progression-creature-era-modifiers.patch),
-[era experience](../patches/mod-individual-progression-era-experience.patch) with its
-[Recruit-a-Friend grant limit](../patches/azerothcore-recruit-a-friend-grant-limit.patch),
-[shared experience rules](../patches/azerothcore-experience-rules.patch),
-[quest availability](../patches/mod-individual-progression-frostmane-hold.patch),
-[world database setup](../patches/mod-individual-progression-cleanup-order.patch),
-[Netherstorm core updates](../patches/mod-individual-progression-netherstorm-updates.patch),
+Source: [era creature modifiers](https://github.com/Syntax555/mod-individual-progression/commit/6f395d0817a919b0458d69107607ac60b905e0e4),
+[era experience](https://github.com/Syntax555/mod-individual-progression/commit/370508a6ceae22857c43021280bc0184d27a2e9c) with its
+[Recruit-a-Friend grant limit](https://github.com/Syntax555/azerothcore-wotlk/commit/24a261d9a04fef004ee94cc3e6f09eed4a5a9d85),
+[shared experience rules](https://github.com/Syntax555/azerothcore-wotlk/commit/b6f6bb7a4254e76d6b4e3a2ec9ee3f979fc25b2e),
+[quest availability](https://github.com/Syntax555/mod-individual-progression/commit/f85cf6b4c87381566b816bbfb7e3a81ec46335f3),
+[world database setup](https://github.com/Syntax555/mod-individual-progression/commit/0d3414ac63e0e339cf2907a4a96934f42dc33aee),
+[Netherstorm core updates](https://github.com/Syntax555/mod-individual-progression/commit/3ab83ec445111a983dece14d473c4ce018f8f683),
 [spell-group contracts](https://github.com/Syntax555/azerothcore-mod-era-talents/commit/908c9d8a78deed185ebfdad1f5b783a135a0d51e) and
-[formation movement](../patches/azerothcore-formation-minimum-velocity.patch).
+[formation movement](https://github.com/Syntax555/azerothcore-wotlk/commit/47a8d90f822f1c8f3a19dbca1ff2bac8044c6b45).
 SQL updates run through the ordinary database updater.
 
 Progression uses shared AzerothCore quest data with selected corrections. It
@@ -134,7 +134,7 @@ release.
 
 ## Validation and supported scope
 
-The release workflow checks patched native gameplay handlers, launcher
+The release workflow checks the adapted native gameplay handlers, launcher
 subprocesses and update recovery, client generation and package contents before
 publishing the Windows build. These checks cover the integrations above; they
 do not certify every quest route, encounter tactic, third-party addon combination

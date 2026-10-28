@@ -123,13 +123,13 @@ are not diagnostic steps.
 ## Verified sources
 
 The [locked sources](module-versions.md) supply the
-[command handler](https://github.com/mod-playerbots/azerothcore-wotlk/blob/3f2969ddb0da42b48b4fca050c02b19163ba1e20/src/server/scripts/Commands/cs_quest.cpp),
-[acceptance checks](https://github.com/mod-playerbots/azerothcore-wotlk/blob/3f2969ddb0da42b48b4fca050c02b19163ba1e20/src/server/game/Entities/Player/PlayerQuest.cpp),
-[command permissions/help](https://github.com/mod-playerbots/azerothcore-wotlk/blob/3f2969ddb0da42b48b4fca050c02b19163ba1e20/data/sql/base/db_world/command.sql)
-and [reason strings](https://github.com/mod-playerbots/azerothcore-wotlk/blob/3f2969ddb0da42b48b4fca050c02b19163ba1e20/data/sql/updates/db_world/2026_02_15_02.sql).
-IP provides the [read-only progression handler](https://github.com/ZhengPeiRu21/mod-individual-progression/blob/4933d455d2f611eed50c74c68c78832df4ed37a3/src/cs_individualProgression.cpp)
-and its [command defaults](https://github.com/ZhengPeiRu21/mod-individual-progression/blob/4933d455d2f611eed50c74c68c78832df4ed37a3/data/sql/world/base/cs_individualProgression.sql).
-Local [historical quest](../patches/mod-individual-progression-historical-class-quests.patch),
-[Frostmane Hold](../patches/mod-individual-progression-frostmane-hold.patch) and
-[earned milestone](../patches/mod-individual-progression-earned-milestones.patch)
+[command handler](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/src/server/scripts/Commands/cs_quest.cpp),
+[acceptance checks](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/src/server/game/Entities/Player/PlayerQuest.cpp),
+[command permissions/help](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/data/sql/base/db_world/command.sql)
+and [reason strings](https://github.com/Syntax555/azerothcore-wotlk/blob/dc4d2647696c2d4729a8fc507fbe27e82d289ad5/data/sql/updates/db_world/2026_02_15_02.sql).
+IP provides the [read-only progression handler](https://github.com/Syntax555/mod-individual-progression/blob/2f10fb0ad85a580517fdc97565684b3eba47b9d1/src/cs_individualProgression.cpp)
+and its [command defaults](https://github.com/Syntax555/mod-individual-progression/blob/2f10fb0ad85a580517fdc97565684b3eba47b9d1/data/sql/world/base/cs_individualProgression.sql).
+Local [historical quest](https://github.com/Syntax555/mod-individual-progression/commit/1ba29350bfabed582ad25b8c56f151862d1ebb12),
+[Frostmane Hold](https://github.com/Syntax555/mod-individual-progression/commit/f85cf6b4c87381566b816bbfb7e3a81ec46335f3) and
+[earned milestone](https://github.com/Syntax555/mod-individual-progression/commit/2e1453bbbed2c38b2564e5354c9de8798877f3ce)
 adaptations define the examples and progression limits.

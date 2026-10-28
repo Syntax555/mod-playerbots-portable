@@ -260,7 +260,7 @@ pass.
   merge upstream into the fork's `335` branch, pin the merge and point
   `forkChanges` at the accepted commit before rerunning the Questie fixtures.
 
-## Core and module patches
+## Core and module forks
 
 - [ ] Share talent-tab totals between Playerbots' `AiFactory::GetPlayerSpecTabs`
   and the MultiBot bridge's `BuildTalentTabPoints`. First align removed-talent,
@@ -281,7 +281,7 @@ pass.
   paying XP on every turn-in; the 1.12/2.4.3 hunter pet XP requirement; dungeon
   and raid elite multipliers (Outland ×4.5 versus TBC DB ×2.5/×2.0, Vanilla
   bosses ×4 versus ×5); gray level 47 at level 60 for group splits, which needs
-  a core patch.
+  a core change.
 - [ ] Heirloom item stats and Experience Eliminator availability before Wrath.
 - [x] [Core experience rules](changing-expansions.md#experience-by-era) shared
   by every era: raid groups receive no party XP bonus outside raid maps, and
@@ -325,4 +325,7 @@ pass.
 
 ## Release and tests
 
+- [ ] Verify the pinned core and all nine native module forks with the full
+  server checks and a complete Windows server and matching client-package
+  build before publishing the resulting release.
 - [ ] Measure a compiler cache for the Windows compile step.

@@ -1,6 +1,6 @@
 # Era world events
 
-[Era Events](https://github.com/buildthehomelab/wow-mod-era-events) adds timed
+[Era Events](https://github.com/Syntax555/wow-mod-era-events) adds timed
 outdoor encounters at four earned Individual Progression tiers. Each character
 must be at the event's exact tier after applying the realm ceiling and in its
 zone to see and fight its creatures. Humans, SelfBot characters and bots use

@@ -1,10 +1,10 @@
 # Generic upstream fixes
 
 These proposals contain only generic fixes, exported with `git format-patch`
-from clean upstream revisions. They are review artifacts, outside the ordered
-runtime patch chain and the server ZIP. Keep the local fixes until an accepted
-upstream revision is pinned and the corresponding local hunks can be removed
-safely.
+from clean upstream revisions. They are review artifacts, separate from the
+maintained forks and excluded from the server ZIP. Keep the local fixes until
+an accepted upstream revision is pinned and the corresponding local hunks can
+be removed safely.
 
 | Fix | Upstream status | Review artifacts |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ The core issues include the complete minimal diff and validation results.
 The pinned Individual Progression revision includes the account-cache change
 [PR #1308](https://github.com/ZhengPeiRu21/mod-individual-progression/pull/1308).
 Its current empty-filter guards live in the numeric account overloads in
-[the runtime patch](../../patches/mod-individual-progression-empty-account-filters.patch).
+[the fork commit](https://github.com/Syntax555/mod-individual-progression/commit/36b1e81281d302c7ee4782cd052f2027124d5948).
 The review artifacts below retain their recorded base for reproducible checks.
 
 The Individual Progression proposal only includes account classification and
@@ -30,29 +30,30 @@ The source comparison uses AzerothCore `master`
 [`aa921a00a2789f7594a99f535ef30f90780f8cda`](https://github.com/azerothcore/azerothcore-wotlk/commit/aa921a00a2789f7594a99f535ef30f90780f8cda)
 and the required Playerbots core `Playerbot` branch
 [`3f2969ddb0da42b48b4fca050c02b19163ba1e20`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/3f2969ddb0da42b48b4fca050c02b19163ba1e20).
-The latter is already the locked core revision. Open issues alone do not
-establish that a fix is available in either branch.
+The latter is the recorded upstream base of the pinned core fork. Open issues
+alone do not establish that a fix is available in either branch.
 
 | Production method in both checked cores | Missing behavior | Retained local change |
 | --- | --- | --- |
-| `FormationMovementGenerator::LaunchMovement` | Falls back only for `velocity == 0.0f`, although the spline validator rejects velocities at or below `0.01f` | [Formation guard](../../patches/azerothcore-formation-minimum-velocity.patch) |
-| `Player::resetTalentsCost` | Converts negative elapsed months to unsigned and subtracts the decay before clamping | Cost guard in [respec accounting](../../patches/azerothcore-era-respec-accounting.patch) |
-| `BattlegroundMgr::GetRandomBG` | Dereferences the weighted selection without checking `ids.empty()` | Empty-selection guard in [earned-era arena matching](../../patches/azerothcore-earned-era-arena-matching.patch) |
+| `FormationMovementGenerator::LaunchMovement` | Falls back only for `velocity == 0.0f`, although the spline validator rejects velocities at or below `0.01f` | [Formation guard](https://github.com/Syntax555/azerothcore-wotlk/commit/47a8d90f822f1c8f3a19dbca1ff2bac8044c6b45) |
+| `Player::resetTalentsCost` | Converts negative elapsed months to unsigned and subtracts the decay before clamping | Cost guard in [respec accounting](https://github.com/Syntax555/azerothcore-wotlk/commit/c2cc8725ffa7ddd7118766b6be3b48ce339009b6) |
+| `BattlegroundMgr::GetRandomBG` | Dereferences the weighted selection without checking `ids.empty()` | Empty-selection guard in [earned-era arena matching](https://github.com/Syntax555/azerothcore-wotlk/commit/64d500742049c65c57ef754c8938cebe9804b4e3) |
 
 Individual Progression `master`
 [`4933d455d2f611eed50c74c68c78832df4ed37a3`](https://github.com/ZhengPeiRu21/mod-individual-progression/commit/4933d455d2f611eed50c74c68c78832df4ed37a3)
-is the locked revision and includes the Scarab Gong gossip correction. Both
-numeric account predicates still call `GetAccountMatch` unconditionally, and character creation shares
-those predicates. The cache therefore still performs an initial account-name
+is the recorded upstream base of the pinned fork and includes the Scarab
+Gong gossip correction. Both numeric account predicates still call
+`GetAccountMatch` unconditionally, and character creation shares those
+predicates. The cache therefore still performs an initial account-name
 query when both filters are empty. The local guards remain necessary for each
 disabled filter, including after a configuration reload.
 
 None of these four fixes has a replacement in the checked sources. The locked
-revisions and runtime patch chain remain intact. A future removal requires a
-compatible fix in the relevant branch, API and profile-key checks, regeneration
-of affected patches through `scripts/patchwork.py`, and the native regression
-and mutation checks. In particular, a generic fix does not replace the custom
-talent-reset hooks, personal earned-era admission or rated-arena team filters.
+upstream bases retain all four gaps. A future removal requires a compatible
+fix in the relevant branch, API and profile-key checks, updates to the affected
+core or module fork commits, and the native regression and mutation checks. In
+particular, a generic fix does not replace the custom talent-reset hooks,
+personal earned-era admission or rated-arena team filters.
 
 ## Reproduce validation
 

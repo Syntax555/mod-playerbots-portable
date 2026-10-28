@@ -8,17 +8,18 @@ Local changes to upstream code retain the applicable source notices.
 ## Sources and versions
 
 [versions.lock.json](versions.lock.json) records the source repository and exact
-revision of each core, module, addon and client build dependency. It also lists
-the ordered [local patches](patches/) applied to those sources. Era Talents and
-the MultiBot, DragonUI, Questie and Zygor addons are pinned as commits of their
-public forks, which contain the local changes; `upstream` names the original
-project. Use the manifest and patches from the same repository commit as the
-downloaded build when retrieving or rebuilding its source.
+revision of each core, module, addon and client build dependency. The core, all
+native server modules and the MultiBot, DragonUI, Questie and Zygor addons are
+pinned as commits of their public forks, which contain the local changes;
+`upstream` names each original project and the original revision imported last.
+Use the manifest from the same repository commit as the downloaded build when
+retrieving or rebuilding its source. Forks preserve original authorship, Git
+history and source licenses.
 
-The server ZIP includes `versions.lock.json`, `patches/` and `licenses/`.
+The server ZIP includes `versions.lock.json` and `licenses/`.
 The combined EraTalents client pack includes dependency licenses and
-`SOURCE_MANIFEST.json` with source revisions and patch hashes. The addon ZIPs
-of the forks include the addons' license files and `SOURCE_REVISION.txt`.
+`SOURCE_MANIFEST.json` with exact source revisions and artifact hashes. The
+addon ZIPs of the forks include the addons' license files and `SOURCE_REVISION.txt`.
 The Questie installer ZIP of the Questie fork contains installation tooling and
 the file list of its commit; it downloads that commit directly from GitHub and
 preserves the addon's notices. Its `LICENSE` applies to the installer tooling,

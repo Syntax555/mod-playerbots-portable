@@ -4,7 +4,7 @@ At the recorded base revision, empty bot and exclusion regex options disable the
 
 This reference patch targets the pre-cache API. The pinned module includes
 [the merged account cache](https://github.com/ZhengPeiRu21/mod-individual-progression/pull/1308);
-[the runtime patch](../../patches/mod-individual-progression-empty-account-filters.patch)
+[the fork commit](https://github.com/Syntax555/mod-individual-progression/commit/36b1e81281d302c7ee4782cd052f2027124d5948)
 applies the empty-filter guards to its shared numeric account overloads.
 
 Validation: the three extracted proposed production methods pass a C++20 fixture with AddressSanitizer and UndefinedBehaviorSanitizer for null players, both empty filters (zero account queries), each configured filter, matching and nonmatching names, failed account lookup, and progression checks on character creation. The same fixture rejects the unmodified upstream methods. A full upstream server build has not been run.

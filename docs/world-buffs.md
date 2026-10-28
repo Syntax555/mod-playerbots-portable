@@ -2,7 +2,7 @@
 
 The default profile uses the core's quest-triggered world-buff events.
 Automatic simulated turn-ins through
-[World Buff Bots](https://github.com/Rockhopper1776/mod-world-buff-bots) are
+[World Buff Bots](https://github.com/Syntax555/mod-world-buff-bots) are
 disabled. Playerbots' synthetic world-buff supplies are also disabled by
 natural progression. No client addon is required.
 
@@ -101,4 +101,4 @@ values and existing values without a saved baseline are preserved. For a
 quest-only existing realm, stop the servers and set `WorldBuffBots.Enable = 0`
 in its active configuration. See [configuration updates](configuration.md) and
 [server adaptations](adaptations.md) for the integration rules. Exact source
-revisions and patches are recorded in [the manifest](../versions.lock.json).
+revisions and fork changes are recorded in [the manifest](../versions.lock.json).

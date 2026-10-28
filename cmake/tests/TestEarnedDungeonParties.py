@@ -530,7 +530,7 @@ def main():
     source=args.source or core/'modules/mod-dungeon-clear/src'
     native_contracts(core,source)
     if not (source/'EarnedDungeonParties.cpp').exists():
-        raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear patch first')
+        raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear sources first')
     compiler=cxx()
     with tempfile.TemporaryDirectory(prefix='earned-dungeons-') as temp:
         work=Path(temp)

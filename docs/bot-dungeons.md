@@ -356,6 +356,6 @@ dungeon queues (mask `4`) rather than disabling the Finder. Updates preserve
 deliberately enabled Finder queues and personal LFG settings, including on
 installations without a saved profile baseline.
 
-Source revisions and integration patches are recorded in
+Source revisions and fork changes are recorded in
 [build provenance](module-versions.md). See [configuration](configuration.md)
 for population and module defaults.

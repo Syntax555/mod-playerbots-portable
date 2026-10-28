@@ -21,30 +21,37 @@ pass, for people and coding agents alike. Progression changes keep normal XP,
 inventory, gold and per-character eligibility. The [build guide](docs/building.md)
 covers the Windows build and the local checks.
 
-Core and module changes are ordered patches listed in
-[versions.lock.json](versions.lock.json). Change a patch through its work tree:
+The core and all nine native server modules are built from maintained forks.
+Work on each fork's configured default branch, listed below. Read its
+`AGENTS.md` and README before editing; its guidance links back to the server's
+product rules and relevant integration guides.
+The central product rules take precedence over instructions inherited from the
+original upstream projects.
 
-```bash
-cmake -P cmake/PrepareModules.cmake
-python3 scripts/patchwork.py open patches/<name>.patch
-# edit the sources in the printed work tree, then:
-python3 scripts/patchwork.py save <work tree>
-cmake -P cmake/PrepareModules.cmake
-```
+| Native component | Fork | Default branch |
+| --- | --- | --- |
+| AzerothCore Playerbots core | [Syntax555/azerothcore-wotlk](https://github.com/Syntax555/azerothcore-wotlk) | `Playerbot` |
+| Playerbots with Raid Clear | [Syntax555/wow-mod-playerbots](https://github.com/Syntax555/wow-mod-playerbots) | `evermore` |
+| Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression) | `master` |
+| Dungeon Clear | [Syntax555/mod-dungeon-clear](https://github.com/Syntax555/mod-dungeon-clear) | `master` |
+| Quest Loot Party | [Syntax555/mod-quest-loot-party](https://github.com/Syntax555/mod-quest-loot-party) | `master` |
+| World Buff Bots | [Syntax555/mod-world-buff-bots](https://github.com/Syntax555/mod-world-buff-bots) | `main` |
+| LFG Progression | [Syntax555/wow-mod-lfg-progression](https://github.com/Syntax555/wow-mod-lfg-progression) | `main` |
+| Era Events | [Syntax555/wow-mod-era-events](https://github.com/Syntax555/wow-mod-era-events) | `main` |
+| MultiBot Bridge | [Syntax555/mod-multibot-bridge](https://github.com/Syntax555/mod-multibot-bridge) | `main` |
+| Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents) | `main` |
 
-`open` extracts the pinned upstream revision, commits the preceding patches of
-the chain as tag `base` and applies the target patch. A new patch is listed at
-its position in `versions.lock.json` first; `open` then starts it empty. `save`
-regenerates the patch from the work tree and checks that the whole chain still
-applies to the pinned revision; if a later patch of the chain stops applying,
-open and save that one too. Delete the work trees under
-`.module-cache/patchwork/` afterwards.
+Make core and module changes as commits in their forks, then pin the tested
+commit in `versions.lock.json`; do not add source patches to this repository.
+Keep changes focused and preserve upstream authorship and source licenses.
+Native fork CI runs selected server fixtures against the proposed fork commit.
+The complete native build and integration run here with the pinned core and all
+modules. Install the resulting server build to try a native change.
 
-Era Talents and the MultiBot, DragonUI, Questie and Zygor addons are built from
-forks instead of patches, so an addon can be changed and tried without a server
+The client addons also use forks, so an addon can be tried without a server
 build:
 
-| Component | Fork and branch | Latest asset |
+| Client addon | Fork and default branch | Latest asset |
 | --- | --- | --- |
 | Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), `main` | `EraTalents-addon-latest.zip` (addon only) |
 | MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), `main` | `MultiBot-Chatless-latest.zip` |
@@ -52,14 +59,25 @@ build:
 | Questie-335 | [Syntax555/Questie](https://github.com/Syntax555/Questie), `335` | `Questie-335-latest.zip` (installer) |
 | Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | `Zygor-IP-latest.zip` (installer) |
 
-Commit to the fork's branch; each push checks the addon and replaces the asset
-in the fork's Latest release. To take a fork commit into the server, set the
-component's `revision` in `versions.lock.json` to it. `upstream` records the
-original project and the revision merged last. `forkChanges` names the commit
-of each fixture-covered change; the fixtures revert and reapply that commit's
-diff, so add a new change there together with its fixture, and update a commit
-that is amended or replaced. Then prepare the sources and run the fixtures as
-below.
+Commit to the fork's configured default branch. Addon pushes check the addon
+and replace its asset in the fork's Latest release. For the core, modules and
+addons, the server manifest's `revision` is the exact fork commit to build.
+`upstream` records the original project and the original revision imported
+last; retain that provenance when pinning a local change. `forkChanges` names
+the commit of each fixture-covered change. The fixtures revert and reapply
+that commit's diff, so add each new
+covered change there together with its fixture and keep the recorded commits
+reachable. Never rewrite a commit the server pins.
+
+For a source update, compare the original project's history with the recorded
+`upstream.revision`, merge the chosen upstream commit into the fork's branch
+and resolve conflicts there. Preserve earned-play guards, manual talent choices,
+configuration, characters and databases. Remove local code only after its native
+replacement passes the relevant fixtures. Update `upstream.revision` to the
+imported original commit and `revision` to the tested fork commit, then prepare
+the sources and run the affected integration checks. Keep MultiBot and MultiBot
+Bridge compatible and install matching EraTalents client files when generated
+data changes. See [dependency updates](docs/module-versions.md#updating-dependencies).
 
 Before committing, run targeted local checks for the changed files and their
 affected callers, configuration and integrations, as the

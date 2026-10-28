@@ -1,12 +1,26 @@
-"""Regression checks for shared fixture source options, WDBC data and SQL rows."""
+"""Regression checks for shared fixture sources, options, WDBC data and SQL rows."""
 
 import argparse
+import json
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
-from FixtureSupport import make_wdbc, source_argument, sql_rows, sql_values, wdbc
+from FixtureSupport import (
+    fork_change,
+    fork_history,
+    git_apply,
+    make_wdbc,
+    pinned_source,
+    source_argument,
+    sql_rows,
+    sql_values,
+    unpatched,
+    wdbc,
+)
 
 
 class FixtureSupportTests(unittest.TestCase):
@@ -69,6 +83,91 @@ class FixtureSupportTests(unittest.TestCase):
                 output.write("\n(9,'wrong','column count');\n")
             with self.assertRaises(ValueError):
                 sql_rows(core, 'fixture', {9})
+
+
+class ForkSourceTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix='fixture-fork-source-')
+        self.addCleanup(temporary.cleanup)
+        self.repository = Path(temporary.name)
+        self.history = self.repository / '.module-cache/mod-fixture'
+        self.history.mkdir(parents=True)
+        self.git('init', '--quiet')
+        self.git('config', 'user.name', 'Fixture')
+        self.git('config', 'user.email', 'fixture@example.invalid')
+        (self.history / 'src').mkdir()
+        self.upstream = self.commit('upstream', 'upstream other')
+        self.first = self.commit('first', 'first other')
+        self.second = self.commit('second', 'first other')
+        self.module = {'name': 'mod-fixture', 'url': 'https://github.com/Syntax555/mod-fixture.git',
+                       'revision': self.second,
+                       'upstream': {'url': 'https://github.com/example/mod-fixture.git', 'revision': self.upstream},
+                       'forkChanges': {'mod-fixture-first': self.first, 'mod-fixture-second': self.second}}
+        self.core = dict(self.module, name='azerothcore-wotlk',
+                         url='https://github.com/Syntax555/azerothcore-wotlk.git',
+                         forkChanges={'azerothcore-first': self.first, 'azerothcore-second': self.second})
+        (self.repository / 'versions.lock.json').write_text(json.dumps(
+            {'core': self.core, 'modules': [self.module]}))
+
+    def git(self, *arguments):
+        return subprocess.run(['git', '-C', str(self.history), *arguments], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    def commit(self, shared, other):
+        (self.history / 'src/shared.cpp').write_text(shared + '\n')
+        (self.history / 'src/other.cpp').write_text(other + '\n')
+        self.git('add', 'src')
+        self.git('commit', '--quiet', '-m', shared)
+        return self.git('rev-parse', 'HEAD')
+
+    def test_fork_history_keeps_refs_for_sequential_commit_fetches(self):
+        for commit, before, after in ((self.first, 'upstream', 'first'), (self.second, 'first', 'second')):
+            history = fork_history('mod-fixture', str(self.history), commit, 2, self.repository)
+            diff = subprocess.run(['git', '-C', str(history), 'diff', commit + '^', commit,
+                                   '--', 'src/shared.cpp'], check=True, capture_output=True, text=True).stdout
+            self.assertIn(f'-{before}\n+{after}\n', diff)
+            ref = subprocess.run(['git', '-C', str(history), 'rev-parse', f'refs/portable-cache/{commit}'],
+                                 check=True, capture_output=True, text=True).stdout.strip()
+            self.assertEqual(commit, ref)
+        refs = subprocess.run(['git', '-C', str(history), 'for-each-ref', '--format=%(objectname)',
+                               'refs/portable-cache'], check=True, capture_output=True, text=True).stdout.splitlines()
+        self.assertEqual({self.first, self.second}, set(refs))
+
+    def test_fork_changes_keep_scope_and_reversion_order(self):
+        paths = ('src/shared.cpp',)
+        for entry in (self.module, self.core):
+            name = entry['name']
+            first_change, second_change = entry['forkChanges']
+            with self.subTest(component=name), \
+                    mock.patch('FixtureSupport.fork_history', return_value=self.history) as history:
+                first = fork_change(name, first_change, paths, self.repository)
+                history.assert_called_once_with(name, entry['url'], self.first, 2, self.repository)
+                second = fork_change(name, second_change, paths, self.repository)
+                complete = fork_change(name, first_change, repository=self.repository)
+                self.assertIn(b'-first\n+second\n', second.read_bytes())
+                self.assertNotIn(b'src/other.cpp', first.read_bytes())
+                self.assertNotEqual(first, complete)
+                self.assertIn(b'src/other.cpp', complete.read_bytes())
+                work = self.repository / name / 'src'
+                work.mkdir(parents=True)
+                (work / 'shared.cpp').write_text('second\n')
+                (work / 'other.cpp').write_text('first other\n')
+                unpatched(work.parent, second)
+                unpatched(work.parent, first)
+                self.assertEqual('upstream\n', (work / 'shared.cpp').read_text())
+                self.assertEqual('first other\n', (work / 'other.cpp').read_text())
+                git_apply(work.parent, first)
+                git_apply(work.parent, second)
+                self.assertEqual('second\n', (work / 'shared.cpp').read_text())
+
+    def test_pinned_source_reads_upstream_instead_of_fork_head(self):
+        for entry in (self.module, self.core):
+            name = entry['name']
+            with self.subTest(component=name), mock.patch('FixtureSupport.REPOSITORY', self.repository), \
+                    mock.patch('FixtureSupport.fork_history', return_value=self.history) as history:
+                self.assertEqual('upstream\n', pinned_source(name, 'src/shared.cpp'))
+                history.assert_called_once_with(name, entry['upstream']['url'], self.upstream, 1)
+        self.assertEqual('second', self.git('show', 'HEAD:src/shared.cpp'))
 
 
 if __name__ == '__main__':

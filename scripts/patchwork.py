@@ -2,7 +2,7 @@
 """Edit one pinned patch and regenerate it reproducibly.
 
   python3 scripts/patchwork.py open patches/<name>.patch
-      Extract the pinned upstream revision of the core, module or addon that
+      Extract the pinned source revision of the core, module or addon that
       lists the patch in versions.lock.json, apply the preceding patches of its
       chain and commit them as tag 'base', then apply the target patch to the
       working tree. Prints the work tree; edit the sources there. A new patch
@@ -14,6 +14,8 @@
 
 Run 'cmake -P cmake/PrepareModules.cmake' first so the pinned sources exist.
 Work trees live in .module-cache/patchwork and can be deleted afterwards.
+The current manifest pins the core, modules and addons directly to forks.
+This helper supports any ordered patch chain added to the manifest.
 """
 import json
 import os

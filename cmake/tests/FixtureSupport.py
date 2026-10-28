@@ -155,7 +155,7 @@ def reject_mutants(work, mutations, build, name):
 def pinned_source(name, path):
     """path at the locked core or module revision, read from its PrepareModules cache.
 
-    A forked module's pinned commit already carries its changes, so its baseline
+    A forked component's pinned commit already carries its changes, so its baseline
     is the upstream revision the fork records.
     """
     lock = json.loads((REPOSITORY / 'versions.lock.json').read_text())
@@ -225,7 +225,9 @@ def fork_history(component, url, commit, depth, repository=REPOSITORY):
         if fetched():
             return history
         try:
-            subprocess.run(['git', '-C', str(history), 'fetch', '--quiet', f'--depth={depth}', url, commit],
+            # Persistent refs let subsequent fetches negotiate the objects already cached.
+            subprocess.run(['git', '-C', str(history), 'fetch', '--quiet', f'--depth={depth}', url,
+                            f'{commit}:refs/portable-cache/{commit}'],
                            check=True, capture_output=True)
         except subprocess.CalledProcessError:
             # A fixture running alongside may hold the shallow lock.
@@ -244,8 +246,9 @@ def fork_change(component, change, paths=(), repository=REPOSITORY):
     limits the diff to the files a fixture copies.
     """
     lock = json.loads((repository / 'versions.lock.json').read_text())
-    entries = [entry for section in ('modules', 'clientAddons', 'sourceAddons')
-               for entry in lock.get(section, []) if entry['name'] == component]
+    entries = [entry for entry in [lock['core'], *lock.get('modules', []),
+                                  *lock.get('clientAddons', []), *lock.get('sourceAddons', [])]
+               if entry['name'] == component]
     if len(entries) != 1:
         raise ValueError(f'Expected one locked component named {component}')
     entry = entries[0]
