@@ -40,7 +40,7 @@ func TestManagedPlayerbotsIgnoredQuestsKeepsCustomList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	current := string(profile)
+	current := strings.ReplaceAll(string(profile), "\r\n", "\n")
 	previous := strings.Replace(current, "Playerbots.IgnoredQuests = \"\"\n", "", 1)
 	if previous == current {
 		t.Fatal("profile does not supply the native ignored-quest default")
