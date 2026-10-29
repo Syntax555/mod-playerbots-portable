@@ -63,6 +63,10 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Verify native loot eligibility and actual rolls with Need level 2:
   stronger/identical/weaker random-property variants, unique equipped items,
   bank-only copies and LFG Need restrictions. Refused Need retains Greed/Pass.
+- [ ] Validate personal-bank transfers in game with incomplete and completed
+  delivery quests, merged stacks, full bags/bank, stale source items and lost
+  banker access. Include MultiBot bulk and exact-stack commands and their
+  reported quantities.
 - [ ] Validate MultiBot startup, vendor purchases and talent learning: preserved
   settings, correct bot gold/items, quantities and confirmations, no owner
   purchase on bridge failure, one earned talent rank per click and read-only
@@ -140,10 +144,6 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 - [ ] Align removed-talent, active-spec-mask and `TalentEntry::RankID` handling
   before sharing Playerbots' `GetPlayerSpecTabs` with the Bridge's talent totals.
-- [ ] Fix native bank quest accounting before replacing `MoveNaturalBankItem`:
-  deposits count before source removal; withdrawals credit only the transferred
-  amount, including completed objectives and merged stacks. Keep banker access,
-  session ownership and actual transfer-result guards.
 - [ ] Retain the rated-arena team-era filter while level-70 teams of different
   earned eras can share a native bracket after a TBC-to-Wrath transition.
 - [ ] Resolve historically uncertain XP rules before implementation: Vanilla

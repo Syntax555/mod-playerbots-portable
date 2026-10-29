@@ -132,8 +132,10 @@ def native_bank_move(bridge):
     first = body.find(interaction)
     activate = body.find('bot->GetSession()->HandleBankerActivateOpcode(activatePacket);')
     again = body.find(interaction, first + 1)
-    moves = [body.find(call) for call in ('bot->BankItem(', 'bot->StoreItem(', 'bot->RemoveItem(')]
-    return 0 <= session < first < activate < again < min(moves)
+    move = body.find('bot->GetSession()->HandleAutoStoreBankItemOpcode(move);')
+    return (0 <= session < first < activate < again < move and
+            all(call not in body for call in ('bot->BankItem(', 'bot->StoreItem(', 'bot->RemoveItem(',
+                                              'bot->ItemAddedQuestCheck(', 'bot->ItemRemovedQuestCheck(')))
 
 def bank_lookup(body):
     lookup = 'Creature* const banker = FindNearbyNpcWithFlag(bot, UNIT_NPC_FLAG_BANKER, sPlayerbotAIConfig.naturalProgression);'
@@ -230,6 +232,7 @@ MUTATIONS = (
       '    if (bot->GetNPCIfCanInteractWith(banker->GetGUID(), UNIT_NPC_FLAG_BANKER) != banker)\n        return 0;\n'),
      ''),
     ('native banker handler', 'bot->GetSession()->GetPlayer() != bot || ', ''),
+    ('native banker handler', '    bot->GetSession()->HandleAutoStoreBankItemOpcode(move);\n', ''),
     ('bank deposit by item',
      ('moved += MoveNaturalBankItem(bot, banker, item, true, reason);\n            if (!reason.empty())\n'
       '                return moved;\n            if (requestedCount > 0 && moved >= requestedCount)\n                break;\n'

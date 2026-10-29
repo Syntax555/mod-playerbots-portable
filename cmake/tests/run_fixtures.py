@@ -48,6 +48,7 @@ GAMEPLAY = (
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
     "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
     "TestCorpseRecovery",
+    "TestNativeBankTransfers",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -55,7 +56,7 @@ GAMEPLAY = (
 CORE_FIXTURES = (
     "TestEraCorePatches", "TestEraTalents", "TestEarnedEraPrices", "TestBattlegroundEraRules",
     "TestEarnedArenaCore", "TestEraExperience", "TestWindowsResourceIncludes", "TestFormationMovement",
-    "TestCoreBuildWarnings", "TestCoreExperience",
+    "TestCoreBuildWarnings", "TestCoreExperience", "TestNativeBankTransfers",
 )
 
 MODULE_FIXTURES = {
@@ -73,6 +74,7 @@ MODULE_FIXTURES = {
     "mod-era-events": ("TestEraEvents", "TestWorldStartupData", "TestWorldUpdateOrder"),
     "mod-multibot-bridge": (
         "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestCombatProfileBridge",
+        "TestNativeBankTransfers",
     ),
     "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook"),
 }

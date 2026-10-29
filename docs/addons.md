@@ -47,6 +47,11 @@ access, its own gold and space. Leaving Buy mode, switching bots or closing
 the inventory cancels pending purchases. Inventory, outfit and trainer requests
 require the bot and player to be in the same map instance.
 
+Under natural progression, personal-bank commands require a banker within the
+bot's interaction range. Native bank handling checks space and item eligibility;
+the reply reports the quantity actually moved. Quest-item counters follow the
+transferred quantity, including when stacks merge.
+
 DragonUI's talent controls, spellbook and level-up notice follow the player's
 own earned era and trainer spells with the matching EraTalents package. Its
 spellbook supports Clique bindings for learned player spells when Clique is

@@ -3,7 +3,7 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "977edf6dba5451a460feb0cbc034c23c4b1511ee",
+    "revision": "1e10aafe94dfd7244600fbc11c2baf42c218f08a",
     "upstream": {
       "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
       "revision": "3f2969ddb0da42b48b4fca050c02b19163ba1e20"
@@ -23,7 +23,8 @@
       "azerothcore-windows-resource-includes": "62f2ba333d3d5731a5295f56b670d4f6889a6d89",
       "azerothcore-formation-minimum-velocity": "47a8d90f822f1c8f3a19dbca1ff2bac8044c6b45",
       "azerothcore-build-warnings": "d2d9d0ff9d21f816c2d59622fd31ec38a160f5af",
-      "azerothcore-experience-rules": "b6f6bb7a4254e76d6b4e3a2ec9ee3f979fc25b2e"
+      "azerothcore-experience-rules": "b6f6bb7a4254e76d6b4e3a2ec9ee3f979fc25b2e",
+      "azerothcore-bank-quest-accounting": "1e10aafe94dfd7244600fbc11c2baf42c218f08a"
     }
   },
   "modules": [
@@ -141,7 +142,7 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Syntax555/mod-multibot-bridge.git",
-      "revision": "112d970b6ba19e56b52c859a80afe4d0c6d36719",
+      "revision": "4a9e0f0fa560797843a135b2f2d6bffcc2acab67",
       "upstream": {
         "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
         "revision": "9f0e8ba767c65f7959a615f70e61ec0980266780"
@@ -154,7 +155,8 @@
         "mod-multibot-bridge-quest-progress": "968512c15f260a7130c17faa1b1cb30ef165bcb4",
         "mod-multibot-bridge-progression-state": "7395bc38459a2dcc11777a1801e0a75235570a5a",
         "mod-multibot-bridge-spellbook-display": "9e653f92929820fb33171ddd9f9f5ee796abfc96",
-        "mod-multibot-bridge-combat-profiles": "6073ac3cb7f09844af678b5d5c186381ee4a9d6b"
+        "mod-multibot-bridge-combat-profiles": "6073ac3cb7f09844af678b5d5c186381ee4a9d6b",
+        "mod-multibot-bridge-native-bank-transfers": "4a9e0f0fa560797843a135b2f2d6bffcc2acab67"
       }
     },
     {
