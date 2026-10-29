@@ -52,6 +52,9 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ### Bots, talents and client interfaces
 
+- [ ] Validate repeated deaths and long corpse runs outside and in dungeons,
+  including reduced AI activity, controlled altbots and SelfBots. Check normal
+  spirit release, group resurrection waits, reclaim limits and missing routes.
 - [ ] Test [combat profiles](combat-profiles.md) for every class on random bots,
   controlled altbots and SelfBots: automatic/manual selection, relog/AI resets,
   combat refusal, retained travel/loot settings and owned-item upgrades.

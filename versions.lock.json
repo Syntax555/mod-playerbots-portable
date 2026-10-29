@@ -30,7 +30,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "9753af1a1ee78101ace2c19f3ada9927355ef592",
+      "revision": "e9e5b7bb6813022cd46648bedc98a3e229812558",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
@@ -47,7 +47,8 @@
         "mod-playerbots-raid-clear-natural-progression": "2130d76c5a5a23b3c090ca2ef6e3c5847128e84c",
         "mod-playerbots-raid-clear-windows-identifiers": "057818adc8e807ff28e1b457e24a05772a9344ac",
         "mod-playerbots-combat-profiles": "cea4febb77ef9d25c27dda7807d20b7533552d22",
-        "mod-playerbots-ignored-quest-reload": "686617ac530f58748f9c53c4dd99e96e2842d6db"
+        "mod-playerbots-ignored-quest-reload": "686617ac530f58748f9c53c4dd99e96e2842d6db",
+        "mod-playerbots-corpse-recovery": "e9e5b7bb6813022cd46648bedc98a3e229812558"
       }
     },
     {

@@ -47,6 +47,7 @@ GAMEPLAY = (
     "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
     "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
+    "TestCorpseRecovery",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -60,7 +61,7 @@ CORE_FIXTURES = (
 MODULE_FIXTURES = {
     "mod-playerbots": (
         "TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay",
-        "TestPlayerbotUpstreamFixes",
+        "TestPlayerbotUpstreamFixes", "TestCorpseRecovery",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
