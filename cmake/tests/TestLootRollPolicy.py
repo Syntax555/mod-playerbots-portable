@@ -46,6 +46,7 @@ shared = (core / 'src/server/shared/SharedDefines.h').read_text()
 loot = (core / 'src/server/game/Loot/LootMgr.h').read_text()
 usage = (module / 'Ai/Base/Value/ItemUsageValue.h').read_text()
 usage_source = (module / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
+equip_source = (module / 'Ai/Base/Actions/EquipAction.cpp').read_text()
 player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
 
 assert 'botOutgoingPacketHandlers.AddHandler(SMSG_LOOT_START_ROLL, "master loot roll");' in ai
@@ -193,8 +194,9 @@ struct Item
     static Item* CreateItem(uint32 entry, uint32 count, Player*) { return new Item{entry, 0, count}; }
     void RemoveFromUpdateQueueOf(Player*) {}
 };
-struct Bag
+struct Bag : Item
 {
+    uint32 GetBagSize() const { return GetTemplate()->ContainerSlots; }
     uint32 GetItemCount(uint32, Item*) const { return 0; }
 };
 struct PlayerbotAIConfig
@@ -382,6 +384,10 @@ public:
     }
     ItemUsage Usage(std::string const& qualifier);
 };
+struct EquipAction
+{
+    static uint8 GetSmallestBagSlot(Player* bot);
+};
 class ItemUsageValue
 {
 public:
@@ -389,7 +395,6 @@ public:
     Player* bot;
     explicit ItemUsageValue(PlayerbotAI* ai) : botAI(ai), bot(ai->GetBot()) {}
     ItemUsage QueryItemUsageForEquip(ItemTemplate const*, int32);
-    uint32 GetSmallestBagSize() const { return 0; }
     Item* CurrentItem(ItemTemplate const* proto) const { return bot->GetItemByEntry(proto->ItemId); }
 };
 ItemUsage PlayerbotAI::Usage(std::string const& qualifier)
@@ -486,6 +491,7 @@ production = '\n'.join([
     function(handler, 'void WorldSession::HandleLootRoll'),
     function(storage, 'uint32 Player::GetItemCount(uint32 item,'),
     function(storage, 'bool Player::HasItemOrGemWithIdEquipped('),
+    function(equip_source, 'uint8 EquipAction::GetSmallestBagSlot(Player* bot)'),
     function(usage_source, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip('),
     function(storage, 'InventoryResult Player::CanRollForItemInLFG'),
     function(storage, 'InventoryResult Player::CanUseItem(ItemTemplate const* proto)'),

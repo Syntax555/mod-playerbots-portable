@@ -39,6 +39,8 @@ module = args.source / 'Bot'
 travel_module = (args.travel_source or args.source) / 'Bot'
 usage_header = (args.source / 'Ai/Base/Value/ItemUsageValue.h').read_text()
 values_source = (args.source / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
+equip_source = (args.source / 'Ai/Base/Actions/EquipAction.cpp').read_text()
+usage_source = (args.source / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
 item_header = (args.core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
 item_instance_header = (args.core / 'src/server/game/Entities/Item/Item.h').read_text()
 player_header = (args.core / 'src/server/game/Entities/Player/Player.h').read_text()
@@ -52,6 +54,8 @@ pet_defines = (args.core / 'src/server/game/Entities/Pet/PetDefines.h').read_tex
 pet_source = (args.core / 'src/server/game/Entities/Pet/Pet.cpp').read_text()
 native = '\n'.join(function(source, signature) + ';' for source, signature in (
     (usage_header, 'enum ItemUsage : uint32'), (item_header, 'enum ItemClass'),
+    (player_header, 'enum InventorySlots'), (player_header, 'enum InventoryPackSlots'),
+    (item_instance_header, 'enum InventorySlot'),
     (item_header, 'enum ItemSubclassWeapon'), (item_header, 'enum ItemSubclassContainer'),
     (item_header, 'enum ItemSubclassQuiver'), (item_header, 'enum InventoryType'),
     (auction_header, 'enum MailAuctionAnswers'),
@@ -85,6 +89,7 @@ pet_diet = function(pet_source, 'bool Pet::HaveInDiet(ItemTemplate const* item) 
 assert 'bool IsInRealGuild();' in (args.source / 'Bot/PlayerbotAI.h').read_text()
 storage = (args.core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
 assert 'return item->ToBag();' in function(storage, 'Bag* Player::GetBagByPos(uint8 bag) const')
+assert '#define INVENTORY_SLOT_BAG_0    255' in player_header
 item_source = (args.core / 'src/server/game/Entities/Item/Item.cpp').read_text()
 assert 'return sObjectMgr->GetItemTemplate(GetEntry());' in function(item_source, 'ItemTemplate const* Item::GetTemplate() const')
 # Compile the native ownership decision, including its public Item* overload.
@@ -270,10 +275,9 @@ using int32 = std::int32_t;
 @@NATIVE@@
 @@PROFESSIONS@@
 constexpr uint32 MINUTE = 60, MIN_AUCTION_TIME = 43200;
-constexpr uint8 INVENTORY_SLOT_BAG_0 = 0, INVENTORY_SLOT_BAG_START = 19,
-    INVENTORY_SLOT_BAG_END = 23, INVENTORY_SLOT_ITEM_START = 23, INVENTORY_SLOT_ITEM_END = 39;
+constexpr uint8 INVENTORY_SLOT_BAG_0 = 255;
 constexpr int ITEM_FIELD_DURATION = 1, ITEM_FLAG_CONJURED = 2, BIND_QUEST_ITEM = 4,
-    PLAYERSPELL_REMOVED = 1, MAX_SPELL_REAGENTS = 8, NULL_BAG = 255, NULL_SLOT = 255,
+    PLAYERSPELL_REMOVED = 1, MAX_SPELL_REAGENTS = 8,
     GAMEOBJECT_TYPE_MAILBOX = 1, UNIT_NPC_FLAG_MAILBOX = 2,
     UNIT_NPC_FLAG_AUCTIONEER = 4, MAIL_AUCTION = 2, MAIL_STATE_DELETED = 3,
     MAX_QUEST_LOG_SIZE = 25, SPELL_EFFECT_CREATE_ITEM = 24;
@@ -615,6 +619,15 @@ struct Player
     bool IsWithinDistInMap(WorldObject*, float) const { return range; }
 };
 @@OWNERSHIP@@
+struct EquipAction { static uint8 GetSmallestBagSlot(Player* bot); };
+@@BAG_SLOT@@
+ItemUsage NativeBagUsage(Player* bot, ItemTemplate const* itemProto)
+{
+    if (bot->CanUseItem(itemProto) != EQUIP_ERR_OK)
+        return ITEM_USAGE_NONE;
+    @@BAG_USAGE@@
+    return ITEM_USAGE_NONE;
+}
 @@BAGS@@
 struct Config
 {
@@ -817,7 +830,8 @@ struct Scenario
     Item& OfferBag(uint32 slots)
     {
         Item& bag = MakeItem(101, 1, ITEM_USAGE_EQUIP); bag.proto.Class = ITEM_CLASS_CONTAINER;
-        bag.proto.ContainerSlots = slots; bag.proto.InventoryType = INVTYPE_BAG; Offer(bag); return bag;
+        bag.proto.ContainerSlots = slots; bag.proto.InventoryType = INVTYPE_BAG;
+        SetUsage(bag, NativeBagUsage(&bot, &bag.proto)); Offer(bag); return bag;
     }
     Item& BagItem(uint32 entry = 100, uint32 count = 1, ItemUsage usage = ITEM_USAGE_AH)
     {
@@ -1485,10 +1499,11 @@ void ServiceTests()
     }
     for (int refusal = 0; refusal < 5; ++refusal)
     {
-        // Auction bags follow the vendor bag rules: a larger general bag replaces the
-        // smallest general bag from a free backpack slot, once. A hunter's quiver rated
-        // an upgrade could not hold the items of the bag it would replace.
-        Scenario s; s.EquipBags(refusal == 1 ? ITEM_CLASS_QUIVER : ITEM_CLASS_CONTAINER);
+        // Auction bags follow the vendor bag rules and retain every special bag.
+        Scenario s; s.EquipBags();
+        if (refusal == 1)
+            for (auto const& [slot, bag] : s.bot.bags)
+                bag->proto.Class = ITEM_CLASS_QUIVER;
         Item& bag = s.OfferBag(10);
         if (refusal == 2)
             for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
@@ -1504,6 +1519,26 @@ void ServiceTests()
             bag.proto.InventoryType = INVTYPE_QUIVER;
         }
         assert(s.Visit() == !refusal); assert(s.bot.session.buys == (refusal ? 0 : 1));
+    }
+    for (uint32 specialClass : {uint32(ITEM_CLASS_QUIVER), uint32(ITEM_CLASS_CONTAINER)})
+    {
+        for (bool larger : {false, true})
+        {
+            Scenario s;
+            s.EquipBags(specialClass, specialClass == ITEM_CLASS_QUIVER ? uint32(ITEM_SUBCLASS_QUIVER)
+                                                                      : uint32(ITEM_SUBCLASS_HERB_CONTAINER));
+            uint8 const slot = EquipAction::GetSmallestBagSlot(&s.bot);
+            assert(slot > INVENTORY_SLOT_BAG_START && slot < INVENTORY_SLOT_BAG_END);
+            s.OfferBag(larger ? 10 : 8);
+            assert(s.Visit() == larger && s.bot.session.buys == (larger ? 1 : 0));
+            assert(s.bot.bags.at(INVENTORY_SLOT_BAG_START)->proto.Class == specialClass);
+        }
+    }
+    {
+        // The first slot remains eligible when all other bags are larger.
+        Scenario s; s.EquipBags(); s.OfferBag(8);
+        assert(EquipAction::GetSmallestBagSlot(&s.bot) == INVENTORY_SLOT_BAG_START);
+        assert(s.Visit() && s.bot.session.buys == 1);
     }
     {
         // A won bag waits in the mail until the backpack can take it, so it can be equipped.
@@ -1732,6 +1767,9 @@ production = {
     'service': '\n'.join(line for line in (module / 'EarnedAuction.cpp').read_text().splitlines()
                           if not line.lstrip().startswith('#include')),
     'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
+    'bag_slot': function(equip_source, 'uint8 EquipAction::GetSmallestBagSlot(Player* bot)'),
+    'bag_usage': function(function(usage_source, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip('),
+                          'if (itemProto->Class == ITEM_CLASS_CONTAINER)'),
     # The vendor bag rules, which auction bag purchases share.
     'bags': '\n'.join([re.search(r'namespace\n\{\n.*?\n\}  // namespace', values_source, re.DOTALL).group(0),
                        function(values_source, 'bool BagPurchaseUseful(PlayerbotAI* botAI, ItemTemplate const* proto)')]),
@@ -1749,6 +1787,7 @@ def build(directory, parts, name):
     text = text.replace('@@PETDIET@@', pet_diet)
     text = text.replace('@@OWNERSHIP@@', ownership_rules).replace('@@OWNERSHIP_OVERLOAD@@', ownership_overload)
     text = text.replace('@@BAGS@@', parts['bags'])
+    text = text.replace('@@BAG_SLOT@@', parts['bag_slot']).replace('@@BAG_USAGE@@', parts['bag_usage'])
     text = text.replace('@@AUCTIONRULES@@', auction_rules).replace('@@TOOLS@@', tools)
     # The policy headers are compiled from private copies, so mutants can change them.
     headers = Path(directory) / name

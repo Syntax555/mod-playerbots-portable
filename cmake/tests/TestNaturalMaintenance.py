@@ -40,6 +40,9 @@ values_header = (module / 'Ai/Base/Value/MaintenanceValues.h').read_text()
 values_source = (module / 'Ai/Base/Value/MaintenanceValues.cpp').read_text()
 usage_source = (module / 'Ai/Base/Value/ItemUsageValue.cpp').read_text()
 usage_header = (module / 'Ai/Base/Value/ItemUsageValue.h').read_text()
+equip_source = (module / 'Ai/Base/Actions/EquipAction.cpp').read_text()
+equip_header = (module / 'Ai/Base/Actions/EquipAction.h').read_text()
+item_instance_header = (core / 'src/server/game/Entities/Item/Item.h').read_text()
 player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
 item_header = (core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
 storage = (core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
@@ -64,14 +67,17 @@ assert ('ItemUsage equip = QueryItemUsageForEquip(proto, randomPropertyId);\n   
 equip_usage = function(usage_source, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip(')
 assert '{\n    if (bot->CanUseItem(itemProto) != EQUIP_ERR_OK)\n        return ITEM_USAGE_NONE;' in equip_usage
 container = function(equip_usage, 'if (itemProto->Class == ITEM_CLASS_CONTAINER)')
-assert container.count('return ') == 3
-assert 'if (itemProto->SubClass != ITEM_SUBCLASS_CONTAINER)\n            return ITEM_USAGE_NONE;' in container
-assert ('if (GetSmallestBagSize() >= itemProto->ContainerSlots)\n            return ITEM_USAGE_NONE;\n\n'
-        '        return ITEM_USAGE_EQUIP;\n    }') in container
+assert 'static uint8 GetSmallestBagSlot(Player* bot);' in equip_header
+assert 'EquipAction::GetSmallestBagSlot(bot)' in container
+assert 'if (slot == NULL_SLOT)\n            return ITEM_USAGE_NONE;' in container
+assert '(bag ? bag->GetBagSize() : 0) >= itemProto->ContainerSlots' in container
+assert '#define INVENTORY_SLOT_BAG_0    255' in player_header
+
 
 production = {
     'native': '\n'.join(function(source, signature) + ';' for source, signature in (
         (player_header, 'enum InventorySlots'), (player_header, 'enum InventoryPackSlots'),
+        (item_instance_header, 'enum InventorySlot'),
         (item_header, 'enum ItemClass'), (item_header, 'enum ItemSubclassContainer'),
         (usage_header, 'enum ItemUsage : uint32'))),
     'professions': profession_skills(core),
@@ -92,7 +98,8 @@ production = {
     'guard': function(values_source, 'bool CanRunNaturalMaintenance(PlayerbotAI* botAI)'),
     'profession': function(values_source, 'bool IsProfessionSpell(uint32 spellId)'),
     'helpers': re.search(r'namespace\n\{\n.*?\n\}  // namespace', values_source, re.DOTALL).group(0),
-    'smallest': function(usage_source, 'uint32 ItemUsageValue::GetSmallestBagSize()'),
+    'smallest': function(equip_source, 'uint8 EquipAction::GetSmallestBagSlot(Player* bot)'),
+    'container': container,
     'value': function(values_source, 'NaturalMaintenanceTask NaturalMaintenanceValue::Calculate()'),
     'action': function(action_source, 'bool NewRpgNaturalMaintenanceAction::Execute(Event /*event*/)'),
     'trigger': function(trigger_source, 'bool NewRpgNaturalMaintenanceTrigger::IsActive()'),
@@ -396,7 +403,6 @@ struct ItemUsageValue
 {
     Player* bot = nullptr;
     static std::string const GetConsumableType(ItemTemplate const* proto, bool hasMana);
-    uint32 GetSmallestBagSize();
 };
 ItemUsage ItemUpgrade(Player* bot, std::string const& qualifier);
 
@@ -648,20 +654,17 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
     ++world.consumableChecks;
     return ProductionConsumableType(proto, hasMana);
 }
+struct EquipAction { static uint8 GetSmallestBagSlot(Player* bot); };
 @@SMALLEST@@
 // ItemUpgradeValue of a bag: QueryItemUsageForEquip's usability check and container
 // branch, which the script asserts in the production source.
 ItemUsage ItemUpgrade(Player* bot, std::string const& qualifier)
 {
-    ItemTemplate const& proto = objectMgr.items.at(uint32(std::stoul(qualifier)));
-    if (bot->unusable.count(proto.ItemId) || proto.Class != ITEM_CLASS_CONTAINER)
+    ItemTemplate const* itemProto = &objectMgr.items.at(uint32(std::stoul(qualifier)));
+    if (bot->CanUseItem(itemProto) != EQUIP_ERR_OK)
         return ITEM_USAGE_NONE;
-    if (proto.SubClass != ITEM_SUBCLASS_CONTAINER)
-        return ITEM_USAGE_NONE;
-    ItemUsageValue usage{bot};
-    if (usage.GetSmallestBagSize() >= proto.ContainerSlots)
-        return ITEM_USAGE_NONE;
-    return ITEM_USAGE_EQUIP;
+    @@CONTAINER@@
+    return ITEM_USAGE_NONE;
 }
 
 @@CLASSES@@
@@ -1420,6 +1423,8 @@ void BagTests()
     s.bot.pack.clear();
     for (uint8 slot = INVENTORY_SLOT_BAG_START + 1; slot < INVENTORY_SLOT_BAG_END; ++slot)
         s.Equip(slot, satchel);
+    assert(buys(cheaper));
+    s.Equip(INVENTORY_SLOT_BAG_START, satchel);
     assert(s.Evaluate().type == Type::NONE);
     ItemTemplate& sack = s.BagTemplate(10, 2000);
     s.Stock(vendor, sack);
@@ -1433,10 +1438,11 @@ void BagTests()
     assert(buys(sack));
     s.bot.pack.clear();
 
-    // A quiver, ammo pouch or profession bag is never displaced by a general bag.
+    // A smaller special bag leaves the other general bags eligible for upgrades.
     ItemTemplate& quiver = s.BagTemplate(6, 0, 2, ITEM_CLASS_QUIVER);
     s.Equip(INVENTORY_SLOT_BAG_START, quiver);
-    assert(s.Evaluate().type == Type::NONE);
+    assert(buys(sack));
+    assert(EquipAction::GetSmallestBagSlot(&s.bot) != INVENTORY_SLOT_BAG_START);
     s.Equip(INVENTORY_SLOT_BAG_START, herbs);
     assert(buys(sack));
     s.Equip(INVENTORY_SLOT_BAG_START, pouch);
@@ -1481,11 +1487,57 @@ void BagTests()
     assert(s.Evaluate().type == Type::NONE && !s.context.reads.count("item upgrade"));
     s.Equip(INVENTORY_SLOT_BAG_START, pouch);
     s.context.reads.clear();
-    assert(s.Evaluate().type == Type::NONE && s.context.reads["item upgrade"] == 3);
+    assert(buys(sack) && s.context.reads["item upgrade"] == 3);
+}
+
+void BagSelectionTests()
+{
+    Scenario s;
+    ItemTemplate& zero = s.BagTemplate(0, 0);
+    ItemTemplate& six = s.BagTemplate(6, 0);
+    ItemTemplate& eight = s.BagTemplate(8, 0);
+    ItemTemplate& ten = s.BagTemplate(10, 0);
+    ItemTemplate& quiver = s.BagTemplate(4, 0, 2, ITEM_CLASS_QUIVER);
+    ItemTemplate& ammo = s.BagTemplate(4, 0, 3, ITEM_CLASS_QUIVER);
+    ItemTemplate& herbs = s.BagTemplate(4, 0, ITEM_SUBCLASS_HERB_CONTAINER);
+    auto const usage = [&](ItemTemplate const& proto)
+    { return ItemUpgrade(&s.bot, std::to_string(proto.ItemId)); };
+    assert(EquipAction::GetSmallestBagSlot(&s.bot) == INVENTORY_SLOT_BAG_START);
+    assert(usage(six) == ITEM_USAGE_EQUIP && usage(zero) == ITEM_USAGE_NONE);
+    for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
+        s.Equip(slot, ten);
+    s.Equip(INVENTORY_SLOT_BAG_START, six);
+    assert(EquipAction::GetSmallestBagSlot(&s.bot) == INVENTORY_SLOT_BAG_START);
+    assert(usage(six) == ITEM_USAGE_NONE && usage(eight) == ITEM_USAGE_EQUIP);
+    s.bot.unusable.insert(eight.ItemId);
+    assert(usage(eight) == ITEM_USAGE_NONE);
+    s.bot.unusable.clear();
+    for (ItemTemplate const* special : {&quiver, &ammo, &herbs})
+    {
+        s.Equip(INVENTORY_SLOT_BAG_START, *special);
+        s.Equip(INVENTORY_SLOT_BAG_START + 1, eight);
+        assert(EquipAction::GetSmallestBagSlot(&s.bot) == INVENTORY_SLOT_BAG_START + 1);
+        assert(usage(eight) == ITEM_USAGE_NONE && usage(ten) == ITEM_USAGE_EQUIP);
+        assert(usage(*special) == ITEM_USAGE_NONE);
+    }
+    s.Equip(INVENTORY_SLOT_BAG_START, quiver);
+    s.Equip(INVENTORY_SLOT_BAG_START + 1, ammo);
+    s.Equip(INVENTORY_SLOT_BAG_START + 2, herbs);
+    s.Equip(INVENTORY_SLOT_BAG_START + 3, herbs);
+    assert(EquipAction::GetSmallestBagSlot(&s.bot) == NULL_SLOT);
+    assert(usage(ten) == ITEM_USAGE_NONE);
+    uint32 size = 999;
+    assert(!ReplaceableBagSize(&s.bot, size));
+    s.bot.bags.erase(INVENTORY_SLOT_BAG_END - 1);
+    assert(EquipAction::GetSmallestBagSlot(&s.bot) == INVENTORY_SLOT_BAG_END - 1);
+    assert(usage(ten) == ITEM_USAGE_EQUIP);
+    s.FillBackpack();
+    assert(ReplaceableBagSize(&s.bot, size) && size == 0);
 }
 
 int main()
 {
+    BagSelectionTests();
     GuardTests();
     SellAndRepairTests();
     TrainerTests();
@@ -1505,7 +1557,7 @@ int main()
 def build(directory, parts, name):
     text = prelude
     for key in ('native', 'professions', 'types', 'classes', 'travel', 'guard', 'profession', 'helpers', 'smallest',
-                'value', 'action', 'trigger', 'usage'):
+                'value', 'action', 'trigger', 'usage', 'container'):
         text = text.replace('@@' + key.upper() + '@@', parts[key])
     (directory / (name + '.cpp')).write_text(text + tests)
     executable = directory / name
@@ -1600,7 +1652,15 @@ mutations = [
      '!(item->maxcount && npc->GetVendorItemCurrentCount(item) < proto->BuyCount) &&\n                    ', ''),
     ('largest bag not preferred', 'value', '(!bag || proto->ContainerSlots > bag->ContainerSlots ||', '(!bag ||'),
     ('cheaper equal bag not preferred', 'value', 'price < bagPrice', 'price > bagPrice'),
-    ('special bag displaced', 'helpers', 'if (!IsGeneralBag(smallest->GetTemplate()))\n        return false;', ''),
+    ('special bag selected for a general bag', 'smallest',
+     'if (proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER)',
+     'if ((proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER) && false)'),
+    ('profession bag selected for a general bag', 'smallest',
+     ' || proto->SubClass != ITEM_SUBCLASS_CONTAINER', ''),
+    ('first bag slot skipped', 'smallest', 'bag = INVENTORY_SLOT_BAG_START;',
+     'bag = INVENTORY_SLOT_BAG_START + 1;'),
+    ('equal-size bag treated as an upgrade', 'container', '(bag ? bag->GetBagSize() : 0) >= itemProto->ContainerSlots',
+     '(bag ? bag->GetBagSize() : 0) > itemProto->ContainerSlots'),
     ('replacement without a free backpack slot', 'helpers',
      'if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))\n            return true;\n    return false;',
      'if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))\n            return true;\n    return true;'),

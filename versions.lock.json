@@ -30,7 +30,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "e9e5b7bb6813022cd46648bedc98a3e229812558",
+      "revision": "cc24d5595e1d2380101983eaed422fd16b05c772",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
@@ -48,7 +48,8 @@
         "mod-playerbots-raid-clear-windows-identifiers": "057818adc8e807ff28e1b457e24a05772a9344ac",
         "mod-playerbots-combat-profiles": "cea4febb77ef9d25c27dda7807d20b7533552d22",
         "mod-playerbots-ignored-quest-reload": "686617ac530f58748f9c53c4dd99e96e2842d6db",
-        "mod-playerbots-corpse-recovery": "e9e5b7bb6813022cd46648bedc98a3e229812558"
+        "mod-playerbots-corpse-recovery": "e9e5b7bb6813022cd46648bedc98a3e229812558",
+        "mod-playerbots-bag-slot-selection": "cc24d5595e1d2380101983eaed422fd16b05c772"
       }
     },
     {

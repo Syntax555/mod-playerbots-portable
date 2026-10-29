@@ -53,6 +53,10 @@ paladins prefer an owned one-handed weapon and shield when both are usable.
 Normal level, skill, armor, weapon and inventory checks still apply. The check
 does not buy items, learn weapon skills or retrieve bank items.
 
+General-purpose bags fill an empty bag slot or upgrade the smallest normal bag
+across all four slots. Quivers, ammunition pouches and profession bags remain
+equipped. The core still checks bag contents and whether the swap is possible.
+
 Ordinary new-loot equipping follows `Playerbots.AutoEquipUpgradeLoot = 1`.
 Loot rolls use the same native item classification; random-property variants
 are scored by their own stats. The portable setting

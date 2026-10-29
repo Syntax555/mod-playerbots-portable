@@ -161,8 +161,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   to vendors when it has a sell price.
 - [ ] Protect bidders when `Playerbots.DeleteRandomBotAccounts` removes bot
   auction items; the core currently drops those auctions without refunds.
-- [ ] Handle general-bag upgrades separately from a hunter's smallest quiver or
-  ammo pouch, preserving ordinary `EquipAction` slot rules.
+- [ ] Verify mixed bag upgrades in game: a smaller quiver, ammo pouch or
+  profession bag must remain equipped while a normal bag upgrades. Cover all
+  four slots, full bags and a new bag stored inside its intended replacement.
 - [ ] Decide whether unsold-stock memory should survive server restarts.
 - [ ] Avoid redundant vendor bag purchases while an auction bag waits in mail.
 

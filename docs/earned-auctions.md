@@ -36,8 +36,9 @@ Buyers seek gear upgrades, ammunition, consumables, bags and gathering tools.
 They reserve upkeep money; a purchase costs at most a quarter of the current
 balance and must fit its category budget. Bags fill an empty slot or replace
 the smallest general bag when backpack space permits. Specialized bags remain
-equipped; quivers are not bought, and a carried unequipped bag upgrade prevents
-another purchase.
+equipped even when they are smaller than the normal bags. Equipment evaluation,
+vendor purchases and auctions use the same bag-slot selection. Quivers are not
+bought, and a carried unequipped bag upgrade prevents another purchase.
 
 Bots cannot buy their own or same-account auctions. Outstanding bids or
 uncollected won items normally pause purchases; a won item blocked by a unique
