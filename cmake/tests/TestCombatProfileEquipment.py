@@ -36,6 +36,14 @@ storage = (core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text
 native_handler = function(handler, 'void WorldSession::HandleAutoEquipItemSlotOpcode(')
 assert 'if (checkInterval < 2)' in value and 'value = Calculate();' in value
 assert 'QueryItemUsageForEquip(proto, randomPropertyId)' in function(usage, 'ItemUsage ItemUpgradeValue::Calculate()')
+# The native core keeps the off hand empty beside a two-hander unless Titan's Grip holds an
+# axe, mace or sword; the doubles' CanEquipItem and session handler follow that rule.
+can_equip = function(storage, 'InventoryResult Player::CanEquipItem(uint8 slot, uint16& dest, Item* pItem, bool swap, bool not_loading) const')
+assert 'if (IsTwoHandUsed())\n                    return EQUIP_ERR_CANT_EQUIP_WITH_TWOHANDED;' in can_equip
+assert 'mhWeaponProto->SubClass == ITEM_SUBCLASS_WEAPON_STAFF' in can_equip
+ai_source = (args.source / 'Bot/PlayerbotAI.cpp').read_text()
+inventory_items = function(ai_source, 'std::vector<Item*> PlayerbotAI::GetInventoryItems()')
+assert 'pBag->GetItemByPos(j)' in inventory_items and 'i < INVENTORY_SLOT_ITEM_END' in inventory_items
 assert 'GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID)' in function(usage, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip(')
 assert 'std::vector<Item*> items;' in function(visitor, 'class CollectItemsVisitor')
 assert '_player->GetItemByGuid(packet.ItemGuid)' in native_handler
@@ -65,6 +73,8 @@ enums = '\n'.join(function(text, 'enum ' + name) + ';' for text, name in (
     (player_header, 'InventoryPackSlots'), (shared, 'Classes')))
 production = '\n\n'.join(function(source, signature) for signature in (
     'uint8 EquipAction::GetSmallestBagSlot(Player* bot)',
+    'bool EquipAction::FillsBothHands(Player* bot, ItemTemplate const* proto)',
+    'float EquipAction::BestOffhandScore(PlayerbotAI* botAI, StatsWeightCalculator& calculator, uint32 candidateId)',
     'void EquipAction::EquipItem(Item* item, uint8 forcedSlot)',
     'bool EquipAction::EquipUpgrades()',
     'bool EquipUpgradesPacketAction::Execute(Event event)',
@@ -98,6 +108,9 @@ struct ItemTemplate {
     uint32 ItemId=0, InventoryType=INVTYPE_HEAD, Class=ITEM_CLASS_ARMOR, SubClass=0;
     uint32 allowedClass=0, level=1;
     std::map<int32,float> tank, dps;
+    // Scores in the item's own slot, where a set tier or freed cap headroom changes it.
+    std::map<int32,float> slotScores{};
+    bool proper=true;
     uint32 ContainerSlots=0;
     bool HasFlag(ItemFlags) const { return false; }
 };
@@ -198,19 +211,29 @@ struct Player {
     }
 };
 struct StatsWeightCalculator {
-    Player* player; explicit StatsWeightCalculator(Player* p):player(p) {}
-    void SetItemSetBonus(bool) {} void SetOverflowPenalty(bool) {} void SetPvpSpec(bool) {}
-    float CalculateItem(uint32 id,int32 property=0) {
-        auto const& weights=player->tank?templates.at(id).tank:templates.at(id).dps;
-        auto it=weights.find(property); return it==weights.end()?weights.at(0):it->second;
+    Player* player; bool pairs=false; explicit StatsWeightCalculator(Player* p):player(p) {}
+    void SetPvpSpec(bool) {} void SetWeaponPairs(bool apply) { pairs=apply; }
+    float CalculateItem(uint32 id,int32 property=0,int32 slot=-1) {
+        auto const& proto=templates.at(id);
+        auto const& weights=player->tank?proto.tank:proto.dps;
+        auto it=weights.find(property); float score=it==weights.end()?weights.at(0):it->second;
+        if(auto found=proto.slotScores.find(slot); found!=proto.slotScores.end()) score=found->second;
+        // Production normalizes a two-hander to one hand unless both hands are compared.
+        return proto.InventoryType==INVTYPE_2HWEAPON && !pairs ? score/2 : score;
     }
 };
 struct PlayerbotAI {
     Player* bot; static bool IsTank(Player* p) { return p->tank; }
+    Player* GetBot() { return bot; }
+    std::vector<Item*> GetInventoryItems() {
+        std::vector<Item*> items;
+        for(auto& item:bot->owned) if(!item.IsEquipped() && !(item.bag==INVENTORY_SLOT_BAG_0 && item.slot<INVENTORY_SLOT_BAG_END)) items.push_back(&item);
+        return items;
+    }
     uint8 FindEquipSlot(ItemTemplate const* p,uint8,bool) {
         switch(p->InventoryType) {
             case INVTYPE_WEAPON: case INVTYPE_WEAPONMAINHAND: case INVTYPE_2HWEAPON:return EQUIPMENT_SLOT_MAINHAND;
-            case INVTYPE_SHIELD: case INVTYPE_WEAPONOFFHAND:return EQUIPMENT_SLOT_OFFHAND;
+            case INVTYPE_SHIELD: case INVTYPE_WEAPONOFFHAND: case INVTYPE_HOLDABLE:return EQUIPMENT_SLOT_OFFHAND;
             case INVTYPE_FINGER:return EQUIPMENT_SLOT_FINGER1;
             case INVTYPE_BAG:case INVTYPE_QUIVER:return INVENTORY_SLOT_BAG_START;
             default:return EQUIPMENT_SLOT_HEAD;
@@ -252,8 +275,8 @@ struct Chat { std::string FormatItem(ItemTemplate const* p) { return std::to_str
 struct Config { bool AutoEquipUpgradeLoot=false; float EquipUpgradeThreshold=1.01f; } sPlayerbotAIConfig;
 struct RandomMgr { bool IsRandomBot(Player* p) { return p->random; } bool IsSpecPvp(uint32,uint8) { return false; } } sRandomPlayerbotMgr;
 struct RandomItemMgr {
-    bool CanEquipWeapon(ItemTemplate const*,uint8) { return true; }
-    bool CanEquipArmor(ItemTemplate const*,uint8,uint8) { return true; }
+    bool CanEquipWeapon(ItemTemplate const* p,uint8) { return p->proper; }
+    bool CanEquipArmor(ItemTemplate const* p,uint8,uint8) { return p->proper; }
 } sRandomItemMgr;
 struct ObjectMgr { ItemTemplate const* GetItemTemplate(uint32 id) { return &templates.at(id); } } manager;
 auto* sObjectMgr=&manager;
@@ -268,6 +291,8 @@ public:
     void EquipItem(Item*,uint8 forcedSlot=NULL_SLOT);
     bool EquipUpgrades();
     static uint8 GetSmallestBagSlot(Player* bot);
+    static bool FillsBothHands(Player* bot,ItemTemplate const* proto);
+    static float BestOffhandScore(PlayerbotAI* botAI,StatsWeightCalculator& calculator,uint32 candidateId);
     void IterateItems(CollectItemsVisitor* visitor,uint32 mask) {
         assert(mask==ITERATE_ITEMS_IN_BAGS); ++bot->bagScans;
         for(auto& item:bot->owned)
@@ -295,7 +320,101 @@ ItemUsage PlayerbotAI::Upgrade(std::string const& qualifier) {
 // PRODUCTION
 void AddTemplate(uint32 id,uint32 type,float tank,float dps,uint32 cls=0,uint32 level=1) {
     uint32 itemClass=(type==INVTYPE_WEAPON || type==INVTYPE_WEAPONMAINHAND || type==INVTYPE_2HWEAPON)?ITEM_CLASS_WEAPON:ITEM_CLASS_ARMOR;
-    templates[id]={id,type,itemClass,ITEM_SUBCLASS_WEAPON_SWORD,cls,level,{{0,tank}},{{0,dps}}};
+    uint32 subclass=type==INVTYPE_2HWEAPON?ITEM_SUBCLASS_WEAPON_SWORD2:ITEM_SUBCLASS_WEAPON_SWORD;
+    templates[id]={id,type,itemClass,subclass,cls,level,{{0,tank}},{{0,dps}}};
+}
+void ScoringTests(Chat& chat) {
+    AddTemplate(40,INVTYPE_HEAD,40,40); templates[40].slotScores[EQUIPMENT_SLOT_HEAD]=70;
+    AddTemplate(41,INVTYPE_HEAD,80,80); templates[41].slotScores[EQUIPMENT_SLOT_HEAD]=65;
+    {
+        // The equipped piece keeps its set tier and freed cap headroom in its own slot.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        auto* worn=p.Add(40,0,true); p.Add(41);
+        assert(ai.Upgrade("41")==ITEM_USAGE_NONE && equip.Execute({}));
+        assert(p.equipped.at(EQUIPMENT_SLOT_HEAD)==worn && p.equips.empty());
+    }
+    AddTemplate(42,INVTYPE_HEAD,-5,-5); AddTemplate(43,INVTYPE_HEAD,0,0);
+    {
+        // An item scoring nothing or worse than nothing never fills an empty slot.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        p.Add(42); p.Add(43);
+        assert(ai.Upgrade("42")==ITEM_USAGE_NONE && ai.Upgrade("43")==ITEM_USAGE_NONE);
+        assert(equip.Execute({}) && p.equips.empty() && !p.equipped.contains(EQUIPMENT_SLOT_HEAD));
+    }
+    AddTemplate(44,INVTYPE_HEAD,100,100); templates[44].proper=false;
+    AddTemplate(45,INVTYPE_HEAD,100.5f,100.5f); templates[45].proper=false;
+    {
+        // An unsuitable item may fill an empty slot but replaces another only past the threshold.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        assert(ai.Upgrade("45")==ITEM_USAGE_BAD_EQUIP);
+        auto* worn=p.Add(44,0,true); p.Add(45);
+        assert(ai.Upgrade("45")==ITEM_USAGE_NONE && equip.Execute({}) && p.equipped.at(EQUIPMENT_SLOT_HEAD)==worn);
+    }
+    AddTemplate(46,INVTYPE_HEAD,30,30); AddTemplate(47,INVTYPE_HEAD,-5,-5);
+    {
+        // A broken item is replaced only by one that is worth wearing.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        auto* worn=p.Add(46,0,true); worn->broken=true; p.Add(47);
+        assert(ai.Upgrade("47")==ITEM_USAGE_NONE && equip.Execute({}) && p.equipped.at(EQUIPMENT_SLOT_HEAD)==worn);
+    }
+    AddTemplate(50,INVTYPE_WEAPON,100,100); AddTemplate(51,INVTYPE_SHIELD,60,60);
+    AddTemplate(52,INVTYPE_2HWEAPON,150,150); AddTemplate(53,INVTYPE_2HWEAPON,170,170);
+    {
+        // A two-hander must beat the main hand and the off hand it displaces together.
+        Player p; p.dual=false; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        p.Add(50,0,true,EQUIPMENT_SLOT_MAINHAND); auto* shield=p.Add(51,0,true,EQUIPMENT_SLOT_OFFHAND);
+        auto* weak=p.Add(52);
+        assert(ai.Upgrade("52")==ITEM_USAGE_NONE && equip.Execute({}) && p.equips.empty());
+        equip.EquipItem(weak); assert(p.equips.empty());
+        auto* strong=p.Add(53);
+        assert(ai.Upgrade("53")==ITEM_USAGE_EQUIP && equip.Execute({}));
+        assert(p.equipped.at(EQUIPMENT_SLOT_MAINHAND)==strong && !p.equipped.contains(EQUIPMENT_SLOT_OFFHAND));
+        assert(!shield->IsEquipped() && p.equips.size()==1);
+    }
+    AddTemplate(54,INVTYPE_2HWEAPON,100,100); templates[54].SubClass=ITEM_SUBCLASS_WEAPON_STAFF;
+    AddTemplate(55,INVTYPE_WEAPON,70,70); AddTemplate(56,INVTYPE_HOLDABLE,40,40);
+    {
+        // A caster leaves a staff for a one-hander when an owned off-hand item completes the pair.
+        Player p; p.cls=CLASS_MAGE; p.dual=false; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        p.Add(54,0,true,EQUIPMENT_SLOT_MAINHAND); auto* dagger=p.Add(55); auto* orb=p.Add(56);
+        assert(ai.Upgrade("55")==ITEM_USAGE_EQUIP && equip.Execute({}));
+        assert(p.equipped.at(EQUIPMENT_SLOT_MAINHAND)==dagger && p.equipped.at(EQUIPMENT_SLOT_OFFHAND)==orb);
+        assert(p.equips.size()==2);
+    }
+    AddTemplate(57,INVTYPE_2HWEAPON,200,200); AddTemplate(58,INVTYPE_WEAPON,120,120);
+    AddTemplate(59,INVTYPE_WEAPON,100,100); AddTemplate(60,INVTYPE_WEAPON,150,150);
+    {
+        // A dual wielder takes two owned one-handers over a weaker two-hander.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        p.Add(57,0,true,EQUIPMENT_SLOT_MAINHAND); auto* main=p.Add(58); auto* off=p.Add(59);
+        assert(equip.Execute({}));
+        assert(p.equipped.at(EQUIPMENT_SLOT_MAINHAND)==main && p.equipped.at(EQUIPMENT_SLOT_OFFHAND)==off);
+    }
+    {
+        // The candidate cannot also count as its own off hand.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        auto* great=p.Add(57,0,true,EQUIPMENT_SLOT_MAINHAND); p.Add(60);
+        assert(ai.Upgrade("60")==ITEM_USAGE_NONE && equip.Execute({}));
+        assert(p.equipped.at(EQUIPMENT_SLOT_MAINHAND)==great && p.equips.empty());
+    }
+    AddTemplate(64,INVTYPE_WEAPON,10,10); templates[64].slotScores[EQUIPMENT_SLOT_MAINHAND]=30;
+    AddTemplate(65,INVTYPE_WEAPON,20,20); AddTemplate(66,INVTYPE_SHIELD,5,5);
+    {
+        // A shield tank compares one-handers in the main hand, where the worn one keeps its slot value.
+        Player p; p.tank=true; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        auto* worn=p.Add(64,0,true,EQUIPMENT_SLOT_MAINHAND); p.Add(66,0,true,EQUIPMENT_SLOT_OFFHAND); p.Add(65);
+        assert(equip.Execute({}) && p.equipped.at(EQUIPMENT_SLOT_MAINHAND)==worn && p.equips.empty());
+    }
+    AddTemplate(61,INVTYPE_FINGER,40,40); templates[61].slotScores[EQUIPMENT_SLOT_FINGER1]=70;
+    AddTemplate(62,INVTYPE_FINGER,45,45); AddTemplate(63,INVTYPE_FINGER,60,60);
+    {
+        // A ring replaces the slot it improves most, keeping a set piece in its own slot.
+        Player p; PlayerbotAI ai{&p}; EquipUpgradeAction equip(&p,&ai,&chat);
+        auto* set=p.Add(61,0,true,EQUIPMENT_SLOT_FINGER1); p.Add(62,0,true,EQUIPMENT_SLOT_FINGER2);
+        auto* upgrade=p.Add(63);
+        assert(ai.Upgrade("63")==ITEM_USAGE_REPLACE && equip.Execute({}));
+        assert(p.equipped.at(EQUIPMENT_SLOT_FINGER1)==set && p.equipped.at(EQUIPMENT_SLOT_FINGER2)==upgrade);
+    }
 }
 void AddBagTemplate(uint32 id,uint32 size,uint32 itemClass=ITEM_CLASS_CONTAINER,uint32 subclass=ITEM_SUBCLASS_CONTAINER) {
     AddTemplate(id,itemClass==ITEM_CLASS_QUIVER?INVTYPE_QUIVER:INVTYPE_BAG,0,0);
@@ -439,7 +558,8 @@ int main() {
         assert(equip.Execute({}) && p.equipped.at(EQUIPMENT_SLOT_HEAD)==strong);
     }
     BagTests(chat);
-    std::cout<<"Profile equipment: native role scores, owned instances, shield combinations, random suffixes, bag selection, combat and packet opt-out passed\n";
+    ScoringTests(chat);
+    std::cout<<"Profile equipment: native role scores, owned instances, shield combinations, random suffixes, slot scores, hand pairs, empty-slot and threshold gates, bag selection, combat and packet opt-out passed\n";
 }
 '''
 
@@ -462,6 +582,26 @@ mutations = (
     ('all-special fallback', '        if (newBagSlot == NULL_SLOT)\n            return;\n', ''),
     ('equal bag accepted', '(bag ? bag->GetBagSize() : 0) >= itemProto->ContainerSlots',
      '(bag ? bag->GetBagSize() : 0) > itemProto->ContainerSlots'),
+    ('slotless candidate score', 'calculator.CalculateItem(itemProto->ItemId, randomPropertyId, slot)',
+     'calculator.CalculateItem(itemProto->ItemId, randomPropertyId, -1)'),
+    ('slotless equipped score', 'oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID), slot)',
+     'oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID), -1)'),
+    ('non-positive empty slot', '            if (!isBetter)\n                return ITEM_USAGE_NONE;\n', ''),
+    ('broken replacement score', 'oldItemIsBroken && !itemIsBroken && itemScore > 0', 'oldItemIsBroken && !itemIsBroken'),
+    ('per-hand weapon scores', 'calculator.SetWeaponPairs(true);', ''),
+    ('displaced off hand', 'if (fillsBothHands && offhand)', 'if (fillsBothHands && offhand && false)'),
+    ('owned off hand', 'itemScore += EquipAction::BestOffhandScore(botAI, calculator, itemProto->ItemId);',
+     'itemScore += 0;'),
+    ('equip displaced off hand', 'betterThanMH = newItemScore > mainHandScore + offHandScore;',
+     'betterThanMH = newItemScore > mainHandScore;'),
+    ('equip owned off hand', 'betterThanMH = newItemScore + BestOffhandScore(botAI, calculator, itemId) > mainHandScore;',
+     'betterThanMH = newItemScore > mainHandScore;'),
+    ('candidate as own off hand', 'item->GetEntry() == candidateId || ', '(candidateId && false) || '),
+    ('two-hander without Titan Grip', '(!bot->CanTitanGrip() || (', '(bot->CanTitanGrip() || ('),
+    ('slotless shield preference', 'current->GetItemRandomPropertyId(), forcedSlot)',
+     'current->GetItemRandomPropertyId(), -1)'),
+    ('ring slot gain', 'equippedItems[i]->GetItemRandomPropertyId(), dstSlot + i)',
+     'equippedItems[i]->GetItemRandomPropertyId(), -1)'),
 )
 with tempfile.TemporaryDirectory(prefix='profile-equipment-') as temporary:
     work = Path(temporary)

@@ -57,6 +57,19 @@ General-purpose bags fill an empty bag slot or upgrade the smallest normal bag
 across all four slots. Quivers, ammunition pouches and profession bags remain
 equipped. The core still checks bag contents and whether the swap is possible.
 
+Upgrades are judged by their effect on the worn equipment. Candidate and worn
+item are scored in the slot they compete for: a piece keeps the set bonus it
+completes, and hit, expertise, defense and armor penetration count only up to
+the caps left without the replaced item and its gems. Spell-hit talents of the
+character's era, such as Shadow Focus, Arcane Focus, Elemental Precision and
+Suppression, count toward the spell-hit cap. A two-hander must beat the main
+and off hand it displaces together; a one-hander replacing a two-hander counts
+the best owned off-hand item. Rings and trinkets replace the slot they improve
+most. Items that score nothing never fill an empty slot, and every replacement
+must exceed `Playerbots.EquipUpgradeThreshold`, so bots do not swap for
+marginal gains. Stat weights remain Playerbots' Wrath-derived class and
+specialization priorities.
+
 Ordinary new-loot equipping follows `Playerbots.AutoEquipUpgradeLoot = 1`.
 Loot rolls use the same native item classification; random-property variants
 are scored by their own stats. The portable setting
@@ -74,6 +87,6 @@ leveling adds points without free respecs. Trainer prices, learned abilities,
 paid respecs and each character's earned era remain authoritative. See
 [historical talents](era-talents.md).
 
-Source fixtures cover profile selection, native strategy mappings, ownership
-and equipment gates. Live coverage across every class, era and gear combination
+Source fixtures cover profile selection, native strategy mappings, ownership,
+equipment gates, slot scoring, weapon pairs and era spell-hit talents. Live coverage across every class, era and gear combination
 remains [outstanding](todo.md#gameplay-validation).

@@ -339,11 +339,12 @@ struct StatsWeightCalculator
 {
     Player* bot;
     explicit StatsWeightCalculator(Player* player) : bot(player) {}
-    void SetItemSetBonus(bool enabled) { assert(!enabled); }
-    void SetOverflowPenalty(bool enabled) { assert(!enabled); }
     void SetPvpSpec(bool) {}
-    float CalculateItem(uint32 id, int32 property = 0)
+    void SetWeaponPairs(bool) {}
+    float CalculateItem(uint32 id, int32 property = 0, int32 slot = -1)
     {
+        // Both the candidate and the worn item are valued in the waist slot they compete for.
+        assert(slot == EQUIPMENT_SLOT_WAIST);
         bot->scoreQueries.emplace_back(id, property);
         return bot->scores.at({id, property});
     }
@@ -387,6 +388,9 @@ public:
 struct EquipAction
 {
     static uint8 GetSmallestBagSlot(Player* bot);
+    static bool FillsBothHands(Player* bot, ItemTemplate const* proto);
+    // Rolled waist items never replace a hand, so no off-hand item is looked up.
+    static float BestOffhandScore(PlayerbotAI*, StatsWeightCalculator&, uint32) { assert(false); return 0.0f; }
 };
 class ItemUsageValue
 {
@@ -492,6 +496,7 @@ production = '\n'.join([
     function(storage, 'uint32 Player::GetItemCount(uint32 item,'),
     function(storage, 'bool Player::HasItemOrGemWithIdEquipped('),
     function(equip_source, 'uint8 EquipAction::GetSmallestBagSlot(Player* bot)'),
+    function(equip_source, 'bool EquipAction::FillsBothHands(Player* bot, ItemTemplate const* proto)'),
     function(usage_source, 'ItemUsage ItemUsageValue::QueryItemUsageForEquip('),
     function(storage, 'InventoryResult Player::CanRollForItemInLFG'),
     function(storage, 'InventoryResult Player::CanUseItem(ItemTemplate const* proto)'),
@@ -1063,8 +1068,8 @@ with tempfile.TemporaryDirectory(prefix='portable-loot-roll-policy-') as directo
           '             randomPropertyId != oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID))'),
          '(itemProto->ItemId != oldItemProto->ItemId)'),
         ('candidate random property',
-         'calculator.CalculateItem(itemProto->ItemId, randomPropertyId)',
-         'calculator.CalculateItem(itemProto->ItemId, 5)'),
+         'calculator.CalculateItem(itemProto->ItemId, randomPropertyId, slot)',
+         'calculator.CalculateItem(itemProto->ItemId, 5, slot)'),
         ('upgrade threshold', 'oldScore * sPlayerbotAIConfig.EquipUpgradeThreshold', 'oldScore'),
         ('native equip eligibility',
          'result != EQUIP_ERR_OK && result != EQUIP_ERR_CANT_CARRY_MORE_OF_THIS', 'false'),

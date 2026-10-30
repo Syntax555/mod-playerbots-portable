@@ -42,7 +42,8 @@ GAMEPLAY = (
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestZygorProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestDragonUIEraTalents", "TestEraTrainerBook", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestMultiBotVendorPurchases", "TestMultiBotSpellbook", "TestMultiBotSpellbookDisplay", "TestFormationMovement",
-    "TestCombatProfiles", "TestCombatProfileEquipment", "TestCombatProfileBridge", "TestMultiBotCombatProfiles",
+    "TestCombatProfiles", "TestCombatProfileEquipment", "TestEquipmentScoring", "TestCombatProfileBridge",
+    "TestMultiBotCombatProfiles",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
     "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
@@ -62,7 +63,7 @@ CORE_FIXTURES = (
 MODULE_FIXTURES = {
     "mod-playerbots": (
         "TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay",
-        "TestPlayerbotUpstreamFixes", "TestCorpseRecovery", "TestBotAccountDeletion",
+        "TestPlayerbotUpstreamFixes", "TestCorpseRecovery", "TestBotAccountDeletion", "TestEquipmentScoring",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",

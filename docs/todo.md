@@ -60,6 +60,11 @@ fixtures pass. Use native core/module functions before adding replacements.
   combat refusal, retained travel/loot settings and owned-item upgrades.
   Include protection weapon/shield, feral cat/bear and historical-era builds;
   controlled characters' talent points must remain manual.
+- [ ] Check equipment upgrades in game across Vanilla, TBC and Wrath eras:
+  set pieces kept against stronger single items, hit-capped casters and melee,
+  Shadow Focus/Arcane Focus/Suppression ranks, two-hander versus one-hander and
+  shield or off-hand, dual wield and Titan's Grip, rings/trinkets and no repeated
+  swaps. Measure the equip and loot evaluation cost with the 2,500-bot target.
 - [ ] Verify native loot eligibility and actual rolls with Need level 2:
   stronger/identical/weaker random-property variants, unique equipped items,
   bank-only copies and LFG Need restrictions. Refused Need retains Greed/Pass.
