@@ -1,11 +1,13 @@
-"""Check upstream Playerbots crash, chat, RPG and ignored-quest guards.
+"""Check upstream Playerbots crash, chat, RPG, ignored-quest and weapon-stone guards.
 
 The production chat hooks, queued command dispatch, RPG quest-giver search and
 smart item destruction run against small engine stubs. Destroyed items are
 freed at once, as AzerothCore frees unsaved items, and the fixture runs under
 AddressSanitizer. Ignored quest configuration reloads use the native parser and
-quest selection gates. Mutation checks remove the guards or restore the previous
-item loop and confirm that the fixture rejects them.
+quest selection gates. Weapon stones run through the real stone choice and imbue
+action, so a shield is never mistaken for a polearm. Mutation checks remove the
+guards or restore the previous item loop and confirm that the fixture rejects
+them.
 """
 
 import argparse
@@ -607,3 +609,161 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-ignored-quests-') as
         if not build_ignored(temporary, mutated).returncode:
             raise SystemExit(f'Ignored quests fixture did not reject: {label}')
         print(f'Ignored quests mutation rejected: {label}')
+
+
+# Shields share subclass 6 with polearms. A stone chosen by subclass alone is
+# cast on the shield, and the server refuses it on every out-of-combat tick.
+# Compile the real stone choice and imbue action against the core item enums.
+item_template = (core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text()
+item_header = (core / 'src/server/game/Entities/Item/Item.h').read_text()
+imbue = (module / 'Ai/Base/Actions/ImbueAction.cpp').read_text()
+assert re.search(r'\buint32 Class;', item_template) and re.search(r'\buint32 SubClass;', item_template)
+assert re.search(r'#define INVENTORY_SLOT_BAG_0\s+255\b', player_header)
+stone_parts = {
+    'item_enums': '\n'.join(function(item_template, 'enum ' + name) + ';'
+                            for name in ('ItemClass', 'ItemSubclassWeapon', 'ItemSubclassArmor')),
+    'slots': function(player_header, 'enum EquipmentSlots') + ';\n' + function(item_header, 'enum EnchantmentSlot : uint8') + ';',
+    'stone_ids': '\n'.join(function(ai_header, 'enum ' + name) + ';' for name in ('SharpeningStoneId', 'WeightstoneId')),
+    'find': function(ai_source, 'Item* PlayerbotAI::FindStoneFor(Item* weapon) const'),
+    'apply': function(imbue, 'bool ImbueWithStoneAction::Execute(Event /*event*/)'),
+}
+stone_source = r'''
+#include <cassert>
+#include <cstdint>
+#include <iostream>
+#include <iterator>
+#include <utility>
+#include <vector>
+using uint8 = std::uint8_t;
+using uint32 = std::uint32_t;
+ITEM_ENUMS
+SLOTS
+STONE_IDS
+constexpr uint8 INVENTORY_SLOT_BAG_0 = 255;
+enum UnitStandStateType : uint8 { UNIT_STAND_STATE_STAND = 0, UNIT_STAND_STATE_SIT = 1 };
+enum AuraType : uint32 { SPELL_AURA_MOD_STEALTH = 16 };
+static_assert(uint32(ITEM_SUBCLASS_ARMOR_SHIELD) == uint32(ITEM_SUBCLASS_WEAPON_POLEARM));
+
+struct ItemTemplate { uint32 ItemId, Class, SubClass; };
+class Item
+{
+public:
+    Item(uint32 entry, uint32 itemClass, uint32 subClass) : proto{entry, itemClass, subClass} {}
+    ItemTemplate const* GetTemplate() const { return &proto; }
+    uint32 GetEnchantmentId(EnchantmentSlot slot) const { return slot == TEMP_ENCHANTMENT_SLOT ? temporary : 0; }
+    ItemTemplate proto;
+    uint32 temporary = 0;
+};
+class Player
+{
+public:
+    bool IsInCombat() const { return false; }
+    bool HasAura(uint32) const { return false; }
+    void RemoveAurasByType(AuraType) {}
+    uint8 getStandState() const { return stand; }
+    void SetStandState(uint8 state) { stand = state; }
+    Item* GetItemByPos(uint8 bag, uint8 slot) const
+    {
+        assert(bag == INVENTORY_SLOT_BAG_0);
+        return slot == EQUIPMENT_SLOT_MAINHAND ? mainHand : slot == EQUIPMENT_SLOT_OFFHAND ? offHand : nullptr;
+    }
+    uint8 stand = UNIT_STAND_STATE_SIT;
+    Item* mainHand = nullptr;
+    Item* offHand = nullptr;
+    std::vector<Item*> bags;
+};
+struct Event {};
+using Uses = std::vector<std::pair<uint32, uint8>>;
+class PlayerbotAI
+{
+public:
+    explicit PlayerbotAI(Player* bot) : bot(bot) {}
+    Item* FindStoneFor(Item* weapon) const;
+    // Like the production lookup: a consumable or trade good with this entry in the bags.
+    Item* FindConsumable(uint32 itemId) const
+    {
+        for (Item* item : bot->bags)
+            if ((item->proto.Class == ITEM_CLASS_CONSUMABLE || item->proto.Class == ITEM_CLASS_TRADE_GOODS) &&
+                item->proto.ItemId == itemId)
+                return item;
+        return nullptr;
+    }
+    void ImbueItem(Item* item, uint8 slot) { used.emplace_back(item->proto.ItemId, slot); }
+    void SetNextCheckDelay(uint32) {}
+    Player* bot;
+    Uses used;
+};
+class ImbueWithStoneAction
+{
+public:
+    explicit ImbueWithStoneAction(PlayerbotAI* botAI) : botAI(botAI), bot(botAI->bot) {}
+    bool Execute(Event event);
+private:
+    PlayerbotAI* botAI;
+    Player* bot;
+};
+FIND
+APPLY
+
+Uses Apply(Player& player)
+{
+    PlayerbotAI ai(&player);
+    assert(ImbueWithStoneAction(&ai).Execute(Event()));
+    return ai.used;
+}
+
+int main()
+{
+    Item sword(1, ITEM_CLASS_WEAPON, ITEM_SUBCLASS_WEAPON_SWORD), mace(2, ITEM_CLASS_WEAPON, ITEM_SUBCLASS_WEAPON_MACE);
+    Item polearm(3, ITEM_CLASS_WEAPON, ITEM_SUBCLASS_WEAPON_POLEARM), dagger(4, ITEM_CLASS_WEAPON, ITEM_SUBCLASS_WEAPON_DAGGER);
+    Item shield(5, ITEM_CLASS_ARMOR, ITEM_SUBCLASS_ARMOR_SHIELD);
+    Item sharpening(HEAVY_SHARPENING_STONE, ITEM_CLASS_CONSUMABLE, 8), weight(HEAVY_WEIGHTSTONE, ITEM_CLASS_CONSUMABLE, 8);
+    Player tank;
+    tank.bags = {&sharpening, &weight};
+    tank.mainHand = &sword;
+    tank.offHand = &shield;
+    // The blade takes its stone; the shield never gets a cast the server refuses.
+    assert(Apply(tank) == Uses({{HEAVY_SHARPENING_STONE, EQUIPMENT_SLOT_MAINHAND}}));
+    assert(tank.stand == UNIT_STAND_STATE_STAND);
+    sword.temporary = 1;
+    assert(Apply(tank).empty());
+    tank.mainHand = &mace;
+    assert(Apply(tank) == Uses({{HEAVY_WEIGHTSTONE, EQUIPMENT_SLOT_MAINHAND}}));
+    tank.bags = {&sharpening};
+    assert(Apply(tank).empty());
+    // Polearms and off-hand blades still take sharpening stones.
+    Player dual;
+    dual.bags = {&sharpening};
+    dual.mainHand = &polearm;
+    dual.offHand = &dagger;
+    assert(Apply(dual) == Uses({{HEAVY_SHARPENING_STONE, EQUIPMENT_SLOT_MAINHAND},
+                                {HEAVY_SHARPENING_STONE, EQUIPMENT_SLOT_OFFHAND}}));
+    std::cout << "Weapon stones: blades and blunt weapons take their stone; shields are never treated as polearms\n";
+}
+'''
+
+
+def build_stones(directory, parts):
+    text = stone_source
+    for key, value in parts.items():
+        text = text.replace(key.upper(), value)
+    source_path = directory / 'stones.cpp'
+    source_path.write_text(text)
+    executable = directory / 'stones'
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    str(source_path), '-o', str(executable)], check=True)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
+
+
+with tempfile.TemporaryDirectory(prefix='portable-playerbot-weapon-stones-') as temporary:
+    temporary = Path(temporary)
+    result = build_stones(temporary, stone_parts)
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Weapon stones fixture failed (exit {result.returncode})')
+    mutated = dict(stone_parts)
+    mutated['find'] = stone_parts['find'].replace(' || item_template->Class != ITEM_CLASS_WEAPON', '')
+    assert mutated['find'] != stone_parts['find'], 'shield stone mutation was not applied'
+    if not build_stones(temporary, mutated).returncode:
+        raise SystemExit('Weapon stones fixture did not reject: stone cast on a shield')
+    print('Weapon stones mutation rejected: stone cast on a shield')

@@ -31,7 +31,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "894c6e540a3f0151b79f527d3129f04a05d34f9b",
+      "revision": "0cbd354582822103b07cf3f10526e029469a41d9",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
@@ -53,7 +53,8 @@
         "mod-playerbots-bag-slot-selection": "cc24d5595e1d2380101983eaed422fd16b05c772",
         "mod-playerbots-pending-auction-bags": "20e042019fac7116f85610651b769694c971b466",
         "mod-playerbots-bot-deletion-auction-refunds": "fe193b6deb391d9ea573fd3f6cfa4fe7a3df0784",
-        "mod-playerbots-equipment-loadout": "894c6e540a3f0151b79f527d3129f04a05d34f9b"
+        "mod-playerbots-equipment-loadout": "894c6e540a3f0151b79f527d3129f04a05d34f9b",
+        "mod-playerbots-weapon-stone-targets": "0cbd354582822103b07cf3f10526e029469a41d9"
       }
     },
     {
