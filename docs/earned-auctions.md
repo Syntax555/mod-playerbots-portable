@@ -113,3 +113,9 @@ origin; see [realm updates](changing-expansions.md#updating-an-existing-realm).
 AI and pathfinding limits can interrupt trading; see
 [supported scope](configuration.md#supported-scope). Source fixtures cover
 market rules, not a fully observed long-running player economy.
+
+`Playerbots.DeleteRandomBotAccounts` removes the bots' listings with their
+items before the characters go. A player's high bid on such a listing returns
+by the native cancellation mail. A bot's bid on a player listing stays binding:
+the seller is paid when the auction ends and the core discards the item, as for
+any buyer whose character no longer exists.

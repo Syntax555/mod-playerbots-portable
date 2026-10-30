@@ -47,7 +47,7 @@ GAMEPLAY = (
     "TestWarlockSoulShards", "TestNaturalMaintenance",
     "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
     "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
-    "TestCorpseRecovery",
+    "TestCorpseRecovery", "TestBotAccountDeletion",
     "TestNativeBankTransfers",
 )
 
@@ -62,7 +62,7 @@ CORE_FIXTURES = (
 MODULE_FIXTURES = {
     "mod-playerbots": (
         "TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay",
-        "TestPlayerbotUpstreamFixes", "TestCorpseRecovery",
+        "TestPlayerbotUpstreamFixes", "TestCorpseRecovery", "TestBotAccountDeletion",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",

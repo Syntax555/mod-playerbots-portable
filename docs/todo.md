@@ -151,8 +151,6 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 - [ ] Disenchanting in natural upkeep; bound outgrown equipment currently goes
   to vendors when it has a sell price.
-- [ ] Protect bidders when `Playerbots.DeleteRandomBotAccounts` removes bot
-  auction items; the core currently drops those auctions without refunds.
 - [ ] Verify mixed bag upgrades in game: a smaller quiver, ammo pouch or
   profession bag must remain equipped while a normal bag upgrades. Cover all
   four slots, full bags, a new bag stored inside its intended replacement and
