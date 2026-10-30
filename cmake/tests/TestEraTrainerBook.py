@@ -839,6 +839,8 @@ function methods:SetAtlasTexture(name)
   self.atlas = name
 end
 function methods:SetDesaturated(value) self.desaturated = value and true or false end
+-- DragonUI's widget API (utils/core.lua) shows or hides by its argument.
+function methods:SetShownCompat(show) if show then self:Show() else self:Hide() end end
 function methods:Enable() self.enabled = true end
 function methods:Disable() self.enabled = false end
 function methods:SetID(id) self.id = id end
@@ -1129,6 +1131,10 @@ assert(byID[6673].sub == "Rang 1" and not byID[6673].grey, "a learned spell keep
 assert(byID[5242] == nil, "a started chain shows no grey first rank")
 assert(byID[900030].grey and byID[900030].sub == "Erlernbar" and byID[900030].desaturated,
   "a ready trainer spell is grey, worded like DragonUI")
+if withDragon then
+  assert(byID[900030].card.halo.shown and byID[900030].card.scroll.shown and not byID[6673].card.halo.shown
+    and not byID[900050].card.scroll.shown, "only a ready trainer spell gets DragonUI's trainer halo and scroll")
+end
 assert(byID[900050].sub == "Benötigt Spell 900051", "a trainer spell names what it needs")
 assert(byID[900040].sub == "Rang 1  (Benötigt Talent)", "an era talent rank waits for its talent, as in DragonUI")
 botLevel = 25
@@ -1257,7 +1263,7 @@ BOT_MUTATIONS = [
      '"TOPRIGHT", -8, -26', True),
     ('single-page header hides right half', 'BotBook.lua',
      '  if wide then art.woodRight:Show() else art.woodRight:Hide() end', '  art.woodRight:Show()', True),
-    ('native helper required', 'BotBook.lua', '      or type(book.InkLabel) ~= "function"\n', '', 'missing-ink'),
+    ('native helper required', 'BotBook.lua', 'type(book.InkLabel) ~= "function" or ', '', 'missing-ink'),
     ('native font helper', 'BotBook.lua', 'return DragonBook().InkLabel(parent, layer, fontObject, size)',
      'return parent:CreateFontString(nil, layer, fontObject)', True),
     ('runtime module preference', 'BotBook.lua', '    if not DragonBookOn() then\n', '    if false then\n', True),
@@ -1271,6 +1277,8 @@ BOT_MUTATIONS = [
     ('started chains', 'BotBook.lua', '      answer = answer or knownInChain(record[2])\n', '', True),
     ('learned spell tree', 'BotBook.lua', '    return record and record[8] or 0', '    return 0', True),
     ('grey cards inert', 'BotBook.lua', '  if not entry or entry.grey then return end', '  if not entry then return end', True),
+    ('trainer halo on ready spells', 'BotBook.lua', 'grey and "squareOff" or "square", grey and entry.state == "ready")',
+     'grey and "squareOff" or "square", grey)', True),
     ('skip list', 'BotBook.lua', '  spells[spellID] = not spells[spellID]\n', '', True),
     ('shift-click skips', 'BotBook.lua', 'if IsShiftKeyDown and IsShiftKeyDown() then', 'if false then', True),
     ('book refresh', 'BotBook.lua', '  if unit and UnitGUID(unit) == guid then Render() end', '', True),
@@ -1323,6 +1331,10 @@ def build(directory, name, source, warnings=('-Wall', '-Wextra', '-Werror')):
                '-I', str(core / 'src/common/Utilities'), str(path), '-o', str(directory / name)]
     subprocess.run(command, check=True)
     return run_fixture([str(directory / name)], name)
+
+
+NATIVE_SHOWN = (DRAGONUI / 'utils/core.lua').read_text()
+assert 'api.SetShownCompat = function(widget, show)\n\tif show then\n\t\twidget:Show()\n\telse\n\t\twidget:Hide()' in NATIVE_SHOWN
 
 
 def run_bot_client(directory, era_dir, packets, with_dragon):

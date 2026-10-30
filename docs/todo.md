@@ -131,10 +131,6 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ## Dependency updates
 
-- [ ] Expose reusable DragonUI spellbook window/card/section helpers before
-  removing EraTalents' remaining `book_slots.lua` rendering duplication. Keep
-  bot data/actions in EraTalents; cover no DragonUI, disabled modules, search,
-  paging and bot switching with production fixtures.
 - [ ] Submit the prepared Individual Progression empty-filter fix when upstream
   permissions permit. Track the generic core proposals and remove local hunks
   only after accepted compatible fixes are pinned and checked; see
