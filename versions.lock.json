@@ -306,7 +306,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "fcf17c77528ca3318b82e235216df7cfdc253f26",
+      "revision": "70c7a44db664902126e901e8a6edb94849e7f9e0",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
@@ -319,7 +319,8 @@
         "zygor-incremental-gearfinder": "84787533d8a16b7c5cd063b84ac1ceb28361fd34",
         "zygor-druid-gear-profiles": "258ee399fffc38307b760faf899e1a3bef6a1dff",
         "zygor-inspected-altbot-gearfinder": "1633821cf1cf4221326cb2e42c905da676054faa",
-        "zygor-gearfinder-equipment-launchers": "de9461efb1b4720dc36c2fc9daa6e21e485414c3"
+        "zygor-gearfinder-equipment-launchers": "de9461efb1b4720dc36c2fc9daa6e21e485414c3",
+        "zygor-paired-slot-upgrades": "70c7a44db664902126e901e8a6edb94849e7f9e0"
       }
     }
   ]

@@ -380,7 +380,15 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
         result = run_fixture([lua, str(launcher_test), str(candidate)], 'equipment launchers', cwd=directory)
         assert result.returncode == 0, result.stdout + result.stderr
         print('Gear Finder equipment launchers fail when reverted and pass when reapplied', flush=True)
-        target_tests = ('gearfinder/test_inspect_context.lua', 'gearfinder/test_target_sources.lua',
+        paired = fork_change('ZygorGuidesViewerRM', 'zygor-paired-slot-upgrades',
+                             paths=('ZygorGuidesViewerRM/Item-GearFinder.lua',))
+        paired_test = Path(directory) / 'tools/gearfinder/test_pair_duplicates.lua'
+        git_apply(work, paired, '--reverse')
+        result = run_fixture([lua, str(paired_test), str(candidate)], 'paired slot upgrades', cwd=directory)
+        assert result.returncode != 0 and "in function 'assert'" in result.stderr, result.stdout + result.stderr
+        git_apply(work, paired)
+        print('Paired-slot Gear Finder upgrades fail when reverted', flush=True)
+        target_tests =('gearfinder/test_inspect_context.lua', 'gearfinder/test_target_sources.lua',
                         'itemscore/test_target_context.lua', 'itemscore/test_target_tooltip.lua')
         git_apply(work, launchers, '--reverse')
         git_apply(work, target_patch, '--reverse')

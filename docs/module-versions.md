@@ -48,7 +48,7 @@ fork releases; see [downloads and installation](addons.md#addon-forks).
 | MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), fork of [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) at `020210ba849c` | `f7b7a596c376` | Client bot controls and combat-profile selection |
 | DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `6cfcd75a2e57` | `d94b06538e7a` | Shared talent renderer for historical player and bot trees, plus spellbook catalogue integration |
 | Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `4c7df0caf0c8` | `2f555ab1d06c` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
-| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `d2aae8d0f1f3` | `fcf17c77528c` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
+| Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `d2aae8d0f1f3` | `70c7a44db664` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
 
 ### Supporting data and tools
 
