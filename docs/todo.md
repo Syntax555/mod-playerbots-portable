@@ -151,6 +151,10 @@ fixtures pass. Use native core/module functions before adding replacements.
   Eliminator and post-2.4.3 Recruit-a-Friend availability separately.
 - [ ] Decide a paid-training refund/unlearn policy for later-era class lessons
   learned before the trainer gate. The current gate blocks only new training.
+- [ ] Correct the TBC Arcane Focus spell-modifier mask in the EraTalents data:
+  it stores `2703605760` (`0xA125C000`) where its comment and TBC use
+  `0xA1205000`, so Arcane Explosion lacks the hit bonus. Regenerate the server
+  data and matching client files.
 
 ## Auction economy
 
