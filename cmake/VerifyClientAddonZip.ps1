@@ -28,7 +28,7 @@ $source = Join-Path $verificationRoot 'source'
 $archive = $null
 try {
     # A ZIP and mutable prepared cache could share the same corruption. Rebuild
-    # expected bytes independently from the immutable locked Git object + patches.
+    # expected bytes independently from the immutable locked Git object.
     & $Python (Join-Path $PSScriptRoot 'ExportClientAddon.py') --repository $RepositoryRoot --addon $AddonName --destination $source
     if ($LASTEXITCODE -ne 0) { throw "Cannot reconstruct locked client addon $AddonName." }
     $runtimeJson = & $Python (Join-Path $PSScriptRoot 'AddonRuntime.py') --source $source --toc $addon.toc --list
@@ -63,7 +63,6 @@ try {
     }
 
     $requiredFiles = @($addon.toc, $addon.license, 'README.md', 'SOURCE_REVISION.txt')
-    if (@($addon.patches).Count -gt 0 -and $addon.patches) { $requiredFiles += 'SOURCE_MANIFEST.json' }
     foreach ($relative in $requiredFiles) {
         $path = "$AddonName/$relative"
         if (-not $entries.ContainsKey($path) -or $entries[$path].Length -eq 0) {
@@ -113,7 +112,7 @@ try {
     foreach ($path in $entries.Keys) {
         if (-not $expected.Contains($path)) { throw "Unexpected asset in client addon ZIP: $path" }
     }
-    Write-Host "Verified standalone client addon ZIP: $AddonName, $($entries.Count) files matching locked sources and patches, WotLK TOC, license and source provenance."
+    Write-Host "Verified standalone client addon ZIP: $AddonName, $($entries.Count) files matching locked sources, WotLK TOC, license and source provenance."
 } finally {
     if ($archive) { $archive.Dispose() }
     if (Test-Path -LiteralPath $verificationRoot) { Remove-Item -LiteralPath $verificationRoot -Recurse -Force }

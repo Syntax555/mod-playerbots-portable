@@ -20,12 +20,15 @@ string(JSON _schema GET "${PORTABLE_VERSIONS_JSON}" schemaVersion)
 if(NOT _schema EQUAL 1)
     message(FATAL_ERROR "Unsupported versions.lock.json schema: ${_schema}")
 endif()
+# Source changes are fork commits; a patch list would otherwise be ignored.
+if(PORTABLE_VERSIONS_JSON MATCHES "\"patches\"[ \t\r\n]*:")
+    message(FATAL_ERROR "versions.lock.json lists source patches; pin a fork commit instead")
+endif()
 
 function(portable_git)
     # Generated staging directories must not inherit the enclosing workspace's
-    # Git repository: git apply would silently skip patches outside its subdir.
-    # Sources marked text without an eol attribute follow core.eol, which is
-    # CRLF on Windows; exports must keep the LF bytes the patches expect.
+    # Git repository. Sources marked text without an eol attribute follow
+    # core.eol, which is CRLF on Windows; exports must keep the committed bytes.
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env
         "GIT_CEILING_DIRECTORIES=${PORTABLE_SOURCE_DIR}/.module-cache"
         "${GIT_EXECUTABLE}" -c "core.autocrlf=false" -c "core.eol=lf" ${ARGN}
@@ -57,74 +60,16 @@ function(portable_fetch_source name url revision output_variable)
     set(${output_variable} "${_source_dir}" PARENT_SCOPE)
 endfunction()
 
-# Records a checked-in patch's hash in a stamp and writes the LF copy that is
-# applied. Windows checkouts created before the LF attribute can still have
-# CRLF patches; the checked-in file, its dependency and its hash stay as is.
-function(portable_prepare_patch patch id stamp_variable output_variable)
-    set(_patch_file "${PORTABLE_SOURCE_DIR}/${patch}")
-    if(NOT CMAKE_SCRIPT_MODE_FILE)
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_patch_file}")
-    endif()
-    file(SHA256 "${_patch_file}" _patch_hash)
-    file(READ "${_patch_file}" _patch_contents)
-    string(REPLACE "\r\n" "\n" _patch_contents "${_patch_contents}")
-    # file(WRITE) uses Windows text mode and would restore CRLF here.
-    # Expand the contents once to preserve any literal @VAR@/${VAR}.
-    # CONFIGURE adds a final LF, so remove one from the input first.
-    string(REGEX REPLACE "\n$" "" _patch_contents "${_patch_contents}")
-    set(_prepared_patch "${PORTABLE_SOURCE_DIR}/.module-cache/patches/${id}.patch")
-    file(MAKE_DIRECTORY "${PORTABLE_SOURCE_DIR}/.module-cache/patches")
-    file(CONFIGURE OUTPUT "${_prepared_patch}" CONTENT "@_patch_contents@" @ONLY NEWLINE_STYLE LF)
-    set(${stamp_variable} "${${stamp_variable}}${patch}: ${_patch_hash}\n" PARENT_SCOPE)
-    set(${output_variable} "${_prepared_patch}" PARENT_SCOPE)
-endfunction()
-
-# Applies prepared patches in order. Each must change files, apply cleanly
-# and then reverse cleanly, so an inapplicable or duplicated patch fails.
-function(portable_apply_patches directory)
-    foreach(_patch_file IN LISTS ARGN)
-        execute_process(COMMAND "${CMAKE_COMMAND}" -E env
-            "GIT_CEILING_DIRECTORIES=${PORTABLE_SOURCE_DIR}/.module-cache"
-            "${GIT_EXECUTABLE}" -C "${directory}" apply --numstat "${_patch_file}"
-            RESULT_VARIABLE _stat_result OUTPUT_VARIABLE _stat ERROR_VARIABLE _stat_error
-            OUTPUT_STRIP_TRAILING_WHITESPACE)
-        if(NOT _stat_result EQUAL 0 OR _stat STREQUAL "")
-            message(FATAL_ERROR "Patch has no applicable files: ${_patch_file}\n${_stat_error}")
-        endif()
-        portable_git(-C "${directory}" apply --check "${_patch_file}")
-        portable_git(-C "${directory}" apply "${_patch_file}")
-        portable_git(-C "${directory}" apply --reverse --check "${_patch_file}")
-    endforeach()
-endfunction()
-
 string(JSON _core_name GET "${PORTABLE_VERSIONS_JSON}" core name)
 string(JSON _core_url GET "${PORTABLE_VERSIONS_JSON}" core url)
 string(JSON _core_revision GET "${PORTABLE_VERSIONS_JSON}" core revision)
 portable_fetch_source("${_core_name}" "${_core_url}" "${_core_revision}" PORTABLE_CORE_SOURCE_DIR)
 
 # A local shared clone keeps the source cache intact and supplies the
-# pinned Git revision to genrev. An empty patch list prepares it unchanged.
-string(JSON _core_patch_count ERROR_VARIABLE _core_patch_error
-    LENGTH "${PORTABLE_VERSIONS_JSON}" core patches)
-if(_core_patch_error)
-    set(_core_patch_count 0)
-endif()
+# pinned Git revision to genrev.
 set(_core_original "${PORTABLE_CORE_SOURCE_DIR}")
 set(_core_target "${PORTABLE_SOURCE_DIR}/.module-cache/prepared-core")
 set(_core_stamp "prepare: ${_prepare_script_hash}\n${_core_url}\n${_core_revision}\n")
-set(_core_patches)
-if(_core_patch_count GREATER 0)
-    math(EXPR _last_core_patch "${_core_patch_count} - 1")
-    foreach(_patch_index RANGE 0 ${_last_core_patch})
-        string(JSON _patch GET "${PORTABLE_VERSIONS_JSON}" core patches ${_patch_index})
-        set(_patch_file "${PORTABLE_SOURCE_DIR}/${_patch}")
-        if(NOT EXISTS "${_patch_file}")
-            message(FATAL_ERROR "Missing core patch: ${_patch_file}")
-        endif()
-        portable_prepare_patch("${_patch}" "core-${_patch_index}" _core_stamp _prepared_patch)
-        list(APPEND _core_patches "${_prepared_patch}")
-    endforeach()
-endif()
 set(_old_core_stamp "")
 if(EXISTS "${_core_target}/.portable-source")
     file(READ "${_core_target}/.portable-source" _old_core_stamp)
@@ -139,7 +84,6 @@ if(NOT _core_stamp STREQUAL _old_core_stamp)
     portable_git(clone --shared --no-checkout --branch portable-pinned --quiet "${_core_original}" "${_core_stage}")
     portable_git(-C "${_core_stage}" config core.autocrlf false)
     portable_git(-C "${_core_stage}" checkout --detach --quiet "${_core_revision}")
-    portable_apply_patches("${_core_stage}" ${_core_patches})
     file(WRITE "${_core_stage}/.portable-source" "${_core_stamp}")
     file(REMOVE_RECURSE "${_core_target}")
     file(RENAME "${_core_stage}" "${_core_target}")
@@ -161,21 +105,7 @@ foreach(_index RANGE 0 ${_last_module})
 
     portable_fetch_source("${_name}" "${_url}" "${_revision}" _source_dir)
 
-    set(_patches)
     set(_stamp "prepare: ${_prepare_script_hash}\n${_url}\n${_revision}\n")
-    string(JSON _patch_count ERROR_VARIABLE _patch_error LENGTH "${PORTABLE_VERSIONS_JSON}" modules ${_index} patches)
-    if(NOT _patch_error AND _patch_count GREATER 0)
-        math(EXPR _last_patch "${_patch_count} - 1")
-        foreach(_patch_index RANGE 0 ${_last_patch})
-            string(JSON _patch GET "${PORTABLE_VERSIONS_JSON}" modules ${_index} patches ${_patch_index})
-            set(_patch_file "${PORTABLE_SOURCE_DIR}/${_patch}")
-            if(NOT EXISTS "${_patch_file}")
-                message(FATAL_ERROR "Missing module patch: ${_patch_file}")
-            endif()
-            portable_prepare_patch("${_patch}" "${_name}-${_patch_index}" _stamp _prepared_patch)
-            list(APPEND _patches "${_prepared_patch}")
-        endforeach()
-    endif()
 
     set(_target "${PORTABLE_CORE_SOURCE_DIR}/modules/${_name}")
     set(_stamp_file "${_target}/.portable-source")
@@ -200,7 +130,6 @@ foreach(_index RANGE 0 ${_last_module})
     if(NOT _extract_result EQUAL 0)
         message(FATAL_ERROR "Cannot extract pinned ${_name}")
     endif()
-    portable_apply_patches("${_stage}" ${_patches})
     file(WRITE "${_stage}/.portable-source" "${_stamp}")
     file(REMOVE_RECURSE "${_target}")
     file(RENAME "${_stage}" "${_target}")
@@ -296,22 +225,6 @@ if(_addon_count GREATER 0)
         set(_addon_target "${PORTABLE_SOURCE_DIR}/.module-cache/prepared-addons/${_addon_name}")
         set(_addon_stamp "prepare: ${_prepare_script_hash}\n${_addon_url}\n${_addon_revision}\ninterface: ${_addon_interface}\n")
         string(APPEND _addon_stamp "export: ${_addon_export_hash}\n")
-        set(_addon_patches)
-        string(JSON _addon_patch_count ERROR_VARIABLE _addon_patch_error
-            LENGTH "${PORTABLE_VERSIONS_JSON}" clientAddons ${_addon_index} patches)
-        if(NOT _addon_patch_error AND _addon_patch_count GREATER 0)
-            math(EXPR _last_addon_patch "${_addon_patch_count} - 1")
-            foreach(_patch_index RANGE 0 ${_last_addon_patch})
-                string(JSON _patch GET "${PORTABLE_VERSIONS_JSON}" clientAddons ${_addon_index} patches ${_patch_index})
-                set(_patch_file "${PORTABLE_SOURCE_DIR}/${_patch}")
-                if(NOT _patch MATCHES "^patches/[A-Za-z0-9_.-]+[.]patch$"
-                    OR NOT EXISTS "${_patch_file}" OR IS_DIRECTORY "${_patch_file}" OR IS_SYMLINK "${_patch_file}")
-                    message(FATAL_ERROR "Missing or invalid client addon patch: ${_patch}")
-                endif()
-                portable_prepare_patch("${_patch}" "addon-${_addon_name}-${_patch_index}" _addon_stamp _prepared_patch)
-                list(APPEND _addon_patches "${_prepared_patch}")
-            endforeach()
-        endif()
         if(EXISTS "${_addon_target}" AND NOT EXISTS "${_addon_target}/.portable-source")
             message(FATAL_ERROR "${_addon_target} is not a generated portable client addon. Move it aside before preparing the pinned addon.")
         endif()
@@ -328,7 +241,6 @@ if(_addon_count GREATER 0)
         if(NOT _addon_extract_result EQUAL 0)
             message(FATAL_ERROR "Cannot extract pinned client addon ${_addon_name}")
         endif()
-        portable_apply_patches("${_addon_stage}" ${_addon_patches})
         file(REMOVE_RECURSE "${_addon_stage}/.github")
         file(REMOVE "${_addon_stage}/.gitignore" "${_addon_stage}/.coderabbit.yaml"
             "${_addon_stage}/AGENTS.md")
@@ -385,21 +297,6 @@ if(_source_addon_count GREATER 0)
         list(APPEND _source_addon_names "${_name}")
         portable_fetch_source("client-addon-${_name}" "${_url}" "${_source_revision}" _source)
         set(_stamp "prepare: ${_prepare_script_hash}\n${_url}\n${_source_revision}\ninterface: ${_interface}\npath: ${_path}\n")
-        set(_source_patches)
-        string(JSON _patch_count ERROR_VARIABLE _patch_error LENGTH "${PORTABLE_VERSIONS_JSON}" sourceAddons ${_index} patches)
-        if(NOT _patch_error AND _patch_count GREATER 0)
-            math(EXPR _last_patch "${_patch_count} - 1")
-            foreach(_patch_index RANGE 0 ${_last_patch})
-                string(JSON _patch GET "${PORTABLE_VERSIONS_JSON}" sourceAddons ${_index} patches ${_patch_index})
-                if(NOT _patch MATCHES "^patches/[A-Za-z0-9_.-]+[.]patch$"
-                    OR NOT EXISTS "${PORTABLE_SOURCE_DIR}/${_patch}"
-                    OR IS_DIRECTORY "${PORTABLE_SOURCE_DIR}/${_patch}" OR IS_SYMLINK "${PORTABLE_SOURCE_DIR}/${_patch}")
-                    message(FATAL_ERROR "Missing or invalid source-only client addon patch: ${_patch}")
-                endif()
-                portable_prepare_patch("${_patch}" "source-addon-${_name}-${_patch_index}" _stamp _prepared_patch)
-                list(APPEND _source_patches "${_prepared_patch}")
-            endforeach()
-        endif()
         set(_target "${PORTABLE_SOURCE_DIR}/.module-cache/prepared-source-addons/${_name}")
         if(EXISTS "${_target}" AND NOT EXISTS "${_target}/.portable-source")
             message(FATAL_ERROR "${_target} is not a generated source-only addon. Move it aside first.")
@@ -414,7 +311,6 @@ if(_source_addon_count GREATER 0)
         if(NOT _extract_result EQUAL 0)
             message(FATAL_ERROR "Cannot extract source-only client addon ${_name}")
         endif()
-        portable_apply_patches("${_source_stage}" ${_source_patches})
         set(_addon_stage "${_source_stage}")
         if(_path)
             set(_addon_stage "${_source_stage}/${_path}")

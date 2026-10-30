@@ -1,7 +1,6 @@
-"""Offline regressions for pinned, patched client addon release artifacts."""
+"""Offline regressions for pinned client addon preparation, packaging and verification."""
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 import os
@@ -23,10 +22,6 @@ ADDON_URL = "https://github.com/example/MultiBot.git"
 CORE_URL = "https://github.com/example/azerothcore-wotlk.git"
 MODULE_URL = "https://github.com/example/mod-fixture.git"
 MAIN = b'local money = "upstream"\nreturn money\n'
-
-
-def digest(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def run(command, *, cwd=None, env=None):
@@ -60,13 +55,6 @@ def commit(repository: Path, files: dict[str, bytes]) -> str:
     git(repository, "add", ".")
     git(repository, "commit", "--quiet", "-m", "Pinned fixture")
     return git(repository, "rev-parse", "HEAD")
-
-
-def text_patch(relative: str, before: str, after: str) -> bytes:
-    return (f"diff --git a/{relative} b/{relative}\n"
-            f"--- a/{relative}\n+++ b/{relative}\n@@ -1,2 +1,2 @@\n"
-            f'-local money = "{before}"\n+local money = "{after}"\n'
-            " return money\n").encode()
 
 
 class AddonFixture:
@@ -103,17 +91,15 @@ class AddonFixture:
                         "README.md": b"Fixture module and addon guide\n"}
         self.module = self.root / ".module-cache/mod-fixture"
         module_revision = commit(self.module, module_files)
-        module = {"name": "mod-fixture", "url": MODULE_URL,
-                  "revision": module_revision, "patches": []}
+        module = {"name": "mod-fixture", "url": MODULE_URL, "revision": module_revision}
         self.cached = self.root / ".module-cache/client-addon-MultiBot"
         addon_revision = commit(self.cached, self.addon_files)
         addon = {"name": "MultiBot", "url": ADDON_URL,
                  "revision": addon_revision, "archiveName": "MultiBot-Chatless",
-                 "interface": 30300, "toc": "MultiBot.toc", "license": "LICENSE",
-                 "patches": []}
+                 "interface": 30300, "toc": "MultiBot.toc", "license": "LICENSE"}
         self.lock = {"schemaVersion": 1,
                      "core": {"name": "azerothcore-wotlk", "url": CORE_URL,
-                              "revision": core_revision, "patches": []},
+                              "revision": core_revision},
                      "modules": [module], "clientAddons": [addon]}
         self.write_lock()
 
@@ -131,15 +117,6 @@ class AddonFixture:
 
     def write_lock(self):
         (self.root / "versions.lock.json").write_text(json.dumps(self.lock), encoding="utf-8")
-
-    def patch(self, name: str, value: bytes):
-        relative = f"patches/{name}.patch"
-        path = self.root / relative
-        path.parent.mkdir(exist_ok=True)
-        path.write_bytes(value)
-        self.addon["patches"].append(relative)
-        self.write_lock()
-        return relative
 
     def export(self, destination: Path):
         return run([sys.executable, str(self.root / "cmake/ExportClientAddon.py"),
@@ -159,17 +136,10 @@ class AddonFixture:
                     "-ZipPath", str(archive or self.archive), "-AddonName", "MultiBot",
                     "-RepositoryRoot", str(self.root), "-Python", sys.executable])
 
-    def manifest(self):
-        patches = self.addon.get("patches", [])
-        return {"schemaVersion": 1, "name": "MultiBot", "repository": self.addon["url"],
-                "revision": self.addon["revision"], "interface": 30300,
-                "patches": {path: digest((self.root / path).read_bytes()) for path in patches}}
-
-
 @unittest.skipUnless(GIT and CMAKE, "Git and CMake are required for offline addon fixtures")
-class ClientAddonPatchTests(unittest.TestCase):
+class ClientAddonPackagingTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="client-addon-patches-")
+        self.temp = tempfile.TemporaryDirectory(prefix="client-addon-packaging-")
         self.directory = Path(self.temp.name)
 
     def tearDown(self):
@@ -184,39 +154,8 @@ class ClientAddonPatchTests(unittest.TestCase):
     def rejected(self, result):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_export_patches_committed_source_and_preserves_upstream_checkout(self):
-        fixture = self.fixture()
-        fixture.patch("money", text_patch("UI/Main.lua", "upstream", "gold silver copper"))
-        # A local modification must neither leak into the artifact nor be lost.
-        (fixture.cached / "UI/Main.lua").write_bytes(b"local editing in progress\n")
-        status = git(fixture.cached, "status", "--porcelain")
-        destination = self.directory / "export"
-        self.successful(fixture.export(destination))
-        self.assertEqual((destination / "UI/Main.lua").read_bytes(),
-                         MAIN.replace(b"upstream", b"gold silver copper"))
-        self.assertEqual(git(fixture.cached, "rev-parse", "HEAD"), fixture.addon["revision"])
-        self.assertEqual(git(fixture.cached, "show", "HEAD:UI/Main.lua"), MAIN.decode().strip())
-        self.assertEqual(git(fixture.cached, "status", "--porcelain"), status)
-        self.assertEqual((fixture.cached / "UI/Main.lua").read_bytes(), b"local editing in progress\n")
-        self.assertFalse((destination / ".git").exists())
-        self.assertFalse((destination / ".github").exists())
-        self.assertEqual(json.loads((destination / "SOURCE_MANIFEST.json").read_text()), fixture.manifest())
-
-    def test_multiple_patches_follow_lock_order(self):
-        fixture = self.fixture()
-        fixture.patch("first", text_patch("UI/Main.lua", "upstream", "intermediate"))
-        fixture.patch("second", text_patch("UI/Main.lua", "intermediate", "complete"))
-        destination = self.directory / "ordered"
-        self.successful(fixture.export(destination))
-        self.assertEqual((destination / "UI/Main.lua").read_bytes(), MAIN.replace(b"upstream", b"complete"))
-        fixture.addon["patches"].reverse()
-        fixture.write_lock()
-        self.rejected(fixture.export(self.directory / "reversed"))
-        self.assertEqual(git(fixture.cached, "show", "HEAD:UI/Main.lua"), MAIN.decode().strip())
-
     def test_packaging_uses_selected_git_without_git_on_path(self):
         fixture = self.fixture()
-        fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
         self.successful(fixture.prepare())
         no_git = self.directory / "empty-path"
         no_git.mkdir()
@@ -226,7 +165,7 @@ class ClientAddonPatchTests(unittest.TestCase):
         environment = {"PATH": str(no_git)}
         self.successful(run(command, env=environment))
         with zipfile.ZipFile(fixture.archive) as archive:
-            self.assertEqual(archive.read("MultiBot/UI/Main.lua"), MAIN.replace(b"upstream", b"release"))
+            self.assertEqual(archive.read("MultiBot/UI/Main.lua"), MAIN)
         script = fixture.root / "cmake/PackageClientAddons.cmake"
         source = script.read_text(encoding="utf-8")
         setting = '--git "${GIT_EXECUTABLE}"'
@@ -234,19 +173,13 @@ class ClientAddonPatchTests(unittest.TestCase):
         script.write_text(source.replace(setting, ""), encoding="utf-8")
         self.rejected(run(command, env=environment))
 
-    def test_patched_exports_ignore_host_line_ending_conversion(self):
+    def test_exports_ignore_host_line_ending_conversion(self):
         def verify(index, mutation=None):
             fixture = AddonFixture(self.directory / f"repository-{index}")
             (fixture.cached / "Native.lua").write_bytes(b"return true\r\n")
             git(fixture.cached, "add", "Native.lua")
             git(fixture.cached, "commit", "--quiet", "-m", "Preserve native CRLF source")
             fixture.addon["revision"] = git(fixture.cached, "rev-parse", "HEAD")
-            fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
-            patch = fixture.root / "patches/module.patch"
-            patch.write_bytes(b"diff --git a/src/module.cpp b/src/module.cpp\n"
-                              b"--- a/src/module.cpp\n+++ b/src/module.cpp\n@@ -1 +1 @@\n"
-                              b"-int module_fixture = 1;\n+int module_fixture = 2;\n")
-            fixture.lock["modules"][0]["patches"] = ["patches/module.patch"]
             fixture.write_lock()
             if mutation:
                 path = fixture.root / "cmake" / mutation
@@ -258,7 +191,7 @@ class ClientAddonPatchTests(unittest.TestCase):
                 f"era_client_endings_{index}", fixture.root / "cmake/PackageEraClient.py")
             package = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(package)
-            expected = MAIN.replace(b"upstream", b"release")
+            expected = MAIN
             environment = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "core.autocrlf",
                            "GIT_CONFIG_VALUE_0": "true", "GIT_CONFIG_KEY_1": "core.eol",
                            "GIT_CONFIG_VALUE_1": "crlf"}
@@ -272,13 +205,13 @@ class ClientAddonPatchTests(unittest.TestCase):
                 prepared = fixture.root / ".module-cache/prepared-core"
                 self.assertEqual((prepared / "README.md").read_bytes(), b"Fixture core\n")
                 self.assertEqual((prepared / "modules/mod-fixture/src/module.cpp").read_bytes(),
-                                 b"int module_fixture = 2;\n")
+                                 b"int module_fixture = 1;\n")
                 self.successful(fixture.package())
                 with zipfile.ZipFile(fixture.archive) as archive:
                     self.assertEqual(archive.read("MultiBot/UI/Main.lua"), expected)
                 module = self.directory / f"module-{index}"
                 package.export_module(fixture.root, fixture.lock["modules"][0], module, GIT)
-                self.assertEqual((module / "src/module.cpp").read_bytes(), b"int module_fixture = 2;\n")
+                self.assertEqual((module / "src/module.cpp").read_bytes(), b"int module_fixture = 1;\n")
 
         verify(0)
         for index, mutation in enumerate(("ExportClientAddon.py", "PrepareModules.cmake",
@@ -290,58 +223,9 @@ class ClientAddonPatchTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
                 verify(index, mutation)
 
-    def test_crlf_patch_applies_but_provenance_hashes_original_bytes(self):
-        fixture = self.fixture()
-        lf_patch = text_patch("UI/Main.lua", "upstream", "localized")
-        patch = fixture.patch("crlf", lf_patch.replace(b"\n", b"\r\n"))
-        self.successful(fixture.prepare())
-        self.assertEqual((fixture.prepared / "UI/Main.lua").read_bytes(),
-                         MAIN.replace(b"upstream", b"localized"))
-        manifest = json.loads((fixture.prepared / "SOURCE_MANIFEST.json").read_text())
-        self.assertEqual(manifest, fixture.manifest())
-        self.assertNotEqual(manifest["patches"][patch], digest(lf_patch))
-        stamp = (fixture.prepared / ".portable-source").read_text()
-        self.assertIn(f"{patch}: {manifest['patches'][patch]}\n", stamp)
-        self.successful(fixture.package())
-
-    def test_missing_and_unsafe_patch_paths_are_rejected(self):
-        fixture = self.fixture()
-        safe = fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
-        (fixture.root / "outside.patch").write_bytes((fixture.root / safe).read_bytes())
-        for index, unsafe in enumerate(("patches/missing.patch", "../outside.patch", "outside.patch",
-                                        "patches/../outside.patch", "patches/nested/money.patch",
-                                        "/tmp/outside.patch", "patches\\money.patch")):
-            with self.subTest(path=unsafe):
-                fixture.addon["patches"] = [unsafe]
-                fixture.write_lock()
-                self.rejected(fixture.export(self.directory / f"unsafe-{index}"))
-                self.rejected(fixture.prepare())
-
-    def test_nonapplicable_patch_fails_without_mutating_pinned_repository(self):
-        fixture = self.fixture()
-        fixture.patch("wrong-source", text_patch("UI/Main.lua", "different upstream", "release"))
-        self.rejected(fixture.export(self.directory / "failed"))
-        self.rejected(fixture.prepare())
-        self.assertEqual(git(fixture.cached, "status", "--porcelain"), "")
-        self.assertEqual(git(fixture.cached, "show", "HEAD:UI/Main.lua"), MAIN.decode().strip())
-
-    def test_changed_patch_hash_invalidates_prepared_stamp_and_reprepares(self):
-        fixture = self.fixture()
-        patch = fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
-        self.successful(fixture.prepare())
-        original_manifest = json.loads((fixture.prepared / "SOURCE_MANIFEST.json").read_text())
-        (fixture.root / patch).write_bytes((fixture.root / patch).read_bytes().replace(b"\n", b"\r\n"))
-        self.rejected(fixture.package())
-        self.successful(fixture.prepare())
-        changed_manifest = json.loads((fixture.prepared / "SOURCE_MANIFEST.json").read_text())
-        self.assertNotEqual(changed_manifest["patches"][patch], original_manifest["patches"][patch])
-        self.assertEqual(changed_manifest, fixture.manifest())
-        self.successful(fixture.package())
-
     @unittest.skipUnless(POWERSHELL, "PowerShell is required for independent ZIP verification")
     def test_verifier_rejects_zip_matching_tampered_prepared_cache(self):
         fixture = self.fixture()
-        fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
         self.successful(fixture.prepare())
         self.successful(fixture.package())
         self.successful(fixture.verify())
@@ -360,36 +244,33 @@ class ClientAddonPatchTests(unittest.TestCase):
     @unittest.skipUnless(POWERSHELL, "PowerShell is required for independent ZIP verification")
     def test_runtime_archive_has_exact_provenance_and_keeps_dynamic_resources(self):
         fixture = self.fixture()
-        fixture.patch("money", text_patch("UI/Main.lua", "upstream", "release"))
         self.successful(fixture.prepare())
         self.successful(fixture.package())
         self.successful(fixture.verify())
         with zipfile.ZipFile(fixture.archive) as archive:
             files = {item.filename: archive.read(item) for item in archive.infolist() if not item.is_dir()}
-        self.assertEqual(json.loads(files["MultiBot/SOURCE_MANIFEST.json"]), fixture.manifest())
         self.assertEqual(files["MultiBot/SOURCE_REVISION.txt"], (fixture.addon["revision"] + "\n").encode())
-        self.assertEqual(files["MultiBot/UI/Main.lua"], MAIN.replace(b"upstream", b"release"))
+        self.assertEqual(files["MultiBot/UI/Main.lua"], MAIN)
         self.assertEqual(files["MultiBot/resources/font.custom"], fixture.addon_files["resources/font.custom"])
         self.assertEqual(files["MultiBot/UI/XMLLoaded.lua"], fixture.addon_files["UI/XMLLoaded.lua"])
         for development in ("docs/development.md", "tests/test_money.lua", "test_old_money.lua",
                             ".portable-source", "AGENTS.md", ".gitignore", ".github/workflows/check.yml"):
             self.assertNotIn(f"MultiBot/{development}", files)
-        # A metadata file naming an arbitrary source hash must not authenticate
-        # an artifact whose code still happens to match a prepared directory.
-        manifest = json.loads(files["MultiBot/SOURCE_MANIFEST.json"])
-        manifest["patches"][fixture.addon["patches"][0]] = "0" * 64
-        files["MultiBot/SOURCE_MANIFEST.json"] = json.dumps(manifest).encode()
-        (fixture.prepared / "SOURCE_MANIFEST.json").write_bytes(files["MultiBot/SOURCE_MANIFEST.json"])
+        # Revision metadata naming another source must not authenticate an artifact
+        # whose code still happens to match a prepared directory.
+        files["MultiBot/SOURCE_REVISION.txt"] = b"0" * 40 + b"\n"
+        (fixture.prepared / "SOURCE_REVISION.txt").write_bytes(files["MultiBot/SOURCE_REVISION.txt"])
         tampered = self.directory / "false-provenance.zip"
         with zipfile.ZipFile(tampered, "w") as archive:
             for name, value in files.items():
                 archive.writestr(name, value)
         self.rejected(fixture.verify(tampered))
 
-    def test_unpatched_addon_retains_existing_pinned_source_format(self):
+    def test_export_matches_pinned_source_and_preserves_upstream_checkout(self):
         fixture = self.fixture()
-        del fixture.addon["patches"]
-        fixture.write_lock()
+        # A local modification must neither leak into the artifact nor be lost.
+        (fixture.cached / "UI/Main.lua").write_bytes(b"local editing in progress\n")
+        status = git(fixture.cached, "status", "--porcelain")
         destination = self.directory / "pristine"
         self.successful(fixture.export(destination))
         expected = {relative: value for relative, value in fixture.addon_files.items()
@@ -399,15 +280,16 @@ class ClientAddonPatchTests(unittest.TestCase):
         exported = {path.relative_to(destination).as_posix(): path.read_bytes()
                     for path in destination.rglob("*") if path.is_file()}
         self.assertEqual(exported, expected)
-        self.assertFalse((destination / "SOURCE_MANIFEST.json").exists())
+        self.assertEqual(git(fixture.cached, "rev-parse", "HEAD"), fixture.addon["revision"])
+        self.assertEqual(git(fixture.cached, "status", "--porcelain"), status)
+        self.assertEqual((fixture.cached / "UI/Main.lua").read_bytes(), b"local editing in progress\n")
         self.successful(fixture.prepare())
         self.successful(fixture.package())
         with zipfile.ZipFile(fixture.archive) as archive:
-            self.assertNotIn("MultiBot/SOURCE_MANIFEST.json", archive.namelist())
             self.assertEqual(archive.read("MultiBot/UI/Main.lua"), MAIN)
         if POWERSHELL:
             self.successful(fixture.verify())
-        # Exporting over existing user files is forbidden, even with no patches.
+        # Exporting over existing user files is forbidden.
         preserved = self.directory / "already-present"
         preserved.mkdir()
         (preserved / "user-file").write_bytes(b"retain me")
@@ -418,8 +300,7 @@ class ClientAddonPatchTests(unittest.TestCase):
         fixture = self.fixture()
         extra = {"name": "mod-extra", "url": "https://github.com/example/mod-extra.git",
                  "revision": commit(fixture.root / ".module-cache/mod-extra",
-                                    {"src/extra.cpp": b"int extra = 1;\n", "conf/extra.conf.dist": b"Extra = 1\n"}),
-                 "patches": []}
+                                    {"src/extra.cpp": b"int extra = 1;\n", "conf/extra.conf.dist": b"Extra = 1\n"})}
         fixture.lock["modules"].append(extra)
         fixture.write_lock()
         self.successful(fixture.prepare())
@@ -540,25 +421,16 @@ class ClientAddonPatchTests(unittest.TestCase):
         revision = commit(cache, {"Questie-335.toc": b"## Interface: 30300\nMain.lua\n",
                                   "Main.lua": MAIN})
         addon = {"name": "Questie-335", "url": "https://github.com/example/Questie.git",
-                 "revision": revision, "interface": 30300, "toc": "Questie-335.toc",
-                 "patches": []}
+                 "revision": revision, "interface": 30300, "toc": "Questie-335.toc"}
         fixture.lock["sourceAddons"] = [addon]
         fixture.write_lock()
         return addon, fixture.root / ".module-cache/prepared-source-addons/Questie-335"
 
-    def test_source_addons_prepare_patches_without_entering_release_packages(self):
+    def test_source_addons_prepare_without_entering_release_packages(self):
         fixture = self.fixture()
         addon, prepared = self.source_addon(fixture)
-        patch = fixture.root / "patches/questie.patch"
-        patch.parent.mkdir()
-        patch.write_bytes(text_patch("Main.lua", "upstream", "first"))
-        second = patch.with_name("questie-second.patch")
-        second.write_bytes(text_patch("Main.lua", "first", "local"))
-        addon["patches"] = ["patches/questie.patch", "patches/questie-second.patch"]
-        fixture.write_lock()
-
         self.successful(fixture.prepare())
-        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN)
         self.assertEqual((prepared / "SOURCE_REVISION.txt").read_text(), addon["revision"] + "\n")
         self.assertFalse((prepared / "LICENSE").exists())
         self.assertFalse((fixture.root / ".module-cache/prepared-addons/Questie-335").exists())
@@ -567,25 +439,26 @@ class ClientAddonPatchTests(unittest.TestCase):
                          ["MultiBot-Chatless-fixture.zip"])
         (prepared / "Main.lua").write_bytes(b"mutable checkout damage\n")
         self.successful(fixture.prepare())
-        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN)
 
-        # Omitting the production patch application must break the same expectation.
-        script = fixture.root / "cmake/PrepareModules.cmake"
-        source = script.read_text()
-        gate = 'portable_apply_patches("${_source_stage}" ${_source_patches})'
-        self.assertEqual(source.count(gate), 1)
-        script.write_text(source.replace(gate, "# omitted patch application"))
+    def test_preparation_rejects_source_patch_lists(self):
+        fixture = self.fixture()
+        self.source_addon(fixture)
+        for entry in (fixture.lock["core"], fixture.lock["modules"][0], fixture.addon, fixture.lock["sourceAddons"][0]):
+            with self.subTest(component=entry["name"]):
+                entry["patches"] = []
+                fixture.write_lock()
+                self.rejected(fixture.prepare())
+                del entry["patches"]
+        fixture.write_lock()
         self.successful(fixture.prepare())
-        self.assertNotEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
-        script.write_text(source)
 
     def test_source_addons_reject_unsafe_inputs_and_preserve_local_directories(self):
         fixture = self.fixture()
         addon, prepared = self.source_addon(fixture)
         original = dict(addon)
         for key, value in (("name", "../Questie"), ("toc", "../Questie.toc"),
-                           ("interface", 12340), ("revision", "HEAD"),
-                           ("patches", ["../outside.patch"])):
+                           ("interface", 12340), ("revision", "HEAD")):
             with self.subTest(field=key):
                 addon.update(original)
                 addon[key] = value
@@ -615,16 +488,13 @@ class ClientAddonPatchTests(unittest.TestCase):
                  ".gitattributes": b"* text=auto\n"}
         revision = commit(cache, files)
         addon = {"name": "Zygor", "url": "https://github.com/example/Zygor.git", "revision": revision,
-                 "path": "Zygor", "interface": 30300, "toc": "Zygor.toc", "patches": ["patches/zygor.patch"]}
-        patch = fixture.root / "patches/zygor.patch"
-        patch.parent.mkdir()
-        patch.write_bytes(text_patch("Zygor/Main.lua", "upstream", "local"))
+                 "path": "Zygor", "interface": 30300, "toc": "Zygor.toc"}
         fixture.lock["sourceAddons"] = [addon]
         fixture.write_lock()
         prepared = fixture.root / ".module-cache/prepared-source-addons/Zygor"
 
         self.successful(fixture.prepare())
-        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN)
         self.assertEqual((prepared / "SOURCE_REVISION.txt").read_text(), revision + "\n")
         self.assertFalse((prepared / "tools").exists() or (prepared / "LICENSE").exists() or (prepared / "Zygor").exists())
 
@@ -643,10 +513,11 @@ class ClientAddonPatchTests(unittest.TestCase):
         endings = '-c "core.eol=lf" '
         self.assertEqual(source.count(endings), 1)
         script.write_text(source.replace(endings, ""))
-        self.rejected(fixture.prepare())
+        self.successful(fixture.prepare())
+        self.assertNotEqual((prepared / "Main.lua").read_bytes(), MAIN)
         script.write_text(source)
         self.successful(fixture.prepare())
-        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
+        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN)
 
         for path in ("Other", "../Zygor", ""):
             with self.subTest(path=path):
@@ -680,59 +551,6 @@ class ClientAddonPatchTests(unittest.TestCase):
             fixture.write_lock()
         self.successful(fixture.prepare())
 
-    def test_patchwork_keeps_lf_sources_on_windows_line_ending_settings(self):
-        windows = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "core.autocrlf", "GIT_CONFIG_VALUE_0": "true",
-                   "GIT_CONFIG_KEY_1": "core.eol", "GIT_CONFIG_VALUE_1": "crlf"}
-        script = ROOT / "scripts/patchwork.py"
-        source = script.read_text(encoding="utf-8")
-        endings = "'-c', 'core.eol=lf', "
-        self.assertEqual(source.count(endings), 1)
-
-        def regenerate(name, patchwork):
-            fixture = AddonFixture(self.directory / name)
-            addon, _ = self.source_addon(fixture)
-            cache = fixture.root / ".module-cache/client-addon-Questie-335"
-            (cache / ".gitattributes").write_bytes(b"* text=auto\n")
-            git(cache, "add", ".gitattributes")
-            git(cache, "commit", "--quiet", "-m", "Normalize text")
-            addon["revision"] = git(cache, "rev-parse", "HEAD")
-            addon["patches"] = ["patches/questie.patch"]
-            fixture.write_lock()
-            git(fixture.root, "init", "--quiet")
-            with mock.patch.dict(os.environ, windows):
-                opened = run([sys.executable, str(patchwork), "open", "patches/questie.patch"], cwd=fixture.root)
-                self.successful(opened)
-                work = Path(opened.stdout.strip().splitlines()[-1])
-                self.assertNotIn(b"\r", (work / "Main.lua").read_bytes())
-                (work / "Main.lua").write_bytes(MAIN.replace(b"upstream", b"local"))
-                (fixture.root / "patches").mkdir()
-                self.successful(run([sys.executable, str(patchwork), "save", str(work)], cwd=fixture.root))
-            patch = (fixture.root / "patches/questie.patch").read_bytes()
-            self.assertNotIn(b"\r", patch)
-            self.assertIn(b'+local money = "local"', patch)
-
-        regenerate("lf-repository", script)
-        mutated = self.directory / "patchwork-without-eol.py"
-        mutated.write_text(source.replace(endings, ""), encoding="utf-8")
-        with self.assertRaises(AssertionError):
-            regenerate("crlf-repository", mutated)
-
-    def test_patchwork_regenerates_source_addon_patch(self):
-        fixture = self.fixture()
-        addon, prepared = self.source_addon(fixture)
-        addon["patches"] = ["patches/questie.patch"]
-        fixture.write_lock()
-        git(fixture.root, "init", "--quiet")
-        script = ROOT / "scripts/patchwork.py"
-        opened = run([sys.executable, str(script), "open", "patches/questie.patch"], cwd=fixture.root)
-        self.successful(opened)
-        work = Path(opened.stdout.strip().splitlines()[-1])
-        (work / "Main.lua").write_bytes(MAIN.replace(b"upstream", b"local"))
-        (fixture.root / "patches").mkdir()
-        self.successful(run([sys.executable, str(script), "save", str(work)], cwd=fixture.root))
-        self.assertIn('+local money = "local"', (fixture.root / "patches/questie.patch").read_text())
-        self.successful(fixture.prepare())
-        self.assertEqual((prepared / "Main.lua").read_bytes(), MAIN.replace(b"upstream", b"local"))
 
 
 if __name__ == "__main__":

@@ -165,9 +165,6 @@ try {
 
     $expectedSql = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $preparedCore = Join-Path $RepositoryRoot '.module-cache/prepared-core'
-    foreach ($patch in @($lock.core.patches)) {
-        if ($patch -and -not $files.Contains($patch)) { throw "Portable ZIP is missing core source patch $patch" }
-    }
     $coreSqlSource = Join-Path $preparedCore 'data/sql'
     if (-not (Test-Path -LiteralPath $coreSqlSource -PathType Container)) { throw 'AzerothCore SQL source is missing.' }
     foreach ($sql in Get-ChildItem -LiteralPath $coreSqlSource -Recurse -File -Force -Filter '*.sql') {
@@ -179,9 +176,6 @@ try {
         if (-not $entries.ContainsKey($name)) { throw "Portable ZIP is missing core SQL $name" }
     }
     foreach ($module in $lock.modules) {
-        foreach ($patch in @($module.patches)) {
-            if ($patch -and -not $files.Contains($patch)) { throw "Portable ZIP is missing source patch $patch" }
-        }
         $sqlSource = Join-Path $preparedCore "modules/$($module.name)/data/sql"
         if (Test-Path -LiteralPath $sqlSource -PathType Container) {
             foreach ($sql in Get-ChildItem -LiteralPath $sqlSource -Recurse -File -Force -Filter '*.sql') {

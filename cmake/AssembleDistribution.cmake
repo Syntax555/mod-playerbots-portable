@@ -11,15 +11,16 @@ endif()
 if(NOT IS_DIRECTORY "${core}/data/sql")
     message(FATAL_ERROR "Prepared AzerothCore SQL is missing: run cmake -P cmake/PrepareModules.cmake")
 endif()
-# Patches, documentation and module templates are source exports; replace them
-# so renamed or removed files cannot survive. User *.conf files stay untouched.
+# Documentation and module templates are source exports; replace them so renamed
+# or removed files, and patch exports of older builds, cannot survive. User
+# *.conf files stay untouched.
 file(REMOVE_RECURSE "${PORTABLE_DIST_DIR}/patches" "${PORTABLE_DIST_DIR}/docs")
 file(GLOB old_module_templates "${PORTABLE_DIST_DIR}/configs/modules/*.conf.dist")
 if(old_module_templates)
     file(REMOVE ${old_module_templates})
 endif()
 file(MAKE_DIRECTORY "${PORTABLE_DIST_DIR}/src/data" "${PORTABLE_DIST_DIR}/configs/modules"
-    "${PORTABLE_DIST_DIR}/licenses" "${PORTABLE_DIST_DIR}/patches")
+    "${PORTABLE_DIST_DIR}/licenses")
 # These are generated source exports, not the live MySQL data or configuration.
 # Replace them so deleted migrations and SQL from removed modules cannot survive.
 file(REMOVE_RECURSE "${PORTABLE_DIST_DIR}/src/data/sql")
@@ -158,8 +159,4 @@ if(NOT PACKAGE_VERSION MATCHES "^[A-Za-z0-9._-]+$")
 endif()
 file(WRITE "${PORTABLE_DIST_DIR}/portable-release.json"
     "{\"schema\":1,\"revision\":\"${PORTABLE_RELEASE_REVISION}\",\"package\":\"mod-playerbots-portable-${PACKAGE_VERSION}.zip\",\"version\":\"${PACKAGE_VERSION}\"}\n")
-file(GLOB patches "${PORTABLE_SOURCE_DIR}/patches/*.patch")
-if(patches)
-    file(COPY ${patches} DESTINATION "${PORTABLE_DIST_DIR}/patches")
-endif()
 message(STATUS "Portable distribution assembled at ${PORTABLE_DIST_DIR}")

@@ -95,12 +95,12 @@ try {
     $revision = 'a' * 40
     $lock = [ordered]@{
         schemaVersion = 1
-        core = @{ name = 'azerothcore-wotlk'; url = 'https://github.com/example/azerothcore-wotlk.git'; revision = $revision; patches = @('patches/core-fixture.patch') }
+        core = @{ name = 'azerothcore-wotlk'; url = 'https://github.com/example/azerothcore-wotlk.git'; revision = $revision }
         modules = @(
-            @{ name = 'mod-fixture'; revision = $revision; patches = @('patches/fixture.patch') },
-            @{ name = 'mod-playerbots'; revision = $revision; patches = @() },
-            @{ name = 'mod-world-buff-bots'; revision = $revision; patches = @('patches/world-buff-fixture.patch') },
-            @{ name = 'mod-era-events'; revision = $revision; patches = @() }
+            @{ name = 'mod-fixture'; revision = $revision },
+            @{ name = 'mod-playerbots'; revision = $revision },
+            @{ name = 'mod-world-buff-bots'; revision = $revision },
+            @{ name = 'mod-era-events'; revision = $revision }
         )
         clientAddons = @(@{ name = 'MultiBot'; revision = $revision; toc = 'MultiBot.toc'; license = 'LICENSE'; interface = 30300 })
         historicalClassData = @{ sources = @(@{ name = 'Historical fixture'; url = 'https://github.com/example/data.git'; revision = $revision }); notice = 'licenses/historical-class-data/NOTICE.txt'; license = 'licenses/GPL-3.0.txt'; licenses = @('licenses/GPL-2.0.txt') }
@@ -108,7 +108,7 @@ try {
     Write-FixtureText (Join-Path $source 'versions.lock.json') ($lock | ConvertTo-Json -Depth 5)
     foreach ($name in @('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/configuration.md', 'docs/module-versions.md',
         'docs/changing-expansions.md', 'docs/earned-bot-brackets.md', 'docs/earned-auctions.md',
-        'patches/fixture.patch', 'patches/world-buff-fixture.patch', 'patches/core-fixture.patch', 'docs/world-buffs.md', 'docs/world-events.md',
+        'docs/world-buffs.md', 'docs/world-events.md',
         'licenses/mod-world-buff-bots/NOTICE.txt', 'licenses/AGPL-3.0.txt',
         'licenses/historical-class-data/NOTICE.txt', 'licenses/GPL-3.0.txt', 'licenses/GPL-2.0.txt',
         'docs/class-quests.md',
@@ -348,7 +348,6 @@ try {
         Test-NegativeZip "obsolete SQL $obsolete" 'Unexpected SQL file' -ExtraEntries @(@{ Name = $obsolete; Bytes = [byte[]]@(1) })
     }
     Assert-Condition (-not $script:baseline.ContainsKey('src/data/sql/updates/db_world/unprepared.sql')) 'Original core SQL leaked into generated export'
-    Test-NegativeZip 'missing core adaptation patch' 'missing core source patch' -Omit @('patches/core-fixture.patch')
     Write-Host "Passed $script:passed portable assembly/ZIP regression checks."
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force }

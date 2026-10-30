@@ -29,7 +29,7 @@ ASSETS = set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDAT
 # docs/building.md and docs/upstream/ stay out, so packaged documents link to
 # them on GitHub.
 ZIP_FILES = {'README.md', 'THIRD_PARTY_NOTICES.md', 'LICENSE', 'versions.lock.json'}
-ZIP_TREES = ('docs/', 'patches/', 'licenses/')
+ZIP_TREES = ('docs/', 'licenses/')
 ZIP_EXCLUDED = {'docs/building.md', 'docs/upstream'}
 ASSEMBLY = (
     'file(REMOVE "${PORTABLE_DIST_DIR}/CONTRIBUTING.md")',
@@ -39,7 +39,6 @@ ASSEMBLY = (
     '"${PORTABLE_DIST_DIR}/versions.lock.json" COPYONLY)',
     'foreach(document README.md THIRD_PARTY_NOTICES.md)',
     'file(CONFIGURE OUTPUT "${PORTABLE_DIST_DIR}/LICENSE"',
-    'file(GLOB patches "${PORTABLE_SOURCE_DIR}/patches/*.patch")',
 )
 LINK = re.compile(r'!?\[[^\]]*\]\(([^()\s]+)(?:\s+"[^"]*")?\)')
 

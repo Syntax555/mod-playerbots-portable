@@ -98,8 +98,8 @@ jobs:
       - name: Test historical client packaging
         run: python3 cmake/tests/TestEraClientPackaging.py
 
-      - name: Test patched client addon packaging
-        run: python3 cmake/tests/TestClientAddonPatches.py
+      - name: Test client addon packaging
+        run: python3 cmake/tests/TestClientAddonPackaging.py
 
       - name: Test client language merging and gameplay preservation
         run: python3 cmake/tests/TestClientLocales.py

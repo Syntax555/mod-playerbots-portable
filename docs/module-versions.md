@@ -86,8 +86,8 @@ and extracts it into `data/`. `--data-url` can select another archive; see
 
 `cmake -P cmake/PrepareModules.cmake` fetches the locked commits into
 `.module-cache/`, creates a separate prepared core and exports module/addon
-sources. Native adaptations live in the forks; no local source patch series
-is applied to those components.
+sources. Native adaptations live in the forks; preparation rejects a source
+patch list in the lock.
 
 Raid Clear is part of Playerbots at `src/Ai/Raid/RaidClear`, with its MIT
 notice retained. Its `RaidClear.*` settings share

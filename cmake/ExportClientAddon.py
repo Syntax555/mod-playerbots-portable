@@ -1,11 +1,9 @@
-"""Reconstruct a client addon from its locked commit and ordered source patches."""
+"""Reconstruct a client addon from its locked commit."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -14,18 +12,15 @@ import tarfile
 import tempfile
 
 
-def run_git(git: str, repository: Path, *arguments: str, ceiling: Path | None = None) -> bytes:
-    environment = os.environ.copy()
-    if ceiling is not None:
-        environment["GIT_CEILING_DIRECTORIES"] = str(ceiling)
-    result = subprocess.run([git, "-c", "core.autocrlf=false", "-C", str(repository), *arguments], env=environment,
+def run_git(git: str, repository: Path, *arguments: str) -> bytes:
+    result = subprocess.run([git, "-c", "core.autocrlf=false", "-C", str(repository), *arguments],
                             capture_output=True, check=False)
     if result.returncode:
         raise ValueError(f"Cannot reconstruct locked addon source: {result.stderr.decode(errors='replace').strip()}")
     return result.stdout
 
 
-def addon_inputs(repository: Path, name: str) -> tuple[dict, list[tuple[str, Path]]]:
+def locked_addon(repository: Path, name: str) -> dict:
     lock = json.loads((repository / "versions.lock.json").read_text(encoding="utf-8"))
     matches = [entry for entry in lock["clientAddons"] if entry["name"] == name]
     if lock.get("schemaVersion") != 1 or len(matches) != 1:
@@ -37,35 +32,17 @@ def addon_inputs(repository: Path, name: str) -> tuple[dict, list[tuple[str, Pat
             or addon.get("interface") != 30300 or addon.get("toc") != name + ".toc"
             or not re.fullmatch(r"[A-Za-z0-9_.-]+", addon.get("license", ""))):
         raise ValueError("Invalid locked client addon identity")
-    patches = []
-    values = addon.get("patches", [])
-    if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
-        raise ValueError("Client addon patches must be an ordered list")
-    for value in values:
-        if not re.fullmatch(r"patches/[A-Za-z0-9_.-]+[.]patch", value):
-            raise ValueError(f"Invalid client addon patch: {value}")
-        path = repository / value
-        if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(repository.resolve()):
-            raise ValueError(f"Missing or unsafe client addon patch: {value}")
-        patches.append((value, path))
-    return addon, patches
+    return addon
 
 
 def write_metadata(repository: Path, name: str, destination: Path) -> None:
-    addon, patches = addon_inputs(repository, name)
+    addon = locked_addon(repository, name)
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "SOURCE_REVISION.txt").write_bytes((addon["revision"] + "\n").encode("ascii"))
-    if not patches:
-        return
-    manifest = {"schemaVersion": 1, "name": name, "repository": addon["url"],
-                "revision": addon["revision"], "interface": addon["interface"],
-                "patches": {path: hashlib.sha256(file.read_bytes()).hexdigest() for path, file in patches}}
-    (destination / "SOURCE_MANIFEST.json").write_bytes(
-        (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
 
 def export_addon(repository: Path, name: str, destination: Path, git: str = "git") -> None:
-    addon, patches = addon_inputs(repository, name)
+    addon = locked_addon(repository, name)
     if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
         raise ValueError("Addon reconstruction destination must be empty")
     cache = repository / ".module-cache" / ("client-addon-" + name)
@@ -82,15 +59,6 @@ def export_addon(repository: Path, name: str, destination: Path, git: str = "git
             if not hasattr(tarfile, "data_filter"):
                 raise ValueError("Python 3.12 or newer is required for safe archive extraction")
             archive.extractall(raw, filter="data")
-
-        for path, file in patches:
-            normalized = stage / "source.patch"
-            normalized.write_bytes(file.read_bytes().replace(b"\r\n", b"\n"))
-            if not run_git(git, raw, "apply", "--numstat", str(normalized), ceiling=stage).strip():
-                raise ValueError(f"Patch has no applicable files: {path}")
-            run_git(git, raw, "apply", "--check", str(normalized), ceiling=stage)
-            run_git(git, raw, "apply", str(normalized), ceiling=stage)
-            run_git(git, raw, "apply", "--reverse", "--check", str(normalized), ceiling=stage)
         shutil.rmtree(raw / ".github", ignore_errors=True)
         for filename in (".gitignore", ".coderabbit.yaml", "AGENTS.md"):
             (raw / filename).unlink(missing_ok=True)

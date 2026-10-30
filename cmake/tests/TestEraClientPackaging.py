@@ -28,7 +28,7 @@ URL = "https://github.com/example/module.git"
 
 def source_lock():
     return {"schemaVersion": 1, "modules": [
-        {"name": "mod-era-talents", "url": URL, "revision": REVISION, "patches": []},
+        {"name": "mod-era-talents", "url": URL, "revision": REVISION},
         {"name": "mod-individual-progression", "url": URL, "revision": REVISION}],
         "clientPatch": {"name": "EraTalents-client", "eraModule": "mod-era-talents",
                         "baseModule": "mod-individual-progression", "baseArchive": "optional/patch-V.7z",
@@ -46,7 +46,7 @@ def source_files():
 
 
 def add_manifest(files, lock):
-    identity = {"url": URL, "revision": REVISION, "patches": {}}
+    identity = {"url": URL, "revision": REVISION}
     manifest = {"schemaVersion": 1, "clientInterface": 30300, "generation": "1234abcd", "eraModule": identity,
                 "baseModule": identity, "stormLib": lock["clientPatch"]["stormLib"], "baseArchive": "optional/patch-V.7z",
                 "files": {name: PACKAGE.sha(value) for name, value in files.items()}}

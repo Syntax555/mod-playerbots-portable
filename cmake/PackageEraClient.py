@@ -112,7 +112,7 @@ def historical_class_files(repository: Path, lock):
 
 
 def export_module(repository: Path, module, destination: Path, git: str):
-    """Re-export a pinned commit and ordered patches, independently of prepared files."""
+    """Re-export a pinned commit, independently of prepared files."""
     cache = repository / module.get("source", f".module-cache/{module['name']}")
     command = [git, "-c", "core.autocrlf=false"]
     run([*command, "-C", str(cache), "cat-file", "-e", f"{module['revision']}^{{commit}}"], quiet=True)
@@ -129,19 +129,7 @@ def export_module(repository: Path, module, destination: Path, git: str):
             raise ValueError("Python 3.12 or newer is required for safe archive extraction")
         source.extractall(destination, filter="data")
     archive.unlink()
-    patches = {}
-    for index, path in enumerate(module.get("patches", [])):
-        path = relative_path(path)
-        content = (repository / path).read_bytes()
-        patches[path] = sha(content)
-        patch = destination.parent / f"{module['name']}-{index}.patch"
-        patch.write_bytes(content.replace(b"\r\n", b"\n"))
-        env = os.environ.copy()
-        env["GIT_CEILING_DIRECTORIES"] = str(destination.parent)
-        subprocess.run([*command, "-C", str(destination), "apply", "--check", str(patch)], env=env, check=True)
-        subprocess.run([*command, "-C", str(destination), "apply", str(patch)], env=env, check=True)
-        patch.unlink()
-    return {"url": module["url"], "revision": module["revision"], "patches": patches}
+    return {"url": module["url"], "revision": module["revision"]}
 
 
 def read_mpq(tool: Path, archive: Path, internal: str, output: Path) -> bytes:
@@ -370,10 +358,8 @@ def verify_zip(path: Path, lock):
     for key, module_key in (("eraModule", "eraModule"), ("baseModule", "baseModule")):
         expected = locked_module(lock, patch[module_key])
         actual = manifest[key]
-        if actual.get("revision") != expected["revision"] or actual.get("url") != expected["url"]:
+        if actual != {"url": expected["url"], "revision": expected["revision"]}:
             raise ValueError(f"Client source identity differs from lock: {key}")
-        if set(actual.get("patches", {})) != set(expected.get("patches", [])):
-            raise ValueError(f"Client source patches differ from lock: {key}")
     if manifest.get("stormLib") != patch["stormLib"] or manifest.get("baseArchive") != patch["baseArchive"]:
         raise ValueError("Client build dependencies differ from lock")
     if patch.get("localizations"):
