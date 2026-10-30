@@ -278,10 +278,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "d94b06538e7af8cf0ef38c0cd871e2a80a1db075",
+      "revision": "0288f1b43903a31843c87631d496fc792f7c9248",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "6cfcd75a2e5762637322fd495cd4302b203b77df"
+        "revision": "34bc67d4ca863d7bf6d8ff167b1e467bdd832f92"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -294,10 +294,10 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "2f555ab1d06cb9b0289c4252c405a49a7696e1d6",
+      "revision": "14423b36cccbacd9b345c733454ec522a45bf92c",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "4c7df0caf0c86ddacf8ae31cb7489189c6d811ce"
+        "revision": "908a40b38bd6938b34eca4ce5e776dca2c70de8a"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",
