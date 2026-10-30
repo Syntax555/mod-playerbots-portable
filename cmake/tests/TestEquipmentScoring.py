@@ -95,8 +95,8 @@ names = {(cls, name) for cls, found in talents.items() for _, name, *_ in found}
 assert {('priest', 'Shadow Focus'), ('mage', 'Arcane Focus'), ('mage', 'Elemental Precision'),
         ('warlock', 'Suppression')} <= names, names
 # Native Wrath ranks from the pinned client Spell.dbc: Shadow Focus 15328 and Arcane Focus 12840.
-talent_cases = [('CLASS_PRIEST', 'PRIEST_TAB_SHADOW', 6, (0x68ba104, 0x283e104, 0), 3),
-                ('CLASS_MAGE', 'MAGE_TAB_ARCANE', 3, (0xa1205000, 0, 0), 3)]
+talent_cases = [('CLASS_PRIEST', 'PRIEST_TAB_SHADOW', 6, (0x68ba104, 0x3c044a, 0x2148), 3),
+                ('CLASS_MAGE', 'MAGE_TAB_ARCANE', 3, (0xa1205000, 0x8010, 0), 3)]
 talent_cases += [(CLASS[cls], str(tab), FAMILY[cls], mask, best)
                  for cls, found in talents.items() for _, _, tab, mask, best in found]
 talent_calls = '\n'.join(f'    TalentHit({cls}, {tab}, {family}, {{{mask[0]}u, {mask[1]}u, {mask[2]}u}}, {best});'
