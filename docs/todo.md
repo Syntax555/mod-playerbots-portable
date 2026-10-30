@@ -109,6 +109,10 @@ fixtures pass. Use native core/module functions before adding replacements.
   loot/quests, missing mesh, late or disconnected members, death, native
   resurrection, wipe, stop/pause/resume and a fresh instance. Remove a failing
   route from autonomous eligibility until resolved.
+- [ ] Check player-led clear deaths with a SelfBot tank: party resurrection by
+  a living healer, a real player's own accept, release and corpse run when no
+  resurrecter is left with the tank waiting until they return, a wipe and the
+  tank's own death.
 - [ ] Wailing Caverns: checked ramp joins and floors, safe group spacing,
   four Fanglords, ordinary Disciple gossip/escort, combat/food interruptions,
   ritual waves, Mutanus and the final departure marker. Cover reset/death,

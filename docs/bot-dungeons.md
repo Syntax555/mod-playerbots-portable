@@ -121,6 +121,14 @@ The optional [DungeonClear addon](addons.md#optional-upstream-addons) opens its
 panel with `/dc`; install it separately. If a start appears to do nothing,
 `.dc on` exposes server refusals the addon may omit.
 
+When a member dies during a clear, a living Priest, Paladin, Shaman or Druid
+in the party raises them with their own resurrection spell after the fight;
+bots stay down until then, and real players accept or decline the offer
+themselves. If nobody left can resurrect, the dead release and walk back from
+the graveyard while the tank waits for them. A wipe, or the tank's death with
+nobody to raise it, ends the clear. A SelfBot's ghost is walked back by its
+player.
+
 A required unsupported event stalls for ordinary player interaction; an optional
 one may be skipped. `.dc skip` advances the objective list without opening
 locked objects or awarding native encounter credit.
@@ -195,10 +203,11 @@ Individual Progression's strict default earned chain; custom or disabled
 progression does not substitute levels or account progress.
 
 The portable profile disables `DungeonClear.DungeonQueueFill.Enable`,
-`BgQueueFill.Enable`, `StrandedRecovery`, `PostCombatRez`,
-`UnreachableCombatPurgeSecs` and `SpectateEnable`. `LootMinQuality = 0` keeps
-ordinary corpse loot. Updates preserve custom route lists, autonomy switches
-and limits; unchanged managed defaults follow the current profile.
+`BgQueueFill.Enable`, `StrandedRecovery`, `UnreachableCombatPurgeSecs` and
+`SpectateEnable`, and enables the party resurrection `PostCombatRez`.
+`LootMinQuality = 0` keeps ordinary corpse loot. Updates preserve custom route
+lists, autonomy switches and limits; unchanged managed defaults follow the
+current profile.
 
 Raid Clear settings live in `configs/modules/playerbots.conf`:
 

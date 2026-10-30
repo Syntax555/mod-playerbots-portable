@@ -84,7 +84,7 @@
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "7d83fd8a6fc5fc5dafc2c001ed491c4ef50390cb",
+      "revision": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
         "revision": "7fb6ebdefb8038af2676c280214f8a15c843b347"
@@ -92,7 +92,8 @@
       "forkChanges": {
         "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
         "mod-dungeon-clear-build-warnings": "8297c0afbdde6010c4ef91906b584da9d09c1f16",
-        "mod-dungeon-clear-earned-shortcut-guards": "10b305cad830574c21b4928a7250e952d76fa503"
+        "mod-dungeon-clear-earned-shortcut-guards": "10b305cad830574c21b4928a7250e952d76fa503",
+        "mod-dungeon-clear-earned-death-recovery": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422"
       }
     },
     {

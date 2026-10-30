@@ -37,7 +37,7 @@ GAMEPLAY = (
     "TestWorldStartupData", "TestWorldUpdateOrder", "TestSubmergeBinding", "TestClientAddonLoading",
     "TestMasterFlightLearning", "TestBotQuestAreaTriggers",
     "TestLootRollPolicy", "TestWorldBuffEvents", "TestEraEvents", "TestLfgProgression",
-    "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestRocknotAle", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
+    "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDefiasCannon", "TestUldamanAltars", "TestRingOfLaw", "TestRocknotAle", "TestWailingCaverns", "TestZumrah", "TestDungeonLabGates", "TestRaidClearEarnedPlay",
     "TestRaidClearWindowsBuild",
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestZygorProgression",
@@ -68,7 +68,9 @@ MODULE_FIXTURES = {
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
     ),
-    "mod-dungeon-clear": ("TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonLabGates"),
+    "mod-dungeon-clear": (
+        "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",
+    ),
     "mod-quest-loot-party": ("TestProfileKeys",),
     "mod-world-buff-bots": ("TestWorldBuffEvents",),
     "mod-lfg-progression": ("TestLfgProgression", "TestWorldStartupData"),
