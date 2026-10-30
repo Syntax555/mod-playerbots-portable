@@ -4,7 +4,8 @@ The prepared module's dataset YAML, band allowlist and locale catalogs are the i
 its addon Lua, era_talent SQL and generation stamp ship as generated files. A source
 edit without regeneration would ship a stale addon tree or server rows while the
 in-game generation check still matches. Custom spell rows also need the client
-Spell.dbc and are rebuilt by the client packaging job.
+Spell.dbc and are rebuilt by the client packaging job. A spell-hit talent's
+explicit spell-modifier mask must bind every spell it names.
 """
 
 import argparse
@@ -44,6 +45,42 @@ def generated(module: Path) -> dict[Path, str]:
     return outputs
 
 
+def spell_hit_gaps(module: Path) -> list[str]:
+    """Spells a spell-hit talent names that its explicit modifier mask leaves out.
+
+    The core applies a modifier when one family-flag word overlaps the cast spell's.
+    """
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(module / 'tools'))
+    import gen_era_talents as generator
+
+    gaps = []
+
+    def walk(node, dataset, data, talent=None):
+        if isinstance(node, dict):
+            if {'tab', 'name', 'maxRank'} <= node.keys():
+                talent = node['name']
+            if node.get('op') == 'resistMiss' and node.get('affectsMask') is not None:
+                mask = generator._resolve_affects_mask(data, node)
+                for name in node.get('affects') or ():
+                    flags = data['_ref']['spells'][name]
+                    identity = (flags.get('flagsA', 0), flags.get('flagsB', 0), flags.get('flagsC', 0))
+                    if not any(word & int(bits) for word, bits in zip(mask, identity)):
+                        gaps.append(f'{dataset}: {talent} leaves out {name}')
+            for value in node.values():
+                walk(value, dataset, data, talent)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, dataset, data, talent)
+
+    for line in (module / 'era-data/datasets.txt').read_text().splitlines():
+        if line.strip() and not line.lstrip().startswith('#'):
+            relative = line.split()[0]
+            data = generator._load(str(module / 'era-data' / relative))
+            walk(data['tabs'], relative, data)
+    return gaps
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--module-source', type=Path)
@@ -63,8 +100,14 @@ def main() -> int:
     if builds.returncode:
         print(builds.stdout + builds.stderr, end='')
         return 1
+    gaps = spell_hit_gaps(module)
+    for gap in gaps:
+        print(f'Spell-hit talent mask gap: {gap}')
+    if gaps:
+        return 1
     print(f'Era generated artifacts: {len(outputs)} addon tree, era_talent row and generation stamp '
-          'files and authored bot orders match their dataset and locale sources')
+          'files and authored bot orders match their dataset and locale sources; spell-hit talent masks '
+          'bind every named spell')
     if args.no_mutations:
         return 0
 
@@ -107,6 +150,19 @@ def main() -> int:
             git_apply(copy, patch)
             subprocess.run(command, capture_output=True, text=True, check=True)
             print('Era authored-build fork change fails when reverted and passes when reapplied')
+
+            mask_patch = fork_change('mod-era-talents', 'mod-era-talents-arcane-focus-mask',
+                                     paths=('era-data/tbc/mage.yaml',))
+            copy = Path(temporary) / 'fork-arcane-focus'
+            shutil.copytree(module / 'tools', copy / 'tools', ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(module / 'era-data', copy / 'era-data')
+            git_apply(copy, mask_patch, '--reverse')
+            if 'tbc/mage.yaml: Arcane Focus leaves out Arcane Explosion' not in spell_hit_gaps(copy):
+                raise SystemExit('Reverting the Arcane Focus mask fork change did not report its gap')
+            git_apply(copy, mask_patch)
+            if spell_hit_gaps(copy):
+                raise SystemExit('Reapplying the Arcane Focus mask fork change left a spell-hit gap')
+            print('Era Arcane Focus mask fork change fails when reverted and passes when reapplied')
     return 0
 
 

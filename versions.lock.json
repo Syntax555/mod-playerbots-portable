@@ -166,7 +166,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "d511f8a76cf170d3929f3e3225330f7b2dae34ce",
+      "revision": "68a1be08b5fa4786efb43a4cb335923219647e32",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -193,7 +193,8 @@
         "mod-era-talents-bot-book-ui-scale": "4a25787a92e42ebe3893c61cdf5cddf939a67765",
         "mod-era-talents-realm-unlock-notices": "b48633bed595d7517aaadabcaf9d180bb8565e9d",
         "mod-era-talents-shared-bot-book": "144dbcab2f6e25a3d5bec29e0428db80190bdda4",
-        "mod-era-talents-shared-book-controls": "d511f8a76cf170d3929f3e3225330f7b2dae34ce"
+        "mod-era-talents-shared-book-controls": "d511f8a76cf170d3929f3e3225330f7b2dae34ce",
+        "mod-era-talents-arcane-focus-mask": "68a1be08b5fa4786efb43a4cb335923219647e32"
       }
     }
   ],
