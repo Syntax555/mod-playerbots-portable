@@ -143,7 +143,7 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Syntax555/mod-multibot-bridge.git",
-      "revision": "4a9e0f0fa560797843a135b2f2d6bffcc2acab67",
+      "revision": "6147c7856b9eaf7e56f54c0d5256ce10037ed56a",
       "upstream": {
         "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
         "revision": "9f0e8ba767c65f7959a615f70e61ec0980266780"
@@ -157,7 +157,8 @@
         "mod-multibot-bridge-progression-state": "7395bc38459a2dcc11777a1801e0a75235570a5a",
         "mod-multibot-bridge-spellbook-display": "9e653f92929820fb33171ddd9f9f5ee796abfc96",
         "mod-multibot-bridge-combat-profiles": "6073ac3cb7f09844af678b5d5c186381ee4a9d6b",
-        "mod-multibot-bridge-native-bank-transfers": "4a9e0f0fa560797843a135b2f2d6bffcc2acab67"
+        "mod-multibot-bridge-native-bank-transfers": "4a9e0f0fa560797843a135b2f2d6bffcc2acab67",
+        "mod-multibot-bridge-shared-talent-totals": "6147c7856b9eaf7e56f54c0d5256ce10037ed56a"
       }
     },
     {

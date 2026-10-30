@@ -74,7 +74,7 @@ MODULE_FIXTURES = {
     "mod-era-events": ("TestEraEvents", "TestWorldStartupData", "TestWorldUpdateOrder"),
     "mod-multibot-bridge": (
         "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestCombatProfileBridge",
-        "TestNativeBankTransfers",
+        "TestNativeBankTransfers", "TestCombatProfiles",
     ),
     "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook"),
 }

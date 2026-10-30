@@ -142,8 +142,6 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ## Core and module forks
 
-- [ ] Align removed-talent, active-spec-mask and `TalentEntry::RankID` handling
-  before sharing Playerbots' `GetPlayerSpecTabs` with the Bridge's talent totals.
 - [ ] Retain the rated-arena team-era filter while level-70 teams of different
   earned eras can share a native bracket after a TBC-to-Wrath transition.
 - [ ] Resolve historically uncertain XP rules before implementation: Vanilla

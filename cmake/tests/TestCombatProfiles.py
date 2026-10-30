@@ -265,6 +265,28 @@ int main() {
 
 
 TESTS = r"""
+    {
+        // MultiBot Bridge reports Playerbots' totals: the active specialization's ranks,
+        // nothing from the other specialization or a removed talent, and era trees.
+        PlayerTalent active, other, removed;
+        other.specMask = 2;
+        removed.specMask = 0;
+        talentPositions[201] = {21}; talentPositions[202] = {22}; talentPositions[203] = {23};
+        sTalentStore.entries[21] = {10}; sTalentStore.entries[22] = {12}; sTalentStore.entries[23] = {11};
+        spellMgr.entries[201] = {3}; spellMgr.entries[202] = {5}; spellMgr.entries[203] = {2};
+        Player player;
+        player.talents = {{201, &active}, {202, &other}, {203, &removed}};
+        std::array<uint32, 3> const expected = {3, 0, 0};
+        assert(BuildTalentTabPoints(&player) == expected);
+        auto tabs = AiFactory::GetPlayerSpecTabs(&player);
+        assert(expected == (std::array<uint32, 3>{tabs[0], tabs[1], tabs[2]}));
+        player.activeSpec = 1;
+        assert((BuildTalentTabPoints(&player) == std::array<uint32, 3>{0, 0, 5}));
+        player.managed = true; player.eraTabs = {7, 31, 13};
+        assert(BuildTalentTabPoints(&player) == player.eraTabs);
+        assert(!BuildTalentTabPoints(nullptr)[0]);
+        talentPositions.clear(); sTalentStore.entries.clear(); spellMgr.entries.clear();
+    }
     struct Expected { uint8 cls; std::vector<std::string> profiles; };
     std::vector<Expected> const classes = {
         {CLASS_WARRIOR, {"arms", "fury", "prot"}},
@@ -675,6 +697,18 @@ def main() -> None:
     production = '\n\n'.join(function(factory, signature) for signature in factory_functions)
     production += '\n\n' + '\n\n'.join(function(ai, signature) for signature in ai_functions)
     production += '\n\n' + function(stats, 'StatsWeightCalculator::StatsWeightCalculator(')
+    # MultiBot Bridge reports the same native or historical talent totals.
+    bridge = (prepared_core(ROOT) / 'modules/mod-multibot-bridge/src/MultiBotBridge.cpp').read_text()
+    production += '\n\n' + function(bridge, 'std::array<uint32, 3> BuildTalentTabPoints(Player* bot)\n{')
+    # The doubles' contracts: a talent removed from every specialization has an
+    # empty mask, and a talent spell's chain rank is its RankID position.
+    core = prepared_core(ROOT) / 'src/server/game'
+    removal = function((core / 'Entities/Player/Player.cpp').read_text(),
+                       'void Player::_removeTalent(PlayerTalentMap::iterator& itr, uint8 specMask)')
+    assert 'itr->second->specMask &= ~specMask;' in removal
+    assert 'if (itr->second->specMask == 0)' in removal and 'State = PLAYERSPELL_REMOVED;' in removal
+    ranks = function((core / 'Spells/SpellMgr.cpp').read_text(), 'void SpellMgr::LoadSpellTalentRanks()')
+    assert 'uint32 spellId = talentInfo->RankID[rank];' in ranks and 'node.rank  = rank + 1;' in ranks
     update = function(ai, 'void PlayerbotAI::UpdateAI(')
     boundary = update.index('    // Bots send no movement opcodes')
     update = update[:boundary] + '}\n'
@@ -716,6 +750,9 @@ def main() -> None:
         ('solo SelfBot assistance ignored', 'if (IsSelfBot(player) || sRandomPlayerbotMgr.IsRandomBot(player))',
          'if (sRandomPlayerbotMgr.IsRandomBot(player))'),
         ('grouped SelfBot uses solo assistance', '        if (!player->GetGroup())', '        if (true)'),
+        ('other specialization counted', 'if ((bot->GetActiveSpecMask() & i->second->specMask) == 0)', 'if (false)'),
+        ('Bridge counts its own talents', 'std::map<uint8, uint32> tabs = AiFactory::GetPlayerSpecTabs(bot);',
+         'std::map<uint8, uint32> tabs;'),
     )
     with tempfile.TemporaryDirectory(prefix='combat-profiles-') as temporary:
         directory = Path(temporary)
