@@ -207,13 +207,33 @@ The selected build is published when its commit is still part of `main` and is
 not older than the current Latest.
 
 Publication generates `UPDATE_MANIFEST.json` with each managed server file's
-size and SHA-256 hash, plus `SHA256SUMS.txt` for the release payloads. It uploads
+size and SHA-256 hash, its Ed25519 signature `UPDATE_MANIFEST.json.sig`, plus
+`SHA256SUMS.txt` for the release payloads. It uploads
 and verifies the replacement before moving the rolling `latest` tag and release;
 previous downloads remain available until then. If publication stops during the
 final tag/release handoff, rerun **Publish Latest** or publish the next verified
 build. The launcher starts the installed release when the remote update is
 temporarily unavailable. Publication selection and recovery are implemented in
 [publish_latest.py](../scripts/publish_latest.py).
+
+### Update signing key
+
+The launcher installs only manifests signed by a key in
+[`cmd/startup/update-signing-key.pem`](../cmd/startup/update-signing-key.pem).
+**Publish Latest** signs with the private key in the repository secret
+`UPDATE_SIGNING_KEY` and refuses to publish when the secret is missing or does
+not match that file, so release-asset upload access alone cannot supply an
+update. Store the PEM text of the private key as that secret
+(**Settings > Secrets and variables > Actions**) and keep no copy in the
+repository.
+
+To replace the key, create a new pair with
+`openssl genpkey -algorithm ed25519 -out update-signing-key.private.pem` and
+`openssl pkey -in update-signing-key.private.pem -pubout`. Append the new public
+key to the trusted file and publish; switch the secret to the new private key
+only after installations have had time to update. A launcher that does not
+trust the signing key refuses automatic updates; its installation needs one
+manual update from the Latest server ZIP.
 
 The executables are currently unsigned. Windows Smart App Control may block
 them; package checksums and automated build checks do not replace a trusted

@@ -90,6 +90,11 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn('run-id: ${{ steps.build.outputs.run_id }}', download)
             self.assertIn("if: steps.build.outputs.run_id != ''", download)
         self.assertIn("--sha '${{ steps.build.outputs.sha }}'", publisher)
+        # The signing key reaches the publishing step and no other.
+        signing = 'UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}'
+        self.assertEqual([step for step in steps(publisher) if signing in step],
+                         [step for step in steps(publisher) if "--sha '${{ steps.build.outputs.sha }}'" in step])
+        self.assertEqual(1, (checks + release + publish).count('secrets.UPDATE_SIGNING_KEY'))
 
     def test_current_workflows(self):
         self.check_workflows(CHECKS.read_text(), RELEASE.read_text(), PUBLISH.read_text())
@@ -117,6 +122,9 @@ class WorkflowTests(unittest.TestCase):
              'ref: ${{ github.event.workflow_run.head_sha }}'),
             ('artifacts from another run', 2, 'run-id: ${{ steps.build.outputs.run_id }}',
              'run-id: ${{ github.event.workflow_run.id }}'),
+            ('unsigned publication', 2, '          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}\n', ''),
+            ('signing key in the build', 1, '    needs: checks\n',
+             '    needs: checks\n    env:\n      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}\n'),
         )
         for label, target, before, after in mutations:
             with self.subTest(label=label):

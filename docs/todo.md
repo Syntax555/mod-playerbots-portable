@@ -161,8 +161,6 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ## Launcher and updates
 
-- [ ] Sign `UPDATE_MANIFEST.json` so release-asset upload access alone cannot
-  supply executable updates.
 - [ ] Evaluate direct MySQL process tracking with `--no-monitor` and in-process
   updates against the detached helper's Windows lock/recovery requirements.
 

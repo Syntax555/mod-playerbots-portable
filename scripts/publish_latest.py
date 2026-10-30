@@ -3,8 +3,9 @@
 The build must belong to main's history and must not be older than the
 current Latest. Uploads are staged in a draft, and the replacement is
 published and verified under its staging tag before the previous release is
-removed. This script uses only the Python standard library and the Actions
-job's GH_TOKEN.
+removed. This script uses only the Python standard library, the OpenSSL
+command-line tool for the update manifest signature and the Actions job's
+GH_TOKEN and UPDATE_SIGNING_KEY.
 
 GitHub refuses the Actions token any ref change, and any release change that
 names a target commit, when that commit's workflow files differ from main's.
@@ -17,6 +18,7 @@ changed: it is deleted once its replacement is public and verified.
 from __future__ import annotations
 
 import argparse
+import base64
 from collections.abc import Iterator
 from dataclasses import dataclass
 import hashlib
@@ -26,7 +28,9 @@ import os
 from pathlib import Path
 import re
 import string
+import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -47,6 +51,9 @@ ZIP_CONTENTS = {
 }
 CHECKSUM_NAME = "SHA256SUMS.txt"
 UPDATE_MANIFEST_NAME = "UPDATE_MANIFEST.json"
+UPDATE_SIGNATURE_NAME = "UPDATE_MANIFEST.json.sig"
+# The launcher trusts only these keys; a manifest it cannot verify is never published.
+SIGNING_PUBLIC_KEYS = Path(__file__).resolve().parents[1] / "cmd/startup/update-signing-key.pem"
 SERVER_PACKAGE_NAME = "mod-playerbots-portable-latest.zip"
 # Seconds to wait before repeating an idempotent request after a transient failure.
 RETRY_DELAYS = (2, 5)
@@ -352,7 +359,7 @@ def update_manifest(package: Asset, expected_revision: str | None) -> dict[str, 
             if (re.search(r"^(data|logs|mysql/data|mysql-files)(/|$)|[.]conf$|(^|/)(my[.]cnf|my[.]ini)$|(^|/)[.]portable-|^configs/realm-phase[.]txt$", name, re.IGNORECASE)
                     or re.search(r"^(addons|defaults)(/|$)|^CONTRIBUTING[.]md$|^docs/building[.]md$|(^|/)[.]git(/|$)|^src/data/sql/old/", name, re.IGNORECASE)
                     or re.search(r"^(dbimport|map_extractor|vmap4_extractor|vmap4_assembler|mmaps_generator)[.]exe$|^mmaps-config[.]yaml$|^(configs/)?dbimport[.]conf[.]dist$", name, re.IGNORECASE)
-                    or name == UPDATE_MANIFEST_NAME):
+                    or name in (UPDATE_MANIFEST_NAME, UPDATE_SIGNATURE_NAME)):
                 raise PublishError(f"Unmanaged user or redundant development file in portable ZIP: {name}")
             hasher = hashlib.sha256()
             size = 0
@@ -367,7 +374,38 @@ def update_manifest(package: Asset, expected_revision: str | None) -> dict[str, 
                 "sha256": package.sha256, "size": package.size, "files": files}
 
 
-def prepare_assets(directory: Path, expected_revision: str | None = None) -> list[Asset]:
+def sign_manifest(manifest_path: Path, private_key: str) -> Path:
+    """Write the manifest's base64 Ed25519 signature after checking it against a launcher key."""
+    if not private_key.strip():
+        raise PublishError("UPDATE_SIGNING_KEY is required to sign the update manifest")
+    blocks = re.findall(r"-----BEGIN PUBLIC KEY-----.*?-----END PUBLIC KEY-----\n?",
+                        SIGNING_PUBLIC_KEYS.read_text(encoding="ascii"), re.DOTALL)
+    with tempfile.TemporaryDirectory() as temporary:
+        key_path = Path(temporary) / "update-signing-key.pem"
+        key_path.touch(mode=0o600)
+        key_path.write_text(private_key.strip() + "\n", encoding="ascii")
+        raw = Path(temporary) / "signature"
+        try:
+            subprocess.run(["openssl", "pkeyutl", "-sign", "-rawin", "-inkey", str(key_path),
+                            "-in", str(manifest_path), "-out", str(raw)], check=True, capture_output=True)
+        except (OSError, subprocess.CalledProcessError):
+            raise PublishError("UPDATE_SIGNING_KEY is not a usable Ed25519 private key") from None
+        trusted = False
+        for index, block in enumerate(blocks):
+            public_path = Path(temporary) / f"trusted-{index}.pem"
+            public_path.write_text(block, encoding="ascii")
+            trusted = trusted or subprocess.run(
+                ["openssl", "pkeyutl", "-verify", "-rawin", "-pubin", "-inkey", str(public_path),
+                 "-in", str(manifest_path), "-sigfile", str(raw)], capture_output=True, check=False).returncode == 0
+        signature = raw.read_bytes()
+    if not trusted or len(signature) != 64:
+        raise PublishError("UPDATE_SIGNING_KEY does not match a public key the launcher trusts")
+    signature_path = manifest_path.with_name(UPDATE_SIGNATURE_NAME)
+    signature_path.write_text(base64.b64encode(signature).decode("ascii") + "\n", encoding="ascii")
+    return signature_path
+
+
+def prepare_assets(directory: Path, signing_key: str, expected_revision: str | None = None) -> list[Asset]:
     """Validate the required packages before creating checksums or API writes."""
     if not directory.is_dir():
         raise PublishError("The artifacts directory does not exist")
@@ -403,6 +441,8 @@ def prepare_assets(directory: Path, expected_revision: str | None = None) -> lis
     manifest_path = directory / UPDATE_MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     assets.append(Asset(manifest_path, UPDATE_MANIFEST_NAME, manifest_path.stat().st_size, digest(manifest_path)))
+    signature_path = sign_manifest(manifest_path, signing_key)
+    assets.append(Asset(signature_path, UPDATE_SIGNATURE_NAME, signature_path.stat().st_size, digest(signature_path)))
     checksum_path = directory / CHECKSUM_NAME
     checksum_path.write_text(
         "".join(f"{asset.sha256}  {asset.name}\n" for asset in sorted(assets, key=lambda item: item.name)),
@@ -573,13 +613,14 @@ def discard_replacement(client: GitHubClient, release_id: int, stage_tag: str) -
             print(f"Warning: could not remove this run's staged release: {error}", file=sys.stderr)
 
 
-def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, run_id: str) -> PublishResult:
+def publish(client: GitHubClient, sha: str, directory: Path, notes_path: Path, run_id: str,
+            signing_key: str) -> PublishResult:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
         raise PublishError("--sha must be a full 40-character commit SHA")
     if not re.fullmatch(r"[0-9]+", run_id):
         raise PublishError("--run-id must be a numeric Actions run ID")
     sha = sha.lower()
-    assets = prepare_assets(directory, sha)
+    assets = prepare_assets(directory, signing_key, sha)
     notes = render_notes(notes_path, client.repository, sha)
     if not build_is_publishable(client, sha):
         return PublishResult(skipped=True)
@@ -697,7 +738,8 @@ def main() -> int:
                     output.write(f"run_id={build['run_id']}\nsha={build['sha']}\n")
                 print(f"Selected main build {build['run_id']} at {build['sha']}.")
             return 0
-        result = publish(client, args.sha, args.artifacts, args.notes, args.run_id)
+        result = publish(client, args.sha, args.artifacts, args.notes, args.run_id,
+                         os.environ.get("UPDATE_SIGNING_KEY", ""))
     except (PublishError, OSError) as error:
         print(f"Publication failed: {error}", file=sys.stderr)
         if isinstance(error, APIError) and error.status == 403 and "not accessible by integration" in error.message:

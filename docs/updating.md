@@ -4,7 +4,9 @@ On normal startup, `startup.exe` checks the rolling
 [Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest)
 before starting the database and servers. It reads a small update manifest over
 HTTPS, compares managed files and downloads only changed files from the server
-ZIP. Each downloaded file must match its SHA-256 hash before installation.
+ZIP. The manifest must carry the release signature the launcher trusts, and each
+downloaded file must match its SHA-256 hash before installation. An unsigned or
+differently signed manifest is refused and the installed release starts.
 
 The launcher stages the update, replaces managed server files and restarts itself.
 SQL migrations run during normal database/server startup, and managed

@@ -1453,6 +1453,10 @@ func TestPortableUpdateManifestResponseDeadlineAllowsSlowTransfer(t *testing.T) 
 			}
 			return
 		}
+		if r.URL.Path == "/slow.sig" {
+			w.Write(updateTestSignature(updateTestSigningKey, content))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write(content[:len(content)/2])
 		w.(http.Flusher).Flush()
@@ -1856,6 +1860,8 @@ func TestPortableUpdateCheckRecordsCurrentReleaseAndStagesNewOne(t *testing.T) {
 		switch req.URL.Path {
 		case "/UPDATE_MANIFEST.json":
 			w.Write(manifestJSON)
+		case "/UPDATE_MANIFEST.json.sig":
+			w.Write(updateTestSignature(updateTestSigningKey, manifestJSON))
 		case "/" + portableUpdatePackage:
 			return false
 		default:

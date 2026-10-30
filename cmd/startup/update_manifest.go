@@ -3,7 +3,12 @@ package main
 import (
 	"archive/zip"
 	"context"
+	"crypto/ed25519"
+	"crypto/x509"
+	_ "embed"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +24,9 @@ import (
 
 const portableUpdateManifestURL = "https://github.com/Syntax555/mod-playerbots-portable/releases/download/latest/UPDATE_MANIFEST.json"
 const portableUpdatePackage = "mod-playerbots-portable-latest.zip"
+const portableUpdateSignatureSuffix = ".sig"
 const maxUpdateManifestBytes = 8 << 20
+const maxUpdateSignatureBytes = 1 << 10
 const maxUpdateFileBytes = 1 << 30
 const maxUpdatePackageBytes = 4 << 30
 
@@ -35,6 +42,44 @@ const updateRangeAttempts = 3
 const updateRangeRetryDelay = 500 * time.Millisecond
 
 var errUntrustedUpdateRedirect = errors.New("update redirect is not a trusted HTTPS GitHub asset")
+
+// Release-asset upload access alone must not supply executable updates: the
+// publisher signs each manifest with a private key that only it holds. Several
+// PEM blocks let a release trust a new key before the publisher switches to it.
+//
+//go:embed update-signing-key.pem
+var updateSigningKeysPEM []byte
+
+var updateSigningKeys = parseUpdateSigningKeys(updateSigningKeysPEM)
+
+func parseUpdateSigningKeys(content []byte) []ed25519.PublicKey {
+	var keys []ed25519.PublicKey
+	for block, rest := pem.Decode(content); block != nil; block, rest = pem.Decode(rest) {
+		parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+		key, ok := parsed.(ed25519.PublicKey)
+		if block.Type != "PUBLIC KEY" || err != nil || !ok {
+			panic("invalid embedded update signing key")
+		}
+		keys = append(keys, key)
+	}
+	if len(keys) == 0 {
+		panic("no embedded update signing key")
+	}
+	return keys
+}
+
+func verifyUpdateManifestSignature(manifest, encoded []byte, keys []ed25519.PublicKey) error {
+	signature, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return errors.New("update manifest signature is malformed")
+	}
+	for _, key := range keys {
+		if ed25519.Verify(key, manifest, signature) {
+			return nil
+		}
+	}
+	return errors.New("update manifest signature does not match a trusted release key")
+}
 
 var updateRevisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var updateDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -160,14 +205,14 @@ func portableUpdateHTTPClient() *http.Client {
 	}
 }
 
-func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL string, responseTimeout time.Duration) (portableUpdateManifest, error) {
-	var manifest portableUpdateManifest
+// fetchUpdateMetadata reads a small release asset; label names it in errors.
+func fetchUpdateMetadata(ctx context.Context, client *http.Client, assetURL, label string, limit int64, responseTimeout time.Duration) ([]byte, error) {
 	responseCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	timer := time.AfterFunc(responseTimeout, cancel)
-	req, err := http.NewRequestWithContext(responseCtx, http.MethodGet, manifestURL, nil)
+	req, err := http.NewRequestWithContext(responseCtx, http.MethodGet, assetURL, nil)
 	if err != nil {
-		return manifest, err
+		return nil, err
 	}
 	resp, err := client.Do(req)
 	if !timer.Stop() {
@@ -176,21 +221,38 @@ func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL s
 		if err == nil {
 			resp.Body.Close()
 		}
-		return manifest, fmt.Errorf("update manifest: no response within %v", responseTimeout)
+		return nil, fmt.Errorf("%s: no response within %v", label, responseTimeout)
 	}
 	if err != nil {
-		return manifest, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return manifest, fmt.Errorf("update manifest returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("%s returned HTTP %d", label, resp.StatusCode)
 	}
-	content, err := io.ReadAll(io.LimitReader(resp.Body, maxUpdateManifestBytes+1))
+	content, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(content)) > limit {
+		return nil, fmt.Errorf("%s is too large", label)
+	}
+	return content, nil
+}
+
+func fetchUpdateManifest(ctx context.Context, client *http.Client, manifestURL string, responseTimeout time.Duration) (portableUpdateManifest, error) {
+	var manifest portableUpdateManifest
+	content, err := fetchUpdateMetadata(ctx, client, manifestURL, "update manifest", maxUpdateManifestBytes, responseTimeout)
 	if err != nil {
 		return manifest, err
 	}
-	if len(content) > maxUpdateManifestBytes {
-		return manifest, errors.New("update manifest is too large")
+	// An unsigned or foreign manifest is not decoded at all.
+	signature, err := fetchUpdateMetadata(ctx, client, manifestURL+portableUpdateSignatureSuffix, "update manifest signature", maxUpdateSignatureBytes, responseTimeout)
+	if err != nil {
+		return manifest, err
+	}
+	if err := verifyUpdateManifestSignature(content, signature, updateSigningKeys); err != nil {
+		return manifest, err
 	}
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return manifest, fmt.Errorf("decode update manifest: %w", err)

@@ -9,6 +9,8 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -409,7 +411,31 @@ class BuildSelectionTests(unittest.TestCase):
             self.assertIn("publication skipped", stdout.getvalue())
 
 
+def openssl(*arguments: str) -> None:
+    subprocess.run(["openssl", *arguments], check=True, capture_output=True)
+
+
+def signing_key(directory: Path, name: str) -> tuple[str, Path]:
+    """A fresh Ed25519 private key and its public key file."""
+    private, public = directory / f"{name}.pem", directory / f"{name}.pub.pem"
+    openssl("genpkey", "-algorithm", "ed25519", "-out", str(private))
+    openssl("pkey", "-in", str(private), "-pubout", "-out", str(public))
+    return private.read_text(encoding="ascii"), public
+
+
+@unittest.skipUnless(shutil.which("openssl"), "OpenSSL signs the update manifest")
 class PublicationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        keys = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(keys.cleanup)
+        cls.keys = Path(keys.name)
+        cls.signing_key, cls.public_key = signing_key(cls.keys, "release")
+        cls.foreign_key, _ = signing_key(cls.keys, "foreign")
+        trusted = patch.object(publisher, "SIGNING_PUBLIC_KEYS", cls.public_key)
+        trusted.start()
+        cls.addClassCleanup(trusted.stop)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -437,8 +463,9 @@ class PublicationTests(unittest.TestCase):
         )
         self.client = FakeGitHub()
 
-    def publish(self):
-        return publisher.publish(self.client, SHA, self.directory, self.notes, "123456")
+    def publish(self, key=None):
+        return publisher.publish(self.client, SHA, self.directory, self.notes, "123456",
+                                 self.signing_key if key is None else key)
 
     def rewrite_server(self, replacements=None, extra=None, prefix=""):
         path = next(self.directory.rglob(publisher.SERVER_PACKAGE_NAME))
@@ -663,7 +690,7 @@ class PublicationTests(unittest.TestCase):
         self.client.main_values = [SHA, OLDER_SHA]
         result = self.publish()
         self.assertTrue(result.skipped)
-        self.assertEqual(4, self.client.upload_count)
+        self.assertEqual(5, self.client.upload_count)
         self.assertIn(1, self.client.releases)
         self.assertEqual(OLDER_SHA, self.client.tags["latest"])
         self.assertNotIn(self.client.draft_id, self.client.releases)
@@ -751,7 +778,7 @@ class PublicationTests(unittest.TestCase):
         self.assertIs(False, stranded["draft"])
         self.assertTrue(stranded["tag_name"].startswith("build-123456-"))
         self.client.draft_id += 1
-        result = publisher.publish(self.client, SHA, self.directory, self.notes, "123457")
+        result = publisher.publish(self.client, SHA, self.directory, self.notes, "123457", self.signing_key)
         self.assertFalse(result.skipped)
         self.assertEqual("latest", self.client.releases[self.client.draft_id]["tag_name"])
         self.assertNotIn(stranded["id"], self.client.releases)
@@ -905,7 +932,7 @@ class PublicationTests(unittest.TestCase):
         result = self.publish()
         self.assertFalse(result.skipped)
         self.assertEqual(f"https://github.com/{REPOSITORY}/releases/tag/latest", result.url)
-        self.assertEqual(4, result.assets)
+        self.assertEqual(5, result.assets)
         self.assertEqual(3, result.removed_staging)
         self.assertEqual(SHA, self.client.tags["latest"])
         release = self.client.releases[self.client.draft_id]
@@ -914,7 +941,8 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual("Latest", release["name"])
         self.assertEqual("latest", release["tag_name"])
         self.assertEqual(SHA, release["target_commitish"])
-        self.assertEqual(set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME},
+        self.assertEqual(set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME,
+                                                        publisher.UPDATE_SIGNATURE_NAME},
                          {asset["name"] for asset in release["assets"]})
         self.assertEqual({4, 6, 7, self.client.draft_id}, set(self.client.releases))
         self.assertEqual({"latest", "v1.0.16", "preview", "build-notes", "build-preserve-me"},
@@ -979,13 +1007,56 @@ class PublicationTests(unittest.TestCase):
     def test_checksum_file_covers_both_public_zips_and_update_manifest(self):
         self.publish()
         checksum_lines = (self.directory / publisher.CHECKSUM_NAME).read_text().splitlines()
-        self.assertEqual(3, len(checksum_lines))
-        self.assertEqual(sorted(set(publisher.ZIP_CONTENTS) | {publisher.UPDATE_MANIFEST_NAME}),
+        self.assertEqual(4, len(checksum_lines))
+        self.assertEqual(sorted(set(publisher.ZIP_CONTENTS) | {publisher.UPDATE_MANIFEST_NAME,
+                                                               publisher.UPDATE_SIGNATURE_NAME}),
                          [line.split("  ")[1] for line in checksum_lines])
         for line in checksum_lines:
             expected_digest, name = line.split("  ")
             payload = next(self.directory.rglob(name)).read_bytes()
             self.assertEqual(hashlib.sha256(payload).hexdigest(), expected_digest)
+
+    def test_update_manifest_signature_verifies_with_the_launcher_key(self):
+        self.publish()
+        manifest = self.directory / publisher.UPDATE_MANIFEST_NAME
+        encoded = (self.directory / publisher.UPDATE_SIGNATURE_NAME).read_text(encoding="ascii")
+        # The launcher reads standard base64 of the raw 64-byte Ed25519 signature.
+        self.assertRegex(encoded, r"^[A-Za-z0-9+/]{86}==\n$")
+        raw = self.keys / "published.sig"
+        raw.write_bytes(publisher.base64.b64decode(encoded))
+        openssl("pkeyutl", "-verify", "-rawin", "-pubin", "-inkey", str(self.public_key),
+                "-in", str(manifest), "-sigfile", str(raw))
+        manifest.write_bytes(manifest.read_bytes().replace(SHA.encode(), NEWER_SHA.encode()))
+        with self.assertRaises(subprocess.CalledProcessError):
+            openssl("pkeyutl", "-verify", "-rawin", "-pubin", "-inkey", str(self.public_key),
+                    "-in", str(manifest), "-sigfile", str(raw))
+
+    def test_missing_invalid_or_untrusted_signing_key_fails_before_api_writes(self):
+        for name, key, message in (("missing", " ", "UPDATE_SIGNING_KEY is required"),
+                                   ("invalid", "not a key", "not a usable Ed25519 private key"),
+                                   ("untrusted", self.foreign_key, "does not match a public key")):
+            with self.subTest(key=name), self.assertRaisesRegex(publisher.PublishError, message):
+                self.publish(key)
+            self.assertEqual([], self.client.calls)
+            self.assertFalse((self.directory / publisher.UPDATE_SIGNATURE_NAME).exists())
+            self.assertFalse((self.directory / publisher.CHECKSUM_NAME).exists())
+
+    def test_any_trusted_key_signs_during_rotation(self):
+        _, next_public = signing_key(self.keys, "next")
+        rotated = self.keys / "rotated.pem"
+        rotated.write_text(next_public.read_text() + self.public_key.read_text(), encoding="ascii")
+        with patch.object(publisher, "SIGNING_PUBLIC_KEYS", rotated):
+            self.assertFalse(self.publish().skipped)
+
+    def test_main_signs_with_the_workflow_secret(self):
+        arguments = ["publish_latest.py", "--sha", SHA, "--artifacts", "out", "--notes", "notes.md", "--run-id", "1"]
+        result = publisher.PublishResult(url="https://example.invalid/latest", assets=5)
+        with patch.object(sys, "argv", arguments), patch("sys.stdout", new_callable=io.StringIO), \
+                patch.dict("os.environ", {"GITHUB_REPOSITORY": REPOSITORY, "GH_TOKEN": "token",
+                                          "UPDATE_SIGNING_KEY": self.signing_key}), \
+                patch.object(publisher, "publish", return_value=result) as publish:
+            self.assertEqual(0, publisher.main())
+        self.assertEqual(self.signing_key, publish.call_args.args[5])
 
     def test_update_manifest_hashes_exact_final_archive_and_every_managed_file(self):
         self.publish()
@@ -1123,7 +1194,8 @@ class PublicationTests(unittest.TestCase):
             with self.subTest(document=document):
                 self.assertTrue((root / document).is_file())
         downloads = re.findall(rf"https://github[.]com/{re.escape(REPOSITORY)}/releases/latest/download/([^)\s]+)", notes)
-        published = set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME}
+        published = set(publisher.ZIP_CONTENTS) | {publisher.CHECKSUM_NAME, publisher.UPDATE_MANIFEST_NAME,
+                                                    publisher.UPDATE_SIGNATURE_NAME}
         self.assertTrue(downloads)
         self.assertLessEqual(set(downloads), published)
         self.assertLessEqual(set(publisher.ZIP_CONTENTS), set(downloads))
@@ -1131,7 +1203,7 @@ class PublicationTests(unittest.TestCase):
     def test_invalid_source_sha_or_run_id_makes_no_api_calls(self):
         for sha, run_id in [("main", "123"), (SHA, "not-a-run"), (SHA, "../../123")]:
             with self.subTest(sha=sha, run_id=run_id), self.assertRaises(publisher.PublishError):
-                publisher.publish(self.client, sha, self.directory, self.notes, run_id)
+                publisher.publish(self.client, sha, self.directory, self.notes, run_id, self.signing_key)
         self.assertEqual([], self.client.calls)
 
 
