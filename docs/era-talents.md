@@ -89,7 +89,9 @@ Dungeon Finder only when the realm enables it, dual specialization at the
 realm's `MinDualSpecLevel`, and glyphs and glyph slots only after earned Wrath.
 
 MultiBot bot spellbooks also open inside DragonUI's book with the bot's known
-spells and eligible trainer lessons. Their casts and skip-list changes retain
+spells and eligible trainer lessons. The window, cards, tabs, search and pager
+come from DragonUI's own builders, so DragonUI updates carry over; a DragonUI
+without one of them keeps MultiBot's window. Casts and skip-list changes retain
 MultiBot's server controls. Disabling DragonUI's spellbook module moves an open
 bot book to MultiBot's fallback window; enabling it moves the book back without
 a reload. Without DragonUI's talent module, EraTalents supplies its own historical

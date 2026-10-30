@@ -861,7 +861,7 @@ function methods:CreateTexture()
   return texture
 end
 function methods:CreateFontString() return Object(nil, "FontString") end
-for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture" }) do
+for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetDisabledTexture", "GetHighlightTexture" }) do
   methods[getter] = function(self)
     local texture = rawget(self, getter .. "Object") or Object(nil, "Texture")
     rawset(self, getter .. "Object", texture)
@@ -902,7 +902,8 @@ local shift = false
 IsShiftKeyDown = function() return shift end
 local tooltip = {}
 GameTooltip = { SetOwner = function() tooltip = {} end, SetHyperlink = function(_, link) tooltip.link = link end,
-                AddLine = function(_, text) table.insert(tooltip, text) end, Show = function() end }
+                AddLine = function(_, text) table.insert(tooltip, text) end, Show = function() end,
+                IsOwned = function() return false end }
 local whispers, macros, actions, sent = {}, {}, {}, {}
 SendChatMessage = function(text, kind, _, target) table.insert(whispers, { text, kind, target }) end
 SendAddonMessage = function(prefix, message, channel, target)
@@ -1010,7 +1011,8 @@ if withDragon then
     end
     return result
   end }
-  for _, file in ipairs({ "book_layout.lua", "book_catalog.lua", "book_frame.lua", "book_slots.lua" }) do
+  for _, file in ipairs({ "book_layout.lua", "book_catalog.lua", "book_frame.lua", "book_slots.lua",
+                          "book_controls.lua" }) do
     assert(loadfile(dragonDir .. "/modules/spellbook/" .. file))("DragonUI", addon)
   end
   if withoutInk then addon.SpellbookModule.InkLabel = nil end
@@ -1087,6 +1089,9 @@ assert(book.wide and book:IsShown() and pressed and not nativeVisible,
 assert(book.tabs[GENERAL].text == "Allgemein" and book.tabs[CLASS].text == "Krieger",
   "DragonUI's two tabs: the general book and the bot's class")
 assert(book.tabs[GENERAL].point[4] < book.tabs[CLASS].point[4], "the general tab comes first, as in DragonUI")
+assert(book.prev.point[4] == book.next.point[4] - 40 and book.prev.point[5] == book.next.point[5]
+  and book.pager.point[4] == book.next.point[4] and book.search.point[1] == "RIGHT",
+  "DragonUI places the bot book's pager, arrows and search box as on its own book")
 local function tabsInFront()
   local paper = book.art.wood.parent:GetFrameLevel()
   return book.tabs[GENERAL]:GetFrameLevel() > paper and book.tabs[CLASS]:GetFrameLevel() > paper
@@ -1259,13 +1264,11 @@ BOT_MUTATIONS = [
      '{ "RestoreSpellbookSystem" }', True),
     ('live disable handoff', 'BotBook.lua', '{ "RefreshSpellbookSystem", "RestoreSpellbookSystem" }',
      '{ "RefreshSpellbookSystem" }', True),
-    ('wide header joins at center', 'BotBook.lua', 'wide and "TOP" or "TOPRIGHT", wide and 0 or -8, -26',
-     '"TOPRIGHT", -8, -26', True),
-    ('single-page header hides right half', 'BotBook.lua',
-     '  if wide then art.woodRight:Show() else art.woodRight:Hide() end', '  art.woodRight:Show()', True),
-    ('native helper required', 'BotBook.lua', 'type(book.InkLabel) ~= "function" or ', '', 'missing-ink'),
-    ('native font helper', 'BotBook.lua', 'return DragonBook().InkLabel(parent, layer, fontObject, size)',
-     'return parent:CreateFontString(nil, layer, fontObject)', True),
+    ('DragonUI paper layout', 'BotBook.lua', '  book.LayoutPaperArt(frame.art, stage, wide)\n', '', True),
+    ('DragonUI tab placement', 'BotBook.lua', '  DragonBook().PlaceTabs(frame, faces, frame.scale)\n', '', True),
+    ('DragonUI control placement', 'BotBook.lua', 'arrows = { frame.next, frame.prev } })', 'arrows = {} })', True),
+    ('bot search query', 'BotBook.lua', '    view.query, view.page = query, 1\n', '', True),
+    ('native helper required', 'BotBook.lua', '"InkLabel", ', '', 'missing-ink'),
     ('runtime module preference', 'BotBook.lua', '    if not DragonBookOn() then\n', '    if false then\n', True),
     ('fallback closes bot book', 'BotBook.lua', '      if frame then frame:Hide() end\n', '', True),
     ('native window closes', 'BotBook.lua', '    if visible(self) then hide(self) end\n', '', True),
@@ -1286,7 +1289,7 @@ BOT_MUTATIONS = [
      'view.cat = GENERAL', True),
     ('tree sections', 'BotBook.lua', '    for tree = 1, 3 do add(names[tree], trees[tree]) end',
      '    for tree = 1, 3 do add(nil, trees[tree]) end', True),
-    ('search filter', 'BotBook.lua', '      if Matches(entry, query) then kept[#kept + 1] = entry end',
+    ('search filter', 'BotBook.lua', '      if book.NameMatches(entry.name, query) then kept[#kept + 1] = entry end',
      '      kept[#kept + 1] = entry', True),
     ('two-page spreads', 'BotBook.lua', 'view.query), wide and 2 or 1,', 'view.query), 1,', True),
     ('DragonUI wording', 'BotBook.lua', 'local text = dragon and type(dragon.L) == "table" and rawget(dragon.L, key) or nil',
@@ -1295,6 +1298,21 @@ BOT_MUTATIONS = [
      '"EraTalentsBotBookFrameTab" .. cat, frame,', True),
     ('general tab first', 'BotBook.lua', 'local TAB_ORDER = { GENERAL, CLASS }', 'local TAB_ORDER = { CLASS, GENERAL }', True),
     ('button release', 'BotBook.lua', '    SetSpellbookButton(view.name, false)\n', '', True),
+]
+
+# (label, file, old, new) in DragonUI's shared spellbook builders, as the bot spellbook uses them.
+DRAGON_BOT_MUTATIONS = [
+    ('wide header joins at center', 'book_frame.lua', 'wide and "TOP" or "TOPRIGHT", wide and 0 or -8, -26',
+     '"TOPRIGHT", -8, -26'),
+    ('single-page header hides right half', 'book_frame.lua', '    sheets.woodRight:SetShownCompat(wide)\n', ''),
+    ('search box reports queries', 'book_controls.lua', '        onQuery(Book.NormalizeQuery(self:GetText()))\n', ''),
+    ('tabs side by side', 'book_controls.lua', '        x = x + face:GetWidth() + 1\n', ''),
+    ('back arrow spacing', 'book_controls.lua', 'turner.offset = direction == "Prev" and -32 - 8 or 0',
+     'turner.offset = 0'),
+    ('empty line ink', 'book_controls.lua', 'local line = Book.InkLabel(parent, "ARTWORK", "GameFontHighlightLarge", 16)',
+     'local line = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")'),
+    ('pager on the arrows', 'book_controls.lua',
+     '        controls.pager:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", x, y)', ''),
 ]
 
 # (label, file, old, new) in the EraTalents client.
@@ -1445,6 +1463,21 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
         if outcome.returncode:
             raise SystemExit(outcome.stdout + outcome.stderr)
         print(outcome.stdout, end='')
+    for index, (label, file, old, new) in enumerate(DRAGON_BOT_MUTATIONS):
+        dragon_copy = directory / f'dragon-bot-{index}'
+        shutil.copytree(DRAGONUI, dragon_copy, ignore=shutil.ignore_patterns('Textures', '*.blp', '*.tga', '*.ttf'))
+        path = dragon_copy / 'modules/spellbook' / file
+        text = path.read_text()
+        if text.count(old) != 1:
+            raise SystemExit(f'{label} DragonUI builder mutation was not applied')
+        path.write_text(text.replace(old, new))
+        DRAGONUI = dragon_copy
+        mutated = run_bot_client(directory, client, packets, True)
+        DRAGONUI = dragon_source
+        if mutated.returncode == 0 or not re.search(r'bot-client\.lua:\d+: ', mutated.stderr):
+            raise SystemExit(f'The bot spellbook fixture did not reject the DragonUI builder mutation {label}:\n'
+                             f'{mutated.stderr}')
+        print(f'DragonUI bot book builder mutation rejected: {label}')
     for index, (label, file, old, new, with_dragon) in enumerate(BOT_MUTATIONS):
         copy = directory / f'bot-client-{index}'
         shutil.copytree(client, copy)
