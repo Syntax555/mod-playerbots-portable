@@ -628,6 +628,7 @@ ItemUsage NativeBagUsage(Player* bot, ItemTemplate const* itemProto)
     @@BAG_USAGE@@
     return ITEM_USAGE_NONE;
 }
+namespace EarnedAuction { uint32 PendingBagSlots(PlayerbotAI* ai); }
 @@BAGS@@
 struct Config
 {
@@ -801,6 +802,7 @@ struct Scenario
         objectMgr.lookups = 0; spellMgr.lookups = 0;
         sPlayerbotAIConfig = {}; world = {}; now += 400;
         auto& processor = PlayerbotWorldThreadProcessor::instance(); processor.queued.clear(); processor.accept = true;
+        EarnedAuction::Pending().Record(bot.guid, 0);
     }
     Item& MakeItem(uint32 entry = 100, uint32 count = 1, ItemUsage usage = ITEM_USAGE_AH)
     {
@@ -1551,6 +1553,33 @@ void ServiceTests()
         s.bot.backpack.erase(INVENTORY_SLOT_ITEM_START); now += sPlayerbotAIConfig.earnedAuctionInterval;
         assert(s.Visit(true)); assert(s.bot.GetItemByGuid(bag.guid) == &bag);
     }
+    for (uint32 slots : {6u, 10u})
+    {
+        // A bag the bot leads a bid on or has won waits until a mailbox visit collects
+        // it. Vendor bag purchases, which may not read mail, count it as carried.
+        Scenario s; s.EquipBags();
+        Item& bag = s.MakeItem(101, 1, ITEM_USAGE_EQUIP); bag.proto.Class = ITEM_CLASS_CONTAINER;
+        bag.proto.ContainerSlots = slots; bag.proto.InventoryType = INVTYPE_BAG;
+        ItemTemplate vendorBag = bag.proto; vendorBag.ItemId = 104; vendorBag.ContainerSlots = 10;
+        assert(BagPurchaseUseful(&s.bot.ai, &vendorBag));
+        AuctionEntry& offer = s.Offer(bag); offer.bidder = s.bot.guid; offer.bid = 400;
+        assert(!s.Visit()); assert(!s.bot.session.buys);
+        bool const blocks = slots > 6;
+        assert(EarnedAuction::PendingBagSlots(&s.bot.ai) == slots);
+        assert(BagPurchaseUseful(&s.bot.ai, &vendorBag) == !blocks);
+        sPlayerbotAIConfig.earnedAuctions = false;
+        assert(!EarnedAuction::PendingBagSlots(&s.bot.ai) && BagPurchaseUseful(&s.bot.ai, &vendorBag));
+        sPlayerbotAIConfig.earnedAuctions = true;
+        // The auction ends; a full backpack leaves the won bag in the mail.
+        auctionMgr.house.auctions.erase(offer.Id); auctionMgr.items.erase(bag.guid);
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+            s.BagItem(100, 1, ITEM_USAGE_KEEP);
+        s.Receipt(&bag).subject = s.Subject(bag, AUCTION_WON);
+        assert(!s.Visit(true)); assert(EarnedAuction::PendingBagSlots(&s.bot.ai) == slots);
+        s.bot.backpack.erase(INVENTORY_SLOT_ITEM_START); now += sPlayerbotAIConfig.earnedAuctionInterval;
+        assert(s.Visit(true)); assert(s.bot.GetItemByGuid(bag.guid) == &bag);
+        assert(!EarnedAuction::PendingBagSlots(&s.bot.ai));
+    }
     {
         // A Blacksmith Hammer serves crafting.
         Scenario s; Item& hammer = s.MakeItem(5956, 1, ITEM_USAGE_SKILL); hammer.proto.Class = ITEM_CLASS_WEAPON;
@@ -1882,6 +1911,22 @@ mutations = [
      '? uint8(NULL_BAG) : uint8(NULL_BAG)'),
     ('second bag upgrade bought', 'bags', '!CarriesBagUpgrade(botAI, replaceable)',
      '(!CarriesBagUpgrade(botAI, replaceable) || true)'),
+    ('vendor bag bought while an auction bag waits', 'bags', 'if (EarnedAuction::PendingBagSlots(botAI) > replaceable)',
+     'if (EarnedAuction::PendingBagSlots(botAI) > replaceable && false)'),
+    ('smaller auction bag blocks an upgrade', 'bags', 'if (EarnedAuction::PendingBagSlots(botAI) > replaceable)',
+     'if (EarnedAuction::PendingBagSlots(botAI))'),
+    ('auction visit leaves no bag record', 'service',
+     '        Pending().Record(botGuid, (bought ? OwnMarketState(bot) : state).pendingBagSlots);\n', ''),
+    ('leading bag bid forgotten', 'service',
+     'std::max(state.pendingBagSlots, GeneralBagSlots(sAuctionMgr->GetAItem(auction->item_guid)));',
+     'std::max(state.pendingBagSlots, 0u);'),
+    ('won bag in the mail forgotten', 'service',
+     'state.pendingBagSlots = std::max(state.pendingBagSlots, GeneralBagSlots(item));', ''),
+    ('collected bag still pending', 'service',
+     'Pending().Record(botGuid, OwnMarketState(bot).pendingBagSlots);\n            return collected;',
+     'return collected;'),
+    ('pending bag kept with auctions disabled', 'service',
+     'return IsEnabled(ai) ? Pending().Slots(', 'return true ? Pending().Slots('),
     ('profession materials bought', 'service', 'else if (usage == ITEM_USAGE_SKILL && GatheringTool(proto))',
      'else if (usage == ITEM_USAGE_SKILL)'),
     ('usage tiers ignored', 'service', 'RankOffer(tier, price, ceiling)', 'RankOffer(tier * 0, price, ceiling)'),

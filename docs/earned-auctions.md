@@ -38,7 +38,9 @@ balance and must fit its category budget. Bags fill an empty slot or replace
 the smallest general bag when backpack space permits. Specialized bags remain
 equipped even when they are smaller than the normal bags. Equipment evaluation,
 vendor purchases and auctions use the same bag-slot selection. Quivers are not
-bought, and a carried unequipped bag upgrade prevents another purchase.
+bought. A carried unequipped bag upgrade, or a bag the bot leads a bid on or
+has won and not yet collected from its mailbox, prevents another vendor or
+auction bag purchase.
 
 Bots cannot buy their own or same-account auctions. Outstanding bids or
 uncollected won items normally pause purchases; a won item blocked by a unique

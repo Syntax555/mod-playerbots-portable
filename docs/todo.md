@@ -163,9 +163,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   auction items; the core currently drops those auctions without refunds.
 - [ ] Verify mixed bag upgrades in game: a smaller quiver, ammo pouch or
   profession bag must remain equipped while a normal bag upgrades. Cover all
-  four slots, full bags and a new bag stored inside its intended replacement.
+  four slots, full bags, a new bag stored inside its intended replacement and
+  no vendor bag purchase while a won or bid-on auction bag awaits collection.
 - [ ] Decide whether unsold-stock memory should survive server restarts.
-- [ ] Avoid redundant vendor bag purchases while an auction bag waits in mail.
 
 ## Launcher and updates
 

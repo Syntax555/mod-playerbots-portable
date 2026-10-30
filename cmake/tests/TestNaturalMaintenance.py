@@ -397,6 +397,7 @@ struct Fixture
     bool waiting = false, queueAccepts = true, travelReachable = true, actionResult = true;
     float farStep = 40.0f;
     int plans = 0, scans = 0, consumableChecks = 0;
+    uint32 pendingBagSlots = 0;
 } world;
 
 struct ItemUsageValue
@@ -605,6 +606,8 @@ bool IsEnabled(PlayerbotAI* ai)
     return ai && sPlayerbotAIConfig.naturalProgression && sPlayerbotAIConfig.earnedAuctions && ai->GetBot() &&
            !ai->HasGameClientMaster();
 }
+// The production record of a won bag still in the mailbox, learned by world-thread visits.
+uint32 PendingBagSlots(PlayerbotAI* ai) { return IsEnabled(ai) ? world.pendingBagSlots : 0; }
 bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox)
 {
     assert(IsEnabled(ai) && !target.IsEmpty());
@@ -1459,6 +1462,15 @@ void BagTests()
     s.bot.unusable.insert(pouch.ItemId);
     s.Carry(pouch);
     assert(buys(sack));
+    // A bag won at auction and still in the mailbox counts as carried while earned
+    // trading runs; without it the record is ignored.
+    world.pendingBagSlots = satchel.ContainerSlots;
+    assert(buys(sack));
+    sPlayerbotAIConfig.earnedAuctions = true;
+    assert(!buys(sack));
+    world.pendingBagSlots = 0;
+    assert(buys(sack));
+    sPlayerbotAIConfig.earnedAuctions = false;
     s.bot.unusable.clear();
     s.bot.pack.clear();
     s.Equip(INVENTORY_SLOT_BAG_START + 3, satchel);
@@ -1666,6 +1678,8 @@ mutations = [
      'if (!bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))\n            return true;\n    return true;'),
     ('carried bag upgrade ignored', 'value', '!CarriesBagUpgrade(botAI, replaceableBag)',
      '!(CarriesBagUpgrade(botAI, replaceableBag) && false)'),
+    ('auction bag in the mailbox ignored', 'helpers', 'if (EarnedAuction::PendingBagSlots(botAI) > replaceable)',
+     'if (EarnedAuction::PendingBagSlots(botAI) > replaceable && false)'),
     ('carried backpack bag ignored', 'helpers', 'slot < INVENTORY_SLOT_ITEM_END; ++slot)',
      'slot < INVENTORY_SLOT_ITEM_START; ++slot)'),
     ('bag inside a bag ignored', 'helpers', 'position < bag->GetBagSize()', 'position < bag->GetBagSize() && false'),
