@@ -133,8 +133,18 @@ namespace EraTrainerBook {
 std::vector<Entry> ClassBook(Player* player) { return {{1, 6673, 10, 0, 0, 0, uint8(player->cls)}}; }
 std::vector<Entry> RidingBook(Player*) { return {{40, 33388, 40000, 0, 0, 0, 0}}; }
 }
-struct World { bool inspect = true; bool getBoolConfig(uint32) const { return inspect; } } world;
+constexpr uint32 CONFIG_MIN_DUALSPEC_LEVEL = 1;
+struct World
+{
+    bool inspect = true; uint32 dualSpecLevel = 80;
+    bool getBoolConfig(uint32) const { return inspect; }
+    uint32 getIntConfig(uint32 index) const { assert(index == CONFIG_MIN_DUALSPEC_LEVEL); return dualSpecLevel; }
+} world;
 auto* sWorld = &world;
+namespace lfg { constexpr uint32 LFG_OPTION_ENABLE_DUNGEON_FINDER = 0x01; }
+// LFGMgr::isOptionEnabled tests its option mask.
+struct LFGMgr { uint32 options = 0; bool isOptionEnabled(uint32 option) const { return options & option; } } lfgMgr;
+auto* sLFGMgr = &lfgMgr;
 class PlayerScript {
 public:
     explicit PlayerScript(char const*) {}
@@ -221,14 +231,19 @@ int main() {
     { Scenario s; config.bots = false; s.Denied(); }
     { Scenario s; config.enabled = false; s.Denied(); }
     {
-        // Every SYNC is followed by the glyph gate's own answer for the requester.
+        // Every SYNC is followed by the glyph gate's own answer for the requester and the
+        // realm's Dungeon Finder switch and dual-specialization level.
         Scenario s;
-        s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 1");
-        s.owner.era = s.owner.stored = ERA_TBC; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 0");
-        s.owner.era = ERA_WOTLK; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 0");
-        s.owner.cls = 6; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 1");
-        s.owner.cls = 1; config.glyphGate = false; s.Send("HELLO"); assert(s.owner.messages.back() == "GLYPHS 1");
-        config.glyphGate = true; s.Send("LEARN 1"); assert(s.owner.messages.back() == "GLYPHS 0");
+        auto const glyphs = [&] { return s.owner.messages.at(s.owner.messages.size() - 2); };
+        s.Send("HELLO"); assert(glyphs() == "GLYPHS 1" && s.owner.messages.back() == "UNLOCKS 0 80");
+        s.owner.era = s.owner.stored = ERA_TBC; s.Send("HELLO"); assert(glyphs() == "GLYPHS 0");
+        s.owner.era = ERA_WOTLK; s.Send("HELLO"); assert(glyphs() == "GLYPHS 0");
+        s.owner.cls = 6; s.Send("HELLO"); assert(glyphs() == "GLYPHS 1");
+        s.owner.cls = 1; config.glyphGate = false; s.Send("HELLO"); assert(glyphs() == "GLYPHS 1");
+        config.glyphGate = true; s.Send("LEARN 1"); assert(glyphs() == "GLYPHS 0");
+        lfgMgr.options = 4; world.dualSpecLevel = 40; s.Send("HELLO"); assert(s.owner.messages.back() == "UNLOCKS 0 40");
+        lfgMgr.options = 5; s.Send("HELLO"); assert(s.owner.messages.back() == "UNLOCKS 1 40");
+        lfgMgr.options = 0; world.dualSpecLevel = 80;
     }
     {
         // BOOK answers with the subject's trainer book and sends no SYNC; riding only for the requester.
@@ -319,6 +334,10 @@ def production(module: Path, core: Path) -> tuple[str, str]:
     glyph_gate = function((module / 'src/EraGlyphGate.cpp').read_text(), 'bool Allowed(Player* player)')
     adapters = ADAPTERS.replace('// AUTHORED_IDS', authored).replace('// CLASSIFICATION', classification).replace(
         '// ERA_GATES', gates).replace('// BOOK_ENTRY', entry).replace('// GLYPH_GATE', glyph_gate)
+    lfg = (core / 'src/server/game/DungeonFinding/LFGMgr.h').read_text()
+    assert re.search(r'LFG_OPTION_ENABLE_DUNGEON_FINDER\s*=\s*0x01,', lfg)
+    lfg_source = (core / 'src/server/game/DungeonFinding/LFGMgr.cpp').read_text()
+    assert 'return m_options & option;' in function(lfg_source, 'bool LFGMgr::isOptionEnabled(uint32 option)')
     source = (module / 'src/EraTalentsComms.cpp').read_text()
     # Keep the complete hook and its helpers; only external include dependencies use adapters.
     source = re.sub(r'^\s*#include[^\n]*\n', '', source, flags=re.MULTILINE)
@@ -364,6 +383,8 @@ def main() -> None:
             ('exact-learn-payload', '&& !(iss >> extra)', ''),
             ('book-dispatch', 'else if (verb == "BOOK")', 'else if (false)'),
             ('glyph-state', 'EraGlyphGate::Allowed(p) ? "1" : "0"', '"1"'),
+            ('finder-state', 'sLFGMgr->isOptionEnabled(lfg::LFG_OPTION_ENABLE_DUNGEON_FINDER) ? "1 " : "0 "', '"1 "'),
+            ('dual-spec-level', 'std::to_string(sWorld->getIntConfig(CONFIG_MIN_DUALSPEC_LEVEL))', '"40"'),
         )
         for name, before, after in mutations:
             if before not in source:

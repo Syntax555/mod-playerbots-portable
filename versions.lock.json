@@ -164,7 +164,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "4a25787a92e42ebe3893c61cdf5cddf939a67765",
+      "revision": "b48633bed595d7517aaadabcaf9d180bb8565e9d",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -188,7 +188,8 @@
         "mod-era-talents-bot-book-native-helpers": "5d4b03d46ebf54118f33f1f01f89bdf4082327c1",
         "era-bot-spellbook-split-header": "d29b75c1b3615a1baa77c54a6cdc936023bec384",
         "mod-era-talents-dragonui-live-book": "0ec31c8f326577e401eb5beddbbb48262a1d4c19",
-        "mod-era-talents-bot-book-ui-scale": "4a25787a92e42ebe3893c61cdf5cddf939a67765"
+        "mod-era-talents-bot-book-ui-scale": "4a25787a92e42ebe3893c61cdf5cddf939a67765",
+        "mod-era-talents-realm-unlock-notices": "b48633bed595d7517aaadabcaf9d180bb8565e9d"
       }
     }
   ],
@@ -280,7 +281,7 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "0288f1b43903a31843c87631d496fc792f7c9248",
+      "revision": "b1d2b5f45481eb9d66f89dca1cf20c9e99c2f220",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
         "revision": "34bc67d4ca863d7bf6d8ff167b1e467bdd832f92"
@@ -290,7 +291,8 @@
       "toc": "DragonUI.toc",
       "forkChanges": {
         "dragonui-era-talents": "34c820d523f1f8f2972bfe417ced3825ddcb51e1",
-        "dragonui-control-ownership": "00e15e78ad005b53c342b226eddf859e9a33a6c3"
+        "dragonui-control-ownership": "00e15e78ad005b53c342b226eddf859e9a33a6c3",
+        "dragonui-level-up-features": "b1d2b5f45481eb9d66f89dca1cf20c9e99c2f220"
       }
     },
     {

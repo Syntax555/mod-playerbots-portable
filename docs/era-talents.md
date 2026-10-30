@@ -84,9 +84,9 @@ Before earned Wrath, the glyph tab/key and glyph use show a notice.
 
 DragonUI's spellbook and level-up notice use your own server trainer list,
 including earned-era, talent and class-quest requirements. The notice filters
-later-expansion instances and uses the realm's riding levels. Some fixed
-DragonUI notices retain native level thresholds; they do not establish server
-eligibility for Dungeon Finder, glyphs or dual specialization.
+later-expansion instances and uses the realm's riding levels. It announces the
+Dungeon Finder only when the realm enables it, dual specialization at the
+realm's `MinDualSpecLevel`, and glyphs and glyph slots only after earned Wrath.
 
 MultiBot bot spellbooks also open inside DragonUI's book with the bot's known
 spells and eligible trainer lessons. Their casts and skip-list changes retain

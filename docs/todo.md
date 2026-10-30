@@ -150,8 +150,6 @@ fixtures pass. Use native core/module functions before adding replacements.
   Eliminator and post-2.4.3 Recruit-a-Friend availability separately.
 - [ ] Decide a paid-training refund/unlearn policy for later-era class lessons
   learned before the trainer gate. The current gate blocks only new training.
-- [ ] Add a native DragonUI level-up data hook before hiding its hard-coded
-  Finder, dual-specialization and glyph-slot notices in earlier eras.
 
 ## Auction economy
 

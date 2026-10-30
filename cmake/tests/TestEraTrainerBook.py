@@ -657,7 +657,23 @@ ET.state.era = 0
 assert(unlocks(30, 30)[900030] == "spell" and unlocks(64, 64)[23920] == nil, "class spells come from the own book")
 assert(unlocks(20, 20)[33388] == nil and unlocks(40, 40)[33388] == "feature" and unlocks(60, 60)[33391] == "feature",
   "riding levels come from the realm's riding trainers")
-print("EraTalents trainer book: DragonUI level-up notice follows the era and the realm's riding")
+-- Feature notices keep DragonUI's native levels until the server answers, then follow its gates.
+local function feature(level, name) return unlocks(level, level)[name] == "feature" end
+assert(feature(15, "Dungeon Finder") and feature(15, "Glyphs") and feature(30, "Major Glyph Slot")
+  and feature(40, "Dual Talent Specialization"), "DragonUI's native features stay without a server reply")
+ET.OnAddonMsg("ERATAL", "GLYPHS 0")
+ET.OnAddonMsg("ERATAL", "UNLOCKS 0 80")
+assert(not feature(15, "Dungeon Finder"), "a disabled Dungeon Finder is not announced")
+assert(not feature(15, "Glyphs") and not feature(30, "Major Glyph Slot") and not feature(50, "Minor Glyph Slot")
+  and not feature(80, "Major Glyph Slot"), "glyphs are not announced while the glyph gate holds")
+assert(not feature(40, "Dual Talent Specialization") and feature(80, "Dual Talent Specialization"),
+  "dual specialization is announced at the realm's level")
+assert(feature(10, "Talent Points") and feature(10, "Battlegrounds"), "ungated features stay")
+ET.OnAddonMsg("ERATAL", "GLYPHS 1")
+ET.OnAddonMsg("ERATAL", "UNLOCKS 1 40")
+assert(feature(15, "Dungeon Finder") and feature(15, "Glyphs") and feature(80, "Major Glyph Slot")
+  and feature(40, "Dual Talent Specialization"), "enabled features keep their levels")
+print("EraTalents trainer book: DragonUI level-up notice follows the era, the realm's riding and its unlocks")
 
 -- Clique binds the player's native cards, without touching the separate bot-book renderer.
 local nativeSlots = assert(io.open(dragonDir .. "/modules/spellbook/book_slots.lua")):read("*a")
@@ -1285,6 +1301,12 @@ CLIENT_MUTATIONS = [
     ('request delay', 'DragonUIBook.lua', 'if waited < BOOK_DELAY then return end', ''),
     ('realm riding levels', 'DragonUIBook.lua', '    if riding and not riding.partial then return riding.records end\n', ''),
     ('earned era instances', 'DragonUIBook.lua', 'if expansion and expansion <= era then', 'if true then'),
+    ('feature rows ignored', 'DragonUIBook.lua', '  if key == "features" then return FeatureRows(base) end\n', ''),
+    ('realm Dungeon Finder switch', 'DragonUIBook.lua',
+     '\n        and not (feature == "dungeonFinder" and state.dungeonFinder == false)', ''),
+    ('glyph gate notices', 'DragonUIBook.lua', 'not (GLYPH_FEATURES[feature] and state.glyphsAllowed == false)', 'true'),
+    ('realm dual-spec level', 'DragonUIBook.lua', 'if feature == "dualSpec" and state.dualSpecLevel then', 'if false then'),
+    ('unlocks reply ignored', 'Comms.lua', '    ET.state.dungeonFinder = finder == "1"\n', ''),
     ('unknown instance expansion', 'DragonUIBook.lua', 'if expansion and expansion <= era then',
      'if (expansion or 0) <= era then'),
     ('heroic mode expansion', 'DragonUIBook.lua',
@@ -1375,11 +1397,13 @@ with tempfile.TemporaryDirectory(prefix='portable-era-trainer-book-') as tempora
             ('Clique window parent restored', 'book_clique.lua', '        config:SetParent(config._duiOwnParent)\n', ''),
             ('Clique released window hidden', 'book_clique.lua',
              '        config:Hide()\n        config:SetParent(config._duiOwnParent)',
-             '        config:SetParent(config._duiOwnParent)'))):
+             '        config:SetParent(config._duiOwnParent)'),
+            ('level-up features bypass integrations', 'levelupenhance.lua',
+             'ipairs(data.features or EMPTY)', 'ipairs(rawget(data, "features") or EMPTY)'))):
         dragon_copy = directory / f'dragon-catalog-{index}'
         for part in ('modules/spellbook', 'modules/levelupenhance'):
             shutil.copytree(DRAGONUI / part, dragon_copy / part)
-        path = dragon_copy / 'modules/spellbook' / filename
+        path = dragon_copy / ('modules/levelupenhance' if filename.startswith('levelup') else 'modules/spellbook') / filename
         text = path.read_text()
         if text.count(old) != 1:
             raise SystemExit(f'{label} catalog mutation was not applied')
