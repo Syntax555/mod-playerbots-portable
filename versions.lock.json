@@ -31,7 +31,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "fe193b6deb391d9ea573fd3f6cfa4fe7a3df0784",
+      "revision": "04f21b336f2e5f9885f0d50cf52c302ef2d31d73",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
