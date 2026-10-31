@@ -63,6 +63,7 @@ See the [update guide](updating.md) for manual installation and offline startup.
 | XP, drops, reputation and honor | Normal 1.0 rates |
 | Skills and professions | Trained and improved normally; two primary professions |
 | Talent points | Normal 1.0 rate; historical trees selected by earned era |
+| Hunter pet and warlock demon abilities | Wrath training; Vanilla taming and grimoire training are disabled |
 | New dual-spec purchases | Level 80 in individual mode |
 | Ordinary respecs | Paid trainer path and normal cost history |
 | Dungeon Finder | Disabled |

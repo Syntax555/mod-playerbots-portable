@@ -77,7 +77,7 @@ def check(sql):
         changed = snapshot(db)
         conflicts = {(entry, field) for entry, field in managed
                      if changed[entry][fields.index(field)] != era[entry][fields.index(field)]}
-        assert len(conflicts) == 534 and len({entry for entry, _ in conflicts}) == 532
+        assert len(conflicts) == 535 and len({entry for entry, _ in conflicts}) == 533
         expected = {entry: list(row) for entry, row in changed.items()}
         for entry, field in conflicts:
             column = fields.index(field)
@@ -135,7 +135,7 @@ module_files = [migration.name, 'tbc_creatures.sql', 'vanilla_creatures.sql']
 assert module_files == sorted(module_files)
 assert len([path for path in core.glob('modules/*/data/sql/**/*.sql') if path.name == migration.name]) == 1
 check(repair)
-print('Era modifiers: 532 creatures/534 fields, core-to-module upgrade, float storage, custom fields, '
+print('Era modifiers: 533 creatures/535 fields, core-to-module upgrade, float storage, custom fields, '
       'idempotence, missing rows, unrelated values and fresh installation passed')
 for name, mutant in (
     ('missing repair', ''),

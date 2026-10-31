@@ -59,6 +59,7 @@ active files and default policies.
 | Era experience | Quest values, battleground objective XP, XP bonuses, rest and quest money at the era cap follow each character's earned era. See [experience by era](changing-expansions.md#experience-by-era). |
 | Shared experience | Raid groups receive no party XP bonus on any map. Rest in inns/cities uses the same base rate online and offline, with the corresponding configured multipliers. Thrallmar's and Honor Hold's Favor apply their XP bonus once. |
 | Formation movement | Near-zero computed velocity falls back to the creature's native walking speed. |
+| Spell cancellation | Cancelling a game object's spell removes dynamic objects without a unit caster; a world trigger's objects are removed from its original caster. |
 
 SQL updates run through the ordinary database updater. Back up an established
 realm before applying them. Progression uses shared AzerothCore quest data with

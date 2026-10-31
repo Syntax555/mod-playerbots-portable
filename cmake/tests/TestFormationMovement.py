@@ -32,6 +32,8 @@ baseline = ((args.baseline / relative).read_text() if args.baseline else
             pinned_source('azerothcore-wotlk', relative))
 validator = function((core / 'src/server/game/Movement/Spline/MoveSpline.cpp').read_text(),
                      'bool MoveSplineInitArgs::Validate')
+# The core rejects a too-small velocity in its own branch and logs it at debug level.
+assert 'if (!(velocity > 0.01f))' in validator and 'small velocity' in validator
 
 fixture = r'''
 #include <algorithm>
@@ -133,6 +135,7 @@ struct Timer
 
 static std::string failedExpression;
 #define LOG_ERROR(category, format, expression, ...) failedExpression = expression
+#define LOG_DEBUG(category, format, ...) failedExpression = "velocity > 0.01f"
 
 namespace Movement
 {
