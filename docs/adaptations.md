@@ -53,7 +53,7 @@ active files and default policies.
 | Era creature modifiers | Targeted SQL restores Individual Progression's damage and armor modifiers for affected creatures only where fields still match the conflicting core update. Other fields and later custom values are preserved. |
 | World setup, Wetlands and Netherstorm | SQL ordering keeps Individual Progression's cleanup compatible with the core schema. Guarded updates restore Drijya's escort, Summoner Kanthin's formation and sheath state, the Wetlands Dark Iron scripts and a Netherstorm Mageslayer's spawn height, and remove duplicate Sunfury Magister spawns on established realms. |
 | Frostmane Hold, quest 287 | Removes prerequisite 420 only where that value remains; ordinary level/faction checks and quest 291's prerequisite remain. |
-| Era world content | Spawns, quests and vendor items follow the earned tier of their expansion or patch, from Vanilla's 1.6 to Wrath's 3.3.5; creatures that would attack unseen stay visible. See [world content by era and patch](changing-expansions.md#world-content-by-era-and-patch). |
+| Era world content | Spawns, quests and vendor items follow the earned tier of their expansion or patch, from Vanilla's 1.6 to Wrath's 3.3.5. Creatures that drop or are needed by earlier quests stay. See [world content by era and patch](changing-expansions.md#world-content-by-era-and-patch). |
 | Historical class quests | Personal race, level and earned-era gates select restored priest rank-1 rewards; later ranks use paid training. Native Wrath records remain. See [class quests](class-quests.md). |
 | Client cache | A stable database cache version refreshes client query data after relevant SQL migrations. Explicit overrides and higher administrator-managed versions remain. See [cache behavior](updating.md#server-data-and-the-client-cache). |
 | EraTalents spell groups | Targeted corrections remove invalid rank or incompatible aura entries while retaining native rank and aura stacking checks. |
@@ -63,6 +63,7 @@ active files and default policies.
 | Spell cancellation | Cancelling a game object's spell removes dynamic objects without a unit caster; a world trigger's objects are removed from its original caster. |
 | Inventory saving | An item saved outside the inventory save leaves its owner's update queue, so the next save stores or deletes it once. |
 | Aura states | Aura state changes walk a snapshot of owned auras, so effects that add or remove auras cannot overrun the walk. |
+| Hidden creatures | A creature or gameobject that its scripts or visibility conditions hide from a player is absent for that player and the player's pets, and it does not perceive them either: it neither shows, aggroes nor targets them. |
 | Bot aura updates | Players without an open connection, mostly bots, update their owned auras every 100 ms with the accumulated time. Durations and periodic totals are unchanged; connected players update every tick. |
 
 SQL updates run through the ordinary database updater. Back up an established

@@ -18,8 +18,8 @@ Spawns on the old-world continents, and a later tier's in Outland or Northrend, 
 character sees before their tier get visibility conditions, which keep AI and scripts.
 Quests reachable before their tier and items of vendors visible earlier get availability
 conditions on the rewarded milestone marker. Spawns are left alone when a module added or
-changed them, an awareness script decides, they are invisible helpers, spirit healers or
-creatures that would attack unseen, they keep collision or traps, earlier quests use them,
+changed them, an awareness script decides, they are invisible helpers or spirit healers,
+they keep collision or traps, earlier quests use them or their quest-item drops,
 or the earlier database places the same name there; quests and items the earlier database
 knows by the same name are left alone too, and Vanilla patches leave Classic battlegrounds,
 holidays and Individual Progression's own placements alone. Write the output into the
@@ -53,9 +53,6 @@ WRATH_MAPS = {571, 574, 575, 576, 578, 595, 599, 600, 601, 602, 603, 604, 607, 6
 # Gameobject types without collision, traps or encounter mechanics.
 GAMEOBJECT_TYPES = {2, 3, 4, 5, 7, 8, 9, 10, 19, 22, 23, 25, 32, 34}
 HELPER = re.compile(r'Trigger|Bunny|Credit|Marker|\[DND\]|\[PH\]|Invisible|Dummy')
-# Faction capitals (map, x range, y range), Stormwind with its harbor: enemy players meet guards there anyway.
-CAPITALS = ((0, -9150, -8000, 200, 1550), (0, -5150, -4550, -1350, -700), (0, 1450, 1950, 0, 600),
-            (1, 1250, 2250, -4950, -3950), (1, -1500, -900, -200, 500), (1, 9450, 10250, 1750, 2750))
 # IP stage at which each Vanilla patch's content opens, by VMaNGOS patch (0 = 1.2 ... 10 = 1.12): with the raid
 # or event of the patch. 1.6 Blackwing Lair; 1.7 Zul'Gurub, 1.8 the Dragons of Nightmare and 1.10's second dungeon
 # set after Nefarian; 1.9 the Ahn'Qiraj gates; 1.11 and 1.12 Naxxramas and the Scourge.
@@ -162,10 +159,6 @@ def map_mask(map_id):
     return sum(1 << stage for stage in STAGES if stage >= first)
 
 
-def in_capital(map_id, x, y):
-    return any(map_id == m and x0 <= x <= x1 and y0 <= y <= y1 for m, x0, x1, y0, y1 in CAPITALS)
-
-
 def stage_name(stage):
     return 'Vanilla' if stage < 8 else 'TBC' if stage < 13 else 'Wrath'
 
@@ -259,8 +252,6 @@ def generate(q, args):
 
     visibility_gated = {(int(g), int(e)) for g, e in q(
         f'SELECT SourceGroup, SourceEntry FROM {world}.conditions WHERE SourceTypeOrReferenceId = 30 AND {OWN}')}
-    hostile = {int(f) for (f,) in q(f'SELECT ID FROM {world}.factiontemplate_dbc WHERE EnemyGroup & 1')}
-    one_side = {int(f) for (f,) in q(f'SELECT ID FROM {world}.factiontemplate_dbc WHERE EnemyGroup & 6')}
     core_spawns = {kind: {(int(g), int(e)) for g, e in q(f'SELECT guid, id FROM {args.core_world}.{table}')}
                    for kind, table in (('creature', 'creature'), ('gameobject', 'gameobject'))}
     earlier_spawns = {}
@@ -293,6 +284,21 @@ def generate(q, args):
         for value in map(int, required):
             if value:
                 objective[('creature' if value > 0 else 'gameobject', abs(value))].add(int(quest))
+    # Quests that need a quest item a creature or chest drops use that creature or chest too.
+    quest_items = {int(i) for (i,) in q(f'SELECT entry FROM {world}.item_template WHERE class = 12 OR bonding = 4')}
+    needs_item = defaultdict(set)
+    for quest, *items in q(f'SELECT ID, RequiredItemId1, RequiredItemId2, RequiredItemId3, RequiredItemId4, RequiredItemId5, '
+                           f'RequiredItemId6, ItemDrop1, ItemDrop2, ItemDrop3, ItemDrop4 FROM {world}.quest_template'):
+        for item in map(int, items):
+            if item in quest_items:
+                needs_item[item].add(int(quest))
+    drops = (('creature', (f'SELECT t.entry, l.Item FROM {world}.creature_template t JOIN {world}.creature_loot_template l '
+                           f'ON l.Entry = t.lootid WHERE t.lootid > 0 AND l.Reference = 0')),
+             ('gameobject', (f'SELECT t.entry, l.Item FROM {world}.gameobject_template t JOIN {world}.gameobject_loot_template l '
+                             f'ON l.Entry = t.Data1 WHERE t.type = 3 AND t.Data1 > 0 AND l.Reference = 0')))
+    for kind, sql in drops:
+        for entry, item in q(sql):
+            objective[(kind, int(entry))] |= needs_item.get(int(item), set())
     disabled = {int(e) for (e,) in q(f'SELECT entry FROM {world}.disables WHERE sourceType = 1')}
     factions = ','.join(map(str, sorted(BATTLEGROUND_FACTIONS)))
     battleground_items = {int(i) for (i,) in q(f'SELECT entry FROM {world}.item_template WHERE RequiredReputationFaction IN ({factions})')}
@@ -305,9 +311,9 @@ def generate(q, args):
     scripted = {'creature': set(), 'gameobject': set()}
     spawns = []
     for kind, group in (('creature', 0), ('gameobject', 1)):
-        template = 't.faction, t.flags_extra, t.npcflag, 0, t.unit_flags' if kind == 'creature' else '0, 0, 0, t.type, 0'
+        template = 't.flags_extra, t.npcflag, 0' if kind == 'creature' else '0, 0, t.type'
         events = {int(g) for (g,) in q(f'SELECT DISTINCT guid FROM {world}.game_event_{kind}')}
-        for guid, entry, map_id, phase, script, name, x, y, faction, extra, npcflag, kind_type, unit_flags in q(
+        for guid, entry, map_id, phase, script, name, x, y, extra, npcflag, kind_type in q(
                 f"""SELECT s.guid, s.id, s.map, s.phaseMask, COALESCE(NULLIF(s.ScriptName, ''), t.ScriptName), t.name,
                     s.position_x, s.position_y, {template}
                     FROM {world}.{kind} s JOIN {world}.{kind}_template t ON t.entry = s.id"""):
@@ -319,8 +325,7 @@ def generate(q, args):
             rule = rules.get(script)
             mask = (map_mask(map_id) if int(phase) & 1 else 0) & (ALL if rule is None else rule)
             seen_before[kind][entry] |= mask
-            spawns.append((kind, group, guid, entry, map_id, script, name, x, y, int(faction), int(extra), int(npcflag),
-                           int(kind_type), int(unit_flags), mask))
+            spawns.append((kind, group, guid, entry, map_id, script, name, x, y, int(extra), int(npcflag), int(kind_type), mask))
 
     def first(mask):
         return next((stage for stage in STAGES if mask >> stage & 1), 0)
@@ -430,7 +435,7 @@ def generate(q, args):
             opens[quest] = max(first(reachable[quest]) if reachable[quest] else quest_need(quest), audiences.get(quest, 0))
     conditions += [(19, 0, quest, 0, 66000 + need) for quest, need in sorted(candidates.items())]
 
-    for kind, group, guid, entry, map_id, script, name, x, y, faction, extra, npcflag, kind_type, unit_flags, mask in spawns:
+    for kind, group, guid, entry, map_id, script, name, x, y, extra, npcflag, kind_type, mask in spawns:
         era = (creature_era if kind == 'creature' else gameobject_era).get(entry)
         need = max(REQUIRED.get(era, 0), phase_spawns.get((kind, entry, guid), 0), phase_spawns.get((kind, entry, 0), 0),
                    phase_spawns.get((kind, 0, guid), 0), vanilla_stage(kind, entry, map_id, x, y) if era == 0 else 0)
@@ -452,9 +457,6 @@ def generate(q, args):
                 reason = 'graveyard', 'spirit healer or guide'
             elif need < 8 and kind == 'creature' and (npcflag & BATTLEMASTER_FLAG or entry in battleground_vendors):
                 reason = 'battleground', 'battlemaster or battleground reputation vendor'
-            elif (kind == 'creature' and not extra & 2 and not unit_flags & 0x100
-                  and (faction in hostile or (faction in one_side and not npcflag and not in_capital(map_id, x, y)))):
-                reason = 'hostile', 'would attack unseen'
             elif kind == 'gameobject' and kind_type not in GAMEOBJECT_TYPES:
                 reason = 'mechanics', f'type {kind_type} keeps collision or mechanics'
             elif earlier:
@@ -521,13 +523,15 @@ HEADER = '''-- World content of later expansions and patches stays out of reach 
 -- 2.1 with tier 10, 2.3 and 2.4 with 12, 3.1 with 14, 3.2 with 15, 3.3 with 16, 3.3.5 with 17.
 --
 -- Spawns on the old-world continents, and a later tier's in Outland or Northrend, get
--- visibility conditions, which keep their AI and scripts. Quests and vendor items
--- reachable before their tier get availability conditions on every existing alternative.
--- Left alone: spawns of modules and awareness scripts, invisible helpers, spirit healers,
--- creatures that would attack unseen, objects with collision or mechanics, objects of
--- earlier quests, entries the earlier database places at the same spot under another
--- number, quests or items the earlier database knows by the same name, and for Vanilla
--- patches Classic battlegrounds, holidays and Individual Progression's own placements.
+-- visibility conditions, which keep their AI and scripts; a hidden creature does not
+-- perceive the character either, so it neither shows nor engages. Quests and vendor
+-- items reachable before their tier get availability conditions on every existing
+-- alternative. Left alone: spawns of modules and awareness scripts, invisible helpers,
+-- spirit healers, objects with collision or mechanics, creatures and objects that
+-- earlier quests use or that drop their quest items, entries the earlier database
+-- places at the same spot under another number, quests or items the earlier database
+-- knows by the same name, and for Vanilla patches Classic battlegrounds, holidays and
+-- Individual Progression's own placements.
 DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` IN (19, 23, 30) AND `Comment` LIKE 'Era content: %';
 '''
 

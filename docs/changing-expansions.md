@@ -144,21 +144,23 @@ with the tier of that patch's raid.
 | 3.0 | 13 | Inscription, barbers, Northrend zeppelin towers, 3.x mailboxes |
 | 3.1–3.3.5 | 14–17 | Ulduar, the Argent Crusade's Coliseum, Icecrown and the Ruby Sanctum |
 
-Spawns use native visibility conditions, which keep their scripts; quests and vendor
-items use availability conditions. Learned professions, accepted quests and owned
-items remain. Classic battlegrounds open by level, so their quests, battlemasters and
-reputation vendors stay available. Individual Progression's own awareness scripts and
-markers keep deciding the content they already place, such as the Ahn'Qiraj
-preparation at tier 3.
+Spawns use native visibility conditions, which keep their scripts; a hidden creature
+does not perceive the character or its pets either, so a later tier's hostile
+creatures neither show nor attack. Quests and vendor items use availability
+conditions. Learned professions, accepted quests and owned items remain. Classic
+battlegrounds open by level, so their quests, battlemasters and reputation vendors
+stay available. Individual Progression's own awareness scripts and markers keep
+deciding the content they already place, such as the Ahn'Qiraj preparation at tier
+3, and no quest opens later than a milestone quest that builds on it.
 
 The repository's `scripts/generate_era_world_content.py` derives the update from the
-pinned CMaNGOS Classic, TBC and Wrath databases (an entry missing from Classic arrived
-with TBC, one missing from TBC too with Wrath), VMaNGOS's patch records for Vanilla and
-ChromieCraft's progression brackets for TBC and Wrath phases. It leaves alone creatures
-that would attack unseen, such as 2.3 Dustwallow's Grimtotem and Defias raiders, which
-stay visible; spirit healers; spawns of other modules; invisible helpers; objects with
-collision or traps; objects of earlier quests; and entries the earlier database knows
-under another number. Holiday content follows the event calendar.
+pinned CMaNGOS Classic, TBC and Wrath databases (an entry missing from Classic
+arrived with TBC, one missing from TBC too with Wrath), VMaNGOS's patch records for
+Vanilla and ChromieCraft's progression brackets for TBC and Wrath phases. It leaves
+alone spirit healers; spawns of other modules; invisible helpers; objects with
+collision or traps; creatures and objects that earlier quests use or that drop their
+quest items; and entries the earlier database knows under another number. Holiday
+content follows the event calendar.
 
 ## Battleground access and rules
 
