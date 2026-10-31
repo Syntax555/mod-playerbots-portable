@@ -1,15 +1,15 @@
 """Replay the era world-content gates on the pinned world and check historical anchors.
 
 Individual Progression hides spawns, quests and vendor items of a later expansion or patch
-until the character has rewarded the milestone marker of its tier. The update replays twice
-on scoped copies of the pinned base world; conditions are then evaluated the way the native
-visibility, quest and vendor checks read them. Anchors are Wrath's Inscription trainers in
-Azeroth and Outland, barbers and Light Parchment, TBC's 2.3 Dustwallow Marsh, guild vaults
-and jewelcrafting designs, Blackwing Lair's, Ahn'Qiraj's and Naxxramas's Vanilla quests,
-the 2.1 Netherwing and the 3.2 Crusader, and Vanilla content and Classic battlegrounds that
-stay put. Hostile creatures are gated too:
-TestMutualVisibility keeps a hidden creature from perceiving the character. Mutations weaken or drop
-single gates.
+until the character has rewarded the milestone marker of its tier. The update replays
+twice on scoped copies of the pinned base world; conditions are then evaluated the way the
+native visibility, quest and vendor checks read them. Anchors are Wrath's Inscription
+trainers in Azeroth and Outland, barbers and Light Parchment, TBC's 2.3 Dustwallow Marsh,
+guild vaults and jewelcrafting designs, Blackwing Lair's, Ahn'Qiraj's and Naxxramas's
+Vanilla quests, the 2.1 Netherwing and the 3.2 Crusader, and Vanilla content and Classic
+battlegrounds that stay put. Hostile creatures are gated too: TestMutualVisibility keeps a
+hidden creature from perceiving the character. Vanilla quests returned to their givers end
+with TBC where they left. Mutations weaken or drop single gates.
 """
 
 import argparse
@@ -31,7 +31,14 @@ source_argument(parser, 'ip')
 args = parser.parse_args()
 core = args.core
 ip = args.ip or core / 'modules/mod-individual-progression'
-update = (ip / 'data/sql/world/updates/zz_2026_10_31_01_era_world_content.sql').read_text()
+updates = ip / 'data/sql/world/updates'
+update_path, restored_path = (updates / 'zz_2026_10_31_01_era_world_content.sql',
+                              updates / '2026_10_31_02_restored_vanilla_quest_givers.sql')
+update = update_path.read_text()
+# Vanilla quests returned to their givers, replayed before the era gates as the native updater orders them by name.
+restored = restored_path.read_text()
+assert restored_path.name < update_path.name
+RESTORED = {2881: 7884, 8411: 6176, 8579: 15503, 8830: 15731, 8831: 15731}
 TBC, WRATH = 66008, 66013
 
 # Native contracts: spawn-level visibility conditions take precedence over entry-level
@@ -85,7 +92,8 @@ def rows(table, keys):
 # Scoped copies of the pinned base world: the spawns, quests and vendor lists the update names.
 creatures = [(int(r['guid']), int(r['id1']), int(r['map'])) for r in rows('creature', numbers)]
 gameobjects = [(int(r['guid']), int(r['id']), int(r['map'])) for r in rows('gameobject', numbers)]
-quests = [(int(r['ID']),) for r in rows('quest_template', numbers)]
+quests = [(int(r['ID']),) for r in rows('quest_template', numbers | set(RESTORED))]
+addons = [(int(r['ID']), int(r['PrevQuestID'])) for r in rows('quest_template_addon', set(RESTORED) | {2880})]
 vendors = [(int(r['entry']), int(r['item'])) for r in rows('npc_vendor', numbers)]
 existing = [tuple(r.values()) for r in rows('conditions', {19, 23, 30})]
 columns = next(iter(rows('conditions', {19}))).keys()
@@ -114,8 +122,12 @@ for milestone, stage in milestones.items():
 assert len(needed) > 20, 'the Scepter of the Shifting Sands chain precedes Bang a Gong!'
 
 
-def replay(source):
+def replay(source, before=restored):
     db = sqlite3.connect(':memory:')
+    for table in ('creature_queststarter', 'creature_questender'):
+        db.execute(f'CREATE TABLE `{table}` (`id` INTEGER, `quest` INTEGER, PRIMARY KEY (`id`, `quest`))')
+    db.execute('CREATE TABLE `quest_template_addon` (`ID` INTEGER PRIMARY KEY, `PrevQuestID` INTEGER)')
+    db.executemany('INSERT INTO `quest_template_addon` VALUES (?,?)', addons)
     db.execute('CREATE TABLE `creature` (`guid` INTEGER PRIMARY KEY, `id` INTEGER, `map` INTEGER)')
     db.execute('CREATE TABLE `gameobject` (`guid` INTEGER PRIMARY KEY, `id` INTEGER, `map` INTEGER)')
     db.execute('CREATE TABLE `quest_template` (`ID` INTEGER PRIMARY KEY)')
@@ -129,10 +141,13 @@ def replay(source):
     db.executemany('INSERT INTO `quest_template` VALUES (?)', quests)
     db.executemany('INSERT INTO `npc_vendor` VALUES (?,?)', vendors)
     db.executemany('INSERT INTO `conditions` VALUES (' + ','.join('?' for _ in columns) + ')', existing)
-    script = source.replace('INSERT IGNORE', 'INSERT OR IGNORE')
+    script = (before + source).replace('INSERT IGNORE', 'INSERT OR IGNORE')
     db.executescript(script)
     first = sorted(db.execute('SELECT * FROM `conditions`'))
     db.executescript(script)
+    for table in ('creature_queststarter', 'creature_questender'):
+        assert sorted(db.execute(f'SELECT quest, id FROM `{table}`')) == sorted(RESTORED.items()), table
+    assert db.execute('SELECT PrevQuestID FROM `quest_template_addon` WHERE ID = 2881').fetchone() == (2880,)
     assert sorted(db.execute('SELECT * FROM `conditions`')) == first, 'the update is not idempotent'
     return db
 
@@ -156,8 +171,8 @@ def spawn(table, entry):
     return next(guid for guid, spawn_entry, _ in data if spawn_entry == entry)
 
 
-def check(source):
-    db = replay(source)
+def check(source, before=restored):
+    db = replay(source, before)
     gated = db.execute("SELECT SourceTypeOrReferenceId, SourceGroup, SourceEntry, SourceId FROM `conditions` "
                        "WHERE Comment LIKE 'Era content: %'").fetchall()
     # Spawn gates leave AI alone: no invisible helpers and no objects with collision or traps.
@@ -192,6 +207,9 @@ def check(source):
         ("Craftsman's Writ - Dense Weightstone", 19, 0, 9178, 0, 66006),
         ('Blood Oath of the Netherwing', 19, 0, 11012, 0, 66010),
         ('Lord Jaraxxus Must Die!', 19, 0, 24589, 0, 66015),
+        # Restored Vanilla quests open with their patch: Mastering the Elements in 1.8, Mortal Champions in 1.9.
+        ('Mastering the Elements', 19, 0, 8411, 0, 66003),
+        ('Mortal Champions', 19, 0, 8579, 0, 66004),
     )
     for name, source_type, group, entry, source_id, marker in expectations:
         stage = marker - 66000
@@ -205,6 +223,9 @@ def check(source):
         assert allowed(db, source_type, group, entry, source_id, 0), name
         assert not db.execute('SELECT 1 FROM `conditions` WHERE SourceTypeOrReferenceId=? AND SourceEntry=? '
                               "AND Comment LIKE 'Era content: %'", (source_type, entry)).fetchone(), name
+    # The restored quests that left with TBC end there.
+    for quest in (2881, 8411, 8579):
+        assert allowed(db, 19, 0, quest, 0, 7) and not allowed(db, 19, 0, quest, 0, 8), ('restored quest outlasts Vanilla', quest)
     # No gate holds a milestone chain back past the tier that needs it.
     for quest, stage in needed.items():
         late = db.execute("SELECT MAX(ConditionValue1) FROM `conditions` WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? "
@@ -237,10 +258,13 @@ mutations = (
     ('gate drops its marker', update.replace(f"0, 8, 0, {TBC}, 0, 0, 0, 0, 0, '', 'Era content: TBC gameobject'",
                                              f"0, 8, 0, {TBC}, 0, 0, 1, 0, 0, '', 'Era content: TBC gameobject'")),
 )
-for name, source in mutations:
-    assert source != update, name
+mutations += (
+    ('restored quests outlast Vanilla', update, restored.replace("8, 0, 66008, 0, 0, 1, 0, 0, '', 'Restored", "8, 0, 66008, 0, 0, 0, 0, 0, '', 'Restored")),
+)
+for name, source, *before in mutations:
+    assert source != update or before, name
     try:
-        check(source)
+        check(source, *before)
     except AssertionError:
         print(f'Era world content mutation rejected: {name}')
     else:

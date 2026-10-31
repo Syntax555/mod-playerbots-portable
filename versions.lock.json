@@ -65,7 +65,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "ae756bd86565b56afe3234c46246f0edf8591ca8",
+      "revision": "f969f3ae1ed750d50cd017077c3fb9701d4288ee",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
@@ -86,7 +86,8 @@
         "mod-individual-progression-expansion-starts": "16bdc770174f9ca619619a9a25ac212c077b3afa",
         "mod-individual-progression-era-world-content": "336f71d14f9a5a2938a6a3a74042791a2d3f5448",
         "mod-individual-progression-era-patch-phases": "72e939bb11ea7cbc79fb54275f0a72fcc4329e0b",
-        "mod-individual-progression-era-hostile-gates": "ae756bd86565b56afe3234c46246f0edf8591ca8"
+        "mod-individual-progression-era-hostile-gates": "ae756bd86565b56afe3234c46246f0edf8591ca8",
+        "mod-individual-progression-restored-vanilla-quests": "f969f3ae1ed750d50cd017077c3fb9701d4288ee"
       }
     },
     {

@@ -137,8 +137,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   Realm credit and the Spirit of Zandalar earned tier.
 - [ ] Verify era XP: quest values, battleground goals, rest/heirloom/holiday
   modifiers, era-cap money and Thrallmar/Honor Hold Favor without double bonuses.
-- [ ] Restore Vanilla quests the Classic database offers and the realm lacks, with
-  their givers, loot and scripts, behind their patch's tier.
+- [ ] Review the Vanilla quests the Classic database offers that the realm disables
+  or lacks entirely, beyond those that regained their givers; holiday and
+  script-started quests keep their native triggers.
 - [ ] In-game checks of the era gates at tiers 0, 3, 4, 6, 8, 10 and 13: Cenarion Hold,
   Silithus, Yojamba Isle, Shadowmoon's Netherwing, Shattrath and Dalaran; phased
   Undercity and Silithus givers; renumbered quests left visible. Hidden hostile
