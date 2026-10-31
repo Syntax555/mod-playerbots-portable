@@ -61,7 +61,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "495b6fe3373d1d9352074570106b97c43a6e2521",
+      "revision": "9d75507a68d7dbeb49aa895d8c4bfc437fd89448",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
@@ -76,8 +76,6 @@
         "mod-individual-progression-creature-era-modifiers": "6f395d0817a919b0458d69107607ac60b905e0e4",
         "mod-individual-progression-era-experience": "370508a6ceae22857c43021280bc0184d27a2e9c",
         "mod-individual-progression-client-cache": "a13ebd35f9103885de1bd6ea8f7b2d9d37d264f3",
-        "mod-individual-progression-submerge-binding": "55b020073ccb59353a662594b9ee4dcee46a1870",
-        "mod-individual-progression-startup-data": "c5acc6d985d5423c97dc079540446c9a0ac8f497",
         "mod-individual-progression-cleanup-order": "0d3414ac63e0e339cf2907a4a96934f42dc33aee",
         "mod-individual-progression-netherstorm-updates": "3ab83ec445111a983dece14d473c4ce018f8f683",
         "mod-individual-progression-wetlands-netherstorm-core-updates": "b58a459a289f46d61e7e27fb98d545b631ce071c"

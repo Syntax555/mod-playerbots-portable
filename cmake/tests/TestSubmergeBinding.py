@@ -40,8 +40,6 @@ def statements(path):
                       r'`spell_script_names`[^;]*;', text)
 
 
-db = sqlite3.connect(':memory:')
-db.execute('CREATE TABLE spell_script_names (spell_id INTEGER, ScriptName TEXT, PRIMARY KEY(spell_id, ScriptName))')
 paths = [args.core / 'data/sql/base/db_world/spell_script_names.sql']
 paths += sorted((args.core / 'data/sql/updates/db_world').glob('*.sql'))
 module_paths = [path for path in (args.core / 'modules').glob('*/data/sql/world/**/*.sql')
@@ -49,36 +47,33 @@ module_paths = [path for path in (args.core / 'modules').glob('*/data/sql/world/
 module_paths += list((module / 'data/sql/world').rglob('*.sql'))
 # The native updater runs core updates first, then modules ordered by filename.
 paths += sorted(module_paths, key=lambda path: path.name)
-for path in paths:
-    for statement in statements(path):
-        db.executescript(statement.replace('INSERT IGNORE', 'INSERT OR IGNORE'))
+spells = module / 'data/sql/world/base/naxx40_spells.sql'
+assert spells in paths
 
 
-def bindings():
+def bindings(replace=None):
+    """Spell bindings 26234 and 28819 after replaying the delivered SQL, optionally with one base text replaced."""
+    db = sqlite3.connect(':memory:')
+    db.execute('CREATE TABLE spell_script_names (spell_id INTEGER, ScriptName TEXT, PRIMARY KEY(spell_id, ScriptName))')
+    replaced = 0
+    for path in paths:
+        for statement in statements(path):
+            if replace and path == spells and replace[0] in statement:
+                statement = statement.replace(*replace)
+                replaced += 1
+            db.executescript(statement.replace('INSERT IGNORE', 'INSERT OR IGNORE'))
+    assert replaced == bool(replace)
     return db.execute('SELECT spell_id, ScriptName FROM spell_script_names '
                       'WHERE spell_id IN (26234, 28819) ORDER BY spell_id, ScriptName').fetchall()
 
 
+# Established realms reapply the changed base file, so it alone must bind the native script.
 expected = [(26234, 'spell_submerge_visual_aura'), (28819, 'spell_gen_submerge_visual')]
 assert bindings() == expected, bindings()
-sql = module / 'data/sql/world/updates/naxx40_submerge_binding.sql'
-upgrade = '\n'.join(statements(sql)).replace('INSERT IGNORE', 'INSERT OR IGNORE')
-db.execute("INSERT INTO spell_script_names VALUES (2147483647,'custom_unrelated')")
-before = db.execute('SELECT * FROM spell_script_names WHERE spell_id<>28819 ORDER BY spell_id, ScriptName').fetchall()
-native, legacy, customized = 'spell_gen_submerge_visual', 'spell_submerge_visual_aura', 'custom_submerge'
-for previous, following in (([legacy], [native]), ([legacy, native], [native]),
-                            ([legacy, customized], [native, customized]),
-                            ([native], [native]), ([customized], [customized]), ([], [])):
-    db.execute('DELETE FROM spell_script_names WHERE spell_id=28819')
-    db.executemany('INSERT INTO spell_script_names VALUES (28819,?)', [(name,) for name in previous])
-    for _ in range(2):
-        db.executescript(upgrade)
-        assert db.execute('SELECT ScriptName FROM spell_script_names WHERE spell_id=28819 ORDER BY ScriptName').fetchall() == [(name,) for name in sorted(following)]
-        assert db.execute('SELECT * FROM spell_script_names WHERE spell_id<>28819 ORDER BY spell_id, ScriptName').fetchall() == before
-db.execute('INSERT INTO spell_script_names VALUES (28819,?)', (legacy,))
-assert bindings() != expected, 'omitting the migration did not reproduce the missing native script'
-db.executescript(upgrade)
-assert bindings() == expected
+native = "(28819, 'spell_gen_submerge_visual')"
+assert native in spells.read_text()
+assert bindings((native, "(28819, 'spell_submerge_visual_aura')")) != expected, \
+    'reverting the base binding did not reproduce the missing native script'
 
 fixture = r'''
 #include <cassert>
@@ -144,4 +139,4 @@ with tempfile.TemporaryDirectory(prefix='submerge-binding-') as directory:
     subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
                     '-fno-pie', '-no-pie', str(source), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
-print('Native submerge binding, idempotent upgrade, reverted-binding mutation and both aura transitions: passed')
+print('Native submerge binding from the module base, reverted-binding mutation and both aura transitions: passed')

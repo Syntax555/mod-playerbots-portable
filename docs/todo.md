@@ -46,9 +46,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   preserved custom configuration/characters, and `RaidClear.*` migration into
   `playerbots.conf` without overwriting explicit destination values.
 - [ ] Validate guarded world-data repairs in game: priest rank chains, AQ event
-  dragon menus, retired Mirelow pool, Submerge Visual, Drijya's escort (10310),
-  Summoner Kanthin's patrol and duplicate Sunfury Magisters. MySQL replay and
-  source fixtures do not establish running-realm behavior.
+  dragon menus, Drijya's escort (10310), Summoner Kanthin's patrol and
+  duplicate Sunfury Magisters. MySQL replay and source fixtures do not
+  establish running-realm behavior.
 
 ### Bots, talents and client interfaces
 
@@ -154,9 +154,6 @@ fixtures pass. Use native core/module functions before adding replacements.
   `IndividualProgression.WarlockDemonTrainers` before enabling them: existing
   pets lose untaught abilities, and bots need ordinary taming and grimoire
   purchases.
-- [ ] Remove the superseded Submerge binding and Mirelow pool repairs with
-  their fixture cases; Grimfeather's `naxx40_spells.sql` and
-  `zone_wetlands.sql` now make both changes.
 - [ ] Retain the rated-arena team-era filter while level-70 teams of different
   earned eras can share a native bracket after a TBC-to-Wrath transition.
 - [ ] Resolve historically uncertain XP rules before implementation: Vanilla
