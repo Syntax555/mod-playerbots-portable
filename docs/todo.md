@@ -139,8 +139,11 @@ fixtures pass. Use native core/module functions before adding replacements.
   modifiers, era-cap money and Thrallmar/Honor Hold Favor without double bonuses.
 - [ ] Check the [restored quests](changing-expansions.md#world-content-by-era-and-patch)
   in game: each bracket's Warsong Gulch and Arathi Basin turn-in with earned marks,
-  gone at tier 8; Heeding the Call from Kal and Gennia Runetotem; Guard Didier and his
-  writ from tier 6; Seer Nakha's A Strange Vision.
+  gone at tier 8; Guard Didier and his writ from tier 6; Seer Nakha's A Strange Vision.
+- [ ] Check the [quest-taught lessons](class-quests.md#quest-taught-lessons) in game for
+  players and bots: Intercept and Sense Undead missing from Vanilla and TBC trainers until
+  The Affray, The Tome of Valor or Return to Silvermoon, then trainable in later ranks;
+  The Affray's and The Second Trial's events; the matching Zygor steps.
 - [ ] In-game checks of the era gates at tiers 0, 3, 4, 6, 8, 10 and 13: Cenarion Hold,
   Silithus, Yojamba Isle, Shadowmoon's Netherwing, Shattrath and Dalaran; phased
   Undercity and Silithus givers; renumbered quests left visible. Hidden hostile

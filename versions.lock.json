@@ -65,7 +65,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "82dd543136be13fe2c9918c366c83a8476d3861d",
+      "revision": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
@@ -89,7 +89,8 @@
         "mod-individual-progression-era-hostile-gates": "ae756bd86565b56afe3234c46246f0edf8591ca8",
         "mod-individual-progression-restored-vanilla-quests": "f969f3ae1ed750d50cd017077c3fb9701d4288ee",
         "mod-individual-progression-era-awareness-bounds": "ac003b9427e44b23e103f69f0d52d067f0fe8217",
-        "mod-individual-progression-restored-era-quests": "82dd543136be13fe2c9918c366c83a8476d3861d"
+        "mod-individual-progression-restored-era-quests": "82dd543136be13fe2c9918c366c83a8476d3861d",
+        "mod-individual-progression-single-heeding-the-call": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4"
       }
     },
     {
@@ -191,7 +192,7 @@
     {
       "name": "mod-era-talents",
       "url": "https://github.com/Syntax555/azerothcore-mod-era-talents.git",
-      "revision": "98127f1182569c434ca13a932b8d3a3faf3dcdbb",
+      "revision": "a09ebf111daf26d978f120772f5eaa8f666844aa",
       "upstream": {
         "url": "https://github.com/lathcf/azerothcore-mod-era-talents.git",
         "revision": "0dac15c4a71d4393f4a2dd8553c460a18db3fbc8"
@@ -220,7 +221,8 @@
         "mod-era-talents-shared-bot-book": "144dbcab2f6e25a3d5bec29e0428db80190bdda4",
         "mod-era-talents-shared-book-controls": "d511f8a76cf170d3929f3e3225330f7b2dae34ce",
         "mod-era-talents-arcane-focus-mask": "68a1be08b5fa4786efb43a4cb335923219647e32",
-        "mod-era-talents-ignite-combat": "98127f1182569c434ca13a932b8d3a3faf3dcdbb"
+        "mod-era-talents-ignite-combat": "98127f1182569c434ca13a932b8d3a3faf3dcdbb",
+        "mod-era-talents-quest-taught-lessons": "a09ebf111daf26d978f120772f5eaa8f666844aa"
       }
     }
   ],
@@ -363,7 +365,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "70c7a44db664902126e901e8a6edb94849e7f9e0",
+      "revision": "409d8564c49a029cb4252b97a8558dbe07b914fb",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
@@ -377,7 +379,8 @@
         "zygor-druid-gear-profiles": "258ee399fffc38307b760faf899e1a3bef6a1dff",
         "zygor-inspected-altbot-gearfinder": "1633821cf1cf4221326cb2e42c905da676054faa",
         "zygor-gearfinder-equipment-launchers": "de9461efb1b4720dc36c2fc9daa6e21e485414c3",
-        "zygor-paired-slot-upgrades": "70c7a44db664902126e901e8a6edb94849e7f9e0"
+        "zygor-paired-slot-upgrades": "70c7a44db664902126e901e8a6edb94849e7f9e0",
+        "zygor-class-lesson-guides": "409d8564c49a029cb4252b97a8558dbe07b914fb"
       }
     }
   ]

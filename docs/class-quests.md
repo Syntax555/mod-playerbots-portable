@@ -59,6 +59,20 @@ Logging in can restore a missing rank-1 root when the character has already
 earned the matching quest reward. It does not complete missing quests, grant
 higher ranks or bypass trainer costs.
 
+## Quest-taught lessons
+
+Before Wrath, two lessons come only from the class quests that taught them in
+Vanilla and TBC; trainers sell them from Wrath on.
+
+| Lesson | Class | Quest |
+| --- | --- | --- |
+| Intercept, with Berserker Stance | Warrior, level 30 | The Affray, after The Islander from a warrior trainer |
+| Sense Undead | Paladin, level 20 | The Tome of Valor; blood elves: Return to Silvermoon after The Second Trial |
+
+The quests teach the spells directly. A character that already knows Intercept
+can train its later ranks as usual. Players and bots follow the same rule, and
+[Zygor](zygor-progression.md#guide-behavior) leads each class through its chain.
+
 ## Client installation
 
 Install the release's matching EraTalents addon and `Data/patch-V.mpq` with WoW
@@ -81,6 +95,7 @@ Quest relations, ranks and mechanics use pinned CMaNGOS Classic and TBC sources.
 and packaged license notices identify the exact source revisions and adaptations.
 SQL updates run through the ordinary database updater.
 
-This integration restores the listed priest families. Other classes retain the
-core and Individual Progression quest support. It does not provide three complete
-historical quest databases or certify every class quest and scripted objective.
+This integration restores the listed priest families and quest-taught lessons.
+Other class quests retain the core and Individual Progression support. It does
+not provide three complete historical quest databases or certify every class
+quest and scripted objective.
