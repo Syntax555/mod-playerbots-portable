@@ -29,7 +29,7 @@ reset hooks and earned-era arena selection rules are outside these proposals.
 The source comparison uses AzerothCore `master`
 [`aa921a00a2789f7594a99f535ef30f90780f8cda`](https://github.com/azerothcore/azerothcore-wotlk/commit/aa921a00a2789f7594a99f535ef30f90780f8cda)
 and the required Playerbots core `Playerbot` branch
-[`3f2969ddb0da42b48b4fca050c02b19163ba1e20`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/3f2969ddb0da42b48b4fca050c02b19163ba1e20).
+[`93333d6a9eb00fdf0179adde30da3c17618207d6`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/93333d6a9eb00fdf0179adde30da3c17618207d6).
 The latter is the recorded upstream base of the pinned core fork. Open issues
 alone do not establish that a fix is available in either branch.
 

@@ -46,7 +46,7 @@ GAMEPLAY = (
     "TestMultiBotCombatProfiles",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
     "TestWarlockSoulShards", "TestNaturalMaintenance",
-    "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestProgressionMapGates",
+    "TestEraGeneratedArtifacts", "TestEraCorePatches", "TestEraIgnite", "TestProgressionMapGates",
     "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
     "TestCorpseRecovery", "TestBotAccountDeletion",
     "TestNativeBankTransfers",
@@ -57,7 +57,7 @@ GAMEPLAY = (
 CORE_FIXTURES = (
     "TestEraCorePatches", "TestEraTalents", "TestEarnedEraPrices", "TestBattlegroundEraRules",
     "TestEarnedArenaCore", "TestEraExperience", "TestWindowsResourceIncludes", "TestFormationMovement",
-    "TestCoreBuildWarnings", "TestCoreExperience", "TestNativeBankTransfers",
+    "TestCoreBuildWarnings", "TestCoreExperience", "TestNativeBankTransfers", "TestEraIgnite",
 )
 
 MODULE_FIXTURES = {
@@ -79,7 +79,7 @@ MODULE_FIXTURES = {
         "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestCombatProfileBridge",
         "TestNativeBankTransfers", "TestCombatProfiles",
     ),
-    "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook"),
+    "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook", "TestEraIgnite"),
 }
 
 

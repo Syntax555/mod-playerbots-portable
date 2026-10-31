@@ -291,6 +291,102 @@ for label, rows, customize, guard in (
     assert before != after, ('guard mutation undetected', label)
     print('Netherstorm guard mutation rejected: ' + label)
 
+# Wetlands and Netherstorm: later core updates replace the module's Dark Iron
+# scripts and its Mageslayer height only on realms that applied the zones first.
+wetlands = ip / 'data/sql/world/base/zone_wetlands.sql'
+later_repair = ip / 'data/sql/world/updates/zz_2026_10_31_00_wetlands_netherstorm_core_updates.sql'
+later_core = [updates / name for name in ('2026_10_17_01.sql', '2026_10_22_00.sql')]
+assert all(path.name < zone.name < wetlands.name < later_repair.name for path in later_core)
+DARK_IRON = (1051, 1052, 1053, 1054, 6523)
+POSITION = ('position_x', 'position_y', 'position_z')
+creature_schema = (world / 'creature.sql').read_text().split('CREATE TABLE `creature` (')[1].split(') ENGINE')[0]
+assert all(re.search(rf'^  `{column}` float NOT NULL\b', creature_schema, re.MULTILINE) for column in POSITION)
+base_columns = ['id' if column == 'id1' else column for column in columns('creature')]
+base_row = re.search(r'^\((67474,18866,[^\n]*)\),?$', (world / 'creature.sql').read_text(), re.MULTILINE)[1]
+base_values = dict(zip(base_columns, base_row.split(',')))
+assert base_values['map'] == '530', base_values
+
+
+def later_statements(path):
+    chosen = []
+    for statement in statements(path.read_text()):
+        table = TABLE.match(statement)
+        keys = {'smart_scripts': DARK_IRON[:4], 'creature': (67474,)}.get(table[1]) if table else None
+        if keys and any(re.search(rf'\b{key}\b', statement) for key in keys):
+            chosen.append(statement.replace("\\'", "''"))
+    assert chosen, path
+    return chosen
+
+
+def later_realms(sql):
+    fresh, existing = sqlite3.connect(':memory:'), sqlite3.connect(':memory:')
+    for db, order in ((fresh, [*later_core, zone, wetlands]), (existing, [zone, wetlands, *later_core])):
+        db.create_function('FLOAT32', 1, lambda value: struct.unpack('<f', struct.pack('<f', value))[0])
+        db.execute('CREATE TABLE `smart_scripts` (' + ','.join(f'`{c}`' for c in columns('smart_scripts')) + ')')
+        db.execute('CREATE TABLE `creature` (`guid`, `id`, `map`, `position_x`, `position_y`, `position_z`)')
+        db.execute('INSERT INTO `creature` VALUES (?, ?, ?, ?, ?, ?)',
+                   [float(base_values[column]) if column in POSITION else int(base_values[column])
+                    for column in ('guid', 'id', 'map', *POSITION)])
+        for path in order:
+            for statement in later_statements(path):
+                db.execute(statement)
+            later_replay(db, '')
+        later_replay(db, sql)
+    return fresh, existing
+
+
+def later_replay(db, sql):
+    replay_repair(db, sql)
+    # The native position columns store single precision, unlike SQLite's REAL.
+    db.execute('UPDATE creature SET ' + ', '.join(f'`{c}` = FLOAT32(`{c}`)' for c in POSITION))
+
+
+def later_snapshot(db):
+    scripts = sorted(db.execute('SELECT * FROM smart_scripts WHERE source_type = 0 AND entryorguid IN '
+                                f'({",".join(map(str, DARK_IRON))})'))
+    return scripts, db.execute('SELECT * FROM creature').fetchall()
+
+
+later_sql = later_repair.read_text()
+fresh, existing = later_realms(later_sql)
+expected = later_snapshot(fresh)
+assert later_snapshot(existing) == expected, 'existing realms keep core rows a fresh realm replaces'
+later_replay(existing, later_sql)
+assert later_snapshot(existing) == expected, 'the Wetlands and Netherstorm repair is not idempotent'
+# The module scripts its four dwarves; the core's Gift of Ragnaros fix still reaches the rifleman.
+assert [row[0] for row in expected[0]].count(1054) == 7
+assert any(row[0] == 6523 and row[15] == 7891 and row[16] == 0 and row[21] == 2 for row in expected[0])
+assert expected[1][0][-1] == struct.unpack('<f', struct.pack('<f', 76.2261))[0], expected[1]
+fresh_before, existing_before = later_realms('')
+assert later_snapshot(fresh_before) == expected, 'the repair changed a fresh realm'
+assert later_snapshot(existing_before) != expected, 'omitting the repair did not reproduce the existing-realm rows'
+print('Wetlands and Netherstorm update order: fresh and existing realms match after an idempotent repair')
+
+later_guard = re.search(r' AND MIN\(\((.*?)\) IN \(.*?\)\) = 1', later_sql, re.DOTALL)
+assert later_guard and re.findall(r'`(\w+)`', later_guard[1]) == columns('smart_scripts')
+count_guard = f'COUNT(*) = {sum(row[0] != 6523 for row in later_snapshot(existing_before)[0])} AND '
+# Each guard keeps rows the realm changed since the core update.
+for label, rows, customize, guard in (
+    ('customized Dark Iron row', 0,
+     'UPDATE smart_scripts SET event_chance = 99 WHERE entryorguid = 1051 AND id = 1', later_guard[0]),
+    ('removed Dark Iron row', 0, 'DELETE FROM smart_scripts WHERE entryorguid = 1054 AND id = 3', count_guard),
+    ('customized Mageslayer height', 1, 'UPDATE creature SET position_z = 77',
+     ' AND `position_z` = CAST(76.0324 AS FLOAT)'),
+):
+    assert guard in later_sql, label
+    for sql, kept in ((later_sql, True), (later_sql.replace(guard, '', 1), False)):
+        _, db = later_realms('')
+        db.execute(customize)
+        before = later_snapshot(db)[rows]
+        later_replay(db, sql)
+        assert (later_snapshot(db)[rows] == before) == kept, ('the repair changed a customized row' if kept else
+                                                         'guard mutation undetected', label)
+    print('Wetlands and Netherstorm guard mutation rejected: ' + label)
+unrounded = re.sub(r'CAST\(([^()]+) AS FLOAT\)', r'\1', later_sql)
+assert unrounded != later_sql
+assert later_snapshot(later_realms(unrounded)[1]) != expected, 'the fixture missed native FLOAT comparison precision'
+print('Wetlands and Netherstorm guard mutation rejected: unrounded native coordinate literals')
+
 # One-shot repairs run once per realm. When a file they follow changes, the
 # updater reapplies it on existing realms, so the repair must change with it.
 def sha1(path):
@@ -300,6 +396,8 @@ def sha1(path):
 era_events = modules / 'mod-era-events/data/sql/db-world/updates'
 PRODUCERS = (
     (zone, repair, '0808c731b2e5755424e24124ab31bd2393b07230'),
+    (zone, later_repair, '0808c731b2e5755424e24124ab31bd2393b07230'),
+    (wetlands, later_repair, '65d00a31cb7b99d5474ccfeba13d870e813dbdbd'),
     (ip / 'data/sql/world/base/zone_wetlands.sql', ip / 'data/sql/world/updates/zz_2026_10_24_00_mirelow_pool.sql',
      '65d00a31cb7b99d5474ccfeba13d870e813dbdbd'),
     (ip / 'data/sql/world/base/naxx40_spells.sql', ip / 'data/sql/world/updates/naxx40_submerge_binding.sql',
