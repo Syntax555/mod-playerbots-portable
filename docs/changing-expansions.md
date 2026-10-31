@@ -166,6 +166,21 @@ collision or traps; creatures and objects that earlier quests use or that drop t
 quest items; and entries the earlier database knows under another number. Holiday
 content follows the event calendar.
 
+Quests that VMaNGOS or CMaNGOS give in their era and the realm lacked return to
+their givers: Vanilla's Warsong Gulch and Arathi Basin reputation turn-ins, one per
+level bracket, which take the marks the battlegrounds award and end with TBC; Heeding
+the Call, the druid Bear Form quests, with Kal in Darnassus and Gennia Runetotem in
+Mulgore; patch 1.11's Guard Didier with the Writ of Safe Passage at Light's Hope
+Chapel from tier 6; and TBC's Seer Nakha in Garadar. Some quests of those databases
+stay unavailable on purpose: holiday quests and givers that scripts or events summon
+keep their native triggers; quests a later patch renumbered are offered in their
+current version; turn-ins for tokens nothing awards any more, such as the early
+Talismans of Merit, and engineering's membership renewals, whose cards nothing
+requires, are left out, as are a few early Alterac Valley quests whose givers the
+battleground no longer places. Individual Progression's Isle of Quel'Danas phases
+choose their own quest variants, and the Magisters' Terrace dailies stay out of
+Shattrath's shared daily pools so that lower tiers keep a daily on their days.
+
 ## Battleground access and rules
 
 Classic battlegrounds use ordinary level requirements. Tier 8 opens Eye of the
