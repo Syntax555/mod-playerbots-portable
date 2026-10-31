@@ -60,6 +60,9 @@ active files and default policies.
 | Shared experience | Raid groups receive no party XP bonus on any map. Rest in inns/cities uses the same base rate online and offline, with the corresponding configured multipliers. Thrallmar's and Honor Hold's Favor apply their XP bonus once. |
 | Formation movement | Near-zero computed velocity falls back to the creature's native walking speed. |
 | Spell cancellation | Cancelling a game object's spell removes dynamic objects without a unit caster; a world trigger's objects are removed from its original caster. |
+| Inventory saving | An item saved outside the inventory save leaves its owner's update queue, so the next save stores or deletes it once. |
+| Aura states | Aura state changes walk a snapshot of owned auras, so effects that add or remove auras cannot overrun the walk. |
+| Bot aura updates | Players without an open connection, mostly bots, update their owned auras every 100 ms with the accumulated time. Durations and periodic totals are unchanged; connected players update every tick. |
 
 SQL updates run through the ordinary database updater. Back up an established
 realm before applying them. Progression uses shared AzerothCore quest data with
