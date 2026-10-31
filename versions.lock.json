@@ -290,10 +290,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "522f20ce390a062b4baa8ce1c4550d3d018d7c55",
+      "revision": "6b3a172e6e568f1f8fa3e11d3cf660df2bcebce8",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "34bc67d4ca863d7bf6d8ff167b1e467bdd832f92"
+        "revision": "80392604ef4e7398f4d8fbaa8204d5011b7a6b3d"
       },
       "path": "DragonUI",
       "interface": 30300,
