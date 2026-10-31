@@ -10,8 +10,8 @@ Vanilla quests, the 2.1 Netherwing and the 3.2 Crusader, and Vanilla content and
 battlegrounds that stay put. Hostile creatures are gated too: TestMutualVisibility keeps a
 hidden creature from perceiving the character. Vanilla quests returned to their givers end
 with TBC where they left: Vanilla's battleground reputation turn-ins take the marks Individual
-Progression's battlegrounds award before TBC, one per level bracket. Heeding the Call returns
-to Darnassus and Mulgore; patch 1.11's Guard Didier and TBC's Seer Nakha return to their posts.
+Progression's battlegrounds award before TBC, one per level bracket. Patch 1.11's Guard Didier
+and TBC's Seer Nakha return to their posts; Kal and Gennia Runetotem keep one Heeding the Call.
 Mutations weaken or drop single gates and restorations.
 """
 
@@ -48,8 +48,7 @@ BATTLEGROUND = {7788: (14733, 29), 7871: (14733, 39), 7872: (14733, 49), 7873: (
                 7789: (14781, 29), 7874: (14781, 39), 7875: (14781, 49), 7876: (14781, 59), 8294: (14781, 69),
                 8155: (14984, 29), 8156: (14984, 39), 8154: (14984, 49), 8080: (14984, 59), 8297: (14984, 69),
                 8162: (15022, 29), 8161: (15022, 39), 8160: (15022, 49), 8123: (15022, 59), 8299: (15022, 69)}
-HEEDING = {5925: 3602, 5928: 3064}
-STARTERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.items()}, **HEEDING}
+STARTERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.items()}}
 ENDERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.items()}}
 # Guard Didier at Light's Hope Chapel and Seer Nakha in Garadar, in Individual Progression's free GUID block.
 SPAWNS = {677001: (16226, 0, 2305.3, -5286.12), 677002: (23265, 530, -1333.53, 7221.96)}
@@ -118,16 +117,17 @@ for r in rows('quest_template', set(BATTLEGROUND)):
 # The pinned world disables the Arathi Basin turn-ins and spawns every giver but the two restored ones.
 quest_disables = [tuple(r.values()) for r in rows('disables', {1})]
 assert {8080, 8123, 8154, 8155, 8156, 8160, 8161, 8162, 8297, 8299} <= {int(r[1]) for r in quest_disables}
-givers = set(STARTERS.values()) | {16212} | {entry for entry, *_ in SPAWNS.values()}
+givers = set(STARTERS.values()) | {16212, 3602, 3064} | {entry for entry, *_ in SPAWNS.values()}
 assert all(int(r['npcflag']) & 2 for r in rows('creature_template', givers)), 'every giver offers quests'
 with (world / 'creature.sql').open(encoding='utf-8') as dump:
     spawned = {int(line.split(',', 2)[1]) for line in dump if line.startswith('(')}
 assert givers - spawned == {16226, 23265}, givers - spawned
-# Their quests end where they did: Heeding the Call with Darnassus's and Thunder Bluff's druids, the
-# writ, which Guard Didier hands over with the quest, with Dispatch Commander Metz beside him.
-enders = {(int(r['id']), int(r['quest'])) for r in rows('creature_questender', {4217, 3033, 16212})}
-assert {(4217, 5925), (3033, 5928), (16212, 9165)} <= enders
+# The writ, which Guard Didier hands over with his quest, goes to Dispatch Commander Metz beside him.
+assert (16212, 9165) in {(int(r['id']), int(r['quest'])) for r in rows('creature_questender', {16212})}
 assert {(int(r['id']), int(r['quest'])) for r in rows('creature_queststarter', {16226, 23265})} == {(16226, 9165), (23265, 11037)}
+# Kal and Gennia Runetotem already offer Heeding the Call as 5923 and 5926, so the historical
+# 5925 and 5928 stay with their later givers instead of repeating the breadcrumb.
+assert {(3602, 5923), (3064, 5926)} <= {(int(r['id']), int(r['quest'])) for r in rows('creature_queststarter', {3602, 3064})}
 assert int(next(iter(rows('quest_template', {9165})))['StartItem']) == int(next(iter(rows('quest_template', {9165})))['RequiredItemId1'])
 
 
@@ -284,8 +284,8 @@ def check(source, before=restored):
     for name, source_type, group, entry, source_id in (('Thrall', 30, 0, 4949, 0), ('Attunement to the Core', 19, 0, 7848, 0),
                                                          ('Refreshing Spring Water', 23, 1250, 159, 0),
                                                          ('The Battle for Arathi Basin!', 19, 0, 8105, 0),
-                                                         ('Heeding the Call in Darnassus', 19, 0, 5925, 0),
-                                                         ('Heeding the Call in Mulgore', 19, 0, 5928, 0)):
+                                                         ('Heeding the Call in Darnassus', 19, 0, 5923, 0),
+                                                         ('Heeding the Call in Mulgore', 19, 0, 5926, 0)):
         assert allowed(db, source_type, group, entry, source_id, 0), name
         assert not db.execute('SELECT 1 FROM `conditions` WHERE SourceTypeOrReferenceId=? AND SourceEntry=? '
                               "AND Comment LIKE 'Era content: %'", (source_type, entry)).fetchone(), name
@@ -343,7 +343,8 @@ mutations += (
     ('Arathi Basin turn-ins stay disabled', update, re.sub(r'DELETE FROM `disables`[^;]*;', '', restored)),
     ('brackets overlap', update, re.sub(r'UPDATE `quest_template_addon` SET `MaxLevel`[^;]*;', '', restored)),
     ('Guard Didier arrives before Naxxramas', update, restored.replace(didier, '')),
-    ('Heeding the Call stays out of Darnassus', update, restored.replace('(3602, 5925), ', '')),
+    ('Kal offers Heeding the Call twice', update,
+     restored + 'INSERT INTO `creature_queststarter` (`id`, `quest`) VALUES (3602, 5925);\n'),
 )
 for name, source, *before in mutations:
     assert source != update or before, name

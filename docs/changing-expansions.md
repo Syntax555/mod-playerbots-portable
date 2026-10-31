@@ -168,9 +168,8 @@ content follows the event calendar.
 
 Quests that VMaNGOS or CMaNGOS give in their era and the realm lacked return to
 their givers: Vanilla's Warsong Gulch and Arathi Basin reputation turn-ins, one per
-level bracket, which take the marks the battlegrounds award and end with TBC; Heeding
-the Call, the druid Bear Form quests, with Kal in Darnassus and Gennia Runetotem in
-Mulgore; patch 1.11's Guard Didier with the Writ of Safe Passage at Light's Hope
+level bracket, which take the marks the battlegrounds award and end with TBC;
+patch 1.11's Guard Didier with the Writ of Safe Passage at Light's Hope
 Chapel from tier 6; and TBC's Seer Nakha in Garadar. Some quests of those databases
 stay unavailable on purpose: holiday quests and givers that scripts or events summon
 keep their native triggers; quests a later patch renumbered are offered in their
@@ -215,6 +214,8 @@ Bots add earned points to their existing build. Ordinary respecs use a paid
 trainer. A genuine era crossing refunds the departing tree's points once,
 out of combat. Training requires the paid lesson or earned talent/quest source,
 and class lessons introduced by TBC or Wrath wait until that expansion is earned.
+Before Wrath, Intercept and Sense Undead come only from the class quests that
+taught them then; see [historical class quests](class-quests.md#quest-taught-lessons).
 Glyph ownership is retained, with effects and new use blocked before Wrath.
 
 Riding lesson prices follow the purchasing character's earned era. Normal

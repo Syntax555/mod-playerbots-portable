@@ -18,6 +18,7 @@ from FixtureSupport import (
     in_parallel,
     prepared_core,
     run_fixture,
+    sql_rows,
 )
 
 
@@ -508,6 +509,22 @@ int main() {
                                if not line.startswith('#include'))
     learn_hook = function((src / 'EraTalentPin.cpp').read_text(), '    void OnPlayerLearnSpell(')
     talents_header = (src / 'EraTalents.h').read_text()
+    # Quest-taught lessons: the core's quests still teach them, and its class trainers sell
+    # them too, which only Wrath did. The Affray's spell teaches Berserker Stance and Intercept.
+    rewards = {int(r['ID']): int(r['RewardSpell']) for r in sql_rows(core, 'quest_template', {1719, 1652, 9691})}
+    assert rewards == {1719: 8616, 1652: 5503, 9691: 5503}, rewards
+    trained = {(int(r['TrainerId']), int(r['SpellId'])) for r in sql_rows(core, 'trainer_spell', {1, 5})}
+    assert {(1, 20252), (5, 5502)} <= trained, 'class trainers sell Intercept and Sense Undead'
+    # The pinned Zygor leveling guides lead each class to the quests that teach these lessons.
+    training_source = (src / 'EraEarnedTraining.cpp').read_text()
+    lesson_table = training_source[training_source.index('kQuestLessons[]'):]
+    lesson_quests = {int(q) for row in re.findall(r'\{ *\d+, *\d+, \{ *(\d+), *(\d+) \} \},', lesson_table[:lesson_table.index('};')])
+                     for q in row if q != '0'}
+    assert lesson_quests == {1719, 1652, 9691}, lesson_quests
+    leveling = repo / '.module-cache/prepared-source-addons/ZygorGuidesViewerRM/Guides/Leveling'
+    guided = ''.join((leveling / name).read_text() for name in ('ZygorGuidesAlliance.lua', 'ZygorGuidesHorde.lua'))
+    for quest in lesson_quests:
+        assert re.search(rf'\.\.turnin [^\n]*##{quest}\b', guided), ('Zygor does not guide quest', quest)
     totem_start = talents_header.index('struct QuestTotem')
     quest_totems = talents_header[totem_start:talents_header.index('};', talents_header.index('kQuestTotems'))+2]
     (fake / 'Define.h').write_text('#pragma once\n#include <cstdint>\nusing uint8=uint8_t; using uint32=uint32_t;\n')
@@ -647,6 +664,20 @@ int main() {
     mage.talents[18046]=1;
     assert(EraEarnedTraining::CanTrain(&mage,ERA_VANILLA,45438));
     assert(EraEarnedTraining::CanTrain(&mage,ERA_TBC,45438));
+    // Intercept and Sense Undead come from their class quests before Wrath, as they did then.
+    Player interceptor; interceptor.cls=1;
+    assert(!EraEarnedTraining::CanTrain(&interceptor,ERA_VANILLA,20252) && !EraEarnedTraining::CanTrain(&interceptor,ERA_TBC,20252));
+    assert(EraEarnedTraining::CanTrain(&interceptor,ERA_WOTLK,20252));
+    interceptor.quests.insert(1719);
+    assert(EraEarnedTraining::CanTrain(&interceptor,ERA_VANILLA,20252) && EraEarnedTraining::CanTrain(&interceptor,ERA_TBC,20252));
+    Player knower; knower.cls=1; knower.known.insert(20252); // learned before the era gate keeps its ranks trainable
+    assert(EraEarnedTraining::CanTrain(&knower,ERA_VANILLA,20252));
+    Player sensor; sensor.cls=2;
+    assert(!EraEarnedTraining::CanTrain(&sensor,ERA_VANILLA,5502) && EraEarnedTraining::CanTrain(&sensor,ERA_WOTLK,5502));
+    sensor.quests.insert(9691);
+    assert(EraEarnedTraining::CanTrain(&sensor,ERA_TBC,5502));
+    Player other; other.cls=8;
+    assert(EraEarnedTraining::CanTrain(&other,ERA_VANILLA,5502)); // another class's lesson id is not this gate's
 
     // Stock lessons without a variant wait for the expansion whose trainers, quests or books
     // first taught them; the generated table names them by trainer spell and class.
@@ -711,6 +742,16 @@ int main() {
         raise SystemExit('later-expansion lesson gate mutation was not applied')
     rejects(directory, 'era-training-later-lessons', training_fixture.replace(gate, 'true'),
             'later-expansion lessons trainable in an earlier era', (fake, src))
+    quest_gate = '&& QuestLessonEarned(player, era, spellId)'
+    if training_fixture.count(quest_gate) != 1:
+        raise SystemExit('quest lesson gate mutation was not applied')
+    rejects(directory, 'era-training-quest-lessons', training_fixture.replace(quest_gate, ''),
+            'quest-taught lessons sold before Wrath', (fake, src))
+    wrath = '    if (era == ERA_WOTLK)\n        return true;\n    for (QuestLesson const& lesson'
+    if training_fixture.count(wrath) != 1:
+        raise SystemExit('Wrath quest lesson mutation was not applied')
+    rejects(directory, 'era-training-quest-lessons-wrath', training_fixture.replace(wrath, '    for (QuestLesson const& lesson'),
+            'Wrath trainers withhold quest-taught lessons', (fake, src))
 
     learn_code = function((src / 'EraTalents.cpp').read_text(), '    bool TryLearn(')
     learn_fixture = r'''

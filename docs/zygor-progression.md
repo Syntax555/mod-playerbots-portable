@@ -70,6 +70,10 @@ inspected-bot view always follows that bot's personal progression.
   including *Bang a Gong!*,
   *Chaos and Destruction* and *Into the Breach* are never accepted or turned in
   automatically.
+- **Class quests:** the leveling guides take warriors through The Affray and
+  paladins through The Tome of Valor or, as blood elves, Return to Silvermoon,
+  whose rewards teach [lessons trainers withhold](class-quests.md#quest-taught-lessons)
+  before Wrath.
 - **Other guides:** reputation, profession, mount, pet, achievement, daily,
   event and Gold Guide routes use the same quest, zone and instance checks.
   Their own requirements remain guide steps; navigation is unchanged.
