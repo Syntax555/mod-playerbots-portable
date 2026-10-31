@@ -3,10 +3,10 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "1e10aafe94dfd7244600fbc11c2baf42c218f08a",
+    "revision": "c885c9b1d8fd693ba8c1e3d62e7ea7db93df1761",
     "upstream": {
       "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-      "revision": "3f2969ddb0da42b48b4fca050c02b19163ba1e20"
+      "revision": "93333d6a9eb00fdf0179adde30da3c17618207d6"
     },
     "forkChanges": {
       "azerothcore-era-shatter": "1076b54f2319ec434c22cce2e0b901f694c275ed",
