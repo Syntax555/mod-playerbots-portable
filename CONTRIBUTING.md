@@ -32,7 +32,7 @@ original upstream projects.
 
 | Native component | Fork | Default branch |
 | --- | --- | --- |
-| AzerothCore Playerbots core | [Syntax555/azerothcore-wotlk](https://github.com/Syntax555/azerothcore-wotlk) | `Playerbot` |
+| AzerothCore Playerbots core | [Syntax555/azerothcore-wotlk](https://github.com/Syntax555/azerothcore-wotlk) | `master` |
 | Playerbots with Raid Clear | [Syntax555/wow-mod-playerbots](https://github.com/Syntax555/wow-mod-playerbots) | `evermore` |
 | Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression) | `master` |
 | Dungeon Clear | [Syntax555/mod-dungeon-clear](https://github.com/Syntax555/mod-dungeon-clear) | `master` |

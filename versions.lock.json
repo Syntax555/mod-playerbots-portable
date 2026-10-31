@@ -3,7 +3,7 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "f2d64c616c6eb20202e52bde7b493663d2a815b4",
+    "revision": "7039e14a451eba20c06fbf1364dbb1a32f3294f5",
     "upstream": {
       "url": "https://github.com/Grimfeather/azerothcore-wotlk.git",
       "revision": "38db9bb1b588a2562ebcb052af1175a9429e32e6"
