@@ -309,10 +309,10 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "14423b36cccbacd9b345c733454ec522a45bf92c",
+      "revision": "13b26418590b893f171def15fd7f669acefc6b80",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "908a40b38bd6938b34eca4ce5e776dca2c70de8a"
+        "revision": "8a2b87a3b80eb4fd221df1d255af425818a2e814"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",
