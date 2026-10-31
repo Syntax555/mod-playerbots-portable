@@ -21,10 +21,9 @@ args = parser.parse_args()
 core = args.core
 ip = args.ip or core / 'modules/mod-individual-progression'
 events = args.events or core / 'modules/mod-era-events'
-pool_path = ip / 'data/sql/world/updates/zz_2026_10_24_00_mirelow_pool.sql'
 menu_path = events / 'data/sql/db-world/updates/mod_era_events_2026_10_24_00_aq_dragon_menus.sql'
 help_path = core / 'modules/mod-lfg-progression/data/sql/db-world/updates/mod_lfg_progression_2026_10_24_00_command_help.sql'
-pool_sql, menu_sql, help_sql = pool_path.read_text(), menu_path.read_text(), help_path.read_text()
+menu_sql, help_sql = menu_path.read_text(), help_path.read_text()
 world = core / 'data/sql/base/db_world'
 tables = ('creature_template', 'pool_template', 'pool_creature', 'pool_gameobject',
           'pool_quest', 'pool_pool', 'game_event_pool')
@@ -103,11 +102,13 @@ def check_menus(sql):
         assert snapshot(db) == missing, 'dragon repair recreated a missing template'
 
 
-# Individual Progression removes Mirelow's pool members and uses one waypoint patrol.
+# Individual Progression replaces Mirelow's spawn pool with one waypoint patrol
+# and retires the emptied pool, which the pool loader would report at startup.
 wetlands = (ip / 'data/sql/world/base/zone_wetlands.sql').read_text()
 remove_members = re.search(r'DELETE FROM `pool_creature` WHERE `pool_entry` = 1072;', wetlands).group()
+retire_pool = re.search(r'DELETE FROM `pool_template` WHERE `entry` = 1072;', wetlands).group()
+pool_sql = remove_members + '\n' + retire_pool
 assert '(91113, 14424,' in wetlands and '(91113, 911130,' in wetlands and '(911130, 1,' in wetlands
-assert pool_path.name > 'zone_wetlands.sql'
 members = []
 for line in (world / 'pool_creature.sql').read_text().splitlines():
     if line.startswith('('):
@@ -137,31 +138,14 @@ def check_pool(sql):
     with database() as db:
         insert(db, 'pool_template', pool_rows)
         insert(db, 'pool_creature', members)
-        db.executescript(remove_members)
         before = snapshot(db)
         db.executescript(sql)
         expected = dict(before)
         expected['pool_template'] = [row for row in before['pool_template'] if row[0] != 1072]
-        assert snapshot(db) == expected, 'obsolete pool repair missing or changed another row'
+        expected['pool_creature'] = [row for row in before['pool_creature'] if row[1] != 1072]
+        assert snapshot(db) == expected, 'Mirelow pool retirement missing or changed another row'
         db.executescript(sql)
-        assert snapshot(db) == expected, 'obsolete pool repair is not idempotent'
-    # Guard every membership/reference and customized template independently.
-    for custom in (
-        'INSERT INTO pool_creature VALUES (91113,1072,0,"custom")',
-        'INSERT INTO pool_gameobject VALUES (99999,1072,0,"custom")',
-        'INSERT INTO pool_quest VALUES (99999,1072,"custom")',
-        'INSERT INTO pool_pool VALUES (99999,1072,0,"custom")',
-        'INSERT INTO pool_pool VALUES (1072,99999,0,"custom")',
-        'INSERT INTO game_event_pool VALUES (99,1072)',
-        'UPDATE pool_template SET max_limit=2 WHERE entry=1072',
-        'UPDATE pool_template SET description="custom" WHERE entry=1072',
-    ):
-        with database() as db:
-            insert(db, 'pool_template', pool_rows)
-            db.execute(custom)
-            before = snapshot(db)
-            db.executescript(sql)
-            assert snapshot(db) == before, 'pool repair removed a custom/referenced pool'
+        assert snapshot(db) == expected, 'Mirelow pool retirement is not idempotent'
 
 
 # A chat command without a `command` row logs a missing-help warning at startup.
@@ -199,8 +183,7 @@ print('Startup SQL: native dragon copies, obsolete Mirelow pool, command help, s
 for label, check, mutant in (
     ('missing dragon repair', check_menus, ''),
     ('missing dragon guards', check_menus, re.sub(r"`ScriptName` = 'npc_era_aq_dragon' AND `npcflag` = 0", '1', menu_sql)),
-    ('missing Mirelow repair', check_pool, ''),
-    ('missing pool guards', check_pool, re.sub(r'\n  AND NOT EXISTS[^;]+', '', pool_sql)),
+    ('emptied Mirelow pool kept', check_pool, remove_members),
     ('missing command help', check_help, ''),
     ('command help with another security level', check_help, help_sql.replace("('lfgprogress', 0,", "('lfgprogress', 2,")),
     ('command help replacing a custom entry', check_help, help_sql.replace('INSERT IGNORE', 'REPLACE')),
