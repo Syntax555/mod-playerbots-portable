@@ -42,6 +42,7 @@ GAMEPLAY = (
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestZygorProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestDragonUIEraTalents", "TestEraTrainerBook", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestMultiBotVendorPurchases", "TestMultiBotSpellbook", "TestMultiBotSpellbookDisplay", "TestFormationMovement",
+    "TestSpellCancelCasters",
     "TestCombatProfiles", "TestCombatProfileEquipment", "TestEquipmentScoring", "TestCombatProfileBridge",
     "TestMultiBotCombatProfiles",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
@@ -57,6 +58,7 @@ GAMEPLAY = (
 CORE_FIXTURES = (
     "TestEraCorePatches", "TestEraTalents", "TestEarnedEraPrices", "TestBattlegroundEraRules",
     "TestEarnedArenaCore", "TestEraExperience", "TestWindowsResourceIncludes", "TestFormationMovement",
+    "TestSpellCancelCasters",
     "TestCoreBuildWarnings", "TestCoreExperience", "TestNativeBankTransfers", "TestEraIgnite",
 )
 

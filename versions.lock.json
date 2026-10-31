@@ -3,10 +3,10 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "c885c9b1d8fd693ba8c1e3d62e7ea7db93df1761",
+    "revision": "f2d64c616c6eb20202e52bde7b493663d2a815b4",
     "upstream": {
-      "url": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
-      "revision": "93333d6a9eb00fdf0179adde30da3c17618207d6"
+      "url": "https://github.com/Grimfeather/azerothcore-wotlk.git",
+      "revision": "38db9bb1b588a2562ebcb052af1175a9429e32e6"
     },
     "forkChanges": {
       "azerothcore-era-shatter": "1076b54f2319ec434c22cce2e0b901f694c275ed",
@@ -24,7 +24,8 @@
       "azerothcore-formation-minimum-velocity": "47a8d90f822f1c8f3a19dbca1ff2bac8044c6b45",
       "azerothcore-build-warnings": "d2d9d0ff9d21f816c2d59622fd31ec38a160f5af",
       "azerothcore-experience-rules": "b6f6bb7a4254e76d6b4e3a2ec9ee3f979fc25b2e",
-      "azerothcore-bank-quest-accounting": "1e10aafe94dfd7244600fbc11c2baf42c218f08a"
+      "azerothcore-bank-quest-accounting": "1e10aafe94dfd7244600fbc11c2baf42c218f08a",
+      "azerothcore-spell-cancel-without-unit-caster": "f2d64c616c6eb20202e52bde7b493663d2a815b4"
     }
   },
   "modules": [
@@ -60,10 +61,10 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "b58a459a289f46d61e7e27fb98d545b631ce071c",
+      "revision": "495b6fe3373d1d9352074570106b97c43a6e2521",
       "upstream": {
-        "url": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
-        "revision": "4933d455d2f611eed50c74c68c78832df4ed37a3"
+        "url": "https://github.com/Grimfeather/mod-individual-progression.git",
+        "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
       },
       "forkChanges": {
         "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
@@ -148,7 +149,7 @@
     {
       "name": "mod-multibot-bridge",
       "url": "https://github.com/Syntax555/mod-multibot-bridge.git",
-      "revision": "6147c7856b9eaf7e56f54c0d5256ce10037ed56a",
+      "revision": "82a7276163d37d0b119a1534122f3326f65676c3",
       "upstream": {
         "url": "https://github.com/Wishmaster117/mod-multibot-bridge.git",
         "revision": "9f0e8ba767c65f7959a615f70e61ec0980266780"

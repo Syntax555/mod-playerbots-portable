@@ -685,6 +685,7 @@ inline ScriptMgr scriptMgr;
 inline ScriptMgr* sScriptMgr=&scriptMgr;
 @HEADER_DECLARATIONS@
 @PROGRESSION_ENUMS@
+@TRAINER_SPELL_STATE@
 @INDIVIDUAL_PROGRESSION_CLASS@
 #define sIndividualProgression IndividualProgression::instance()
 '''
@@ -713,6 +714,8 @@ replacements = {
     '@WORLD_SCRIPT_HOOKS@': hook_declarations('src/server/game/Scripting/ScriptDefines/WorldScript.h', ('OnAfterConfigLoad',)),
     '@HEADER_DECLARATIONS@': header_declarations,
     '@PROGRESSION_ENUMS@': enum(ip_header, 'ProgressionState : uint8') + '\n' + enum(ip_header, 'ProgressionQuestIDs'),
+    '@TRAINER_SPELL_STATE@': 'namespace Trainer {\n' + function(
+        read('src/server/game/Entities/Creature/Trainer.h'), 'enum class SpellState : uint8') + ';\n}',
     '@INDIVIDUAL_PROGRESSION_CLASS@': function(ip_header, 'class IndividualProgression\n') + ';',
 }
 for placeholder, text in replacements.items():
@@ -740,7 +743,7 @@ ip_functions = '\n'.join(function(ip_source, signature) for signature in (
     'IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(',
     'bool IndividualProgression::isExcludedAccount(Player*',
     'bool IndividualProgression::isExcludedAccount(uint32',
-    'bool IndividualProgression::isBotAccount(Player*',
+    'bool IndividualProgression::isBotAccount(const Player*',
     'bool IndividualProgression::isBotAccount(uint32',
     'bool IndividualProgression::isNormalAccount(',
     'void IndividualProgression::LoadCustomProgressionEntries(',
@@ -1139,7 +1142,13 @@ void InactiveCases(std::map<std::string,std::string> const& values) {
     Player vanilla=Character(0,36), tbc=Character(8,60), necklace=Character(0,45);
     assert(TurnIn(vanilla,Q(2))==1950 && TurnIn(tbc,Q(1318))==8250 && TurnIn(necklace,Q(2881))==0);
     bool const strict=sIndividualProgression->IsStrictDefaultProgression();
-    assert(Money(0,60,90003)==int64(Q(90003).XPValue(40))*6 || !strict);
+    // Below-level quests pay for the share of the Vanilla value the capped player would get.
+    int32 const fullXp=int32(Q(90003).XPValue(40));
+    assert(sIndividualProgression->questXpFix && sIndividualProgression->questXpMap.at(90003)==3000);
+    int32 payout=3000;
+    payout*=Q(90003).XPValue(60)*1.0/fullXp;
+    assert(payout>0 && payout<3000);
+    assert(Money(0,60,90003)==int64(payout)*6 || !strict);
 }
 
 int main() {

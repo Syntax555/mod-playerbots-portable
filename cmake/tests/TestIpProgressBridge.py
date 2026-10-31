@@ -55,7 +55,7 @@ def visibility_rules(awareness):
         else:
             expression = re.fullmatch(r'if \((.*)\) return true; else return false;', rule).group(1)
         rules[name] = ' || '.join(extra + [expression])
-    assert len(rules) == 28 and 'npc_ipp_tbc' in rules and 'gobject_ipp_wotlk' in rules
+    assert len(rules) == 29 and 'npc_ipp_tbc' in rules and 'gobject_ipp_wotlk' in rules
     return rules
 
 
@@ -205,7 +205,7 @@ def native_contracts(core):
         'bool IndividualProgression::hasPassedProgression(',
         'bool IndividualProgression::isBeforeProgression(',
         'bool IndividualProgression::isExcludedAccount(Player* player)',
-        'bool IndividualProgression::isBotAccount(Player* player)',
+        'bool IndividualProgression::isBotAccount(const Player* player)',
     ))
     return re.sub(r'^#.*$', '', policy, flags=re.MULTILINE) + '\n' + sizes + '\n' + source_data, production
 

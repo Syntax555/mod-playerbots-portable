@@ -147,6 +147,16 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ## Core and module forks
 
+- [ ] Validate Grimfeather's Individual Progression and core changes in game:
+  the original Alterac Valley layout, mines, quests and Playerbots tactics;
+  restored quest, escort and dungeon scripts; and the matching client pack.
+- [ ] Evaluate `IndividualProgression.VanillaHunterPets` and
+  `IndividualProgression.WarlockDemonTrainers` before enabling them: existing
+  pets lose untaught abilities, and bots need ordinary taming and grimoire
+  purchases.
+- [ ] Remove the superseded Submerge binding and Mirelow pool repairs with
+  their fixture cases; Grimfeather's `naxx40_spells.sql` and
+  `zone_wetlands.sql` now make both changes.
 - [ ] Retain the rated-arena team-era filter while level-70 teams of different
   earned eras can share a native bracket after a TBC-to-Wrath transition.
 - [ ] Resolve historically uncertain XP rules before implementation: Vanilla

@@ -120,7 +120,7 @@ public:
     std::vector<std::tuple<uint32, uint8, bool>> satisfyCalls;
 
     ObjectGuid GetGUID() const { return guid; }
-    WorldSession* GetSession() { return hasSession ? &session : nullptr; }
+    WorldSession* GetSession() const { return hasSession ? const_cast<WorldSession*>(&session) : nullptr; }
     Group* GetGroup() const { return group; }
     bool CanDualWield() const { return dualWield; }
     bool IsWithinDistInMap(Player const* target, float range, bool is3D) const
@@ -396,7 +396,7 @@ public:
     static bool isBeforeProgression(Player* player, ProgressionState state);
     bool isExcludedAccount(Player* player);
     bool isExcludedAccount(uint32 accountId) { return !(enabled && strictEarnedProgression) && excludedAccounts.contains(accountId); }
-    bool isBotAccount(Player* player);
+    bool isBotAccount(const Player* player);
     bool isBotAccount(uint32 accountId) { return !(enabled && strictEarnedProgression) && botAccounts.contains(accountId); }
     bool CanEnterMap(Player* player, uint32 mapId, float x, float y, float z)
     {

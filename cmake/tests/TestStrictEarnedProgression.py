@@ -33,6 +33,9 @@ module = args.source
 core = args.core
 production = (module / 'src/IndividualProgression.cpp').read_text()
 player_source = (module / 'src/IndividualProgressionPlayer.cpp').read_text()
+spells_source = (module / 'src/IndividualProgressionSpells.cpp').read_text()
+trainer_states = function((core / 'src/server/game/Entities/Creature/Trainer.h').read_text(),
+                          'enum class SpellState : uint8')
 header = (module / 'src/IndividualProgression.h').read_text()
 commands = (module / 'src/cs_individualProgression.cpp').read_text()
 
@@ -68,10 +71,14 @@ functions = '\n'.join(function(production, signature) for signature in (
     'IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(',
     'bool IndividualProgression::isExcludedAccount(Player*',
     'bool IndividualProgression::isExcludedAccount(uint32',
-    'bool IndividualProgression::isBotAccount(Player*',
+    'bool IndividualProgression::isBotAccount(const Player*',
     'bool IndividualProgression::isBotAccount(uint32',
     'bool IndividualProgression::isNormalAccount(',
+))
+# Random-bot class spells and trainer unlocks live with the module's spell rules.
+functions += '\n' + '\n'.join(function(spells_source, signature) for signature in (
     'void IndividualProgression::UpdateRNDbotSpells(',
+    'void IndividualProgression::TrainerRNDbotSpellsUnlock(',
 ))
 hooks = '\n'.join(function(player_source, signature).replace(' override', '')
                   for signature in ('    bool OnPlayerCanLearnTalent(',
@@ -120,7 +127,7 @@ constexpr int QUEST_STATUS_REWARDED=3, QUEST_STATUS_COMPLETE=2, CONFIG_GROUP_XP_
 constexpr int SEC_PLAYER=0, SEC_GAMEMASTER=2;
 constexpr int COPPER=1, SILVER=100, GOLD=10000, RATE_REWARD_BONUS_MONEY=0;
 constexpr uint8 RACE_DRAENEI=11, RACE_BLOODELF=10, CLASS_DEATH_KNIGHT=6,
-    CLASS_DRUID=11, CLASS_PALADIN=2, CLASS_WARLOCK=9;
+    CLASS_DRUID=11, CLASS_PALADIN=2, CLASS_WARLOCK=9, CLASS_HUNTER=3;
 struct WorldObject {
     bool inWorld=true; uint32 map=1, instance=1, phase=1; float x=0, y=0, z=0;
     bool IsInMap(WorldObject const* other) const {
@@ -162,7 +169,7 @@ struct Player : WorldObject {
     int settingWrites=0, spellGrants=0;
     bool IsInWorld() const { return inWorld; } bool IsAlive() const { return alive; }
     bool IsGameMaster() const { return gm; } Corpse* GetCorpse() const { return corpse; }
-    Session* GetSession() { return &session; } Group* GetGroup() const { return group; }
+    Session* GetSession() const { return const_cast<Session*>(&session); } Group* GetGroup() const { return group; }
     bool IsAtLootRewardDistance(Creature*) const { return allowedReward; }
     int GetQuestStatus(uint32 id) const { auto it=quests.find(id); return it==quests.end()?0:it->second; }
     PlayerSetting GetPlayerSetting(std::string const& source,uint32 index) { return {settings[{source,index}]}; }
@@ -218,7 +225,8 @@ struct ChatHandler { Session* session=nullptr; int messages=0;
 declarations = r'''
 struct IndividualProgression {
     bool enabled=true, strictEarnedProgression=true, disableDefaultProgression=false;
-    bool questMoneyAtLevelCap=false, repeatableVanillaQuestsXp=false;
+    bool questMoneyAtLevelCap=false, repeatableVanillaQuestsXp=false, questXpFix=false;
+    std::unordered_map<uint32,uint32> questXpMap;
     int progressionLimit=0;
     uint8 tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13;
     std::map<uint32,uint8> customProgressionMap;
@@ -242,13 +250,14 @@ struct IndividualProgression {
     AccountMatch GetAccountMatch(uint32);
     bool isExcludedAccount(Player*);
     bool isExcludedAccount(uint32);
-    bool isBotAccount(Player*);
+    bool isBotAccount(const Player*);
     bool isBotAccount(uint32);
     bool isNormalAccount(Player*);
     bool hasPassedProgression(Player* player,ProgressionState stage) {
         return GetPlayerProgressionFromQuests(player)>=stage;
     }
     void UpdateRNDbotSpells(Player*);
+    void TrainerRNDbotSpellsUnlock(Player const*,uint32,Trainer::SpellState&);
     void SyncBotsProgressionToLeader(Group*);
     void UpdateGroupAttunement(Player*,std::string);
     void UpdateAccountReputation(uint32,uint32,Player*);
@@ -404,6 +413,10 @@ int main() {
     assert(AccountMgr::queries==0);
     player.cls=CLASS_WARLOCK; player.level=60;
     progression.UpdateRNDbotSpells(&player); assert(player.spellGrants==0);
+    Player hunter; hunter.cls=CLASS_HUNTER; hunter.level=60;
+    Trainer::SpellState tranquilizing=Trainer::SpellState::Unavailable;
+    progression.TrainerRNDbotSpellsUnlock(&hunter,19801,tranquilizing); // the Molten Core book stays required
+    assert(tranquilizing==Trainer::SpellState::Unavailable);
     progression.SyncBotsProgressionToLeader(&tapped);
     progression.UpdateGroupAttunement(&player,"mc");
     progression.UpdateAccountReputation(1,1,&player);
@@ -439,12 +452,15 @@ int main() {
     assert(Stage(legacy)==3); // feature-off upstream advancement still works
     assert(progression.isBotAccount(&player));
     progression.UpdateRNDbotSpells(&player); assert(player.spellGrants==1);
+    progression.TrainerRNDbotSpellsUnlock(&hunter,19801,tranquilizing);
+    assert(tranquilizing==Trainer::SpellState::Available); // the feature-off upstream unlock still works
     progression.enabled=false; assert(hook.CanAccountCreateCharacter(1,1,6));
     std::cout << "Strict earned progression: sequential milestones, saved credits, physical tapped-party kills, talent and bypass checks passed\n";
 }
 '''
 
-source = prelude + enums + declarations + functions + '\n' + '\n'.join(guard_functions)
+source = prelude + 'namespace Trainer {\n' + trainer_states + ';\n}\n' + enums + declarations + functions
+source += '\n' + '\n'.join(guard_functions)
 source += '\nstruct Script {\n' + hooks + '\n};\n'
 source += '\nstruct Command {\n' + '\n'.join(command_guards) + '\n};\n' + tests
 mutations = (
@@ -455,6 +471,8 @@ mutations = (
     ('numeric account exemption', 'bool IndividualProgression::isBotAccount(uint32 accountId)\n{\n    if (enabled && strictEarnedProgression)\n        return false;\n', 'bool IndividualProgression::isBotAccount(uint32 accountId)\n{\n'),
     ('numeric excluded-account exemption', 'bool IndividualProgression::isExcludedAccount(uint32 accountId)\n{\n    if (enabled && strictEarnedProgression)\n        return false;\n', 'bool IndividualProgression::isExcludedAccount(uint32 accountId)\n{\n'),
     ('talent earned era', 'uint8 const era = IndividualProgression_GetEarnedEra(player);', 'uint8 const era = 2;'),
+    ('bot trainer unlock without account check', 'if (unlockedForBots && sIndividualProgression->isBotAccount(player))',
+     'if (unlockedForBots)'),
 )
 with tempfile.TemporaryDirectory(prefix='portable-strict-earned-') as temporary:
     target = Path(temporary) / 'strict.cpp'

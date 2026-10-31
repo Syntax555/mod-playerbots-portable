@@ -30,8 +30,10 @@ The source comparison uses AzerothCore `master`
 [`aa921a00a2789f7594a99f535ef30f90780f8cda`](https://github.com/azerothcore/azerothcore-wotlk/commit/aa921a00a2789f7594a99f535ef30f90780f8cda)
 and the required Playerbots core `Playerbot` branch
 [`93333d6a9eb00fdf0179adde30da3c17618207d6`](https://github.com/mod-playerbots/azerothcore-wotlk/commit/93333d6a9eb00fdf0179adde30da3c17618207d6).
-The latter is the recorded upstream base of the pinned core fork. Open issues
-alone do not establish that a fix is available in either branch.
+The pinned core fork's recorded upstream base, Grimfeather's core
+[`38db9bb1b588a2562ebcb052af1175a9429e32e6`](https://github.com/Grimfeather/azerothcore-wotlk/commit/38db9bb1b588a2562ebcb052af1175a9429e32e6),
+contains that `Playerbot` commit and leaves the methods below unchanged. Open
+issues alone do not establish that a fix is available in either branch.
 
 | Production method in both checked cores | Missing behavior | Retained local change |
 | --- | --- | --- |
@@ -39,10 +41,12 @@ alone do not establish that a fix is available in either branch.
 | `Player::resetTalentsCost` | Converts negative elapsed months to unsigned and subtracts the decay before clamping | Cost guard in [respec accounting](https://github.com/Syntax555/azerothcore-wotlk/commit/c2cc8725ffa7ddd7118766b6be3b48ce339009b6) |
 | `BattlegroundMgr::GetRandomBG` | Dereferences the weighted selection without checking `ids.empty()` | Empty-selection guard in [earned-era arena matching](https://github.com/Syntax555/azerothcore-wotlk/commit/64d500742049c65c57ef754c8938cebe9804b4e3) |
 
-Individual Progression `master`
-[`4933d455d2f611eed50c74c68c78832df4ed37a3`](https://github.com/ZhengPeiRu21/mod-individual-progression/commit/4933d455d2f611eed50c74c68c78832df4ed37a3)
-is the recorded upstream base of the pinned fork and includes the Scarab
-Gong gossip correction. Both numeric account predicates still call
+Grimfeather's Individual Progression `master`
+[`18999da65adcbb70c7f4b962afb3600534481ef6`](https://github.com/Grimfeather/mod-individual-progression/commit/18999da65adcbb70c7f4b962afb3600534481ef6)
+is the recorded upstream base of the pinned fork. The fork also carries
+ZhengPeiRu21's `master`
+[`4933d455d2f611eed50c74c68c78832df4ed37a3`](https://github.com/ZhengPeiRu21/mod-individual-progression/commit/4933d455d2f611eed50c74c68c78832df4ed37a3),
+including the Scarab Gong gossip correction. In both, the numeric account predicates still call
 `GetAccountMatch` unconditionally, and character creation shares those
 predicates. The cache therefore still performs an initial account-name
 query when both filters are empty. The local guards remain necessary for each
