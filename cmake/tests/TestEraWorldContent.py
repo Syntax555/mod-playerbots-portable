@@ -9,7 +9,10 @@ guild vaults and jewelcrafting designs, Blackwing Lair's, Ahn'Qiraj's and Naxxra
 Vanilla quests, the 2.1 Netherwing and the 3.2 Crusader, and Vanilla content and Classic
 battlegrounds that stay put. Hostile creatures are gated too: TestMutualVisibility keeps a
 hidden creature from perceiving the character. Vanilla quests returned to their givers end
-with TBC where they left. Mutations weaken or drop single gates.
+with TBC where they left: Vanilla's battleground reputation turn-ins take the marks Individual
+Progression's battlegrounds award before TBC, one per level bracket. Heeding the Call returns
+to Darnassus and Mulgore; patch 1.11's Guard Didier and TBC's Seer Nakha return to their posts.
+Mutations weaken or drop single gates and restorations.
 """
 
 import argparse
@@ -32,13 +35,24 @@ args = parser.parse_args()
 core = args.core
 ip = args.ip or core / 'modules/mod-individual-progression'
 updates = ip / 'data/sql/world/updates'
-update_path, restored_path = (updates / 'zz_2026_10_31_01_era_world_content.sql',
-                              updates / '2026_10_31_02_restored_vanilla_quest_givers.sql')
+update_path, restored_path, restored_era_path = (updates / 'zz_2026_10_31_01_era_world_content.sql',
+                                                 updates / '2026_10_31_02_restored_vanilla_quest_givers.sql',
+                                                 updates / '2026_10_31_03_restored_era_quests.sql')
 update = update_path.read_text()
-# Vanilla quests returned to their givers, replayed before the era gates as the native updater orders them by name.
-restored = restored_path.read_text()
-assert restored_path.name < update_path.name
+# Quests returned to their givers, replayed before the era gates as the native updater orders them by name.
+restored = restored_path.read_text() + restored_era_path.read_text()
+assert restored_path.name < restored_era_path.name < update_path.name
 RESTORED = {2881: 7884, 8411: 6176, 8579: 15503, 8830: 15731, 8831: 15731}
+# Vanilla's battleground reputation turn-ins: giver and ender, and the ceiling of the quest's level bracket.
+BATTLEGROUND = {7788: (14733, 29), 7871: (14733, 39), 7872: (14733, 49), 7873: (14733, 59), 8291: (14733, 69),
+                7789: (14781, 29), 7874: (14781, 39), 7875: (14781, 49), 7876: (14781, 59), 8294: (14781, 69),
+                8155: (14984, 29), 8156: (14984, 39), 8154: (14984, 49), 8080: (14984, 59), 8297: (14984, 69),
+                8162: (15022, 29), 8161: (15022, 39), 8160: (15022, 49), 8123: (15022, 59), 8299: (15022, 69)}
+HEEDING = {5925: 3602, 5928: 3064}
+STARTERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.items()}, **HEEDING}
+ENDERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.items()}}
+# Guard Didier at Light's Hope Chapel and Seer Nakha in Garadar, in Individual Progression's free GUID block.
+SPAWNS = {677001: (16226, 0, 2305.3, -5286.12), 677002: (23265, 530, -1333.53, 7221.96)}
 TBC, WRATH = 66008, 66013
 
 # Native contracts: spawn-level visibility conditions take precedence over entry-level
@@ -93,11 +107,36 @@ def rows(table, keys):
     return sql_rows(core, table, keys)
 
 
+# The turn-ins take the marks Individual Progression's battlegrounds award until TBC's fifth tier.
+battleground = (ip / 'src/IndividualProgressionBG.cpp').read_text()
+assert 'WARSONG_GULCH = 20558' in battleground and 'ARATHI_BASIN = 20559' in battleground
+award = function(battleground, 'void OnBattlegroundEndReward(')
+assert award.index('hasPassedProgression(player, PROGRESSION_TBC_TIER_5)') < award.index('player->AddItem(rewardItemId, rewardQuantity)')
+for r in rows('quest_template', set(BATTLEGROUND)):
+    giver = BATTLEGROUND[int(r['ID'])][0]
+    assert int(r['RequiredItemId1']) == (20558 if giver in (14733, 14781) else 20559), r['ID']
+# The pinned world disables the Arathi Basin turn-ins and spawns every giver but the two restored ones.
+quest_disables = [tuple(r.values()) for r in rows('disables', {1})]
+assert {8080, 8123, 8154, 8155, 8156, 8160, 8161, 8162, 8297, 8299} <= {int(r[1]) for r in quest_disables}
+givers = set(STARTERS.values()) | {16212} | {entry for entry, *_ in SPAWNS.values()}
+assert all(int(r['npcflag']) & 2 for r in rows('creature_template', givers)), 'every giver offers quests'
+with (world / 'creature.sql').open(encoding='utf-8') as dump:
+    spawned = {int(line.split(',', 2)[1]) for line in dump if line.startswith('(')}
+assert givers - spawned == {16226, 23265}, givers - spawned
+# Their quests end where they did: Heeding the Call with Darnassus's and Thunder Bluff's druids, the
+# writ, which Guard Didier hands over with the quest, with Dispatch Commander Metz beside him.
+enders = {(int(r['id']), int(r['quest'])) for r in rows('creature_questender', {4217, 3033, 16212})}
+assert {(4217, 5925), (3033, 5928), (16212, 9165)} <= enders
+assert {(int(r['id']), int(r['quest'])) for r in rows('creature_queststarter', {16226, 23265})} == {(16226, 9165), (23265, 11037)}
+assert int(next(iter(rows('quest_template', {9165})))['StartItem']) == int(next(iter(rows('quest_template', {9165})))['RequiredItemId1'])
+
+
 # Scoped copies of the pinned base world: the spawns, quests and vendor lists the update names.
 creatures = [(int(r['guid']), int(r['id1']), int(r['map'])) for r in rows('creature', numbers)]
 gameobjects = [(int(r['guid']), int(r['id']), int(r['map'])) for r in rows('gameobject', numbers)]
-quests = [(int(r['ID']),) for r in rows('quest_template', numbers | set(RESTORED))]
-addons = [(int(r['ID']), int(r['PrevQuestID'])) for r in rows('quest_template_addon', set(RESTORED) | {2880})]
+quests = [(int(r['ID']),) for r in rows('quest_template', numbers | set(STARTERS))]
+addons = [(int(r['ID']), int(r['PrevQuestID']), int(r['MaxLevel']))
+          for r in rows('quest_template_addon', set(RESTORED) | set(BATTLEGROUND) | {2880})]
 vendors = [(int(r['entry']), int(r['item'])) for r in rows('npc_vendor', numbers)]
 existing = [tuple(r.values()) for r in rows('conditions', {19, 23, 30})]
 columns = next(iter(rows('conditions', {19}))).keys()
@@ -130,9 +169,16 @@ def replay(source, before=restored):
     db = sqlite3.connect(':memory:')
     for table in ('creature_queststarter', 'creature_questender'):
         db.execute(f'CREATE TABLE `{table}` (`id` INTEGER, `quest` INTEGER, PRIMARY KEY (`id`, `quest`))')
-    db.execute('CREATE TABLE `quest_template_addon` (`ID` INTEGER PRIMARY KEY, `PrevQuestID` INTEGER)')
-    db.executemany('INSERT INTO `quest_template_addon` VALUES (?,?)', addons)
-    db.execute('CREATE TABLE `creature` (`guid` INTEGER PRIMARY KEY, `id` INTEGER, `map` INTEGER)')
+    db.execute('CREATE TABLE `quest_template_addon` (`ID` INTEGER PRIMARY KEY, `PrevQuestID` INTEGER, `MaxLevel` INTEGER)')
+    db.executemany('INSERT INTO `quest_template_addon` VALUES (?,?,?)', addons)
+    db.execute('CREATE TABLE `disables` (`sourceType` INTEGER, `entry` INTEGER, `flags` INTEGER, `params_0`, `params_1`, '
+               '`comment`, PRIMARY KEY (`sourceType`, `entry`))')
+    db.executemany('INSERT INTO `disables` VALUES (?,?,?,?,?,?)', quest_disables)
+    db.execute('CREATE TABLE `creature` (`guid` INTEGER PRIMARY KEY, `id` INTEGER, `map` INTEGER, ' + ', '.join(
+        f'`{c}`' for c in ('zoneId', 'areaId', 'spawnMask', 'phaseMask', 'equipment_id', 'position_x', 'position_y',
+                           'position_z', 'orientation', 'spawntimesecs', 'wander_distance', 'currentwaypoint', 'curhealth',
+                           'curmana', 'MovementType', 'npcflag', 'unit_flags', 'dynamicflags', 'ScriptName',
+                           'VerifiedBuild')) + ')')
     db.execute('CREATE TABLE `gameobject` (`guid` INTEGER PRIMARY KEY, `id` INTEGER, `map` INTEGER)')
     db.execute('CREATE TABLE `quest_template` (`ID` INTEGER PRIMARY KEY)')
     db.execute('CREATE TABLE `npc_vendor` (`entry` INTEGER, `item` INTEGER, PRIMARY KEY (`entry`, `item`))')
@@ -140,7 +186,7 @@ def replay(source, before=restored):
     db.execute('CREATE TABLE `conditions` (' + ','.join(f'`{c}`' + ('' if c in ('ScriptName', 'Comment') else ' INTEGER')
                                                          for c in columns) + ', PRIMARY KEY (' +
                ','.join(f'`{c}`' for c in list(columns)[:10]) + '))')
-    db.executemany('INSERT INTO `creature` VALUES (?,?,?)', creatures)
+    db.executemany('INSERT INTO `creature` (`guid`, `id`, `map`) VALUES (?,?,?)', creatures)
     db.executemany('INSERT INTO `gameobject` VALUES (?,?,?)', gameobjects)
     db.executemany('INSERT INTO `quest_template` VALUES (?)', quests)
     db.executemany('INSERT INTO `npc_vendor` VALUES (?,?)', vendors)
@@ -149,9 +195,16 @@ def replay(source, before=restored):
     db.executescript(script)
     first = sorted(db.execute('SELECT * FROM `conditions`'))
     db.executescript(script)
-    for table in ('creature_queststarter', 'creature_questender'):
-        assert sorted(db.execute(f'SELECT quest, id FROM `{table}`')) == sorted(RESTORED.items()), table
+    for table, expected in (('creature_queststarter', STARTERS), ('creature_questender', ENDERS)):
+        assert sorted(db.execute(f'SELECT quest, id FROM `{table}`')) == sorted(expected.items()), table
     assert db.execute('SELECT PrevQuestID FROM `quest_template_addon` WHERE ID = 2881').fetchone() == (2880,)
+    # Each bracket's turn-in ends with its bracket, and none of them stays disabled.
+    assert dict(db.execute(f'SELECT ID, MaxLevel FROM `quest_template_addon` WHERE ID IN ({",".join(map(str, BATTLEGROUND))})')) == {
+        quest: ceiling for quest, (_, ceiling) in BATTLEGROUND.items()}, 'brackets overlap'
+    assert not db.execute(f'SELECT entry FROM `disables` WHERE sourceType = 1 AND entry IN ({",".join(map(str, BATTLEGROUND))})'
+                          ).fetchall(), 'battleground turn-ins stay disabled'
+    assert {guid: (entry, spawn_map, round(x, 2), round(y, 2)) for guid, entry, spawn_map, x, y in db.execute(
+        'SELECT guid, id, map, position_x, position_y FROM `creature` WHERE guid IN (677001, 677002)')} == SPAWNS
     assert sorted(db.execute('SELECT * FROM `conditions`')) == first, 'the update is not idempotent'
     return db
 
@@ -214,6 +267,9 @@ def check(source, before=restored):
         # Restored Vanilla quests open with their patch: Mastering the Elements in 1.8, Mortal Champions in 1.9.
         ('Mastering the Elements', 19, 0, 8411, 0, 66003),
         ('Mortal Champions', 19, 0, 8579, 0, 66004),
+        # Patch 1.11's Guard Didier and his Writ of Safe Passage arrive with Naxxramas.
+        ('Guard Didier', 30, 0, 16226, 677001, 66006),
+        ('Writ of Safe Passage', 19, 0, 9165, 0, 66006),
     )
     # Quests only awareness-scripted givers offer follow those givers: the Ahn'Qiraj war's colossus
     # secrets during the war, Vanilla's battleground quests until TBC.
@@ -227,13 +283,18 @@ def check(source, before=restored):
     # Classic battlegrounds open by level, so Arathi Basin's 1.7 quests stay too.
     for name, source_type, group, entry, source_id in (('Thrall', 30, 0, 4949, 0), ('Attunement to the Core', 19, 0, 7848, 0),
                                                          ('Refreshing Spring Water', 23, 1250, 159, 0),
-                                                         ('The Battle for Arathi Basin!', 19, 0, 8105, 0)):
+                                                         ('The Battle for Arathi Basin!', 19, 0, 8105, 0),
+                                                         ('Heeding the Call in Darnassus', 19, 0, 5925, 0),
+                                                         ('Heeding the Call in Mulgore', 19, 0, 5928, 0)):
         assert allowed(db, source_type, group, entry, source_id, 0), name
         assert not db.execute('SELECT 1 FROM `conditions` WHERE SourceTypeOrReferenceId=? AND SourceEntry=? '
                               "AND Comment LIKE 'Era content: %'", (source_type, entry)).fetchone(), name
     # The restored quests that left with TBC end there.
     for quest in (2881, 8411, 8579):
         assert allowed(db, 19, 0, quest, 0, 7) and not allowed(db, 19, 0, quest, 0, 8), ('restored quest outlasts Vanilla', quest)
+    # The battleground turn-ins serve every Vanilla tier and leave with TBC.
+    for quest in BATTLEGROUND:
+        assert [stage for stage in range(19) if allowed(db, 19, 0, quest, 0, stage)] == list(range(8)), ('turn-in', quest)
     # No gate holds a milestone chain back past the tier that needs it.
     for quest, stage in needed.items():
         late = db.execute("SELECT MAX(ConditionValue1) FROM `conditions` WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? "
@@ -271,9 +332,18 @@ mutations = (
 )
 closing = update[update.index('quests closing at tier 8'):]
 closing = closing[closing.index('INSERT IGNORE'):closing.index(';') + 1]
+didier = restored[restored.index("INSERT INTO `conditions`", restored.index("'Restored Vanilla creature: patch 1.11'")):]
+didier = didier[:didier.index(';') + 1]
 mutations += (
     ('Vanilla battleground quests outlast Vanilla', update.replace(closing, ''), restored),
-    ('restored quests outlast Vanilla', update, restored.replace("8, 0, 66008, 0, 0, 1, 0, 0, '', 'Restored", "8, 0, 66008, 0, 0, 0, 0, 0, '', 'Restored")),
+    ('restored quests outlast Vanilla', update, restored.replace("0, 0, 1, 0, 0, '', 'Restored Vanilla quest:",
+                                                                 "0, 0, 0, 0, 0, '', 'Restored Vanilla quest:")),
+    ('turn-ins outlast Vanilla', update, restored.replace("0, 0, 1, 0, 0, '', 'Restored Vanilla battleground",
+                                                         "0, 0, 0, 0, 0, '', 'Restored Vanilla battleground")),
+    ('Arathi Basin turn-ins stay disabled', update, re.sub(r'DELETE FROM `disables`[^;]*;', '', restored)),
+    ('brackets overlap', update, re.sub(r'UPDATE `quest_template_addon` SET `MaxLevel`[^;]*;', '', restored)),
+    ('Guard Didier arrives before Naxxramas', update, restored.replace(didier, '')),
+    ('Heeding the Call stays out of Darnassus', update, restored.replace('(3602, 5925), ', '')),
 )
 for name, source, *before in mutations:
     assert source != update or before, name

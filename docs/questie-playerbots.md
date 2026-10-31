@@ -91,7 +91,8 @@ that offer it nothing. In `configs/modules/QuestieBridge.conf`,
 
 Questie's database still supplies locations, prerequisites and rewards: quest
 XP follows its normal rate reports, not era XP changes, and quests it does not
-know cannot appear. Questgivers are observed only while loaded in the current
+know cannot appear. Quests Individual Progression restores, such as Vanilla's
+battleground turn-ins, keep only the game's own quest markers. Questgivers are observed only while loaded in the current
 zone, at most 64 unavailable spawns per snapshot; other givers keep their usual
 markers. Trainer and vendor markers are unaffected. If the closed quests would
 not fit into one snapshot, none are sent and Questie shows its usual quests.
