@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
-"""Generate Individual Progression's era gates for later-expansion world content.
+"""Generate Individual Progression's era gates for world content of later expansions and patches.
 
   python3 scripts/generate_era_world_content.py --ip <checkout> --output <file> [--report <json>] \\
       [--mysql "mysql --defaults-file=<file>"] [--world acore_world] [--core-world core_world] \\
-      [--classic cm_classic] [--tbc cm_tbc] [--wotlk cm_wotlk]
+      [--classic cm_classic] [--tbc cm_tbc] [--wotlk cm_wotlk] [--vmangos vm_world] [--chromiecraft <checkout>]
 
-The MySQL server holds five databases: the realm's world database after every core
-and module update except this file's own rows, the same world built from the core
-alone, and the CMaNGOS classic-db, tbc-db and wotlk-db revisions pinned in
-versions.lock.json, each loaded from Full_DB with its Updates directory. An entry
-absent from Classic arrived with TBC and needs the rewarded TBC marker (66008); an
-entry absent from TBC too arrived with Wrath and needs the Wrath marker (66013).
+The MySQL server holds the realm's world database after every core and module update
+except this file's own rows, the same world built from the core alone, and the CMaNGOS
+classic-db, tbc-db and wotlk-db revisions pinned in versions.lock.json, each loaded from
+Full_DB with its Updates directory. An entry absent from Classic arrived with TBC (tier 8);
+an entry absent from TBC too arrived with Wrath (tier 13). The VMaNGOS world database
+(the pinned dump with every migration of the pinned core) dates Vanilla content to its
+patch, and the pinned ChromieCraft progression system's brackets date TBC and Wrath phases.
+Each patch opens with the tier of its raid: PATCH_STAGE and BRACKET_STAGE below.
 
-Creature and gameobject spawns on the old-world continents, and Wrath's in Outland, that
-a character sees before their era get visibility conditions, which keep AI and scripts. Quests reachable before their era
-and later-era items of vendors visible earlier get availability conditions. Spawns
-are left alone when a module added or changed them, an awareness script decides,
-they are invisible helpers, they would attack unseen, they keep collision or traps,
-earlier quests use them, or the earlier database places the same name there; quests
-and items the earlier database knows by the same name are left alone too. Write the
-output into the Individual Progression fork's
-data/sql/world/updates/zz_2026_10_31_01_era_world_content.sql and commit it there.
+Spawns on the old-world continents, and a later tier's in Outland or Northrend, that a
+character sees before their tier get visibility conditions, which keep AI and scripts.
+Quests reachable before their tier and items of vendors visible earlier get availability
+conditions on the rewarded milestone marker. Spawns are left alone when a module added or
+changed them, an awareness script decides, they are invisible helpers, spirit healers or
+creatures that would attack unseen, they keep collision or traps, earlier quests use them,
+or the earlier database places the same name there; quests and items the earlier database
+knows by the same name are left alone too, and Vanilla patches leave Classic battlegrounds,
+holidays and Individual Progression's own placements alone. Write the output into the
+Individual Progression fork's data/sql/world/updates/zz_2026_10_31_01_era_world_content.sql
+and commit it there.
 """
 
 from __future__ import annotations
@@ -52,6 +56,32 @@ HELPER = re.compile(r'Trigger|Bunny|Credit|Marker|\[DND\]|\[PH\]|Invisible|Dummy
 # Faction capitals (map, x range, y range), Stormwind with its harbor: enemy players meet guards there anyway.
 CAPITALS = ((0, -9150, -8000, 200, 1550), (0, -5150, -4550, -1350, -700), (0, 1450, 1950, 0, 600),
             (1, 1250, 2250, -4950, -3950), (1, -1500, -900, -200, 500), (1, 9450, 10250, 1750, 2750))
+# IP stage at which each Vanilla patch's content opens, by VMaNGOS patch (0 = 1.2 ... 10 = 1.12): with the raid
+# or event of the patch. 1.6 Blackwing Lair; 1.7 Zul'Gurub, 1.8 the Dragons of Nightmare and 1.10's second dungeon
+# set after Nefarian; 1.9 the Ahn'Qiraj gates; 1.11 and 1.12 Naxxramas and the Scourge.
+PATCH_STAGE = (0, 0, 0, 0, 1, 3, 3, 4, 3, 6, 6)
+# ChromieCraft's progression brackets in order, and the IP stage of the raid of each bracket's original patch for
+# its TBC and Wrath content: 2.0 Karazhan, Serpentshrine and Tempest Keep; 2.1 Hyjal, the Black Temple, Ogri'la,
+# the Skyguard and the Netherwing; 2.3 Zul'Aman; 2.4 the Sunwell; 3.1 Ulduar; 3.2 the Crusader; 3.3 Icecrown;
+# 3.3.5 the Ruby Sanctum. Stage 11 is reserved.
+BRACKETS = ('Bracket_0', 'Bracket_1_19', 'Bracket_20_29', 'Bracket_30_39', 'Bracket_40_49', 'Bracket_50_59_1',
+            'Bracket_50_59_2', 'Bracket_60_1_1', 'Bracket_60_1_2', 'Bracket_60_2_1', 'Bracket_60_2_2', 'Bracket_60_3_1',
+            'Bracket_60_3_2', 'Bracket_60_3_3', 'Bracket_61_64', 'Bracket_65_69', 'Bracket_70_1_1', 'Bracket_70_1_2',
+            'Bracket_70_2_1', 'Bracket_70_2_2', 'Bracket_70_2_3', 'Bracket_70_3_1', 'Bracket_70_3_2', 'Bracket_70_4_1',
+            'Bracket_70_4_2', 'Bracket_70_5', 'Bracket_70_6_1', 'Bracket_70_6_2', 'Bracket_70_6_3', 'Bracket_71_74',
+            'Bracket_75_79', 'Bracket_80_1_1', 'Bracket_80_1_2', 'Bracket_80_1_3', 'Bracket_80_2', 'Bracket_80_3',
+            'Bracket_80_4_1', 'Bracket_80_4_2')
+BRACKET_STAGE = {'Bracket_61_64': 8, 'Bracket_65_69': 8, 'Bracket_70_1_1': 8, 'Bracket_70_1_2': 8, 'Bracket_70_2_1': 9,
+                 'Bracket_70_2_2': 9, 'Bracket_70_2_3': 10, 'Bracket_70_3_1': 10, 'Bracket_70_3_2': 10, 'Bracket_70_4_1': 10,
+                 'Bracket_70_4_2': 10, 'Bracket_70_5': 12, 'Bracket_70_6_1': 12, 'Bracket_70_6_2': 12, 'Bracket_70_6_3': 12,
+                 'Bracket_71_74': 13, 'Bracket_75_79': 13, 'Bracket_80_1_1': 13, 'Bracket_80_1_2': 13, 'Bracket_80_1_3': 13,
+                 'Bracket_80_2': 14, 'Bracket_80_3': 15, 'Bracket_80_4_1': 16, 'Bracket_80_4_2': 17}
+# Spirit healers and guides serve the graveyards of every era; battlemasters queue Classic battlegrounds by level.
+GRAVEYARD_FLAGS = 0x4000 | 0x8000
+BATTLEMASTER_FLAG = 0x100000
+# Classic battlegrounds open with their level, not their patch: quest zones and reputations of Warsong, Arathi and Alterac.
+BATTLEGROUND_SORTS = {-25, 2597, 3277, 3358}
+BATTLEGROUND_FACTIONS = {509, 510, 729, 730, 889, 890}
 HOLIDAY_SORTS = {-22, -41, -284, -364, -366, -369, -370, -374, -375, -376, -1002, -1003, -1005}
 UPDATE = 'data/sql/world/updates/zz_2026_10_31_01_era_world_content.sql'
 OWN = "Comment NOT LIKE 'Era content: %'"
@@ -136,6 +166,54 @@ def in_capital(map_id, x, y):
     return any(map_id == m and x0 <= x <= x1 and y0 <= y <= y1 for m, x0, x1, y0, y1 in CAPITALS)
 
 
+def stage_name(stage):
+    return 'Vanilla' if stage < 8 else 'TBC' if stage < 13 else 'Wrath'
+
+
+def chromiecraft_openings(root):
+    """Stage at which ChromieCraft's progression brackets open TBC and Wrath quests and spawns.
+
+    Quests come from the brackets' quest disables, spawns from their phase-mask hides; each opens with the
+    bracket that removes the disable or shows the spawn again.
+    """
+    quests, spawns = {}, {}
+    hidden_quests, hidden_spawns = {}, {}
+    for bracket in BRACKETS:
+        for path in sorted((root / 'src' / bracket).rglob('*.sql')):
+            text = re.sub(r'--[^\n]*', '', path.read_text(errors='replace'))
+            for statement in (' '.join(part.split()) for part in text.split(';')):
+                lower = statement.lower()
+                if lower.startswith('delete from `disables`') and ('sourcetype' not in lower or
+                                                                   re.search(r'sourcetype`?\s*=\s*1\b', lower)):
+                    for group in re.findall(r'entry`?\s*(?:in\s*\(([^)]*)\)|=\s*(\d+))', lower):
+                        for entry in map(int, re.findall(r'\d+', ' '.join(group))):
+                            if entry in hidden_quests:
+                                del hidden_quests[entry]
+                                quests[entry] = bracket
+                elif lower.startswith('insert into `disables`'):
+                    columns = [c.strip(' `') for c in re.search(r'\(([^)]*)\)\s*values', lower).group(1).split(',')]
+                    for row in re.findall(r'\(([^()]*)\)', statement[lower.index('values'):]):
+                        record = dict(zip(columns, (v.strip(" '\"") for v in row.split(','))))
+                        if record.get('sourcetype') == '1':
+                            hidden_quests[int(record['entry'])] = bracket
+                            quests.pop(int(record['entry']), None)
+                elif match := re.match(r'update `(creature|gameobject)` set `phasemask`\s*=\s*(\d+) where (.*)', lower):
+                    kind, phase, where = match.groups()
+                    ids = re.search(r'`id`\s*(?:in\s*\(([^)]*)\)|=\s*(\d+))', where)
+                    guids = re.search(r'`guid`\s*(?:in\s*\(([^)]*)\)|=\s*(\d+))', where)
+                    entries = [int(e) for e in re.findall(r'\d+', ' '.join(ids.groups(''))) ] if ids else [0]
+                    spots = [int(g) for g in re.findall(r'\d+', ' '.join(guids.groups('')))] if guids else [0]
+                    for key in ((kind, entry, guid) for entry in entries for guid in spots):
+                        if phase != '1':
+                            hidden_spawns[key] = bracket
+                            spawns.pop(key, None)
+                        elif key in hidden_spawns:
+                            del hidden_spawns[key]
+                            spawns[key] = bracket
+    return ({quest: BRACKET_STAGE[bracket] for quest, bracket in quests.items() if bracket in BRACKET_STAGE},
+            {key: BRACKET_STAGE[bracket] for key, bracket in spawns.items() if bracket in BRACKET_STAGE})
+
+
 def generate(q, args):
     rules = awareness_rules(args.ip)
     world, earlier_dbs = args.world, {1: (args.classic,), 2: (args.classic, args.tbc)}
@@ -148,6 +226,37 @@ def generate(q, args):
 
     creature_era, gameobject_era = eras('creature_template', 'Entry'), eras('gameobject_template', 'entry')
     quest_era, item_era = eras('quest_template', 'entry'), eras('item_template', 'entry')
+    phase_quests, phase_spawns = chromiecraft_openings(args.chromiecraft) if args.chromiecraft else ({}, {})
+
+    # Vanilla patches from VMaNGOS: the first patch of each entry, and of each spawn found at the same spot.
+    patch_of, patch_spawns = defaultdict(dict), {}
+    if args.vmangos:
+        for kind, table in (('creature', 'creature_template'), ('gameobject', 'gameobject_template'),
+                            ('quest', 'quest_template'), ('item', 'item_template')):
+            patch_of[kind] = {int(e): int(p) for e, p in q(f'SELECT entry, MIN(patch) FROM {args.vmangos}.{table} GROUP BY entry')}
+        for kind in ('creature', 'gameobject'):
+            index = defaultdict(list)
+            for entry, map_id, x, y, first in q(f'SELECT id, map, position_x, position_y, patch_min FROM {args.vmangos}.{kind}'):
+                index[(int(entry), int(map_id))].append((float(x), float(y), int(first)))
+            patch_spawns[kind] = index
+
+    def vanilla_stage(kind, entry, map_id=None, x=0.0, y=0.0):
+        patch = patch_of[kind].get(entry)
+        if patch is None:
+            return 0
+        if map_id is not None:
+            near = [first for px, py, first in patch_spawns[kind].get((entry, map_id), ())
+                    if (px - x) ** 2 + (py - y) ** 2 <= 30 ** 2]
+            if near:
+                patch = max(patch, min(near))
+        return PATCH_STAGE[min(patch, len(PATCH_STAGE) - 1)]
+
+    def quest_need(quest):
+        era = quest_era.get(quest)
+        if era is None:
+            return 0
+        return max(REQUIRED.get(era, 0), phase_quests.get(quest, 0), vanilla_stage('quest', quest) if era == 0 else 0)
+
     visibility_gated = {(int(g), int(e)) for g, e in q(
         f'SELECT SourceGroup, SourceEntry FROM {world}.conditions WHERE SourceTypeOrReferenceId = 30 AND {OWN}')}
     hostile = {int(f) for (f,) in q(f'SELECT ID FROM {world}.factiontemplate_dbc WHERE EnemyGroup & 1')}
@@ -185,14 +294,19 @@ def generate(q, args):
             if value:
                 objective[('creature' if value > 0 else 'gameobject', abs(value))].add(int(quest))
     disabled = {int(e) for (e,) in q(f'SELECT entry FROM {world}.disables WHERE sourceType = 1')}
+    factions = ','.join(map(str, sorted(BATTLEGROUND_FACTIONS)))
+    battleground_items = {int(i) for (i,) in q(f'SELECT entry FROM {world}.item_template WHERE RequiredReputationFaction IN ({factions})')}
+    battleground_vendors = {int(v) for (v,) in q(f'SELECT DISTINCT v.entry FROM {world}.npc_vendor v JOIN {world}.item_template i '
+                                                 f'ON i.entry = v.item WHERE i.RequiredReputationFaction IN ({factions})')}
 
     conditions, skipped = [], defaultdict(list)
     seen_before = {'creature': defaultdict(int), 'gameobject': defaultdict(int)}
     seen_after = {'creature': defaultdict(int), 'gameobject': defaultdict(int)}
+    scripted = {'creature': set(), 'gameobject': set()}
+    spawns = []
     for kind, group in (('creature', 0), ('gameobject', 1)):
         template = 't.faction, t.flags_extra, t.npcflag, 0, t.unit_flags' if kind == 'creature' else '0, 0, 0, t.type, 0'
         events = {int(g) for (g,) in q(f'SELECT DISTINCT guid FROM {world}.game_event_{kind}')}
-        known = creature_era if kind == 'creature' else gameobject_era
         for guid, entry, map_id, phase, script, name, x, y, faction, extra, npcflag, kind_type, unit_flags in q(
                 f"""SELECT s.guid, s.id, s.map, s.phaseMask, COALESCE(NULLIF(s.ScriptName, ''), t.ScriptName), t.name,
                     s.position_x, s.position_y, {template}
@@ -200,41 +314,19 @@ def generate(q, args):
             guid, entry, map_id, x, y = int(guid), int(entry), int(map_id), float(x), float(y)
             if guid in events:
                 continue
+            if script in rules:
+                scripted[kind].add(entry)
             rule = rules.get(script)
             mask = (map_mask(map_id) if int(phase) & 1 else 0) & (ALL if rule is None else rule)
             seen_before[kind][entry] |= mask
-            era = known.get(entry)
-            if era in REQUIRED and (map_id in (0, 1) or (era == 2 and map_id == 530)) and mask & ((1 << REQUIRED[era]) - 1):
-                earlier = sorted(quest for quest in starts[(kind, entry)] | ends[(kind, entry)] | objective[(kind, entry)]
-                                 if quest not in disabled and quest_era.get(quest, 9) < era)
-                reason = None
-                if (guid, entry) not in core_spawns[kind]:
-                    reason = 'module', 'a module added or changed the spawn'
-                elif script in rules:
-                    reason = 'script', 'an awareness script decides'
-                elif (group, entry) in visibility_gated:
-                    reason = 'condition', 'an existing visibility condition decides'
-                elif kind == 'creature' and (int(extra) & 128 or HELPER.search(name)):
-                    reason = 'helper', 'invisible helper'
-                elif (kind == 'creature' and not int(extra) & 2 and not int(unit_flags) & 0x100
-                      and (int(faction) in hostile or (int(faction) in one_side and not int(npcflag)
-                                                       and not in_capital(map_id, x, y)))):
-                    reason = 'hostile', 'would attack unseen'
-                elif kind == 'gameobject' and int(kind_type) not in GAMEOBJECT_TYPES:
-                    reason = 'mechanics', f'type {kind_type} keeps collision or mechanics'
-                elif earlier:
-                    reason = 'quest', 'earlier quests ' + ','.join(map(str, earlier[:6]))
-                elif source := renumbered(era, ('go:' + name) if kind == 'gameobject' else name, map_id,
-                                          round(x), round(y)):
-                    reason = 'renumbered', f'same name here in {source}'
-                if reason:
-                    skipped[f'{kind}:{reason[0]}'].append((f'{ERA[era]} {kind} {entry} {name}', guid, map_id, reason[1]))
-                else:
-                    conditions.append((30, group, entry, guid, MARKER[era]))
-                    mask &= ~((1 << REQUIRED[era]) - 1)
-            seen_after[kind][entry] |= mask
+            spawns.append((kind, group, guid, entry, map_id, script, name, x, y, int(faction), int(extra), int(npcflag),
+                           int(kind_type), int(unit_flags), mask))
 
-    # A quest zone opens with the maps most of its givers stand on; spawn zone ids are rarely filled.
+    def first(mask):
+        return next((stage for stage in STAGES if mask >> stage & 1), 0)
+
+    # Quests: the tier each opens at, then the chain rule. A quest never opens later than one that builds on it,
+    # including the milestone quests Individual Progression places itself.
     zone_maps = defaultdict(Counter)
     for zone, map_id in q(f"""SELECT q.QuestSortID, c.map FROM {world}.quest_template q
                                JOIN {world}.creature_queststarter s ON s.quest = q.ID JOIN {world}.creature c ON c.id = s.id
@@ -259,37 +351,123 @@ def generate(q, args):
         if int(following) > 0:
             followers[int(quest)].add(int(following))
     reachable = defaultdict(int)
+    givers = defaultdict(set)
     for (kind, entry), quests in starts.items():
         for quest in quests:
             reachable[quest] |= seen_before[kind].get(entry, 0)
+            givers[quest].add((kind, entry))
+    opens, candidates, titles, audiences = {}, {}, {}, {}
     for quest, title, sort, races, classes in q(
             f"""SELECT q.ID, q.LogTitle, q.QuestSortID, q.AllowableRaces, COALESCE(a.AllowableClasses, 0)
                 FROM {world}.quest_template q LEFT JOIN {world}.quest_template_addon a ON a.ID = q.ID"""):
         quest, sort, races, classes = int(quest), int(sort), int(races), int(classes)
-        era = quest_era.get(quest)
-        if era not in REQUIRED or quest in disabled or gated[quest] >= MARKER[era]:
-            continue
+        titles[quest] = title
+        era, need = quest_era.get(quest), quest_need(quest)
         mask = reachable[quest]
         if quest in item_started:
             mask |= zone_mask.get(sort, ALL if sort < 0 and sort not in HOLIDAY_SORTS else 0)
-        if not mask & ((1 << REQUIRED[era]) - 1):
+        # Blood elves and draenei start at tier 8, death knights at tier 13.
+        audience = 8 if races and not races & ~(512 | 1024) else 13 if classes == 32 else 0
+        # A quest no giver or item offers is started by a script; it opens with its own tier.
+        opens[quest] = max(first(mask) if mask else need, gated[quest] - 66000 if gated[quest] else 0, audience)
+        audiences[quest] = audience
+        if not need or quest in disabled or gated[quest] >= 66000 + need or not mask & ((1 << need) - 1):
             continue
-        earlier = sorted(x for x in followers[quest] if quest_era.get(x, 9) < era)
+        own_era = need == REQUIRED.get(era)
         reason = None
         if quest in holiday or sort in HOLIDAY_SORTS:
             reason = 'holiday', 'holiday quest'
+        elif need < 8 and sort in BATTLEGROUND_SORTS:
+            reason = 'battleground', 'battleground quest'
+        elif need < 8 and (gated[quest] or (givers[quest] and all(entry in scripted[kind] for kind, entry in givers[quest]))):
+            reason = 'script', 'Individual Progression already places it'
         elif era == 1 and races and not races & ~(512 | 1024):
             reason = 'race', 'blood elf or draenei quest'
         elif classes == 32:
             reason = 'class', 'death knight quest'
-        elif any(title.strip().lower() in earlier_titles[db] for db in earlier_dbs[era]):
+        elif own_era and any(title.strip().lower() in earlier_titles[db] for db in earlier_dbs[era]):
             reason = 'renumbered', 'same title in an earlier database'
-        elif earlier:
-            reason = 'chain', 'earlier quests follow it ' + ','.join(map(str, earlier[:6]))
         if reason:
-            skipped[f'quest:{reason[0]}'].append((f'{ERA[era]} quest {quest} {title}', quest, sort, reason[1]))
+            skipped[f'quest:{reason[0]}'].append((f'{stage_name(need)} quest {quest} {title}', quest, sort, reason[1]))
         else:
-            conditions.append((19, 0, quest, 0, MARKER[era]))
+            candidates[quest] = need
+            opens[quest] = need
+    # Milestone quests are rewarded to earn the next tier, so their chains must open a tier earlier.
+    header = (args.ip / 'src/IndividualProgression.h').read_text()
+    placed = {int(re.search(rf'\b{name}\s*=\s*(\d+)', header).group(1)): stage
+              for name, stage in (('BANG_A_GONG', 3), ('INTO_THE_BREACH', 7))}
+    # Quests Individual Progression places itself open at the tier it chose.
+    for quest in reachable:
+        if gated[quest] or (givers[quest] and all(entry in scripted[kind] for kind, entry in givers[quest])):
+            placed.setdefault(quest, opens[quest])
+    previous = defaultdict(set)
+    for quest, after in followers.items():
+        for follower in after:
+            previous[follower].add(quest)
+    changed = True
+    while changed:
+        # The tier by which each quest must be available: no later than any placed or gated quest after it.
+        limit, pending = {}, []
+        for quest in set(placed) | set(candidates):
+            limit[quest] = min(placed.get(quest, 99), candidates.get(quest, 99))
+            pending.append(quest)
+        while pending:
+            quest = pending.pop()
+            for before in previous[quest]:
+                if limit[quest] < limit.get(before, 99):
+                    limit[before] = limit[quest]
+                    pending.append(before)
+        changed = False
+        for quest, need in list(candidates.items()):
+            bound = min((limit.get(f, 99) for f in followers[quest] if f not in disabled), default=99)
+            if bound < need:
+                del candidates[quest]
+                skipped['quest:chain'].append((f'{stage_name(need)} quest {quest} {titles[quest]}', quest, 0,
+                                               f'a quest after it opens at tier {bound}'))
+                changed = True
+    for quest in list(opens):
+        if quest not in candidates and quest not in placed:
+            opens[quest] = max(first(reachable[quest]) if reachable[quest] else quest_need(quest), audiences.get(quest, 0))
+    conditions += [(19, 0, quest, 0, 66000 + need) for quest, need in sorted(candidates.items())]
+
+    for kind, group, guid, entry, map_id, script, name, x, y, faction, extra, npcflag, kind_type, unit_flags, mask in spawns:
+        era = (creature_era if kind == 'creature' else gameobject_era).get(entry)
+        need = max(REQUIRED.get(era, 0), phase_spawns.get((kind, entry, guid), 0), phase_spawns.get((kind, entry, 0), 0),
+                   phase_spawns.get((kind, 0, guid), 0), vanilla_stage(kind, entry, map_id, x, y) if era == 0 else 0)
+        # Gates cover the old-world continents, and a later tier's spawns in Outland or Northrend.
+        where = map_id in (0, 1) or (map_id == 530 and need > 8) or (map_id == 571 and need > 13)
+        if era is not None and need and where and mask & ((1 << need) - 1):
+            earlier = sorted(quest for quest in starts[(kind, entry)] | ends[(kind, entry)] | objective[(kind, entry)]
+                             if quest not in disabled and quest in opens and opens[quest] < need)
+            reason = None
+            if (guid, entry) not in core_spawns[kind]:
+                reason = 'module', 'a module added or changed the spawn'
+            elif script in rules:
+                reason = 'script', 'an awareness script decides'
+            elif (group, entry) in visibility_gated:
+                reason = 'condition', 'an existing visibility condition decides'
+            elif kind == 'creature' and (extra & 128 or HELPER.search(name)):
+                reason = 'helper', 'invisible helper'
+            elif kind == 'creature' and npcflag & GRAVEYARD_FLAGS:
+                reason = 'graveyard', 'spirit healer or guide'
+            elif need < 8 and kind == 'creature' and (npcflag & BATTLEMASTER_FLAG or entry in battleground_vendors):
+                reason = 'battleground', 'battlemaster or battleground reputation vendor'
+            elif (kind == 'creature' and not extra & 2 and not unit_flags & 0x100
+                  and (faction in hostile or (faction in one_side and not npcflag and not in_capital(map_id, x, y)))):
+                reason = 'hostile', 'would attack unseen'
+            elif kind == 'gameobject' and kind_type not in GAMEOBJECT_TYPES:
+                reason = 'mechanics', f'type {kind_type} keeps collision or mechanics'
+            elif earlier:
+                reason = 'quest', 'earlier quests ' + ','.join(map(str, earlier[:6]))
+            elif need == REQUIRED.get(era) and (source := renumbered(era, ('go:' + name) if kind == 'gameobject' else name,
+                                                                      map_id, round(x), round(y))):
+                reason = 'renumbered', f'same name here in {source}'
+            if reason:
+                skipped[f'{kind}:{reason[0]}'].append((f'{stage_name(need)} {kind} {entry} {name}', guid, map_id, reason[1]))
+            else:
+                conditions.append((30, group, entry, guid, 66000 + need))
+                mask &= ~((1 << need) - 1)
+        seen_after[kind][entry] |= mask
 
     vendor_gated = {(int(g), int(e)) for g, e in q(
         f'SELECT SourceGroup, SourceEntry FROM {world}.conditions WHERE SourceTypeOrReferenceId = 23 AND {OWN}')}
@@ -305,14 +483,16 @@ def generate(q, args):
                 JOIN {world}.creature_template t ON t.entry = v.entry WHERE v.item > 0"""):
         vendor, item = int(vendor), int(item)
         era = item_era.get(item)
-        if (era not in REQUIRED or (vendor, item) in vendor_gated or vendor not in creature_era
-                or not seen_after['creature'].get(vendor, 0) & ((1 << REQUIRED[era]) - 1)):
+        need = REQUIRED.get(era, 0) or (vanilla_stage('item', item) if era == 0 else 0)
+        if (not need or (vendor, item) in vendor_gated or vendor not in creature_era
+                or (need < 8 and (vendor in scripted['creature'] or item in battleground_items))
+                or not seen_after['creature'].get(vendor, 0) & ((1 << need) - 1)):
             continue
-        if any(item_name.lower() in earlier_wares[(db, vendor)] for db in earlier_dbs[era]):
+        if era in REQUIRED and any(item_name.lower() in earlier_wares[(db, vendor)] for db in earlier_dbs[era]):
             skipped['vendor:renumbered'].append((f'{ERA[era]} item {item} {item_name} at {vendor} {vendor_name}',
                                                  vendor, item, 'same item name at this vendor in an earlier database'))
         else:
-            conditions.append((23, vendor, item, 0, MARKER[era]))
+            conditions.append((23, vendor, item, 0, 66000 + need))
     return conditions, skipped
 
 
@@ -330,39 +510,44 @@ def wrap(values, indent='    ', width=110):
 COLUMNS = ('(`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTypeOrReference`, '
            '`ConditionTarget`, `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorType`, '
            '`ErrorTextId`, `ScriptName`, `Comment`)')
-HEADER = '''-- Later-expansion world content stays out of reach until the character earns its
--- expansion: TBC content needs the rewarded TBC marker (66008), Wrath content the
--- Wrath marker (66013). Generated from the CMaNGOS world databases (classic-db
--- ec4f596, tbc-db ebe51a8, wotlk-db 78e8dc0): an entry absent from Classic arrived
--- with TBC, an entry absent from TBC too arrived with Wrath.
+HEADER = '''-- World content of later expansions and patches stays out of reach until the character
+-- earns the milestone of its tier: TBC content needs the rewarded marker of tier 8 (66008),
+-- Wrath content tier 13 (66013), and each patch the tier of its raid. Generated from the
+-- CMaNGOS world databases (classic-db ec4f596, tbc-db ebe51a8, wotlk-db 78e8dc0): an entry
+-- absent from Classic arrived with TBC, an entry absent from TBC too arrived with Wrath.
+-- VMaNGOS (core 9b7fb4d, world dump of 14 June 2021) dates Vanilla content to its patch:
+-- 1.6 opens with tier 1, 1.7, 1.8 and 1.10 with tier 3, 1.9 with tier 4, 1.11 and 1.12
+-- with tier 6. ChromieCraft's progression brackets (9235693) date TBC and Wrath phases:
+-- 2.1 with tier 10, 2.3 and 2.4 with 12, 3.1 with 14, 3.2 with 15, 3.3 with 16, 3.3.5 with 17.
 --
--- Creature and gameobject spawns on the old-world continents, and Wrath's in
--- Outland, get visibility conditions, which keep their AI and scripts. Quests and vendor items reachable before their expansion get
--- availability conditions on every existing alternative. Left alone: spawns of
--- modules and awareness scripts, invisible helpers, creatures that would attack
--- unseen, objects with collision or mechanics, objects of earlier quests, entries the
--- earlier database places at the same spot under another number, and quests or items
--- the earlier database knows by the same name.
+-- Spawns on the old-world continents, and a later tier's in Outland or Northrend, get
+-- visibility conditions, which keep their AI and scripts. Quests and vendor items
+-- reachable before their tier get availability conditions on every existing alternative.
+-- Left alone: spawns of modules and awareness scripts, invisible helpers, spirit healers,
+-- creatures that would attack unseen, objects with collision or mechanics, objects of
+-- earlier quests, entries the earlier database places at the same spot under another
+-- number, quests or items the earlier database knows by the same name, and for Vanilla
+-- patches Classic battlegrounds, holidays and Individual Progression's own placements.
 DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` IN (19, 23, 30) AND `Comment` LIKE 'Era content: %';
 '''
 
 
 def render(conditions):
     out = [HEADER]
-    for era in (1, 2):
-        marker, name = MARKER[era], ERA[era]
+    for marker in sorted({c[4] for c in conditions}):
+        stage = marker - 66000
+        name = stage_name(stage)
         for group, table in ((0, 'creature'), (1, 'gameobject')):
             spawns = sorted((guid, entry) for source, g, entry, guid, m in conditions if source == 30 and g == group and m == marker)
             if spawns:
-                where = 'the old-world continents and Outland' if era == 2 else 'the old-world continents'
-                out += [f'-- {name} {table}s on {where}.',
+                out += [f'-- {name} {table}s opening at tier {stage}.',
                         (f'INSERT IGNORE INTO `conditions` {COLUMNS}\n'
                          f"SELECT 30, {group}, `id`, `guid`, 0, 8, 0, {marker}, 0, 0, 0, 0, 0, '', 'Era content: {name} {table}'\n"
                          f'FROM `{table}` WHERE `id` IN (\n{wrap(sorted({e for _, e in spawns}))}\n) AND `guid` IN (\n'
                          f'{wrap([g for g, _ in spawns])}\n);\n')]
         quests = sorted(entry for source, _, entry, _, m in conditions if source == 19 and m == marker)
         if quests:
-            out += [f'-- {name} quests reachable earlier; every existing alternative keeps its own conditions.',
+            out += [f'-- {name} quests opening at tier {stage}; every existing alternative keeps its own conditions.',
                     (f'INSERT IGNORE INTO `conditions` {COLUMNS}\n'
                      f'SELECT DISTINCT 19, 0, q.`ID`, 0, COALESCE(c.`ElseGroup`, 0), 8, 0, {marker}, 0, 0, 0, 0, 0, \'\', '
                      f"'Era content: {name} quest'\n"
@@ -377,7 +562,7 @@ def render(conditions):
         if wares:
             clauses = '\n   OR '.join(f'(v.`entry` = {vendor} AND v.`item` IN ({", ".join(map(str, sorted(items)))}))'
                                       for vendor, items in sorted(wares.items()))
-            out += [f'-- {name} items sold by vendors that are visible earlier.',
+            out += [f'-- {name} items opening at tier {stage}, sold by vendors that are visible earlier.',
                     (f'INSERT IGNORE INTO `conditions` {COLUMNS}\n'
                      f"SELECT DISTINCT 23, v.`entry`, v.`item`, 0, 0, 8, 0, {marker}, 0, 0, 0, 0, 0, '', "
                      f"'Era content: {name} vendor item'\n"
@@ -394,13 +579,15 @@ def main():
     for name, default in (('world', 'acore_world'), ('core-world', 'core_world'), ('classic', 'cm_classic'),
                           ('tbc', 'cm_tbc'), ('wotlk', 'cm_wotlk')):
         parser.add_argument(f'--{name}', default=default)
+    parser.add_argument('--vmangos', help='VMaNGOS world database for the patches of Vanilla content')
+    parser.add_argument('--chromiecraft', type=Path, help='mod-progression-system checkout for TBC and Wrath phases')
     args = parser.parse_args()
     conditions, skipped = generate(Database(args.mysql), args)
     args.output.write_text(render(conditions))
     if args.report:
         args.report.write_text(json.dumps({'conditions': conditions, 'skipped': skipped}, ensure_ascii=False, indent=0))
     counts = Counter((source, marker) for source, *_, marker in conditions)
-    print(', '.join(f'{count} {kind} {ERA[1 if marker == 66008 else 2]}' for (source, marker), count in sorted(counts.items())
+    print(', '.join(f'{count} {kind} at tier {marker - 66000}' for (source, marker), count in sorted(counts.items())
                     for kind in [{19: 'quests', 23: 'vendor items', 30: 'spawns'}[source]]))
 
 

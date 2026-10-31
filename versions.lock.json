@@ -64,7 +64,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "336f71d14f9a5a2938a6a3a74042791a2d3f5448",
+      "revision": "72e939bb11ea7cbc79fb54275f0a72fcc4329e0b",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
@@ -83,7 +83,8 @@
         "mod-individual-progression-netherstorm-updates": "3ab83ec445111a983dece14d473c4ce018f8f683",
         "mod-individual-progression-wetlands-netherstorm-core-updates": "b58a459a289f46d61e7e27fb98d545b631ce071c",
         "mod-individual-progression-expansion-starts": "16bdc770174f9ca619619a9a25ac212c077b3afa",
-        "mod-individual-progression-era-world-content": "336f71d14f9a5a2938a6a3a74042791a2d3f5448"
+        "mod-individual-progression-era-world-content": "336f71d14f9a5a2938a6a3a74042791a2d3f5448",
+        "mod-individual-progression-era-patch-phases": "72e939bb11ea7cbc79fb54275f0a72fcc4329e0b"
       }
     },
     {
@@ -277,6 +278,21 @@
         "name": "cmangos-wotlk-db",
         "url": "https://github.com/cmangos/wotlk-db.git",
         "revision": "78e8dc010748043b08b3b011794c645382aa107f"
+      },
+      {
+        "name": "vmangos-core",
+        "url": "https://github.com/vmangos/core.git",
+        "revision": "9b7fb4dfdb1d863ef93c5cf24d57aff92124f41f"
+      },
+      {
+        "name": "vmangos-database",
+        "url": "https://github.com/brotalnia/database.git",
+        "revision": "fc4af4870578efa63b36824bfd48fca7933f7362"
+      },
+      {
+        "name": "chromiecraft-progression-system",
+        "url": "https://github.com/azerothcore/mod-progression-system.git",
+        "revision": "923569393ee4a2dc239afe3cae39d0eec6787798"
       },
       {
         "name": "cmangos-mangos-classic",

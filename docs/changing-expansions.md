@@ -124,26 +124,41 @@ and 79; the remaining 65% continue progression. New random bots level from 1, an
 level-69/79 residents must first earn TBC/Wrath. See
 [earned bot brackets](earned-bot-brackets.md) to adjust or release these caps.
 
-## Later-expansion content in Azeroth
+## World content by era and patch
 
-The 3.3.5 world shows NPCs, objects, quests and wares that TBC and Wrath added to
-Azeroth. An era update keeps them out of each character's reach until its own tier
-8 (TBC) or 13 (Wrath): for example Wrath's Inscription trainers, supplies and
-glyph parchment, barbers, Northrend zeppelin towers and 3.x mailboxes, and TBC's
-2.3 Dustwallow Marsh with Mudsprocket, guild vaults, blood elf and draenei envoys,
-the Caverns of Time keepers and jewelcrafting designs. Spawns use native
-visibility conditions, which keep their scripts; quests and vendor items use
-availability conditions. Learned professions, accepted quests and owned items
-remain.
+The 3.3.5 world shows NPCs, objects, quests and wares of every patch. An era update
+keeps them out of each character's reach until its own tier opens them: content of
+a later expansion with its tier 8 (TBC) or 13 (Wrath), and each patch's additions
+with the tier of that patch's raid.
 
-The repository's `scripts/generate_era_world_content.py` derives the update from
-the pinned CMaNGOS Classic, TBC and Wrath databases: an entry missing from Classic
-arrived with TBC, one missing from TBC too with Wrath. It leaves alone creatures
-that would attack unseen, such as 2.3 Dustwallow's Grimtotem and Defias raiders,
-which stay visible; spawns of other modules and of Individual Progression's
-awareness scripts; invisible helpers; objects with collision or traps; objects of
-earlier quests; and entries the earlier database knows under another number.
-Holiday content follows the event calendar.
+| Patch | Opens at tier | Examples |
+| --- | --- | --- |
+| 1.2–1.5 | 0 | Molten Core, Onyxia, Dire Maul, Warsong Gulch, Alterac Valley |
+| 1.6 | 1 | Blackwing Lair attunement, Thunderfury, Argent Dawn and Timbermaw patterns |
+| 1.7, 1.8, 1.10 | 3 | Zul'Gurub's Zandalar quests, Cenarion Hold, the second dungeon set's braziers |
+| 1.9 | 4 | Ahn'Qiraj war quests, Silithus Twilight's Hammer, fishing schools, Timbermaw quests |
+| 1.11, 1.12 | 6 | Naxxramas and the Argent Dawn's Craftsman's Writs, Silithus world PvP |
+| 2.0 | 8 | Blood elf and draenei envoys, the Caverns of Time keepers, guild vaults, jewelcrafting |
+| 2.1 | 10 | Ogri'la, the Sha'tari Skyguard and the Netherwing |
+| 2.3, 2.4 | 12 | Zul'Aman and the Isle of Quel'Danas |
+| 3.0 | 13 | Inscription, barbers, Northrend zeppelin towers, 3.x mailboxes |
+| 3.1–3.3.5 | 14–17 | Ulduar, the Argent Crusade's Coliseum, Icecrown and the Ruby Sanctum |
+
+Spawns use native visibility conditions, which keep their scripts; quests and vendor
+items use availability conditions. Learned professions, accepted quests and owned
+items remain. Classic battlegrounds open by level, so their quests, battlemasters and
+reputation vendors stay available. Individual Progression's own awareness scripts and
+markers keep deciding the content they already place, such as the Ahn'Qiraj
+preparation at tier 3.
+
+The repository's `scripts/generate_era_world_content.py` derives the update from the
+pinned CMaNGOS Classic, TBC and Wrath databases (an entry missing from Classic arrived
+with TBC, one missing from TBC too with Wrath), VMaNGOS's patch records for Vanilla and
+ChromieCraft's progression brackets for TBC and Wrath phases. It leaves alone creatures
+that would attack unseen, such as 2.3 Dustwallow's Grimtotem and Defias raiders, which
+stay visible; spirit healers; spawns of other modules; invisible helpers; objects with
+collision or traps; objects of earlier quests; and entries the earlier database knows
+under another number. Holiday content follows the event calendar.
 
 ## Battleground access and rules
 
