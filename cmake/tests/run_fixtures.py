@@ -42,7 +42,6 @@ GAMEPLAY = (
     "TestOnyxiaIntegration",
     "TestHistoricalClassQuests", "TestMultiBotTrainerMoney", "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestZygorProgression",
     "TestMultiBotOptionalPresets", "TestMultiBotEraTalents", "TestDragonUIEraTalents", "TestEraTrainerBook", "TestMultiBotTalentLearning", "TestMultiBotRoleStrategies", "TestMultiBotVendorPurchases", "TestMultiBotSpellbook", "TestMultiBotSpellbookDisplay", "TestFormationMovement",
-    "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates",
     "TestCombatProfiles", "TestCombatProfileEquipment", "TestEquipmentScoring", "TestCombatProfileBridge",
     "TestMultiBotCombatProfiles",
     "TestFrostmaneHold", "TestCreatureEraModifiers", "TestNaturalTaxiRoutes", "TestNaturalMovement",
@@ -51,6 +50,8 @@ GAMEPLAY = (
     "TestPlayerbotUpstreamFixes", "TestPlayerbotSscEarnedPlay", "TestPlayerbotRaidRecovery", "TestProfileKeys", "TestDocumentation", "TestEraTreeBlanketing",
     "TestCorpseRecovery", "TestBotAccountDeletion",
     "TestNativeBankTransfers",
+    # Appended so existing fixtures keep their shard.
+    "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
