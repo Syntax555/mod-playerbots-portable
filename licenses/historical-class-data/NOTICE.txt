@@ -1,4 +1,4 @@
-Historical class-quest, priest racial and quest experience data
+Historical class-quest, priest racial, quest experience and era world-content data
 
 Source projects and revisions:
 - CMaNGOS classic-db
@@ -8,14 +8,22 @@ Source projects and revisions:
   quest_template, creature_questrelation, creature_involvedrelation,
   npc_trainer and npc_trainer_template records; quest_template QuestLevel for
   the 1.12 quest level table; player_xp_for_level as the reference the source
-  fixtures compare Individual Progression's table with.
+  fixtures compare Individual Progression's table with; with its Updates,
+  creature, gameobject, quest and item entries, spawns and vendor lists for
+  the era world-content gates.
 - CMaNGOS tbc-db
   https://github.com/cmangos/tbc-db
   ebe51a83b0fde5397f0ecd82a36cb6c40f667d36
   Full_DB/TBCDB_1.11.0_Vengeance_One_A_Cmangos_Story.sql.gz:
   npc_trainer and npc_trainer_template records; quest_template QuestLevel,
   RewMoneyMaxLevel and QuestFlags for the 2.4.3 quest experience table;
-  player_xp_for_level as a fixture reference.
+  player_xp_for_level as a fixture reference; with its Updates, the same
+  world records as classic-db for the era world-content gates.
+- CMaNGOS wotlk-db
+  https://github.com/cmangos/wotlk-db
+  78e8dc010748043b08b3b011794c645382aa107f
+  Full_DB/WoTLKDB_1_9_14092.sql.gz with its Updates: creature, gameobject,
+  quest and item entries for the era world-content gates.
 - CMaNGOS mangos-classic
   https://github.com/cmangos/mangos-classic
   8ec338a1704e7dcb1c0213eb7ed58f9231ade40f
@@ -29,7 +37,8 @@ Source projects and revisions:
 Selected historical quest, trainer, spell, rank, triggered-effect and quest
 experience data are adapted to the server's per-character progression gates,
 generated era Spell.dbc records and Individual Progression's custom_quest_xp_tbc
-and custom_quest_xp_level tables. No complete CMaNGOS database or core is distributed here. The source
+and custom_quest_xp_level tables; era world-content entry lists become
+Individual Progression's rewarded-marker conditions. No complete CMaNGOS database or core is distributed here. The source
 revisions and local adaptations are recorded in versions.lock.json and in the
 client package's SOURCE_MANIFEST.json.
 
@@ -37,7 +46,7 @@ Authorship remains with the CMaNGOS Project and the contributors identified in
 each pinned repository's AUTHORS file and commit history. Classic-DB also
 credits the Zero Project team and the MaNGOS Foundation team.
 
-Database license: the classic-db and tbc-db README files declare GPL version 3.
+Database license: the classic-db, tbc-db and wotlk-db README files declare GPL version 3.
 Their complete, identical LICENSE.md text is preserved in ../GPL-3.0.txt.
 Database AUTHORS and COPYRIGHT.md notices remain applicable to derived data.
 
@@ -52,8 +61,8 @@ from World of Warcraft content and materials, which retain the rights of
 Blizzard and its licensors. The following upstream COPYRIGHT.md notices are
 preserved verbatim. Inclusion is not a grant of rights to the game content.
 
-CMaNGOS classic-db and tbc-db COPYRIGHT.md
-----------------------------------------
+CMaNGOS classic-db, tbc-db and wotlk-db COPYRIGHT.md
+----------------------------------------------------
 Copyright
 =========
 

@@ -29,7 +29,9 @@ Sources, licenses and update instructions are in
   never treat them as random bots, recruit them automatically or spend their
   talent points.
 - Content follows each character's own earned era (Individual Progression).
-  An account, a party leader or a higher level never unlocks it for someone else.
+  An account, a party leader or a higher level never unlocks it for someone else;
+  only a new blood elf, draenei or death knight starts at its expansion's first
+  tier once another character on the same account has earned it.
 - Preserve user configuration, characters and databases when changing
   installation, packaging, migration or updates. Managed defaults may change
   only where the user kept the previous managed value.

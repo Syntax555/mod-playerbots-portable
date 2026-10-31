@@ -58,8 +58,9 @@ See the [update guide](updating.md) for manual installation and offline startup.
 | Strict earned milestones | Enabled; preceding boss and rewarded-quest markers required |
 | TBC / Wrath access | Earned tiers 8 / 13; XP stops at 60 / 70 until unlocked |
 | Experience rules | Each character's earned era; see [experience by era](changing-expansions.md#experience-by-era) |
-| Expansion races | Same-account earned TBC unlock; alts start at tier 0 |
-| New death knights | Blocked by strict mode; existing characters retained |
+| Expansion races | After another character on the account earned TBC; start at level 1, tier 8 |
+| New death knights | After another character on the account earned Wrath; native level-55 start, tier 13 |
+| Later-expansion world content | TBC and Wrath NPCs, objects, quests and wares in Azeroth appear at tier 8 / 13; see [changing expansions](changing-expansions.md#later-expansion-content-in-azeroth) |
 | XP, drops, reputation and honor | Normal 1.0 rates |
 | Skills and professions | Trained and improved normally; two primary professions |
 | Talent points | Normal 1.0 rate; historical trees selected by earned era |

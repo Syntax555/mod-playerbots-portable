@@ -35,6 +35,8 @@ for method, flag in (('isExcludedAccount', '_excludedAccountsEnabled'), ('isBotA
     assert '}\n\n    return GetAccountMatch(accountId).' in predicate
 progress = '\n'.join(function(production, signature) for signature in (
     'uint8 IndividualProgression::GetAccountProgression(',
+    'uint8 IndividualProgression::ExpansionRaceUnlockStage() const',
+    'uint8 IndividualProgression::DeathKnightUnlockStage() const',
     'void IndividualProgression::LoadAccountRegexes(',
     'IndividualProgression::AccountMatch IndividualProgression::GetAccountMatch(',
     'bool IndividualProgression::isExcludedAccount(uint32',
@@ -122,6 +124,8 @@ struct IndividualProgression {
     bool isExcludedAccount(uint32);
     bool isBotAccount(uint32);
     static uint8 GetAccountProgression(uint32);
+    uint8 ExpansionRaceUnlockStage() const;
+    uint8 DeathKnightUnlockStage() const;
     bool isExcludedAccount(Player*) { return false; }
     bool isBotAccount(Player*) { return false; }
     bool hasPassedProgression(Player* player, int stage) { return player->state >= stage; }

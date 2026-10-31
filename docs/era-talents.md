@@ -15,7 +15,7 @@ The server validates the historical talents shown by the addon. Historical passi
 abilities and selected class spell variants are supported. Other combat formulas
 and class subsystems still use the Wrath core. TBC Classic 2.5.4 includes later
 balance changes, including paladin seals, and is not exact original 2.4.3 balance.
-Existing death knights retain native trees; strict mode blocks new hero characters.
+Death knights, created once the account has earned Wrath, use native trees.
 
 ## Install the matching client files
 
