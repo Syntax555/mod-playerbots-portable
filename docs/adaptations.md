@@ -51,7 +51,7 @@ active files and default policies.
 | Adaptation | Scope |
 | --- | --- |
 | Era creature modifiers | Targeted SQL restores Individual Progression's damage and armor modifiers for affected creatures only where fields still match the conflicting core update. Other fields and later custom values are preserved. |
-| World setup and Netherstorm | SQL ordering keeps Individual Progression's cleanup compatible with the core schema. Guarded updates restore Drijya's escort, Summoner Kanthin's formation and sheath state, and remove duplicate Sunfury Magister spawns on established realms. |
+| World setup, Wetlands and Netherstorm | SQL ordering keeps Individual Progression's cleanup compatible with the core schema. Guarded updates restore Drijya's escort, Summoner Kanthin's formation and sheath state, the Wetlands Dark Iron scripts and a Netherstorm Mageslayer's spawn height, and remove duplicate Sunfury Magister spawns on established realms. |
 | Frostmane Hold, quest 287 | Removes prerequisite 420 only where that value remains; ordinary level/faction checks and quest 291's prerequisite remain. |
 | Historical class quests | Personal race, level and earned-era gates select restored priest rank-1 rewards; later ranks use paid training. Native Wrath records remain. See [class quests](class-quests.md). |
 | Client cache | A stable database cache version refreshes client query data after relevant SQL migrations. Explicit overrides and higher administrator-managed versions remain. See [cache behavior](updating.md#server-data-and-the-client-cache). |
