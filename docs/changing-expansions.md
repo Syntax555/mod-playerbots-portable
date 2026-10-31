@@ -1,15 +1,16 @@
 # Individual progression through expansions
 
 The default `individual` mode supports Vanilla, TBC and Wrath on the WoW 3.3.5a
-client. Each new character starts at level 1, tier 0 and earns its own access.
-Players and bots use the same milestone chain. Account race unlocks permit
-character creation; they do not advance an alt.
+client. Each new character of a Vanilla race and class starts at level 1, tier 0
+and earns its own access. Players and bots use the same milestone chain. Blood
+elves, draenei and death knights did not exist before their expansion: another
+character on the account must have earned it, and the new character starts there.
 
 | Earned progression | Content and level ceiling | Account creation unlock |
 | --- | --- | --- |
 | Tiers 0–7 | Vanilla; level 60 | Vanilla races and classes |
-| Tier 8 | TBC; level 70 | Blood elves and draenei |
-| Tier 13 | Wrath; level 80 | No additional level-1 class |
+| Tier 8 | TBC; level 70 | Blood elves and draenei, starting at tier 8 |
+| Tier 13 | Wrath; level 80 | Death knights, starting at level 55 and tier 13 |
 | Tier 18 | Completed default Wrath chain | No levels, equipment or gold granted |
 
 Strict earned progression requires each preceding milestone. Eligible boss
@@ -91,8 +92,8 @@ Recruit-a-Friend XP, level grants, summons and reputation bonuses are disabled.
 
 Limits:
 
-- Characters outside their era's level band, such as existing death knights
-  from before strict mode or GM level changes, use their level's table.
+- Characters outside their era's level band, such as death knights below
+  level 71 or GM level changes, use their level's table.
 - Heirlooms keep their stats; only their XP bonus is ignored before Wrath. A
   kill with an ignored bonus can differ by one XP point.
 - The client quest log calculates rewards from its own 3.3.5 data; quest-giver
@@ -107,19 +108,42 @@ Limits:
 
 ## Accounts and the bot population
 
-Blood elf and draenei creation uses earned markers on the same account. An
-unlocked character still starts at level 1, tier 0 with normal starter items and
-zero gold. A player's account unlock does not apply to random-bot accounts.
-Existing expansion-race bots without their account unlock remain offline.
-
-Strict mode blocks new death knight creation because their native level-55 start
-conflicts with the level-1 policy. Existing death knights retain native class
-talents. Bot death knight login is disabled in the default profile.
+Blood elf and draenei creation needs another character on the same account with
+earned TBC (tier 8). The new character starts at level 1 with normal starter items
+and zero gold, carrying the markers of tiers 1–8 at its first login; TBC's raid
+tiers and Wrath it earns itself. Death knight creation needs earned Wrath (tier 13)
+on the account. A death knight keeps its native start, level 55 in Acherus, with
+the markers of tiers 1–13 and earns Wrath's raid tiers. Neither start copies
+another character's progress beyond the expansion's first tier. A player's account
+unlock does not apply to random-bot accounts. Existing expansion-race bots without
+their account unlock remain offline, and bot death knight login is disabled in the
+default profile.
 
 About 5% of random bots are assigned each earned cap at 19, 29, 39, 49, 59, 69
 and 79; the remaining 65% continue progression. New random bots level from 1, and
 level-69/79 residents must first earn TBC/Wrath. See
 [earned bot brackets](earned-bot-brackets.md) to adjust or release these caps.
+
+## Later-expansion content in Azeroth
+
+The 3.3.5 world shows NPCs, objects, quests and wares that TBC and Wrath added to
+Azeroth. An era update keeps them out of each character's reach until its own tier
+8 (TBC) or 13 (Wrath): for example Wrath's Inscription trainers, supplies and
+glyph parchment, barbers, Northrend zeppelin towers and 3.x mailboxes, and TBC's
+2.3 Dustwallow Marsh with Mudsprocket, guild vaults, blood elf and draenei envoys,
+the Caverns of Time keepers and jewelcrafting designs. Spawns use native
+visibility conditions, which keep their scripts; quests and vendor items use
+availability conditions. Learned professions, accepted quests and owned items
+remain.
+
+The repository's `scripts/generate_era_world_content.py` derives the update from
+the pinned CMaNGOS Classic, TBC and Wrath databases: an entry missing from Classic
+arrived with TBC, one missing from TBC too with Wrath. It leaves alone creatures
+that would attack unseen, such as 2.3 Dustwallow's Grimtotem and Defias raiders,
+which stay visible; spawns of other modules and of Individual Progression's
+awareness scripts; invisible helpers; objects with collision or traps; objects of
+earlier quests; and entries the earlier database knows under another number.
+Holiday content follows the event calendar.
 
 ## Battleground access and rules
 

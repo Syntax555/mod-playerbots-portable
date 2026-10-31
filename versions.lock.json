@@ -64,7 +64,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "9d75507a68d7dbeb49aa895d8c4bfc437fd89448",
+      "revision": "336f71d14f9a5a2938a6a3a74042791a2d3f5448",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
@@ -81,7 +81,9 @@
         "mod-individual-progression-client-cache": "a13ebd35f9103885de1bd6ea8f7b2d9d37d264f3",
         "mod-individual-progression-cleanup-order": "0d3414ac63e0e339cf2907a4a96934f42dc33aee",
         "mod-individual-progression-netherstorm-updates": "3ab83ec445111a983dece14d473c4ce018f8f683",
-        "mod-individual-progression-wetlands-netherstorm-core-updates": "b58a459a289f46d61e7e27fb98d545b631ce071c"
+        "mod-individual-progression-wetlands-netherstorm-core-updates": "b58a459a289f46d61e7e27fb98d545b631ce071c",
+        "mod-individual-progression-expansion-starts": "16bdc770174f9ca619619a9a25ac212c077b3afa",
+        "mod-individual-progression-era-world-content": "336f71d14f9a5a2938a6a3a74042791a2d3f5448"
       }
     },
     {
@@ -270,6 +272,11 @@
         "name": "cmangos-tbc-db",
         "url": "https://github.com/cmangos/tbc-db.git",
         "revision": "ebe51a83b0fde5397f0ecd82a36cb6c40f667d36"
+      },
+      {
+        "name": "cmangos-wotlk-db",
+        "url": "https://github.com/cmangos/wotlk-db.git",
+        "revision": "78e8dc010748043b08b3b011794c645382aa107f"
       },
       {
         "name": "cmangos-mangos-classic",

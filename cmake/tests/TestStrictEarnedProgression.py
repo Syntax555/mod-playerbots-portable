@@ -74,6 +74,9 @@ functions = '\n'.join(function(production, signature) for signature in (
     'bool IndividualProgression::isBotAccount(const Player*',
     'bool IndividualProgression::isBotAccount(uint32',
     'bool IndividualProgression::isNormalAccount(',
+    'uint8 IndividualProgression::ExpansionRaceUnlockStage(',
+    'uint8 IndividualProgression::DeathKnightUnlockStage(',
+    'void IndividualProgression::GrantCreationStartingStage(',
 ))
 # Random-bot class spells and trainer unlocks live with the module's spell rules.
 functions += '\n' + '\n'.join(function(spells_source, signature) for signature in (
@@ -84,7 +87,8 @@ hooks = '\n'.join(function(player_source, signature).replace(' override', '')
                   for signature in ('    bool OnPlayerCanLearnTalent(',
                                     '    void OnPlayerCreatureKillCredit(',
                                     '    void OnPlayerCompleteQuest(',
-                                    '    bool CanAccountCreateCharacter('))
+                                    '    bool CanAccountCreateCharacter(',
+                                    '    void OnPlayerFirstLogin('))
 
 # Keep the actual entry checks of commands/helpers that otherwise need a live
 # database or inventory. A sentinel observes whether execution passes them.
@@ -108,6 +112,7 @@ for signature in ('    static bool HandleSetBotIndividualProgressionCommand(',
                           unused + '        ++unguardedCalls;\n        return true;\n    }')
 
 prelude = r'''
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -163,7 +168,7 @@ struct PlayerSetting { uint32 value=0; bool HasFlag(uint32 flag) const { return 
 struct Creature;
 struct Player : WorldObject {
     Session session; bool alive=true, allowedReward=true, gm=false;
-    Corpse* corpse=nullptr; Group* group=nullptr; uint8 cls=1; uint32 level=1;
+    Corpse* corpse=nullptr; Group* group=nullptr; uint8 cls=1, race=1; uint32 level=1;
     std::map<uint32,int> quests; std::map<std::pair<std::string,uint32>,uint32> settings;
     std::set<uint32> spells, achievements; std::vector<uint32> rewarded;
     int settingWrites=0, spellGrants=0;
@@ -182,7 +187,7 @@ struct Player : WorldObject {
         quests[quest->id]=QUEST_STATUS_REWARDED; rewarded.push_back(quest->id);
     }
     bool HasAchieved(uint32 id) const { return achievements.contains(id); }
-    uint8 getClass() const { return cls; } uint32 GetLevel() const { return level; }
+    uint8 getClass() const { return cls; } uint8 getRace() const { return race; } uint32 GetLevel() const { return level; }
     bool HasSpell(uint32 id) const { return spells.contains(id); }
     void learnSpell(uint32 id,bool) { ++spellGrants; spells.insert(id); }
     void ModifyMoney(int32) {} void RemoveRewardedQuest(uint32 id) { quests.erase(id); }
@@ -229,12 +234,16 @@ struct IndividualProgression {
     std::unordered_map<uint32,uint32> questXpMap;
     int progressionLimit=0;
     uint8 tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13;
+    uint8 tbcRacesStartingProgression=8, deathKnightStartingProgression=13;
     std::map<uint32,uint8> customProgressionMap;
     std::string botAccountsRegex="RNDBOT.*", excludedAccountsRegex="RNDBOT.*";
     static std::map<uint32,uint8> accounts;
     static uint8 GetAccountProgression(uint32 account) { return accounts[account]; }
     uint8 GetPlayerProgressionFromQuests(Player*) const;
     bool IsStrictDefaultProgression() const;
+    uint8 ExpansionRaceUnlockStage() const;
+    uint8 DeathKnightUnlockStage() const;
+    void GrantCreationStartingStage(Player*);
     bool EraExperienceActive() const { return false; }
     bool HasStrictEarnedMilestone(Player*,uint8) const;
     static bool IsEligibleStrictKill(Player*,Creature*);
@@ -441,8 +450,36 @@ int main() {
         assert(hook.CanAccountCreateCharacter(1,1,1));
         assert(hook.CanAccountCreateCharacter(1,10,2)==(stage>=8));
         assert(hook.CanAccountCreateCharacter(1,11,7)==(stage>=8));
-        assert(!hook.CanAccountCreateCharacter(1,1,6)); // no fresh level-55 hero-class shortcut
+        assert(hook.CanAccountCreateCharacter(1,1,6)==(stage>=13)); // a level-55 hero class waits for Wrath
     }
+    // Strict mode keeps both unlocks at their expansion even when configured lower.
+    progression.tbcRacesProgressionLevel=0; progression.deathKnightProgressionLevel=0;
+    progression.accounts[1]=7;
+    assert(!hook.CanAccountCreateCharacter(1,10,2) && !hook.CanAccountCreateCharacter(1,1,6));
+    progression.accounts[1]=12;
+    assert(hook.CanAccountCreateCharacter(1,10,2) && !hook.CanAccountCreateCharacter(1,1,6));
+    progression.tbcRacesProgressionLevel=8; progression.deathKnightProgressionLevel=13;
+
+    // New expansion characters start in their expansion only on an account that earned it.
+    std::vector<uint32> const tbcMarkers{66001,66002,66003,66004,66005,66006,66007,66008};
+    progression.accounts[1]=8;
+    Player elf; elf.race=RACE_BLOODELF; hook.OnPlayerFirstLogin(&elf);
+    assert(Stage(elf)==8 && elf.rewarded==tbcMarkers);
+    Player human; hook.OnPlayerFirstLogin(&human);
+    assert(Stage(human)==0 && human.rewarded.empty());
+    progression.accounts[1]=7;
+    Player early; early.race=RACE_DRAENEI; hook.OnPlayerFirstLogin(&early);
+    assert(Stage(early)==0 && early.rewarded.empty());
+    progression.accounts[1]=13;
+    Player knight; knight.cls=CLASS_DEATH_KNIGHT; hook.OnPlayerFirstLogin(&knight);
+    assert(Stage(knight)==13 && knight.rewarded.size()==12 && !knight.quests.contains(66011));
+    progression.accounts[1]=12;
+    Player squire; squire.cls=CLASS_DEATH_KNIGHT; hook.OnPlayerFirstLogin(&squire);
+    assert(Stage(squire)==0);
+    progression.accounts[1]=18; progression.progressionLimit=7;
+    Player capped; capped.race=RACE_BLOODELF; hook.OnPlayerFirstLogin(&capped);
+    assert(Stage(capped)==0); // a Vanilla realm ceiling keeps expansion races in Vanilla
+    progression.progressionLimit=0;
     assert(AccountMgr::queries==0); // account regex cannot unlock races or the hero class
     progression.customProgressionMap[123]=5;
     assert(!progression.IsStrictDefaultProgression());
@@ -471,6 +508,12 @@ mutations = (
     ('numeric account exemption', 'bool IndividualProgression::isBotAccount(uint32 accountId)\n{\n    if (enabled && strictEarnedProgression)\n        return false;\n', 'bool IndividualProgression::isBotAccount(uint32 accountId)\n{\n'),
     ('numeric excluded-account exemption', 'bool IndividualProgression::isExcludedAccount(uint32 accountId)\n{\n    if (enabled && strictEarnedProgression)\n        return false;\n', 'bool IndividualProgression::isExcludedAccount(uint32 accountId)\n{\n'),
     ('talent earned era', 'uint8 const era = IndividualProgression_GetEarnedEra(player);', 'uint8 const era = 2;'),
+    ('death knight before Wrath', 'std::max<uint8>(deathKnightProgressionLevel, PROGRESSION_TBC_TIER_5)',
+     'deathKnightProgressionLevel'),
+    ('expansion race before TBC', 'std::max<uint8>(tbcRacesProgressionLevel, PROGRESSION_PRE_TBC)', 'tbcRacesProgressionLevel'),
+    ('expansion start without account stage', 'GetAccountProgression(player->GetSession()->GetAccountId()) < std::max(start, unlock)',
+     'GetAccountProgression(player->GetSession()->GetAccountId()) < (unlock & 0)'),
+    ('reserved stage granted on start', 'stage = StrictEarnedProgressionPolicy::NextStage(stage))', 'stage = stage + 1)'),
     ('bot trainer unlock without account check', 'if (unlockedForBots && sIndividualProgression->isBotAccount(player))',
      'if (unlockedForBots)'),
 )

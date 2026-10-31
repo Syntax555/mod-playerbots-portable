@@ -28,7 +28,7 @@ turn-ins are disabled in the shipped profile.
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [Syntax555/azerothcore-wotlk](https://github.com/Syntax555/azerothcore-wotlk), fork of [Grimfeather/azerothcore-wotlk](https://github.com/Grimfeather/azerothcore-wotlk) at `38db9bb1b588` | `8931c036ef6f` | Core server with the Playerbots and Individual Progression core changes, historical spell/accounting hooks and earned-era PvP rules |
 | Playerbots with Raid Clear | [Syntax555/wow-mod-playerbots](https://github.com/Syntax555/wow-mod-playerbots), fork of [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) at `5283a13e0a5d` | `9db761b686b4` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
-| Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression), fork of [Grimfeather/mod-individual-progression](https://github.com/Grimfeather/mod-individual-progression) at `18999da65adc` | `9d75507a68d7` | Earned content milestones and expansion access |
+| Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression), fork of [Grimfeather/mod-individual-progression](https://github.com/Grimfeather/mod-individual-progression) at `18999da65adc` | `336f71d14f9a` | Earned content milestones, expansion access and era world content |
 | Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `98127f118256` | Historical server trees, authored random-bot builds and client addon |
 | Dungeon Clear | [Syntax555/mod-dungeon-clear](https://github.com/Syntax555/mod-dungeon-clear), fork of [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) at `7fb6ebdefb80` | `340e5eb1416a` | Autonomous earned-era parties and player-led clears without event shortcuts |
 | MultiBot Bridge | [Syntax555/mod-multibot-bridge](https://github.com/Syntax555/mod-multibot-bridge), fork of [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) at `9f0e8ba767c6` | `82a7276163d3` | Server support for the MultiBot controls |
@@ -55,8 +55,9 @@ fork releases; see [downloads and installation](addons.md#addon-forks).
 | Component | Source repository and imported upstream | Locked revision | Role |
 | --- | --- | --- | --- |
 | StormLib | [ladislav-zezula/StormLib](https://github.com/ladislav-zezula/StormLib) | `116135c27e8c` | Native MPQ generation and verification |
-| CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records and 1.12 quest levels |
-| CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records and 2.4.3 quest experience values |
+| CMaNGOS Classic DB | [cmangos/classic-db](https://github.com/cmangos/classic-db) | `ec4f596146be` | Historical class quest and trainer records, 1.12 quest levels and Vanilla world entries |
+| CMaNGOS TBC DB | [cmangos/tbc-db](https://github.com/cmangos/tbc-db) | `ebe51a83b0fd` | Historical TBC class quest and trainer records, 2.4.3 quest experience values and TBC world entries |
+| CMaNGOS Wrath DB | [cmangos/wotlk-db](https://github.com/cmangos/wotlk-db) | `78e8dc010748` | Wrath world entries for the era content gates |
 | CMaNGOS Classic core | [cmangos/mangos-classic](https://github.com/cmangos/mangos-classic) | `8ec338a1704e` | Historical spell mechanics and coefficients |
 | CMaNGOS TBC core | [cmangos/mangos-tbc](https://github.com/cmangos/mangos-tbc) | `a8ad244bcbce` | Historical TBC spell mechanics and coefficients, quest experience formula |
 | German client text | [Haeniken/TrinityCore-3.3.5-data-multilang](https://github.com/Haeniken/TrinityCore-3.3.5-data-multilang) | `b21c94991a28` | German DBC text merged into the client MPQ |
