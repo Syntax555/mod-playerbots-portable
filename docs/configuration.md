@@ -14,6 +14,7 @@ embedded profiles. Active server files live in `configs/`; module files live in
 | `configs/modules/individualProgression.conf` | Character milestones, era access and historical rules |
 | `configs/modules/mod_era_talents.conf` | Historical trees and earned glyph access |
 | `configs/modules/MultiBotBridge.conf` | MultiBot and addon/server integrations |
+| `configs/modules/QuestieBridge.conf` | Questie-335 server state, such as each character's era quests |
 | `configs/modules/mod_dungeon_clear.conf` | Autonomous dungeon parties and player-led clears |
 | `configs/modules/mod_lfg_progression.conf` | Earned-era guards for optional Dungeon Finder |
 | `configs/modules/mod-quest-loot-party.conf` | Shared quest-item loot |

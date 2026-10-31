@@ -162,10 +162,10 @@ audit. See [supported scope](docs/configuration.md#supported-scope).
 
 ## Included modules
 
-The bundle builds the maintained Playerbots core with **nine native modules**:
+The bundle builds the maintained Playerbots core with **ten native modules**:
 Playerbots with integrated Raid Clear, Individual Progression, Era Talents,
-Dungeon Clear, MultiBot Bridge, Quest Loot Party, LFG Progression, Era Events
-and World Buff Bots. Runtime defaults and optional features differ from the
+Dungeon Clear, MultiBot Bridge, Questie Bridge, Quest Loot Party, LFG
+Progression, Era Events and World Buff Bots. Runtime defaults and optional features differ from the
 original projects' templates.
 
 See the [module catalog and pinned sources](docs/module-versions.md#server-modules)

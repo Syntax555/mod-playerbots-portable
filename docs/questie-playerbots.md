@@ -3,13 +3,15 @@
 Questie-335 displays authorized group bots' own quest counters without a WoW
 client for each bot. The server's MultiBot Bridge reads their active quest logs;
 Questie renders the results through its normal communication, tooltips and
-party objectives. The tracker remains the local player's tracker.
+party objectives. The tracker remains the local player's tracker. The server's
+Questie Bridge also shows each character only the quests of its own
+[era](#quests-of-the-characters-era).
 
 ## Installation
 
 Use **WoW 3.3.5a, build 12340** and the matching
 [server Latest release](https://github.com/Syntax555/mod-playerbots-portable/releases/latest).
-The prebuilt server includes the bridge; no additional module, compiler or new
+The prebuilt server includes both bridges; no additional module, compiler or new
 server setting is required.
 
 1. Update and restart the server using the [update guide](updating.md).
@@ -34,9 +36,7 @@ For a noninteractive installation from the extracted folder:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-Questie.ps1 -AddOnsPath 'C:\Games\WoW\Interface\AddOns'
 ```
 
-MultiBot is optional for controls. The separate upstream `mod-questie-bridge`
-provides other server information and is not required for bot quest progress.
-The installer retains the addon's existing notices; its MIT license applies
+MultiBot is optional for controls. The installer retains the addon's existing notices; its MIT license applies
 only to the installation tooling. See [third-party notices](../THIRD_PARTY_NOTICES.md).
 
 ## Supported behavior
@@ -61,6 +61,40 @@ Individual Progression: missing locations cannot be invented, and ID-less
 money, event and player-kill goals do not create entity tooltip lookups. Quests
 without objectives retain active-log membership but have no separate status
 display. The server's quest status remains authoritative.
+
+## Quests of the character's era
+
+Questie's database lists the quests of every patch up to 3.3.5. The server
+[gates later content](changing-expansions.md#world-content-by-era-and-patch)
+per character, and the included Questie Bridge reports that state to Questie:
+
+- Quests whose availability conditions the character fails, such as a later
+  era's or patch's quests, or Vanilla versions that Individual Progression
+  retires at a later tier, are hidden from the map and quest lists like quests
+  the server disables. Quest
+  details label them *Disabled by server*. A quest already in the quest log
+  stays tracked.
+- Questgivers that are hidden from the character, by the era's visibility
+  conditions or by Individual Progression's scripts, no longer show quest
+  markers in its current zone.
+- Both follow a new tier within a few seconds; no `/reload` is needed.
+
+Each character gets its own snapshot, so characters of different tiers on one
+account or realm see different quests. The bridge reads the server's live
+checks, so Questie matches what the character can accept.
+
+`/qserver quest <quest ID>` shows whether the server reports a quest as
+disabled for the character, and `/qserver giver <NPC ID>` lists observed spawns
+that offer it nothing. In `configs/modules/QuestieBridge.conf`,
+`QuestieBridge.QuestConditions = 0` turns the quest reports off and
+`QuestieBridge.Questgivers = 0` the questgiver reports.
+
+Questie's database still supplies locations, prerequisites and rewards: quest
+XP follows its normal rate reports, not era XP changes, and quests it does not
+know cannot appear. Questgivers are observed only while loaded in the current
+zone, at most 64 unavailable spawns per snapshot; other givers keep their usual
+markers. Trainer and vendor markers are unaffected. If the closed quests would
+not fit into one snapshot, none are sent and Questie shows its usual quests.
 
 ## Access and compatibility
 
@@ -91,8 +125,8 @@ two seconds and one snapshot request per bot per second. Messages respect the
 
 ## Source and verification
 
-The [manifest](../versions.lock.json) pins the Questie and MultiBot Bridge
-forks. The [upstream integration](https://github.com/Aldori15/Questie/commit/4c7df0caf0c86ddacf8ae31cb7489189c6d811ce)
+The [manifest](../versions.lock.json) pins the Questie, MultiBot Bridge and
+Questie Bridge forks. The [upstream integration](https://github.com/Aldori15/Questie/commit/4c7df0caf0c86ddacf8ae31cb7489189c6d811ce)
 provides progress, roster refresh, identity checks and bindings without a
 separate client implementation. Fork source, installation tooling and update
 instructions are linked in the [Questie README](https://github.com/Syntax555/Questie/tree/335).
@@ -106,6 +140,7 @@ For a behavior change, run the affected checks after source preparation:
 ```bash
 python3 cmake/tests/TestQuestProgressBridge.py
 python3 cmake/tests/TestQuestiePlayerbots.py
+python3 cmake/tests/TestQuestieEraQuests.py
 ```
 
 These exercise production C++ and Lua logic with native-shaped doubles and

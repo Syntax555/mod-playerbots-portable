@@ -1,0 +1,13 @@
+Questie Bridge
+Upstream: https://github.com/Aldori15/mod-questie-bridge
+Maintainer: Aldori
+Revision: 9a24fd652c1d658f87a057703298848baec26bae
+
+The upstream README declares:
+"GPL-2.0-or-later."
+
+Its source files carry the notice "SPDX-License-Identifier: GPL-2.0-or-later".
+The pinned repository does not include a separate LICENSE or COPYING file.
+The GNU General Public License version 2 text is included in ../GPL-2.0.txt.
+Upstream authorship and source remain available at the repository and
+revision above; fork changes are recorded in versions.lock.json.

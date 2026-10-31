@@ -59,8 +59,9 @@ installed.
 
 Questie shows group bots' quest counters automatically. Its native upstream
 integration supplies progress, roster refresh, identity checks and bindings.
-Use the matching bridge for the tested server integration. Database
-markers can differ from Individual Progression's quest versions. See
+Use the matching bridge for the tested server integration. The included
+Questie Bridge hides each character's quests and questgivers of later tiers.
+Database markers can differ from Individual Progression's quest versions. See
 [Questie bot progress](questie-playerbots.md).
 
 Zygor guides, Gear Finder and Talent Advisor follow each character's tier. Its

@@ -17,7 +17,9 @@ Each patch opens with the tier of its raid: PATCH_STAGE and BRACKET_STAGE below.
 Spawns on the old-world continents, and a later tier's in Outland or Northrend, that a
 character sees before their tier get visibility conditions, which keep AI and scripts.
 Quests reachable before their tier and items of vendors visible earlier get availability
-conditions on the rewarded milestone marker. Spawns are left alone when a module added or
+conditions on the rewarded milestone marker. A quest only awareness-scripted givers offer opens
+and closes with their fixed stage rule, so a shared quest, and Questie's map through the
+Questie bridge, follow the giver. Spawns are left alone when a module added or
 changed them, an awareness script decides, they are invisible helpers or spirit healers,
 they keep collision or traps, earlier quests use them or their quest-item drops,
 or the earlier database places the same name there; quests and items the earlier database
@@ -104,8 +106,11 @@ def settings(ip):
     return values
 
 
-def awareness_rules(ip):
-    """Stage masks of the awareness scripts' CanBeSeen decisions; None where the decision is not a stage rule."""
+def awareness_rules(ip, configured=None):
+    """Stage masks of the awareness scripts' CanBeSeen decisions; None where the decision is not a stage rule.
+
+    Scripts whose stages follow a configuration option are added to configured.
+    """
     enum = {name: int(value) for name, value in re.findall(
         r'(PROGRESSION_\w+)\s*=\s*(\d+)', (ip / 'src/IndividualProgression.h').read_text())}
     config = settings(ip)
@@ -127,6 +132,9 @@ def awareness_rules(ip):
             if not decision:
                 continue
             expression, first, _ = decision[-1]
+            if configured is not None and re.search(r'sIndividualProgression->(?:Required\w+|\w+ArenaSeason|earlyDungeonSet2)',
+                                                    seen.group(1)):
+                configured.add(name)
             # Local copies of the character's stage and of a configured requirement.
             for variable, option in re.findall(r'ProgressionState (\w+) = static_cast<ProgressionState>\('
                                                r'sIndividualProgression->(\w+)\);', seen.group(1)):
@@ -208,7 +216,8 @@ def chromiecraft_openings(root):
 
 
 def generate(q, args):
-    rules = awareness_rules(args.ip)
+    configured = set()
+    rules = awareness_rules(args.ip, configured)
     world, earlier_dbs = args.world, {1: (args.classic,), 2: (args.classic, args.tbc)}
 
     def eras(table, key):
@@ -309,6 +318,7 @@ def generate(q, args):
     seen_before = {'creature': defaultdict(int), 'gameobject': defaultdict(int)}
     seen_after = {'creature': defaultdict(int), 'gameobject': defaultdict(int)}
     scripted = {'creature': set(), 'gameobject': set()}
+    awareness = {'creature': {}, 'gameobject': {}}
     spawns = []
     for kind, group in (('creature', 0), ('gameobject', 1)):
         template = 't.flags_extra, t.npcflag, 0' if kind == 'creature' else '0, 0, t.type'
@@ -325,6 +335,9 @@ def generate(q, args):
             rule = rules.get(script)
             mask = (map_mask(map_id) if int(phase) & 1 else 0) & (ALL if rule is None else rule)
             seen_before[kind][entry] |= mask
+            # The stages an entry's spawns are visible at by fixed awareness rules alone.
+            fixed = rule if script in rules and rule is not None and script not in configured else ALL
+            awareness[kind][entry] = awareness[kind].get(entry, 0) | fixed
             spawns.append((kind, group, guid, entry, map_id, script, name, x, y, int(extra), int(npcflag), int(kind_type), mask))
 
     def first(mask):
@@ -435,6 +448,30 @@ def generate(q, args):
             opens[quest] = max(first(reachable[quest]) if reachable[quest] else quest_need(quest), audiences.get(quest, 0))
     conditions += [(19, 0, quest, 0, 66000 + need) for quest, need in sorted(candidates.items())]
 
+    # Quests only awareness-scripted givers offer open and close with those givers, so a shared quest or
+    # one read from the client's own data follows the giver's fixed rule too. Stage 11 has no marker.
+    def marker(stage):
+        return 66000 + (12 if stage == 11 else stage)
+
+    gated_quests = {c[2]: c[4] for c in conditions if c[0] == 19}
+    for quest in sorted(givers):
+        if quest in item_started or quest in disabled or quest in holiday:
+            continue
+        stages = 0
+        for kind, entry in givers[quest]:
+            stages |= awareness[kind].get(entry, ALL)
+        if stages in (0, ALL):
+            continue
+        visible = [stage for stage in STAGES if stages >> stage & 1]
+        if visible != list(range(visible[0], visible[-1] + 1)):
+            skipped['quest:awareness'].append((f'quest {quest} {titles[quest]}', quest, 0, 'givers visible at separate tiers'))
+            continue
+        first_stage, last_stage = visible[0], visible[-1]
+        if first_stage and marker(first_stage) > gated_quests.get(quest, 0) and marker(first_stage) > gated[quest]:
+            conditions.append((19, 0, quest, 0, marker(first_stage)))
+        if last_stage < STAGES[-1]:
+            conditions.append((19, 0, quest, 0, -marker(last_stage + 1)))
+
     for kind, group, guid, entry, map_id, script, name, x, y, extra, npcflag, kind_type, mask in spawns:
         era = (creature_era if kind == 'creature' else gameobject_era).get(entry)
         need = max(REQUIRED.get(era, 0), phase_spawns.get((kind, entry, guid), 0), phase_spawns.get((kind, entry, 0), 0),
@@ -522,6 +559,9 @@ HEADER = '''-- World content of later expansions and patches stays out of reach 
 -- with tier 6. ChromieCraft's progression brackets (9235693) date TBC and Wrath phases:
 -- 2.1 with tier 10, 2.3 and 2.4 with 12, 3.1 with 14, 3.2 with 15, 3.3 with 16, 3.3.5 with 17.
 --
+-- A quest only awareness-scripted givers offer opens and closes with their fixed stage
+-- rule, so a shared quest, and Questie's map through the Questie bridge, follow the giver.
+--
 -- Spawns on the old-world continents, and a later tier's in Outland or Northrend, get
 -- visibility conditions, which keep their AI and scripts; a hidden creature does not
 -- perceive the character either, so it neither shows nor engages. Quests and vendor
@@ -538,7 +578,7 @@ DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` IN (19, 23, 30) AND `Co
 
 def render(conditions):
     out = [HEADER]
-    for marker in sorted({c[4] for c in conditions}):
+    for marker in sorted({c[4] for c in conditions if c[4] > 0}):
         stage = marker - 66000
         name = stage_name(stage)
         for group, table in ((0, 'creature'), (1, 'gameobject')):
@@ -571,6 +611,18 @@ def render(conditions):
                      f"SELECT DISTINCT 23, v.`entry`, v.`item`, 0, 0, 8, 0, {marker}, 0, 0, 0, 0, 0, '', "
                      f"'Era content: {name} vendor item'\n"
                      f'FROM `npc_vendor` v\nWHERE {clauses};\n')]
+    for marker in sorted({-c[4] for c in conditions if c[4] < 0}):
+        stage = marker - 66000
+        name = stage_name(stage - 1)
+        quests = sorted(entry for source, _, entry, _, m in conditions if source == 19 and m == -marker)
+        out += [f'-- {name} quests closing at tier {stage} with their awareness-scripted givers.',
+                (f'INSERT IGNORE INTO `conditions` {COLUMNS}\n'
+                 f'SELECT DISTINCT 19, 0, q.`ID`, 0, COALESCE(c.`ElseGroup`, 0), 8, 0, {marker}, 0, 0, 1, 0, 0, \'\', '
+                 f"'Era content: {name} quest'\n"
+                 'FROM `quest_template` q\n'
+                 'LEFT JOIN `conditions` c ON c.`SourceTypeOrReferenceId` = 19 AND c.`SourceGroup` = 0 '
+                 'AND c.`SourceEntry` = q.`ID` AND c.`SourceId` = 0\n'
+                 f'WHERE q.`ID` IN (\n{wrap(quests)}\n);\n')]
     return '\n'.join(out)
 
 
@@ -591,7 +643,8 @@ def main():
     if args.report:
         args.report.write_text(json.dumps({'conditions': conditions, 'skipped': skipped}, ensure_ascii=False, indent=0))
     counts = Counter((source, marker) for source, *_, marker in conditions)
-    print(', '.join(f'{count} {kind} at tier {marker - 66000}' for (source, marker), count in sorted(counts.items())
+    print(', '.join(f'{count} {kind} ' + (f'at tier {marker - 66000}' if marker > 0 else f'closing at tier {-marker - 66000}')
+                    for (source, marker), count in sorted(counts.items())
                     for kind in [{19: 'quests', 23: 'vendor items', 30: 'spawns'}[source]]))
 
 
