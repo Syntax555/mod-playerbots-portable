@@ -146,6 +146,12 @@ fixtures pass. Use native core/module functions before adding replacements.
   creatures (2.3 Dustwallow) must not aggro, cast at or block lower-tier players,
   their pets or mixed-tier groups. See
   [world content by era and patch](changing-expansions.md#world-content-by-era-and-patch).
+- [ ] Check [Questie's era display](questie-playerbots.md#quests-of-the-characters-era)
+  in game with characters at tiers 0, 3, 4, 8 and 13: later quests and hidden givers
+  absent from map and quest lists, `/qserver quest` and `/qserver giver` results,
+  updates within seconds of a new tier, kept log quests, party sharing of quests
+  Individual Progression retires, and snapshot size and frame time in Shattrath
+  and Dalaran.
 
 ## Dependency updates
 

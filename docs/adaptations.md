@@ -80,7 +80,7 @@ to investigate access without granting quest or progression credit.
 | [EraTalents](era-talents.md) | Matching addon and MPQ provide Vanilla 1.12.1 and TBC Classic 2.5.4 trees, selected restored spells, and German/English text. The core and client remain Wrath 3.3.5a. |
 | [DragonUI](era-talents.md#dragonui) | Historical trees render for the player and inspected bots. Spellbook and level-up notices follow the character's trainer list; glyph access follows earned Wrath. |
 | [MultiBot](addons.md) | Inspected historical trees belong to the selected bot. Controlled group altbots can spend their earned Vanilla/TBC points; other inspected characters stay read-only. The Bridge supplies the bot's own spells, inventory, money and control state. |
-| [Questie](questie-playerbots.md) | Authorized group bots' native quest counters feed Questie's group tooltips and optional party objectives. It does not complete quests or unlock content. |
+| [Questie](questie-playerbots.md) | Authorized group bots' native quest counters feed Questie's group tooltips and optional party objectives. Each character sees only the quests and questgivers of its own era. It does not complete quests or unlock content. |
 | [Zygor](zygor-progression.md) | Read-only server tier, quest and instance access inform guides, Gear Finder and Talent Advisor. Unknown progression does not unlock content. |
 
 Install optional addons from their [forks' Latest releases](addons.md#addon-forks).

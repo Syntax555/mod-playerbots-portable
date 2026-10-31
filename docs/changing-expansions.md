@@ -151,7 +151,11 @@ conditions. Learned professions, accepted quests and owned items remain. Classic
 battlegrounds open by level, so their quests, battlemasters and reputation vendors
 stay available. Individual Progression's own awareness scripts and markers keep
 deciding the content they already place, such as the Ahn'Qiraj preparation at tier
-3, and no quest opens later than a milestone quest that builds on it.
+3, and no quest opens later than a milestone quest that builds on it. A quest that
+only such scripted givers offer opens and closes with their fixed tier range, so a
+party member cannot share it outside that range. With the included bridge,
+[Questie](questie-playerbots.md#quests-of-the-characters-era) hides the quests and
+questgivers a character cannot reach yet.
 
 The repository's `scripts/generate_era_world_content.py` derives the update from the
 pinned CMaNGOS Classic, TBC and Wrath databases (an entry missing from Classic

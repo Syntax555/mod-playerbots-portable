@@ -12,7 +12,7 @@ can have different defaults from this distribution's managed profile.
 
 ## Pinned sources
 
-The core, nine native modules and four separate addon projects use maintained
+The core, ten native modules and four separate addon projects use maintained
 Syntax555 forks on their configured default branches. The
 [contributor guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md#changing-the-server)
 lists those branches. Builds use the immutable commits below, rather than
@@ -20,7 +20,7 @@ whatever a branch happens to contain later.
 
 ### Server modules
 
-All nine modules build with the matching core. Being included does not mean
+All ten modules build with the matching core. Being included does not mean
 every optional feature is enabled: the Dungeon Finder and simulated world-buff
 turn-ins are disabled in the shipped profile.
 
@@ -28,10 +28,11 @@ turn-ins are disabled in the shipped profile.
 | --- | --- | --- | --- |
 | AzerothCore Playerbots core | [Syntax555/azerothcore-wotlk](https://github.com/Syntax555/azerothcore-wotlk), fork of [Grimfeather/azerothcore-wotlk](https://github.com/Grimfeather/azerothcore-wotlk) at `38db9bb1b588` | `07065587bdb8` | Core server with the Playerbots and Individual Progression core changes, historical spell/accounting hooks and earned-era PvP rules |
 | Playerbots with Raid Clear | [Syntax555/wow-mod-playerbots](https://github.com/Syntax555/wow-mod-playerbots), fork of [buildthehomelab/wow-mod-playerbots](https://github.com/buildthehomelab/wow-mod-playerbots) at `5283a13e0a5d` | `9db761b686b4` | Natural progression, earned auctions, era-aware bots and integrated raid tactics |
-| Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression), fork of [Grimfeather/mod-individual-progression](https://github.com/Grimfeather/mod-individual-progression) at `18999da65adc` | `f969f3ae1ed7` | Earned content milestones, expansion access and era world content |
+| Individual Progression | [Syntax555/mod-individual-progression](https://github.com/Syntax555/mod-individual-progression), fork of [Grimfeather/mod-individual-progression](https://github.com/Grimfeather/mod-individual-progression) at `18999da65adc` | `ac003b9427e4` | Earned content milestones, expansion access and era world content |
 | Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), fork of [lathcf/azerothcore-mod-era-talents](https://github.com/lathcf/azerothcore-mod-era-talents) at `0dac15c4a71d` | `98127f118256` | Historical server trees, authored random-bot builds and client addon |
 | Dungeon Clear | [Syntax555/mod-dungeon-clear](https://github.com/Syntax555/mod-dungeon-clear), fork of [jrad7/mod-dungeon-clear](https://github.com/jrad7/mod-dungeon-clear) at `7fb6ebdefb80` | `340e5eb1416a` | Autonomous earned-era parties and player-led clears without event shortcuts |
 | MultiBot Bridge | [Syntax555/mod-multibot-bridge](https://github.com/Syntax555/mod-multibot-bridge), fork of [Wishmaster117/mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) at `9f0e8ba767c6` | `82a7276163d3` | Server support for the MultiBot controls |
+| Questie Bridge | [Syntax555/mod-questie-bridge](https://github.com/Syntax555/mod-questie-bridge), fork of [Aldori15/mod-questie-bridge](https://github.com/Aldori15/mod-questie-bridge) at `9a24fd652c1d` | `7193c3c4995f` | Live server state for Questie-335, including each character's era-locked quests and hidden questgivers |
 | Quest Loot Party | [Syntax555/mod-quest-loot-party](https://github.com/Syntax555/mod-quest-loot-party), fork of [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) at `c3955915c76d` | `b558cd259a95` | Scoped party sharing of naturally dropped quest items |
 | LFG Progression | [Syntax555/wow-mod-lfg-progression](https://github.com/Syntax555/wow-mod-lfg-progression), fork of [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) at `2615e82902cf` | `451486aaeff9` | Always included access guards for optional Dungeon Finder use |
 | Era Events | [Syntax555/wow-mod-era-events](https://github.com/Syntax555/wow-mod-era-events), fork of [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) at `cf02786aceb5` | `910af62c3a47` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |

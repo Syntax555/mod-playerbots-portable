@@ -23,7 +23,7 @@ pass, for people and coding agents alike. Progression changes keep normal XP,
 inventory, gold and per-character eligibility. The [build guide](docs/building.md)
 covers the Windows build and the local checks.
 
-The core and all nine native server modules are built from maintained forks.
+The core and all ten native server modules are built from maintained forks.
 Work on each fork's configured default branch, listed below. Read its
 `AGENTS.md` and README before editing; its guidance links back to the server's
 product rules and relevant integration guides.
@@ -41,6 +41,7 @@ original upstream projects.
 | LFG Progression | [Syntax555/wow-mod-lfg-progression](https://github.com/Syntax555/wow-mod-lfg-progression) | `main` |
 | Era Events | [Syntax555/wow-mod-era-events](https://github.com/Syntax555/wow-mod-era-events) | `main` |
 | MultiBot Bridge | [Syntax555/mod-multibot-bridge](https://github.com/Syntax555/mod-multibot-bridge) | `main` |
+| Questie Bridge | [Syntax555/mod-questie-bridge](https://github.com/Syntax555/mod-questie-bridge) | `main` |
 | Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents) | `main` |
 
 Make core and module changes as commits in their forks, then pin the tested

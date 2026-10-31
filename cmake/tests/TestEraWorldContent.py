@@ -75,11 +75,15 @@ assert all(re.search(rf'^\({marker},', markers, re.MULTILINE) for marker in rang
 assert 'current == 10 ? 12 : current + 1' in (ip / 'src/StrictEarnedProgressionPolicy.h').read_text()
 
 # Every row is a rewarded-marker gate the update can find and remove again.
-INSERTS = re.findall(r"INSERT IGNORE INTO `conditions` \([^)]*\)\nSELECT (?:DISTINCT )?(\d+), [^;]*?, 8, 0, (\d+), 0, 0, 0, 0, 0, '', "
+INSERTS = re.findall(r"INSERT IGNORE INTO `conditions` \([^)]*\)\nSELECT (?:DISTINCT )?(\d+), [^;]*?, 8, 0, (\d+), 0, 0, ([01]), 0, 0, '', "
                      r"'Era content: (Vanilla|TBC|Wrath) (creature|gameobject|quest|vendor item)'", update)
 assert len(INSERTS) == update.count('INSERT'), 'every insert is a marker gate'
 ERAS = {'Vanilla': range(66001, 66008), 'TBC': (66008, 66009, 66010, 66012), 'Wrath': range(66013, 66019)}
-assert all(int(marker) in ERAS[era] for _, marker, era, _ in INSERTS), 'each gate waits for a milestone of its era'
+assert all(int(marker) in ERAS[era] for _, marker, negative, era, _ in INSERTS if negative == '0'), \
+    'each gate opens with a milestone of its era'
+# A closing gate ends with a later implemented milestone; only quests close.
+assert all(source == '19' and int(marker) in range(66002, 66019) and marker != '66011'
+           for source, marker, negative, _, _ in INSERTS if negative == '1'), 'quests close with a milestone'
 assert update.count("DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` IN (19, 23, 30) AND `Comment` LIKE 'Era content: %';") == 1
 numbers = {int(value) for value in re.findall(r'\b\d+\b', update)}
 world = core / 'data/sql/base/db_world'
@@ -211,6 +215,10 @@ def check(source, before=restored):
         ('Mastering the Elements', 19, 0, 8411, 0, 66003),
         ('Mortal Champions', 19, 0, 8579, 0, 66004),
     )
+    # Quests only awareness-scripted givers offer follow those givers: the Ahn'Qiraj war's colossus
+    # secrets during the war, Vanilla's battleground quests until TBC.
+    for name, quest, first, last in (('Secrets of the Colossus - Zora', 8859, 4, 4), ('Battle of Warsong Gulch', 8368, 0, 7)):
+        assert [stage for stage in range(19) if allowed(db, 19, 0, quest, 0, stage)] == list(range(first, last + 1)), name
     for name, source_type, group, entry, source_id, marker in expectations:
         stage = marker - 66000
         assert not allowed(db, source_type, group, entry, source_id, stage - 1), (name, 'reachable before its expansion')
@@ -229,8 +237,11 @@ def check(source, before=restored):
     # No gate holds a milestone chain back past the tier that needs it.
     for quest, stage in needed.items():
         late = db.execute("SELECT MAX(ConditionValue1) FROM `conditions` WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? "
-                          "AND Comment LIKE 'Era content: %'", (quest,)).fetchone()[0]
+                          "AND NegativeCondition=0 AND Comment LIKE 'Era content: %'", (quest,)).fetchone()[0]
         assert not late or late - 66000 <= stage, ('milestone chain quest opens too late', quest, late)
+        early = db.execute("SELECT MIN(ConditionValue1) FROM `conditions` WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? "
+                           "AND NegativeCondition=1 AND Comment LIKE 'Era content: %'", (quest,)).fetchone()[0]
+        assert not early or early - 66000 > stage, ('milestone chain quest closes too early', quest, early)
     return len(gated)
 
 
@@ -258,7 +269,10 @@ mutations = (
     ('gate drops its marker', update.replace(f"0, 8, 0, {TBC}, 0, 0, 0, 0, 0, '', 'Era content: TBC gameobject'",
                                              f"0, 8, 0, {TBC}, 0, 0, 1, 0, 0, '', 'Era content: TBC gameobject'")),
 )
+closing = update[update.index('quests closing at tier 8'):]
+closing = closing[closing.index('INSERT IGNORE'):closing.index(';') + 1]
 mutations += (
+    ('Vanilla battleground quests outlast Vanilla', update.replace(closing, ''), restored),
     ('restored quests outlast Vanilla', update, restored.replace("8, 0, 66008, 0, 0, 1, 0, 0, '', 'Restored", "8, 0, 66008, 0, 0, 0, 0, 0, '', 'Restored")),
 )
 for name, source, *before in mutations:

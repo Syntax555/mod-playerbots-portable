@@ -52,6 +52,7 @@ GAMEPLAY = (
     "TestNativeBankTransfers",
     # Appended so existing fixtures keep their shard.
     "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestEraWorldContent", "TestMutualVisibility",
+    "TestQuestieEraQuests",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -84,6 +85,7 @@ MODULE_FIXTURES = {
         "TestNativeBankTransfers", "TestCombatProfiles",
     ),
     "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook", "TestEraIgnite"),
+    "mod-questie-bridge": ("TestQuestieEraQuests",),
 }
 
 

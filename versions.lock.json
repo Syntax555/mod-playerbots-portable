@@ -65,7 +65,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "f969f3ae1ed750d50cd017077c3fb9701d4288ee",
+      "revision": "ac003b9427e44b23e103f69f0d52d067f0fe8217",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
@@ -87,7 +87,8 @@
         "mod-individual-progression-era-world-content": "336f71d14f9a5a2938a6a3a74042791a2d3f5448",
         "mod-individual-progression-era-patch-phases": "72e939bb11ea7cbc79fb54275f0a72fcc4329e0b",
         "mod-individual-progression-era-hostile-gates": "ae756bd86565b56afe3234c46246f0edf8591ca8",
-        "mod-individual-progression-restored-vanilla-quests": "f969f3ae1ed750d50cd017077c3fb9701d4288ee"
+        "mod-individual-progression-restored-vanilla-quests": "f969f3ae1ed750d50cd017077c3fb9701d4288ee",
+        "mod-individual-progression-era-awareness-bounds": "ac003b9427e44b23e103f69f0d52d067f0fe8217"
       }
     },
     {
@@ -172,6 +173,18 @@
         "mod-multibot-bridge-combat-profiles": "6073ac3cb7f09844af678b5d5c186381ee4a9d6b",
         "mod-multibot-bridge-native-bank-transfers": "4a9e0f0fa560797843a135b2f2d6bffcc2acab67",
         "mod-multibot-bridge-shared-talent-totals": "6147c7856b9eaf7e56f54c0d5256ce10037ed56a"
+      }
+    },
+    {
+      "name": "mod-questie-bridge",
+      "url": "https://github.com/Syntax555/mod-questie-bridge.git",
+      "revision": "7193c3c4995f4242a23b679f576160633195221c",
+      "upstream": {
+        "url": "https://github.com/Aldori15/mod-questie-bridge.git",
+        "revision": "9a24fd652c1d658f87a057703298848baec26bae"
+      },
+      "forkChanges": {
+        "mod-questie-bridge-era-quests": "7193c3c4995f4242a23b679f576160633195221c"
       }
     },
     {
