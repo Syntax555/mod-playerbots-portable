@@ -24,6 +24,21 @@ Source projects and revisions:
   78e8dc010748043b08b3b011794c645382aa107f
   Full_DB/WoTLKDB_1_9_14092.sql.gz with its Updates: creature, gameobject,
   quest and item entries for the era world-content gates.
+- VMaNGOS core
+  https://github.com/vmangos/core
+  9b7fb4dfdb1d863ef93c5cf24d57aff92124f41f
+  sql/migrations/*_world.sql, applied to the database below: the patch of each
+  creature, gameobject, quest and item record and spawn for the era
+  world-content gates.
+- VMaNGOS database
+  https://github.com/brotalnia/database
+  fc4af4870578efa63b36824bfd48fca7933f7362
+  world_full_14_june_2021.7z, the world database the VMaNGOS migrations build on.
+- ChromieCraft progression system (azerothcore/mod-progression-system)
+  https://github.com/azerothcore/mod-progression-system
+  923569393ee4a2dc239afe3cae39d0eec6787798
+  src/Bracket_*/sql/world quest disables and spawn phase masks: the bracket
+  that opens each TBC and Wrath quest or spawn for the era world-content gates.
 - CMaNGOS mangos-classic
   https://github.com/cmangos/mangos-classic
   8ec338a1704e7dcb1c0213eb7ed58f9231ade40f
@@ -49,6 +64,12 @@ credits the Zero Project team and the MaNGOS Foundation team.
 Database license: the classic-db, tbc-db and wotlk-db README files declare GPL version 3.
 Their complete, identical LICENSE.md text is preserved in ../GPL-3.0.txt.
 Database AUTHORS and COPYRIGHT.md notices remain applicable to derived data.
+
+Only patch numbers and bracket membership of entry ids are derived from VMaNGOS
+and ChromieCraft; no VMaNGOS or ChromieCraft data is distributed. The VMaNGOS core
+includes the GNU GPL version 2 in LICENSE (../GPL-2.0.txt); its database repository
+carries no license file. The ChromieCraft progression system includes the GNU AGPL
+version 3 in LICENSE (../AGPL-3.0.txt).
 
 Core license: both mangos-classic and mangos-tbc include the GNU GPL version 2
 in LICENSE. Their native source-file headers allow version 2 or any later

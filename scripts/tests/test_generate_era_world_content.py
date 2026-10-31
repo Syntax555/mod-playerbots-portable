@@ -108,6 +108,32 @@ class AwarenessRules(unittest.TestCase):
         self.assertIsNone(rules['boss_plain'])
 
 
+class ChromieCraftOpenings(unittest.TestCase):
+    def test_quests_and_spawns_open_with_the_bracket_that_restores_them(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for bracket, name, sql in (
+                    ('Bracket_0', 'progression_0_disables.sql',
+                     ("INSERT INTO `disables` (`sourceType`, `entry`, `comment`) VALUES (1, 11012, 'Netherwing'), "
+                      "(1, 24589, 'Jaraxxus'), (2, 564, 'Black Temple');\n"
+                      "UPDATE `creature` SET `phasemask` = 16384 WHERE `id` IN (23139, 23140);")),
+                    ('Bracket_61_64', 'progression_61_64_phase.sql',
+                     "UPDATE `gameobject` SET `phaseMask`=16384 WHERE `id` IN (185915);"),
+                    ('Bracket_70_4_1', 'progression_70_4_1_down.sql',
+                     ("-- Netherwing\nDELETE FROM `disables` WHERE `sourceType` = 1 AND `entry` IN (11012);\n"
+                      "UPDATE `creature` SET `phasemask` = 1 WHERE `id` = 23139;\n"
+                      "UPDATE `gameobject` SET `phaseMask`=1 WHERE `id` IN (185915);")),
+                    ('Bracket_80_3', 'progression_80_3_disables.sql',
+                     "DELETE FROM `disables` WHERE `sourceType`=1 AND `entry` IN (24589, 99999);")):
+                folder = root / 'src' / bracket / 'sql/world'
+                folder.mkdir(parents=True)
+                (folder / name).write_text(sql)
+            quests, spawns = generator.chromiecraft_openings(root)
+        self.assertEqual(quests, {11012: 10, 24589: 15})
+        # A spawn that is never shown again, or a map disable, opens nothing.
+        self.assertEqual(spawns, {('creature', 23139, 0): 10, ('gameobject', 185915, 0): 10})
+
+
 class Render(unittest.TestCase):
     def replay(self, sql):
         db = sqlite3.connect(':memory:')

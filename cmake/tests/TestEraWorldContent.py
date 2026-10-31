@@ -1,12 +1,13 @@
 """Replay the era world-content gates on the pinned world and check historical anchors.
 
-Individual Progression hides old-world spawns, quests and vendor items of a later
-expansion until the character has rewarded that expansion's progression marker. The
-update replays twice on scoped copies of the pinned base world; conditions are then
-evaluated the way the native visibility, quest and vendor checks read them. Anchors
-are Wrath's Inscription trainers in Azeroth and Outland, barbers and Light
-Parchment, TBC's 2.3 Dustwallow Marsh, guild vaults and jewelcrafting designs, and
-Vanilla content that stays put. Mutations weaken or drop single gates.
+Individual Progression hides spawns, quests and vendor items of a later expansion or patch
+until the character has rewarded the milestone marker of its tier. The update replays twice
+on scoped copies of the pinned base world; conditions are then evaluated the way the native
+visibility, quest and vendor checks read them. Anchors are Wrath's Inscription trainers in
+Azeroth and Outland, barbers and Light Parchment, TBC's 2.3 Dustwallow Marsh, guild vaults
+and jewelcrafting designs, Blackwing Lair's, Ahn'Qiraj's and Naxxramas's Vanilla quests,
+the 2.1 Netherwing and the 3.2 Crusader, and Vanilla content and Classic battlegrounds that
+stay put. Mutations weaken or drop single gates.
 """
 
 import argparse
@@ -57,13 +58,16 @@ progression = (ip / 'src/IndividualProgression.cpp').read_text()
 assert 'for (uint8 i = currentState; i <= newState; ++i)' in function(
     progression, 'void IndividualProgression::UpdateProgressionState(')
 markers = (ip / 'data/sql/world/base/player_progression.sql').read_text()
-assert all(re.search(rf'^\({marker},', markers, re.MULTILINE) for marker in (TBC, WRATH))
+assert all(re.search(rf'^\({marker},', markers, re.MULTILINE) for marker in range(66001, 66019))
+# Stage 11 is not an implemented milestone, so no gate waits for its marker.
+assert 'current == 10 ? 12 : current + 1' in (ip / 'src/StrictEarnedProgressionPolicy.h').read_text()
 
 # Every row is a rewarded-marker gate the update can find and remove again.
 INSERTS = re.findall(r"INSERT IGNORE INTO `conditions` \([^)]*\)\nSELECT (?:DISTINCT )?(\d+), [^;]*?, 8, 0, (\d+), 0, 0, 0, 0, 0, '', "
-                     r"'Era content: (TBC|Wrath) (creature|gameobject|quest|vendor item)'", update)
+                     r"'Era content: (Vanilla|TBC|Wrath) (creature|gameobject|quest|vendor item)'", update)
 assert len(INSERTS) == update.count('INSERT'), 'every insert is a marker gate'
-assert all((marker == str(TBC)) == (era == 'TBC') and marker in (str(TBC), str(WRATH)) for _, marker, era, _ in INSERTS)
+ERAS = {'Vanilla': range(66001, 66008), 'TBC': (66008, 66009, 66010, 66012), 'Wrath': range(66013, 66019)}
+assert all(int(marker) in ERAS[era] for _, marker, era, _ in INSERTS), 'each gate waits for a milestone of its era'
 assert update.count("DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` IN (19, 23, 30) AND `Comment` LIKE 'Era content: %';") == 1
 numbers = {int(value) for value in re.findall(r'\b\d+\b', update)}
 world = core / 'data/sql/base/db_world'
@@ -80,8 +84,29 @@ quests = [(int(r['ID']),) for r in rows('quest_template', numbers)]
 vendors = [(int(r['entry']), int(r['item'])) for r in rows('npc_vendor', numbers)]
 existing = [tuple(r.values()) for r in rows('conditions', {19, 23, 30})]
 columns = next(iter(rows('conditions', {19}))).keys()
-creature_flags = {int(r['entry']): int(r['flags_extra']) for r in rows('creature_template', {e for _, e, _ in creatures})}
+creature_flags = {int(r['entry']): (int(r['flags_extra']), int(r['npcflag']))
+                  for r in rows('creature_template', {e for _, e, _ in creatures})}
 gameobject_types = {int(r['entry']): int(r['type']) for r in rows('gameobject_template', {e for _, e, _ in gameobjects})}
+# Milestone quests are rewarded to earn the next tier, so they and every quest before them in their chain must be
+# available one tier earlier: Bang a Gong! earns tier 4 and Into the Breach tier 8.
+header_ip = (ip / 'src/IndividualProgression.h').read_text()
+milestones = {int(re.search(rf'{name}\s*=\s*(\d+)', header_ip).group(1)): stage
+              for name, stage in (('BANG_A_GONG', 3), ('INTO_THE_BREACH', 7))}
+before = defaultdict(set)
+for r in rows('quest_template_addon', set(range(1, 30000))):
+    if int(r['PrevQuestID']) > 0:
+        before[int(r['ID'])].add(int(r['PrevQuestID']))
+    if int(r['NextQuestID']) > 0:
+        before[int(r['NextQuestID'])].add(int(r['ID']))
+needed = {}
+for milestone, stage in milestones.items():
+    pending = [milestone]
+    while pending:
+        quest = pending.pop()
+        if needed.get(quest, 99) > stage:
+            needed[quest] = stage
+            pending += before[quest]
+assert len(needed) > 20, 'the Scepter of the Shifting Sands chain precedes Bang a Gong!'
 
 
 def replay(source):
@@ -134,7 +159,9 @@ def check(source):
     for _, group, entry, guid in (row for row in gated if row[0] == 30):
         assert guid, ('visibility gates name the spawn', entry)
         if group == 0 and entry in creature_flags:
-            assert not creature_flags[entry] & 128, ('invisible helper gated', entry)
+            assert not creature_flags[entry][0] & 128, ('invisible helper gated', entry)
+            # Ghosts must still find every graveyard's spirit healer.
+            assert not creature_flags[entry][1] & (0x4000 | 0x8000), ('spirit healer gated', entry)
         if group == 1 and entry in gameobject_types:
             assert gameobject_types[entry] not in (0, 1, 6, 11, 14, 15, 31, 33), ('mechanical object gated', entry)
     expectations = (
@@ -151,37 +178,57 @@ def check(source):
         ('Blood elf ambassador', 30, 0, 16287, spawn('creature', 16287), TBC),
         ('Design: The Jade Eye', 23, 4775, 20975, 0, TBC),
         ('Inspecting the Ruins', 19, 0, 11123, 0, TBC),
+        # Phases within each expansion open with the raid of their patch: 1.6 Blackwing Lair, 1.9 the
+        # Ahn'Qiraj gates, 1.11 Naxxramas, 2.1 the Black Temple and the Netherwing, 3.2 the Crusader.
+        ("Blackhand's Command", 19, 0, 7761, 0, 66001),
+        ('The Four Dukes', 19, 0, 8538, 0, 66004),
+        ("Craftsman's Writ - Dense Weightstone", 19, 0, 9178, 0, 66006),
+        ('Blood Oath of the Netherwing', 19, 0, 11012, 0, 66010),
+        ('Lord Jaraxxus Must Die!', 19, 0, 24589, 0, 66015),
     )
     for name, source_type, group, entry, source_id, marker in expectations:
         stage = marker - 66000
         assert not allowed(db, source_type, group, entry, source_id, stage - 1), (name, 'reachable before its expansion')
         assert allowed(db, source_type, group, entry, source_id, stage), (name, 'still hidden in its expansion')
     # Vanilla stays: Thrall, the Vanilla Molten Core attunement and Refreshing Spring Water.
+    # Classic battlegrounds open by level, so Arathi Basin's 1.7 quests stay too.
     for name, source_type, group, entry, source_id in (('Thrall', 30, 0, 4949, 0), ('Attunement to the Core', 19, 0, 7848, 0),
-                                                         ('Refreshing Spring Water', 23, 1250, 159, 0)):
+                                                         ('Refreshing Spring Water', 23, 1250, 159, 0),
+                                                         ('The Battle for Arathi Basin!', 19, 0, 8105, 0)):
         assert allowed(db, source_type, group, entry, source_id, 0), name
         assert not db.execute('SELECT 1 FROM `conditions` WHERE SourceTypeOrReferenceId=? AND SourceEntry=? '
                               "AND Comment LIKE 'Era content: %'", (source_type, entry)).fetchone(), name
+    # No gate holds a milestone chain back past the tier that needs it.
+    for quest, stage in needed.items():
+        late = db.execute("SELECT MAX(ConditionValue1) FROM `conditions` WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? "
+                          "AND Comment LIKE 'Era content: %'", (quest,)).fetchone()[0]
+        assert not late or late - 66000 <= stage, ('milestone chain quest opens too late', quest, late)
     # Hostile Grimtotem raiders of 2.3 stay visible rather than attack unseen.
     assert not db.execute("SELECT 1 FROM `conditions` WHERE SourceTypeOrReferenceId=30 AND SourceGroup=0 AND SourceEntry=23592").fetchone()
     return len(gated)
 
 
 total = check(update)
-print(f'Era world content: {total} gates replay idempotently; anchors open with TBC (66008) and Wrath (66013)')
+print(f'Era world content: {total} gates replay idempotently; anchors open with their patch\'s tier')
 
 
-def section(era, noun):
-    start = update.index(f"'Era content: {era} {noun}'")
+def section(marker, era, noun):
+    start = update.index(f", 8, 0, {marker}, 0, 0, 0, 0, 0, '', 'Era content: {era} {noun}'")
     return update[update.rindex('INSERT IGNORE', 0, start):update.index(';', start) + 1]
 
 
 mutations = (
-    ('Inscription opens with TBC', update.replace(section('Wrath', 'creature'), section('Wrath', 'creature').replace(
+    ('Inscription opens with TBC', update.replace(section(WRATH, 'Wrath', 'creature'), section(WRATH, 'Wrath', 'creature').replace(
         f', 8, 0, {WRATH},', f', 8, 0, {TBC},'))),
-    ('TBC creatures stay visible', update.replace(section('TBC', 'creature'), '')),
-    ('TBC quests stay available', update.replace(section('TBC', 'quest'), '')),
-    ('Wrath vendor items stay for sale', update.replace(section('Wrath', 'vendor item'), '')),
+    ('TBC creatures stay visible', update.replace(section(TBC, 'TBC', 'creature'), '')),
+    ('TBC quests stay available', update.replace(section(TBC, 'TBC', 'quest'), '')),
+    ('Wrath vendor items stay for sale', update.replace(section(WRATH, 'Wrath', 'vendor item'), '')),
+    ('Naxxramas writs open with Ahn\'Qiraj', update.replace(section(66006, 'Vanilla', 'quest'), section(66006, 'Vanilla', 'quest').replace(
+        ', 8, 0, 66006,', ', 8, 0, 66004,'))),
+    ('the Netherwing open with TBC', update.replace(section(66010, 'TBC', 'quest'), section(66010, 'TBC', 'quest').replace(
+        ', 8, 0, 66010,', ', 8, 0, 66008,'))),
+    ('the Scepter chain waits for Ahn\'Qiraj', update + "\nINSERT IGNORE INTO `conditions` SELECT 19, 0, 8742, 0, 0, 8, 0, 66004, "
+     "0, 0, 0, 0, 0, '', 'Era content: Vanilla quest';\n"),
     ('gate drops its marker', update.replace(f"0, 8, 0, {TBC}, 0, 0, 0, 0, 0, '', 'Era content: TBC gameobject'",
                                              f"0, 8, 0, {TBC}, 0, 0, 1, 0, 0, '', 'Era content: TBC gameobject'")),
 )

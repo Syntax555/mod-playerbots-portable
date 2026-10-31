@@ -60,7 +60,7 @@ See the [update guide](updating.md) for manual installation and offline startup.
 | Experience rules | Each character's earned era; see [experience by era](changing-expansions.md#experience-by-era) |
 | Expansion races | After another character on the account earned TBC; start at level 1, tier 8 |
 | New death knights | After another character on the account earned Wrath; native level-55 start, tier 13 |
-| Later-expansion world content | TBC and Wrath NPCs, objects, quests and wares in Azeroth appear at tier 8 / 13; see [changing expansions](changing-expansions.md#later-expansion-content-in-azeroth) |
+| World content by era and patch | NPCs, objects, quests and wares appear with the tier of their expansion or patch; see [changing expansions](changing-expansions.md#world-content-by-era-and-patch) |
 | XP, drops, reputation and honor | Normal 1.0 rates |
 | Skills and professions | Trained and improved normally; two primary professions |
 | Talent points | Normal 1.0 rate; historical trees selected by earned era |
