@@ -137,15 +137,14 @@ fixtures pass. Use native core/module functions before adding replacements.
   Realm credit and the Spirit of Zandalar earned tier.
 - [ ] Verify era XP: quest values, battleground goals, rest/heirloom/holiday
   modifiers, era-cap money and Thrallmar/Honor Hold Favor without double bonuses.
-- [ ] Era world content: hide the hostile spawns of later expansions and patches
-  (for example 2.3 Dustwallow's Grimtotem and Defias raiders) so they neither show
-  nor attack before their tier; visibility conditions alone would leave unseen
-  attackers. See [world content by era and patch](changing-expansions.md#world-content-by-era-and-patch).
 - [ ] Restore Vanilla quests the Classic database offers and the realm lacks, with
   their givers, loot and scripts, behind their patch's tier.
 - [ ] In-game checks of the era gates at tiers 0, 3, 4, 6, 8, 10 and 13: Cenarion Hold,
   Silithus, Yojamba Isle, Shadowmoon's Netherwing, Shattrath and Dalaran; phased
-  Undercity and Silithus givers; renumbered quests left visible.
+  Undercity and Silithus givers; renumbered quests left visible. Hidden hostile
+  creatures (2.3 Dustwallow) must not aggro, cast at or block lower-tier players,
+  their pets or mixed-tier groups. See
+  [world content by era and patch](changing-expansions.md#world-content-by-era-and-patch).
 
 ## Dependency updates
 

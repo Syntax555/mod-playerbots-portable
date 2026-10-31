@@ -7,7 +7,9 @@ visibility, quest and vendor checks read them. Anchors are Wrath's Inscription t
 Azeroth and Outland, barbers and Light Parchment, TBC's 2.3 Dustwallow Marsh, guild vaults
 and jewelcrafting designs, Blackwing Lair's, Ahn'Qiraj's and Naxxramas's Vanilla quests,
 the 2.1 Netherwing and the 3.2 Crusader, and Vanilla content and Classic battlegrounds that
-stay put. Mutations weaken or drop single gates.
+stay put. Hostile creatures are gated too:
+TestMutualVisibility keeps a hidden creature from perceiving the character. Mutations weaken or drop
+single gates.
 """
 
 import argparse
@@ -44,8 +46,11 @@ conditions_source = (core / 'src/server/game/Conditions/ConditionMgr.cpp').read_
 lookup = function(conditions_source, 'ConditionList ConditionMgr::GetConditionsForObjectVisibility(WorldObject const* object) const')
 assert lookup.index('sourceIdConditions.find(guid)') < lookup.index('sourceIdConditions.find(0)')
 assert 'condMeets = player->GetQuestRewardStatus(ConditionValue1);' in conditions_source
-sight = function((core / 'src/server/game/Entities/Object/Object.cpp').read_text(), 'bool WorldObject::CanSeeOrDetect(')
-assert sight.count('if (!player->CanSeeObjectByVisibilityConditions(obj))') == 2
+objects = (core / 'src/server/game/Entities/Object/Object.cpp').read_text()
+sight = function(objects, 'bool WorldObject::CanSeeOrDetect(')
+assert 'viewer && HiddenFrom(obj, viewer)' in sight and 'viewed && HiddenFrom(this, viewed)' in sight
+assert function(objects, 'bool HiddenFrom(WorldObject const* object, Player const* player)').count(
+    '!player->CanSeeObjectByVisibilityConditions(object)') == 2
 player_source = (core / 'src/server/game/Entities/Player/Player.cpp').read_text()
 visibility = function(player_source, 'bool Player::CanSeeObjectByVisibilityConditions(WorldObject const* object) const')
 assert 'ConditionSourceInfo(const_cast<Player*>(this), const_cast<WorldObject*>(object))' in visibility
@@ -178,6 +183,8 @@ def check(source):
         ('Blood elf ambassador', 30, 0, 16287, spawn('creature', 16287), TBC),
         ('Design: The Jade Eye', 23, 4775, 20975, 0, TBC),
         ('Inspecting the Ruins', 19, 0, 11123, 0, TBC),
+        # Hidden creatures do not perceive the character either, so hostile ones are gated too.
+        ('Grimtotem raider', 30, 0, 23592, spawn('creature', 23592), TBC),
         # Phases within each expansion open with the raid of their patch: 1.6 Blackwing Lair, 1.9 the
         # Ahn'Qiraj gates, 1.11 Naxxramas, 2.1 the Black Temple and the Netherwing, 3.2 the Crusader.
         ("Blackhand's Command", 19, 0, 7761, 0, 66001),
@@ -203,8 +210,6 @@ def check(source):
         late = db.execute("SELECT MAX(ConditionValue1) FROM `conditions` WHERE SourceTypeOrReferenceId=19 AND SourceEntry=? "
                           "AND Comment LIKE 'Era content: %'", (quest,)).fetchone()[0]
         assert not late or late - 66000 <= stage, ('milestone chain quest opens too late', quest, late)
-    # Hostile Grimtotem raiders of 2.3 stay visible rather than attack unseen.
-    assert not db.execute("SELECT 1 FROM `conditions` WHERE SourceTypeOrReferenceId=30 AND SourceGroup=0 AND SourceEntry=23592").fetchone()
     return len(gated)
 
 

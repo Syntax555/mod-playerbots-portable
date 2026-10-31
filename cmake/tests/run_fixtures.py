@@ -51,7 +51,7 @@ GAMEPLAY = (
     "TestCorpseRecovery", "TestBotAccountDeletion",
     "TestNativeBankTransfers",
     # Appended so existing fixtures keep their shard.
-    "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestEraWorldContent",
+    "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestEraWorldContent", "TestMutualVisibility",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -59,7 +59,7 @@ GAMEPLAY = (
 CORE_FIXTURES = (
     "TestEraCorePatches", "TestEraTalents", "TestEarnedEraPrices", "TestBattlegroundEraRules",
     "TestEarnedArenaCore", "TestEraExperience", "TestWindowsResourceIncludes", "TestFormationMovement",
-    "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates",
+    "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestMutualVisibility",
     "TestCoreBuildWarnings", "TestCoreExperience", "TestNativeBankTransfers", "TestEraIgnite",
 )
 
