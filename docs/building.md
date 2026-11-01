@@ -179,6 +179,37 @@ same ID and skip the migration. Changes confined to AI, loot, spawns or rates do
 not require a client cache bump. DBC/MPQ or addon changes need matching client
 files installed separately.
 
+## Launcher process model
+
+The launcher retains MySQL's native Windows monitor. In the bundled MySQL
+8.0.46, [`--no-monitor`](https://github.com/mysql/mysql-server/blob/mysql-8.0.46/sql/restart_monitor_win.cc#L548)
+would let the launched process serve connections directly, but it also
+[disables SQL `RESTART`](https://github.com/mysql/mysql-server/blob/mysql-8.0.46/sql/sql_restart_server.cc#L57).
+The [ownership checks](../cmd/startup/mysql_process_windows.go) already accept
+the launched process or verified descendants of the same executable. Retained
+handles, creation times and fresh parent snapshots prevent PID reuse from
+authorizing an unrelated listener. Direct startup would still need those
+protections and compatibility with monitored processes, so it does not justify
+changing the native restart behavior.
+
+Update downloads and verification run in the launcher before services start.
+Normal installation uses a verified copy at `.portable-update/helper.exe` and
+waits for `startup.exe` to exit before replacing it at its installed path. The
+[helper handoff](../cmd/startup/update.go) records its journal ownership before
+the original launcher exits; the
+[transaction](../cmd/startup/update_transaction.go) waits for that process to
+exit, installs or rolls back the files, then restarts the launcher. Windows
+permits recovery to rename a running replacement back into staging and restore
+its verified backup in-process. Keep the normal installation's helper handoff
+and journal ownership protocol so replacement and restart complete before
+services start.
+
+Existing launcher tests cover process identity and foreign-listener refusal,
+helper acknowledgement, replacement after parent exit and interrupted rollback.
+The Windows test job exercises native process and file-lock behavior; live
+fresh-realm and stopped-realm update validation remains tracked in the
+[roadmap](todo.md#server-updates-and-data).
+
 ## Automated builds
 
 The [checks workflow](../.github/workflows/checks.yml) validates the launcher,

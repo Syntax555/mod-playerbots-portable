@@ -198,11 +198,6 @@ fixtures pass. Use native core/module functions before adding replacements.
   four slots, full bags, a new bag stored inside its intended replacement and
   no vendor bag purchase while a won or bid-on auction bag awaits collection.
 
-## Launcher and updates
-
-- [ ] Evaluate direct MySQL process tracking with `--no-monitor` and in-process
-  updates against the detached helper's Windows lock/recovery requirements.
-
 ## Release and tests
 
 - [ ] Complete Windows server and matching client-package verification for
