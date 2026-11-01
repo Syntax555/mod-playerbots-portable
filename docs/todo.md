@@ -156,6 +156,69 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Audit historical class quests beyond restored priest families and test
   teachers, requirements, rewards and paid training. Validate Halion's Twilight
   Realm credit and the Spirit of Zandalar earned tier.
+- [ ] Audit autonomous class-quest item and event handling against the native
+  quest scripts before enabling additional routes. Live-test the warlock
+  Binding handling for 1471, 1474, 1504, 1513, 1689, 1739 and 1795; audit shaman
+  Call of Earth 1518/1521/9451, Call of Fire 1527/9555 and Call of Water 96/9509; warrior
+  The Affray 1719; and paladin The Tome of Valor 1652 / Return to Silvermoon
+  9691. Verify the correct owned items, targets, ordinary interactions, rewards
+  and each character's own era. Native quest availability alone does not prove
+  autonomous completion. Retain player-controlled character ownership.
+- [ ] **Warrior:** Verify the racial defensive-stance quest routes, including
+  Path of Defense (1498), and The Islander / The Affray (1719) for Berserker
+  Stance and Intercept. Check ordinary quest-giver access, the arena event,
+  survival, quest credit, turn-in and later paid ranks in each earned era.
+- [ ] **Paladin:** Verify racial resurrection quest chains, including The Tome
+  of Divinity (1785/1788), Redemption (9600) and Redeeming the Dead (9685),
+  plus The Tome of Valor (1652) / Return to Silvermoon (9691) and their
+  prerequisites. Check the event, earned spell and later trainer availability;
+  audit class-mount quest chains separately.
+- [ ] **Hunter:** Validate all six first-pet lesson chains and Training the
+  Beast using the existing native-quest bot actions, including interrupted
+  casts, owned rods, travel, pet preservation and subsequent feeding/revival.
+  Historical ability acquisition by taming additional beasts is not implemented;
+  keep `VanillaHunterPets` disabled until that and existing-pet migration have
+  been evaluated.
+- [ ] **Rogue:** Audit the racial lockpicking and poison quest chains, including
+  Klaven's Tower (2359), for the required keys, chests, skills, quest items and
+  native credit. Verify that learned poison abilities and owned consumables are
+  available to the existing combat actions in the character's earned era.
+- [ ] **Priest:** Verify each restored racial quest family end to end, including
+  Desperate Prayer, Fear Ward and the race-specific rewards listed in the
+  [class quest guide](class-quests.md#priest-training). Check teacher access,
+  prerequisites, ordinary turn-in, earned rank 1 and paid later ranks; do not
+  infer autonomous completion from the restored quest data.
+- [ ] **Shaman:** Audit racial Call of Earth, Fire, Water and Air chains,
+  including 1518/1521/9451, 1527/9555, 96/9509 and 1531/1532/9554. Check
+  source items, elemental encounters, native quest credit, totem rewards and
+  subsequent paid spells; scripted objectives need explicit handling if the
+  ordinary quest actions cannot perform them.
+- [ ] **Mage:** Audit class quest chains and their era-specific prerequisites,
+  including Magecraft (8250), Fragmented Magic (9364) and Attunement to Dalaran
+  (12172/12173). Verify actual rewards and trainer requirements before treating
+  a quest as necessary for a spell; check ordinary travel and item use.
+- [ ] **Warlock:** Live-verify the 43-quest Imp, Voidwalker, Succubus and
+  Felhunter action for all four Vanilla warlock races. It accepts and rewards
+  native quests, uses ordinary kills/chest loot and owned ritual items, and
+  leaves demon combat and credit to native scripts. Imp questgiver relations
+  are restored by Individual Progression. Verify the earned continent routes
+  for Alliance Heartswood and the Felhunter chains, including map transfers
+  while aboard and disembarking. Check recovery after relogs, missing ritual
+  items and native event resets before claiming autonomous end-to-end completion.
+  Add the blood elf Voidwalker quests 9529/9619, class mounts, Infernal and
+  Doomguard quests. Historical demon grimoire purchases remain unimplemented;
+  keep `WarlockDemonTrainers` disabled until evaluated. See the
+  [implemented scope](class-quests.md#autonomous-warlock-demon-quests).
+- [ ] **Druid:** Audit racial form and class-spell quests, including Aquatic
+  Form (31/5061), Body and Heart (6001/6002) and Power over Poison (6125/6130).
+  Verify ordinary underwater travel, quest items, native rewards and trainer
+  requirements for each earned era; existing form combat actions alone do not
+  establish that the prerequisite quests can be completed.
+- [ ] **Death knight:** Audit the Acherus starting chain, including The
+  Emblazoned Runeblade (12619), Into the Realm of Shadows (12687) and The Light
+  of Dawn (12801), before claiming autonomous completion. Random death-knight
+  login is disabled in the portable profile; controlled characters keep their
+  owner's choices and must meet ordinary starting-chain and era requirements.
 - [ ] Verify era XP: quest values, battleground goals, rest/heirloom/holiday
   modifiers, era-cap money and Thrallmar/Honor Hold Favor without double bonuses.
 - [ ] Check the [restored quests](changing-expansions.md#world-content-by-era-and-patch)

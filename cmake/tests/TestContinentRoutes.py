@@ -298,6 +298,11 @@ assert '(creatureTemplate->Entry != 3838 || sPlayerbotAIConfig.continentTravel)'
 # Bots stand on a lift the core cannot pick out when a door or another lift is nearer.
 assert ('if (sPlayerbotAIConfig.continentTravel && (!newTransport || !newTransport->ToMotionTransport()))'
         in function(ai, 'void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)'))
+# A transport's map transfer acknowledges a far teleport and resets RPG status while its route survives.
+teleport_ack = function(ai, 'void PlayerbotAI::HandleTeleportAck()')
+assert 'if (bot->IsBeingTeleportedFar())' in teleport_ack and 'Reset(true);' in teleport_ack
+reset_ai = function(ai, 'void PlayerbotAI::Reset(bool full)')
+assert 'rpgInfo = NewRpgInfo();' in reset_ai and 'continentRoute' not in reset_ai
 
 state_declaration = function(routes_header, 'struct ContinentRouteState') + ';'
 catalog_declaration = function(routes_header, 'class ContinentRouteCatalog') + ';'
@@ -1422,14 +1427,34 @@ int main()
         // A far teleport resets the RPG status; the route resumes without a new choice.
         status.hub = true;
         assert(status.StartContinentTravel() && status.selections == 1 && ai.rpgInfo.travelRoutes == 2);
-        // Arrived on the destination's map, the route ends and ordinary choices follow.
+        // After a boat's map transfer, an idle bot must keep its route until it steps ashore.
         bot.mapId = 1;
+        MotionTransport ship;
+        bot.transport = &ship;
+        WorldPosition const arrival = ai.continentRoute.destination;
+        ai.rpgInfo = NewRpgInfo();
+        assert(status.StartContinentTravel() && ai.rpgInfo.travelRoutes == 1);
+        assert(ai.continentRoute.Active() && ai.continentRoute.destination == arrival && status.selections == 1);
+        // The same arrival rule holds during a taxi flight, before ordinary ground choices can resume.
+        bot.transport = nullptr;
+        bot.inFlight = true;
+        ai.rpgInfo = NewRpgInfo();
+        assert(status.StartContinentTravel() && ai.rpgInfo.travelRoutes == 1);
+        assert(ai.continentRoute.Active() && ai.continentRoute.destination == arrival && status.selections == 1);
+        // Resuming an aboard route still respects the option and the existing time budget.
+        sPlayerbotAIConfig.continentTravel = false;
+        assert(!status.StartContinentTravel() && ai.continentRoute.Active() && ai.rpgInfo.travelRoutes == 1);
+        sPlayerbotAIConfig.continentTravel = true;
+        bot.inFlight = false;
+        // Only after leaving the ride on the destination map does the route end.
         assert(!status.StartContinentTravel() && !ai.continentRoute.Active());
         // Routes end after their time budget.
         bot.mapId = 0;
         ai.continentRoute.Start(status.next, false);
         nowMs += ContinentTravel::RouteTimeoutMs;
+        bot.transport = &ship;
         assert(!status.StartContinentTravel() && !ai.continentRoute.Active());
+        bot.transport = nullptr;
         // A companion's way to its master is not an RPG goal.
         Player master;
         ai.master = &master;
@@ -1638,6 +1663,9 @@ def build(directory, sources, name):
                                                'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
 
 
+resume_area = re.search(r'!ContinentRoutes::SameArea\(sContinentRoutes.Locate\(WorldPosition\(bot\)\),\s*'
+                        r'sContinentRoutes.Locate\(route.destination\)\)', production['start'])[0]
+
 mutations = [
     ('unusable links planned', 'policy', 'if (!allowed[i] || settled[i + 1])', 'if (settled[i + 1])'),
     ('walking between maps', 'policy', 'if (a.map != b.map)\n        return std::numeric_limits<float>::infinity();\n', ''),
@@ -1694,9 +1722,9 @@ mutations = [
     ('companion travels from an instance', 'trigger', 'bot->IsInFlight() ||\n        bot->GetMap()->Instanceable())',
      'bot->IsInFlight())'),
     ('travel despite a local camp', 'start', 'if (HasTravelHubHere())\n        return false;', ''),
-    ('route never resumes', 'start', ('if (!ContinentRoutes::SameArea(sContinentRoutes.Locate(WorldPosition(bot)),\n'
-                                      '                                       sContinentRoutes.Locate(route.destination)) &&'),
-     'if (false &&'),
+    ('route resumes only aboard', 'start', resume_area, 'false'),
+    ('arrival route ends before disembarking', 'start', 'bot->GetTransport() || ', ''),
+    ('arrival route ends during flight', 'start', 'bot->IsInFlight() ||', ''),
     ('companion route taken over', 'start', 'if (botAI->GetMaster())\n            return false;', ''),
     ('route without time budget', 'start', ' &&\n            GetMSTimeDiffToNow(route.startedAt) < ContinentTravel::RouteTimeoutMs', ''),
     ('walking across islands free', 'policy', ' + (SeparateIslands(a, b) ? IslandPenaltySeconds : 0.0f)', ''),
@@ -1738,9 +1766,7 @@ mutations = [
     ('companion ignores islands', 'trigger', (' ||\n           !ContinentRoutes::SameArea(sContinentRoutes.Locate(WorldPosition(bot)),\n'
                                               '                                      sContinentRoutes.Locate(WorldPosition(master)));'),
      ';'),
-    ('route ends on the wrong island', 'start', ('if (!ContinentRoutes::SameArea(sContinentRoutes.Locate(WorldPosition(bot)),\n'
-                                                 '                                       sContinentRoutes.Locate(route.destination)) &&'),
-     'if (bot->GetMapId() != route.destination.GetMapId() &&'),
+    ('route ends on the wrong island', 'start', resume_area, 'bot->GetMapId() != route.destination.GetMapId()'),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-continent-routes-') as temporary:

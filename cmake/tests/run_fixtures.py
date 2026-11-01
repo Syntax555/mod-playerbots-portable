@@ -57,6 +57,8 @@ GAMEPLAY = (
     "TestHunterPetTaming",
     "TestHunterTamingLessons",
     "TestContinentRoutes",
+    "TestWarlockDemonQuests",
+    "TestQuestGrindTargets",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -75,6 +77,8 @@ MODULE_FIXTURES = {
         "TestHunterPetTaming",
         "TestHunterTamingLessons",
         "TestContinentRoutes",
+        "TestWarlockDemonQuests",
+        "TestQuestGrindTargets",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
