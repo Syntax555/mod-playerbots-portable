@@ -128,7 +128,10 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Player-led Onyxia, MC, BWL, ZG and AQ: personal entry/attunement, native
   tactics and earned-play refusals. Cover Onyxia's ground/air/landing phases,
   all Deep Breaths, whelps, threat/fear, ordinary recovery and AI-reset strategy
-  restoration; no raid-cheat Suppression Room or floor-rescue bypass.
+  restoration; no raid-cheat Suppression Room or floor-rescue bypass. Verify
+  Arlokk's ordinary gong interaction and Ouro's approach/summon, submerged
+  phase, wipe/reset and native completion. Check ordinary Jeklik and Plugger
+  pulls with forced aggro refused, including an unreachable boss that stalls.
 - [ ] Compare native Vanilla world-buff turn-ins with 1.12: faction delivery,
   cooldowns, recipient levels/scaling, duration, death and dispel. Simulated
   turn-ins remain disabled; native WotLK scripts are not a verified 1:1 model.
@@ -159,6 +162,10 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ## Dependency updates
 
+- [ ] Evaluate newer CMaNGOS Classic/TBC database snapshots before importing
+  them: replay their migrations, regenerate historical quest and era-world
+  data, and verify the TBC `QuestLevel=-1` changes against era XP rules. Keep
+  the reference core pins aligned with the verified source data.
 - [ ] Submit the prepared Individual Progression empty-filter fix when upstream
   permissions permit. Track the generic core proposals and remove local hunks
   only after accepted compatible fixes are pinned and checked; see

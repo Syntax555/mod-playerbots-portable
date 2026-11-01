@@ -458,6 +458,10 @@ def native_contracts(core, source):
         (core/'src/server/game/Groups/Group.cpp').read_text(), 'bool Group::AddMember(')
     summon=(core/'modules/mod-playerbots/src/Ai/Base/Actions/UseMeetingStoneAction.cpp').read_text()
     assert re.search(r'if \(sPlayerbotAIConfig.naturalProgression\)\s*return false;',function(summon,'bool SummonAction::Teleport('))
+    engage = function((core/'src/server/game/Entities/Unit/Unit.cpp').read_text(),
+                      'void Unit::EngageWithTarget(')
+    assert 'm_threatManager.AddThreat(who, 0.0f, nullptr, true, true)' in engage
+    assert 'SetInCombatWith(who)' in engage
     path=(core/'src/server/game/Movement/MovementGenerators/PathGenerator.cpp').read_text()
     assert '_useRaycast' in path and 'PATHFIND_INCOMPLETE' in path
     coordinator=(source/'EarnedDungeonParties.cpp').read_text()
@@ -521,6 +525,68 @@ def native_contracts(core, source):
     print('Native dungeon contracts: joined map workers, invitation security/reset, summon refusal, group ownership, event shortcut and production shortcut gates verified')
 
 
+def forced_pull_checks(source, compiler):
+    pull = (source/'Ai/Dungeon/DungeonClear/Action/DcPullActions.cpp').read_text()
+    # Both planning and retry use the ordinary pull path in earned play.
+    assert 'if (!DcEarnedPlay::Active() && forceRow && forceRow->forceAggroRange > 0.0f)' in pull
+    assert 'bool const forced = !DcEarnedPlay::Active() && forceRow && forceRow->forceAggroRange > 0.0f;' in pull
+    method = function(pull, 'bool DcForceBossAggroOnTank(')
+    harness = r'''
+#include <cassert>
+bool earned=true;
+namespace DcEarnedPlay { bool Active(){return earned;} }
+constexpr int UNIT_STATE_EVADE=1,CAST_ANGLE_IN_FRONT=2;
+struct Creature;
+struct Player { bool facing=false; int turns=0; bool HasInArc(int,Creature*){return facing;} };
+struct CreatureAI { int attacks=0; void AttackStart(Player*){++attacks;} };
+struct Creature {
+ bool alive=true,combat=false,evade=true,movement=true,hasAI=true;
+ int clears=0,engages=0; CreatureAI ai;
+ bool IsAlive(){return alive;} bool IsInCombat(){return combat;}
+ bool IsInEvadeMode(){return evade;} void ClearUnitState(int){evade=false;++clears;}
+ void EngageWithTarget(Player*){combat=true;++engages;}
+ CreatureAI* AI(){return hasAI?&ai:nullptr;} bool IsCombatMovementAllowed(){return movement;}
+};
+struct ServerFacade { static ServerFacade& instance(){static ServerFacade s;return s;} void SetFacingTo(Player* p,Creature*){p->facing=true;++p->turns;} };
+#include "ForcedPull.h"
+int main(){
+ Player bot;
+ // Earned pulls never clear evasion, manufacture threat or force a boss's AI.
+ for(bool combat:{false,true})for(bool movement:{false,true}){
+  Creature boss;boss.combat=combat;boss.movement=movement;
+  assert(!DcForceBossAggroOnTank(&bot,&boss));
+  assert(boss.combat==combat&&boss.evade&&boss.clears==0&&boss.engages==0&&boss.ai.attacks==0&&bot.turns==0);
+ }
+ assert(!DcForceBossAggroOnTank(nullptr,nullptr));
+ earned=false;
+ assert(!DcForceBossAggroOnTank(nullptr,nullptr));
+ Creature dead;dead.alive=false;assert(!DcForceBossAggroOnTank(&bot,&dead)&&dead.engages==0);
+ // Standalone upstream behavior respects scripted movement and existing combat.
+ for(bool movement:{false,true})for(bool hasAI:{false,true}){
+  Creature boss;boss.movement=movement;boss.hasAI=hasAI;
+  assert(DcForceBossAggroOnTank(&bot,&boss));
+  assert(boss.combat&&!boss.evade&&boss.clears==1&&boss.engages==1&&boss.ai.attacks==(movement&&hasAI?1:0));
+  assert(DcForceBossAggroOnTank(&bot,&boss)&&boss.engages==1&&boss.ai.attacks==(movement&&hasAI?1:0));
+ }
+}
+'''
+    with tempfile.TemporaryDirectory(prefix='earned-forced-pull-') as temp:
+        work = Path(temp)
+        (work/'ForcedPull.h').write_text(method)
+        (work/'fixture.cpp').write_text('#include <initializer_list>\n'+harness)
+        flags = ['-std=c++20', '-O1', '-Wall', '-Wextra', '-I', str(work)]
+        if os.name != 'nt':
+            flags += [*SANITIZER_FLAGS, '-no-pie']
+        exe = work/('fixture.exe' if os.name == 'nt' else 'fixture')
+        subprocess.run([compiler, *flags, str(work/'fixture.cpp'), '-o', str(exe)], check=True)
+        subprocess.run([str(exe)], check=True, timeout=TIMEOUT)
+        reject_mutants(work, [
+            ('forced boss aggro in earned play', 'ForcedPull.h', 'DcEarnedPlay::Active() || ', ''),
+            ('cancel scripted boss path', 'ForcedPull.h', 'boss->AI() && boss->IsCombatMovementAllowed()', 'boss->AI()'),
+        ], lambda directory, executable: [compiler, '-std=c++20', '-O1', '-I', str(directory),
+                                         str(directory/'fixture.cpp'), '-o', str(executable)], 'Earned forced pulls')
+
+
 def main():
     parser=argparse.ArgumentParser()
     source_argument(parser)
@@ -532,6 +598,7 @@ def main():
     if not (source/'EarnedDungeonParties.cpp').exists():
         raise SystemExit('PrepareModules.cmake must prepare the earned DungeonClear sources first')
     compiler=cxx()
+    forced_pull_checks(source, compiler)
     with tempfile.TemporaryDirectory(prefix='earned-dungeons-') as temp:
         work=Path(temp)
         ip_header=(core/'modules/mod-individual-progression/src/IndividualProgression.h').read_text()

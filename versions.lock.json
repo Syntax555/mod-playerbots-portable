@@ -36,10 +36,10 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "9db761b686b458587fad33e455ce20ab72bf822d",
+      "revision": "a26ae2e91642580472cf1cdab9de9cdc8adc4e0e",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
-        "revision": "5283a13e0a5d873350fdaef777b95d553d354bee"
+        "revision": "08e5a03f99b648745b840707327f7c803ed51aa1"
       },
       "forkChanges": {
         "mod-playerbots-natural-progression": "2a50914f4731316f7431ce11711c37970e1d9b7e",
@@ -59,16 +59,19 @@
         "mod-playerbots-pending-auction-bags": "20e042019fac7116f85610651b769694c971b466",
         "mod-playerbots-bot-deletion-auction-refunds": "fe193b6deb391d9ea573fd3f6cfa4fe7a3df0784",
         "mod-playerbots-equipment-loadout": "894c6e540a3f0151b79f527d3129f04a05d34f9b",
-        "mod-playerbots-weapon-stone-targets": "0cbd354582822103b07cf3f10526e029469a41d9"
+        "mod-playerbots-weapon-stone-targets": "0cbd354582822103b07cf3f10526e029469a41d9",
+        "mod-playerbots-refresh-talents": "f7258883442d6a49b255451601a5f81161477367",
+        "mod-playerbots-refresh-role-equipment": "10beb1e82bbaeedb0b3e30ba02ad4559f302357b",
+        "mod-playerbots-automatic-talent-ownership": "a26ae2e91642580472cf1cdab9de9cdc8adc4e0e"
       }
     },
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4",
+      "revision": "a9347655e7bd21a2ab1db7d939e9acdf84bec0db",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
-        "revision": "18999da65adcbb70c7f4b962afb3600534481ef6"
+        "revision": "09dcdb3ff5eec7685cf7d039220452354301d96e"
       },
       "forkChanges": {
         "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
@@ -90,28 +93,30 @@
         "mod-individual-progression-restored-vanilla-quests": "f969f3ae1ed750d50cd017077c3fb9701d4288ee",
         "mod-individual-progression-era-awareness-bounds": "ac003b9427e44b23e103f69f0d52d067f0fe8217",
         "mod-individual-progression-restored-era-quests": "82dd543136be13fe2c9918c366c83a8476d3861d",
-        "mod-individual-progression-single-heeding-the-call": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4"
+        "mod-individual-progression-single-heeding-the-call": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4",
+        "mod-individual-progression-borean-persuasion": "a9347655e7bd21a2ab1db7d939e9acdf84bec0db"
       }
     },
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422",
+      "revision": "e0e38cf1938e4f2526f64575ddf12dd5b70ddb74",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-        "revision": "7fb6ebdefb8038af2676c280214f8a15c843b347"
+        "revision": "db160a9fa372dbd97d51d7f59a7bbb85645edfef"
       },
       "forkChanges": {
         "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
         "mod-dungeon-clear-build-warnings": "8297c0afbdde6010c4ef91906b584da9d09c1f16",
         "mod-dungeon-clear-earned-shortcut-guards": "10b305cad830574c21b4928a7250e952d76fa503",
-        "mod-dungeon-clear-earned-death-recovery": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422"
+        "mod-dungeon-clear-earned-death-recovery": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422",
+        "mod-dungeon-clear-earned-forced-pulls": "e0e38cf1938e4f2526f64575ddf12dd5b70ddb74"
       }
     },
     {
       "name": "mod-quest-loot-party",
       "url": "https://github.com/Syntax555/mod-quest-loot-party.git",
-      "revision": "b558cd259a959ac333aa923191b464af9201f44c",
+      "revision": "9d5894ab81eeda4c71afff29540b520161352219",
       "upstream": {
         "url": "https://github.com/pangolp/mod-quest-loot-party.git",
         "revision": "c3955915c76d5a22a9d25a44482345d368a8de82"
@@ -121,7 +126,7 @@
     {
       "name": "mod-world-buff-bots",
       "url": "https://github.com/Syntax555/mod-world-buff-bots.git",
-      "revision": "6fe255ec85049fdd32031bc4aa7d1fc3109551d0",
+      "revision": "5ddf67ca213f3bdfcd5d84ee146071da91665460",
       "upstream": {
         "url": "https://github.com/Rockhopper1776/mod-world-buff-bots.git",
         "revision": "baae5656aa6a375e103bc83da8262f2061dbfcb6"
@@ -133,7 +138,7 @@
     {
       "name": "mod-lfg-progression",
       "url": "https://github.com/Syntax555/wow-mod-lfg-progression.git",
-      "revision": "451486aaeff9b8488f98ab20cb85b6ab3cd47945",
+      "revision": "5fc50532de7c7cbc2101ebe236557a7beedbd609",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-lfg-progression.git",
         "revision": "2615e82902cf92c0e7dd93dd6c2472d7b40fe14a"
@@ -146,7 +151,7 @@
     {
       "name": "mod-era-events",
       "url": "https://github.com/Syntax555/wow-mod-era-events.git",
-      "revision": "910af62c3a478bc90051c1058c8770516bfa887f",
+      "revision": "bba38c12bc7f3f960b2e29ed5ba4cb976855ce11",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
         "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1"
@@ -180,13 +185,14 @@
     {
       "name": "mod-questie-bridge",
       "url": "https://github.com/Syntax555/mod-questie-bridge.git",
-      "revision": "7193c3c4995f4242a23b679f576160633195221c",
+      "revision": "3a010d7084798cb38598f4dee807a29acd99a38b",
       "upstream": {
         "url": "https://github.com/Aldori15/mod-questie-bridge.git",
-        "revision": "9a24fd652c1d658f87a057703298848baec26bae"
+        "revision": "7a62da55de9de29a77b4562cc15f3d382a4f1f0b"
       },
       "forkChanges": {
-        "mod-questie-bridge-era-quests": "7193c3c4995f4242a23b679f576160633195221c"
+        "mod-questie-bridge-era-quests": "7193c3c4995f4242a23b679f576160633195221c",
+        "mod-questie-bridge-protocol19-era-quests": "3a010d7084798cb38598f4dee807a29acd99a38b"
       }
     },
     {
@@ -334,10 +340,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "6b3a172e6e568f1f8fa3e11d3cf660df2bcebce8",
+      "revision": "0188619ac8b6ba75e79ba1c8c2a521a6e7949d2f",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "80392604ef4e7398f4d8fbaa8204d5011b7a6b3d"
+        "revision": "f154bd5cf4982359619896c354904da1e212ebd3"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -353,10 +359,10 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "13b26418590b893f171def15fd7f669acefc6b80",
+      "revision": "ed5bc85f50d78595a05de46801b39d0a9c3cecdb",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "8a2b87a3b80eb4fd221df1d255af425818a2e814"
+        "revision": "f1b5c606f582c7e588646fde8894919c68eedac5"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",

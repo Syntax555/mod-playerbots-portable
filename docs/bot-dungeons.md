@@ -159,6 +159,11 @@ Molten Core runes need Aqual Quintessence; bots do not douse them. Natural
 progression does not cancel a bot's crowd control artificially when a formerly
 mind-controlled target returns to the raid.
 
+Dungeon Clear includes ordinary Gong of Bethekk interaction for Arlokk and
+movement toward Ouro's native summon trigger. Object locks, interaction range,
+real navigation and native encounter completion still apply. Complete
+Zul'Gurub and Ahn'Qiraj clears remain unverified.
+
 Onyxia's map 249 tactics cover Deep Breath spell positions, Fireball spacing,
 tank positioning and threat in the restored level-60 encounter. Whelp targeting
 includes native and restored Vanilla whelps and skips evading targets. A full
@@ -172,6 +177,10 @@ Parties share a route calculated over the native navigation mesh. Each bot's
 short movement sections are checked from its current position; water sections
 use its swim speed. After interruptions a bot rejoins a reachable route point.
 Missing mesh, unsafe sections or a missing member stop progress.
+
+Forced boss aggro is refused under natural progression, including Jeklik and
+Plugger Spazzring. Bots must reach a normal attack position or rely on a player's
+ordinary pull; an unreachable boss can stall the clear.
 
 If an entrance refuses a member, the attempt stops and that bot is excluded from
 that dungeon for two hours or until its level/progression changes. Failed
