@@ -1,7 +1,7 @@
 """Run native release, corpse travel and reclaim decisions without a realm.
 
 Production Playerbots methods and the core packet handlers execute against
-recording movement, time and geometry. No resurrection or travel decision is
+recording movement, time, navmesh and geometry. No resurrection or travel decision is
 implemented by the fixture. Minimal-AI priorities use the native strategy data.
 """
 
@@ -45,9 +45,32 @@ assert 'if (minimal && (relevance < 100))' in function(engine_source, 'bool Engi
 assert 'if (minimal && node->getFirstRelevance() < 100)' in function(engine_source, 'void Engine::ProcessTriggers(')
 can_move = function((source / 'Bot/PlayerbotAI.cpp').read_text(), 'bool PlayerbotAI::CanMove()')
 assert '(bot->isDead() && !bot->HasPlayerFlag(PLAYER_FLAGS_GHOST))' in can_move
-move = (source / 'Ai/Base/Actions/MovementActions.cpp').read_text().split(
-    'bool MovementAction::MoveTo(uint32', 1)[1].split('\n    return false;', 1)[0]
+movement_source = (source / 'Ai/Base/Actions/MovementActions.cpp').read_text()
+move = movement_source.split('bool MovementAction::MoveTo(uint32', 1)[1].split('\n    return false;', 1)[0]
 assert move.index('if (!IsMovingAllowed())') < move.index('DoMovePoint(')
+# An exact waypoint goes to the spline as given; the height search would accept the core's straight lines.
+exact = move.split('else if (exact_waypoint || disableMoveSplinePath || !generatePath)', 1)[1].split('\n    else\n', 1)[0]
+assert 'DoMovePoint(bot, x, y, z, generatePath, backwards);' in exact and 'SearchForBestPath' not in exact
+assert 'int typeOk = PATHFIND_NORMAL | PATHFIND_INCOMPLETE;' in function(
+    movement_source, 'const Movement::PointsArray MovementAction::SearchForBestPath(')
+# The navmesh double answers a player as the core does: an end without a polygon and a route past the
+# point limit come back as straight lines, which the spline then follows.
+path_header = (core / 'src/server/game/Movement/MovementGenerators/PathGenerator.h').read_text()
+path_source = (core / 'src/server/game/Movement/MovementGenerators/PathGenerator.cpp').read_text()
+poly_path = function(path_source, 'void PathGenerator::BuildPolyPath(')
+assert re.search(r'bool path = creature \? creature->CanFly\(\) : true;.*?if \(path \|\| \(waterPath && canSwim\)\)\s*\{'
+                 r'\s*_type = PathType\(PATHFIND_NORMAL \| PATHFIND_NOT_USING_PATH\);', poly_path, re.DOTALL)
+assert re.search(r'_type = PathType\(PATHFIND_INCOMPLETE\);\s*AddFarFromPolyFlags\(startFarFromPoly, endFarFromPoly\);',
+                 poly_path)
+point_path = function(path_source, 'void PathGenerator::BuildPointPath(')
+assert re.search(r'else if \(pointCount >= _pointPathLimit\)\s*\{\s*BuildShortcut\(\);\s*'
+                 r'_type = PathType\(_type \| PATHFIND_SHORT\);', point_path)
+assert 'SetActualEndPosition(_pathPoints[pointCount - 1]);' in point_path
+assert 'if (result && !(path.GetPathType() & PATHFIND_NOPATH))' in function(
+    (core / 'src/server/game/Movement/Spline/MoveSplineInit.cpp').read_text(),
+    'void MoveSplineInit::MoveTo(Vector3 const& dest,')
+point_limit = re.search(r'#ifdef MOD_PLAYERBOTS.*?#define MAX_POINT_PATH_LENGTH\s+(\d+)\s.*?#else', path_header, re.DOTALL)
+path_step = re.search(r'^#define SMOOTH_PATH_STEP_SIZE\s+([0-9.]+f)$', path_header, re.MULTILINE)
 assert 'return GetMap()->GetCorpseByPlayer(GetGUID());' in function(player_source, 'Corpse* Player::GetCorpse() const')
 assert '_corpsesByPlayer.find(ownerGuid)' in function(
     (core / 'src/server/game/Maps/Map.h').read_text(), 'Corpse* GetCorpseByPlayer(')
@@ -75,6 +98,7 @@ assert 'corpseInstance ? corpseInstance->Parent : 0' in function(
 production = {
     'entrance': function(corpse_source, 'bool HasRemoteInstanceCorpse(') + '\n' +
                 function(corpse_source, 'AreaTrigger const* FindCorpseEntrance('),
+    'walk': function(corpse_source, 'bool FindGhostWalk('),
     'find': function(corpse_source, 'bool FindCorpseAction::Execute('),
     'useful': function(corpse_source, 'bool FindCorpseAction::isUseful()'),
     'reclaim': function(corpse_source, 'bool ReviveFromCorpseAction::Execute('),
@@ -158,7 +182,8 @@ struct Player {
     float x=0,y=0,z=0; uint32 mapId=1; bool alive=false,ghost=true,bg=false,arena=false,moving=false;
     bool aiControlled=true,selfBot=false,path=true,preventResurrection=false,grouped=false,fleeUseful=false;
     unsigned resurrections=0,bones=0,teleports=0,freeRepairs=0,graveyardReleases=0,moves=0;
-    float targetX=0; uint32 targetMap=0; Corpse* corpse=nullptr; Corpse* releaseCorpse=nullptr;
+    float targetX=0,targetY=0,targetZ=0; uint32 targetMap=0; bool exactMove=false; Corpse* corpse=nullptr; Corpse* releaseCorpse=nullptr;
+    float meshEdge=1e9f,reachEdge=1e9f; bool startOffMesh=false;
     WorldSession* session=nullptr; Motion motion; Map map; Group group;
     WorldLocation corpseLocation;
     bool IsAlive() const { return alive; } bool isDead() const { return !alive; }
@@ -174,6 +199,8 @@ struct Player {
     bool HasCorpse() const { return corpseLocation.map!=MAPID_INVALID; }
     WorldLocation GetCorpseLocation() const { return corpseLocation; }
     float GetExactDistSq(float px,float py,float pz) const { return (x-px)*(x-px)+(y-py)*(y-py)+(z-pz)*(z-pz); }
+    float GetPositionX() const { return x; } float GetPositionY() const { return y; } float GetPositionZ() const { return z; }
+    float GetAngle(struct WorldPosition const*) const;
     bool IsInAreaTriggerRadius(AreaTrigger const*) const;
     Group* GetGroup() { return grouped?&group:nullptr; } Map* GetMap() { return &map; }
     ObjectGuid GetGUID() const { return {}; } WorldSession* GetSession() { return session; }
@@ -211,7 +238,7 @@ struct ServerFacade {
 struct WorldPosition { uint32 map=1; float x=0,y=0,z=0;
     explicit WorldPosition(Player* p) { if(p) { map=p->mapId;x=p->x;y=p->y;z=p->z; } }
     explicit WorldPosition(Corpse* p):map(p->map),x(p->x),y(p->y),z(p->z) {}
-    WorldPosition(uint32 m,float px,float py,float pz,float):map(m),x(px),y(py),z(pz) {}
+    WorldPosition(uint32 m,float px,float py,float pz,float=0):map(m),x(px),y(py),z(pz) {}
     float distance(WorldPosition p) const { return std::sqrt((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y)+(z-p.z)*(z-p.z)); }
     float fDist(WorldPosition p) const { return distance(p); }
     uint32 GetMapId() const { return map; } float GetPositionX() const { return x; }
@@ -219,6 +246,7 @@ struct WorldPosition { uint32 map=1; float x=0,y=0,z=0;
     unsigned getUnitsAggro(GuidVector const&,Player*) const { return 0; }
     bool GetReachableRandomPointOnGround(Player*,float,uint32) { return false; }
 };
+float Player::GetAngle(WorldPosition const* p) const { return std::atan2(p->y-y,p->x-x); }
 uint32 urand(uint32 lower,uint32) { return lower; }
 struct FleeManager { Player* bot; FleeManager(Player* p,float,double,uint32,WorldPosition):bot(p) {}
     bool isUseful() const { return bot->fleeUseful; } bool CalculateDestination(float*,float*,float*) { return false; } };
@@ -249,8 +277,8 @@ struct PlayerbotTextMgr { static PlayerbotTextMgr& instance() { static Playerbot
 struct Action { PlayerbotAI* botAI; Player* bot; Context* context;
     Action(PlayerbotAI* ai,char const*):botAI(ai),bot(ai->bot),context(&ai->context) {} };
 struct MovementAction:Action { using Action::Action;
-    bool MoveTo(uint32 map,float x,float,float,bool,bool) {
-        ++bot->moves;bot->targetMap=map;bot->targetX=x;
+    bool MoveTo(uint32 map,float x,float y,float z,bool,bool,bool=false,bool exact=false) {
+        ++bot->moves;bot->targetMap=map;bot->targetX=x;bot->targetY=y;bot->targetZ=z;bot->exactMove=exact;
         if(!bot->path||!bot->ghost||map!=bot->mapId) return false;
         bot->moving=true;return true;
     }
@@ -313,7 +341,7 @@ struct Scenario {
     Corpse corpse;Player bot;PlayerbotAI ai;FindCorpseAction find;ReviveFromCorpseAction reclaim;AutoReleaseSpiritAction release;WorldSession session;
     Scenario():ai(&bot),find(&ai),reclaim(&ai),release(&ai),session{&bot} {
         bot.corpse=&corpse;bot.releaseCorpse=&corpse;bot.session=&session;reclaimPackets=0;sRandomPlayerbotMgr.revives=0;
-        bot.corpseLocation={corpse.map,corpse.x,corpse.y,corpse.z};sMapStore={};objects={};
+        bot.corpseLocation={corpse.map,corpse.x,corpse.y,corpse.z};sMapStore={};objects={};pathQueries=0;
     }
     void Safe() { assert(!bot.teleports&&!bot.freeRepairs&&!sRandomPlayerbotMgr.revives); }
 };
@@ -331,7 +359,7 @@ void TravelAndReclaim() {
         assert(s.bot.alive&&s.bot.resurrections==1&&s.bot.bones==1&&reclaimPackets==1&&!s.ai.healerCalls);s.Safe();
     }
     { Scenario s;s.bot.moving=true;s.ai.context.deaths.value=100;s.corpse.ghostTime=fixtureNow-3600;
-      assert(s.find.Execute(Event())&&!s.bot.moves&&!s.ai.healerCalls);s.Safe(); }
+      assert(s.find.Execute(Event())&&!s.bot.moves&&!s.ai.healerCalls&&!pathQueries);s.Safe(); }
     { Scenario s;s.bot.path=false;s.ai.context.deaths.value=100;s.corpse.ghostTime=fixtureNow-3600;
       assert(!s.find.Execute(Event())&&s.bot.moves==1&&s.ai.healerCalls==1&&!s.bot.resurrections);s.Safe(); }
     { Scenario s;s.bot.corpse=nullptr;assert(!s.find.isUseful()&&!s.find.Execute(Event())&&!s.reclaim.Execute(Event()));s.Safe(); }
@@ -341,6 +369,36 @@ void TravelAndReclaim() {
     { Scenario s;Player leader;leader.aiControlled=false;leader.corpse=&s.corpse;s.ai.leader=&leader;s.ai.context.leaderDistance.value=5;s.bot.x=180;
       assert(!s.reclaim.Execute(Event())&&!reclaimPackets);leader.alive=true;
       assert(s.reclaim.Execute(Event())&&s.bot.alive);s.Safe(); }
+}
+bool Walk(Scenario& s) {
+    unsigned moves=s.bot.moves;float x=s.bot.x,y=s.bot.y;
+    if(!s.find.Execute(Event())) return false;
+    assert(s.bot.moves==moves+1&&s.bot.exactMove&&s.bot.targetMap==s.corpse.map);
+    assert(s.bot.targetX<=std::min(s.bot.meshEdge,s.bot.reachEdge)&&std::hypot(s.bot.targetX-x,s.bot.targetY-y)<=POINT_PATH_REACH);
+    s.bot.x=s.bot.targetX;s.bot.y=s.bot.targetY;s.bot.z=s.bot.targetZ;s.bot.moving=false;return true;
+}
+void GhostWalks() {
+    sPlayerbotAIConfig.naturalProgression=true;
+    // A route longer than a path holds is walked in legs to the body, never along the core's straight line.
+    { Scenario s;s.corpse.x=POINT_PATH_REACH*2.5f;
+      assert(Walk(s)&&s.bot.x==GHOST_WALK_LEG&&pathQueries==2);
+      unsigned legs=1;while(Walk(s)) ++legs;
+      assert(legs>2&&s.bot.x==s.corpse.x);
+      assert(!s.ai.healerCalls&&s.reclaim.Execute(Event())&&s.bot.alive);s.Safe(); }
+    // A body off the navmesh is approached only to the mesh edge; then the spirit healer remains.
+    { Scenario s;s.bot.meshEdge=100;assert(Walk(s)&&s.bot.x==GHOST_WALK_LEG);
+      assert(!Walk(s)&&s.bot.moves==1&&s.ai.healerCalls==1&&!s.bot.resurrections);s.Safe(); }
+    { Scenario s;s.bot.meshEdge=210;s.corpse.x=230;
+      assert(Walk(s)&&Walk(s)&&Walk(s)&&s.bot.x==210&&!Walk(s)&&s.bot.moves==3&&!s.ai.healerCalls);
+      assert(s.reclaim.Execute(Event())&&s.bot.alive);s.Safe(); }
+    // A ghost standing off the mesh starts no walk.
+    { Scenario s;s.bot.startOffMesh=true;
+      assert(!s.find.Execute(Event())&&!s.bot.moves&&s.ai.healerCalls==1&&pathQueries==6);s.Safe(); }
+    // A floor not connected to the body's is walked to its closest reachable point.
+    { Scenario s;s.bot.reachEdge=180;assert(Walk(s)&&s.bot.x==180&&pathQueries==1);
+      assert(!s.find.Execute(Event())&&s.reclaim.Execute(Event())&&s.bot.alive&&!s.ai.healerCalls);s.Safe(); }
+    { Scenario s;s.bot.reachEdge=100;assert(Walk(s)&&s.bot.x==100);
+      assert(!Walk(s)&&s.ai.healerCalls==1&&!s.bot.resurrections);s.Safe(); }
 }
 void NativeReclaimGuards() {
     for(int refusal=0;refusal<8;++refusal) {
@@ -468,12 +526,38 @@ void InstanceCorpseRoutes() {
       }
       s.Safe(); }
 }
-int main() { TravelAndReclaim();NativeReclaimGuards();ReleaseAndGroupWait();LegacyBehavior();MinimalPriorities();InstanceCorpseRoutes();
+int main() { TravelAndReclaim();GhostWalks();NativeReclaimGuards();ReleaseAndGroupWait();LegacyBehavior();MinimalPriorities();InstanceCorpseRoutes();
     std::cout<<"Corpse recovery: native release, repeated/old deaths, real reclaim guards, group waits and minimal AI passed\n"; }
 '''
 
 native_definitions = re.search(r'^#define CORPSE_RECLAIM_RADIUS [0-9]+$', corpse_header, re.MULTILINE).group(0)
 native_definitions += '\n' + function(corpse_header, 'enum CorpseType') + ';'
+native_definitions += '\n' + function(path_header, 'enum PathType') + ';\n'
+native_definitions += re.search(r'^constexpr float GHOST_WALK_LEG = [0-9.]+f;$', corpse_source, re.MULTILINE).group(0)
+native_definitions += f'''
+constexpr float POINT_PATH_REACH={point_limit.group(1)}*{path_step.group(1)};
+static_assert(GHOST_WALK_LEG*2<POINT_PATH_REACH);
+''' + r'''
+namespace G3D { struct Vector3 { float x=0,y=0,z=0; Vector3()=default; Vector3(float a,float b,float c):x(a),y(b),z(c) {} }; }
+static unsigned pathQueries=0;
+// The navmesh ends at meshEdge; beyond reachEdge the floor is not connected to the ghost's.
+struct PathGenerator {
+    Player const* source; PathType type=PATHFIND_BLANK; G3D::Vector3 end;
+    explicit PathGenerator(Player const* p):source(p) {}
+    bool CalculatePath(float x,float y,float z,bool=false) {
+        ++pathQueries;end={x,y,z};
+        if(x>source->meshEdge) { type=PathType(PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH);return true; }
+        bool partial=x>source->reachEdge;
+        type=partial||source->startOffMesh?PATHFIND_INCOMPLETE:PATHFIND_NORMAL;
+        if(source->startOffMesh) type=PathType(type|PATHFIND_FARFROMPOLY_START);
+        if(std::hypot(x-source->x,y-source->y)>POINT_PATH_REACH) type=PathType(type|PATHFIND_SHORT);
+        else if(partial) end.x=source->reachEdge;
+        return true;
+    }
+    PathType GetPathType() const { return type; }
+    G3D::Vector3 const& GetActualEndPosition() const { return end; }
+};
+'''
 real_player = function((source / 'Bot/PlayerbotAI.cpp').read_text(), 'bool IsRealPlayer(Player* player)')
 
 
@@ -487,6 +571,18 @@ def build(directory, name, parts):
 
 
 mutations = (
+    ('ghost straight-line corpse run', 'find',
+     ('FindGhostWalk(bot, moveToPos, walkEnd) &&\n                        '
+      'MoveTo(moveToPos.GetMapId(), walkEnd.x, walkEnd.y, walkEnd.z, false, false, false, true)'),
+     ('MoveTo(moveToPos.GetMapId(), moveToPos.GetPositionX(), moveToPos.GetPositionY(), '
+      'moveToPos.GetPositionZ(), false, false)')),
+    ('route past the path point limit', 'walk', ' | PATHFIND_SHORT |', ' |'),
+    ('body off the navmesh', 'walk', 'PATHFIND_NOT_USING_PATH | ', ''),
+    ('ghost off the navmesh', 'walk', ' | PATHFIND_FARFROMPOLY_START', ''),
+    ('ghost walk without progress', 'walk',
+     'destination.distance(WorldPosition(destination.GetMapId(), end.x, end.y, end.z)) + 1.0f < remaining',
+     'remaining >= 0.0f'),
+    ('height search re-path', 'find', 'walkEnd.z, false, false, false, true)', 'walkEnd.z, false, false)'),
     ('old death and time travel limits', 'find',
      'sPlayerbotAIConfig.naturalProgression || (deadTime < 10 * MINUTE && dCount < 5)',
      'deadTime < 10 * MINUTE && dCount < 5'),
