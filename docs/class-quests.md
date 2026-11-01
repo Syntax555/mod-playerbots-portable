@@ -73,6 +73,34 @@ The quests teach the spells directly. A character that already knows Intercept
 can train its later ranks as usual. Players and bots follow the same rule, and
 [Zygor](zygor-progression.md#guide-behavior) leads each class through its chain.
 
+## Autonomous warlock demon quests
+
+Solo, headless random warlocks using natural progression can pursue the native
+Imp, Voidwalker, Succubus and Felhunter quest chains when the corresponding
+summoning spell is missing. The action recognizes 43 chain quests and lets the
+core decide race, level, prerequisites and quest availability. Characters under
+player control retain their own quest decisions. Individual
+Progression restores the original Imp questgiver relations; Summon Imp remains
+a quest reward rather than trainer teaching.
+
+Bots accept and turn in quests through ordinary NPC interactions, travel to
+native objective spawns and use the existing combat and loot actions for kills
+and quest chests. Binding quests use the bot's owned ritual item near its native
+spell focus. Native scripts create the circle and demon, and ordinary combat
+earns the objective credit. Quest rewards teach the summoning spell.
+
+With [continent travel](configuration.md#continent-travel) enabled, bots select
+quest destinations through their usable earned routes and continue journeys
+aboard ships, zeppelins and other transports. This includes the continent
+crossings in Alliance Heartswood and the Felhunter chains. With travel disabled
+or its catalog unavailable, quest routing stays on the current map.
+
+The blood elf Voidwalker quests The Stone (9529) and The Rune of Summoning
+(9619) are outside this action's scope. Class mounts, Infernal, Doomguard and
+historical demon grimoire purchases remain pending. End-to-end live verification
+for all four Vanilla warlock races is still required; see the
+[class audit](todo.md#dungeons-raids-and-outdoor-content).
+
 ## Client installation
 
 Install the release's matching EraTalents addon and `Data/patch-V.mpq` with WoW
@@ -95,7 +123,8 @@ Quest relations, ranks and mechanics use pinned CMaNGOS Classic and TBC sources.
 and packaged license notices identify the exact source revisions and adaptations.
 SQL updates run through the ordinary database updater.
 
-This integration restores the listed priest families and quest-taught lessons.
-Other class quests retain the core and Individual Progression support. It does
-not provide three complete historical quest databases or certify every class
-quest and scripted objective.
+This integration restores the listed priest families and quest-taught lessons,
+and adds the scoped warlock automation described above. Other class quests
+retain the core and Individual Progression support. It does not provide three
+complete historical quest databases or certify every class quest and scripted
+objective.

@@ -1,0 +1,852 @@
+"""Exercise earned warlock demon chains, native quest packets and owned rituals.
+
+The selector and action execute production code against native-shaped adapters.
+Named native SQL fields and handler contracts anchor the data used by those adapters.
+"""
+
+import argparse
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+
+from FixtureSupport import (
+    SANITIZER_FLAGS,
+    cxx,
+    function,
+    in_parallel,
+    prepared_core,
+    run_fixture,
+    source_argument,
+    sql_rows,
+)
+
+
+parser = argparse.ArgumentParser(description=__doc__)
+source_argument(parser, help='Playerbots src directory')
+args = parser.parse_args()
+root = Path(__file__).resolve().parents[2]
+core = prepared_core(root)
+module = args.source or core / 'modules/mod-playerbots/src'
+warlock = module / 'Ai/Class/Warlock'
+source = (warlock / 'WarlockDemonQuests.cpp').read_text()
+header = (warlock / 'WarlockDemonQuests.h').read_text()
+items = (module / 'Ai/Base/Actions/UseItemAction.cpp').read_text()
+
+# Ritual metadata is native quest content; prerequisites carry the demon unlocked
+# at their chain's end so a bot that knows that demon does not replay the chain.
+chains = [tuple(map(int, row)) for row in re.findall(
+    r'\{(\d+), (\d+), (\d+), (\d+)\}', source)]
+assert len(chains) == len({row[0] for row in chains})
+assert len(chains) == 43
+assert {row[1] for row in chains} == {688, 697, 712, 691}
+quests = {int(row['ID']): row for row in sql_rows(core, 'quest_template', {r[0] for r in chains})}
+addon = {int(row['ID']): row for row in sql_rows(core, 'quest_template_addon', set(quests))}
+item_rows = {int(row['entry']): row for row in sql_rows(core, 'item_template', {r[2] for r in chains if r[2]})}
+reward_demons = {7763: 688, 11520: 697, 11519: 712, 1373: 691}
+by_quest = {row[0]: row for row in chains}
+for quest, demon, item, creature in chains:
+    row = quests[quest]
+    assert int(addon[quest]['AllowableClasses']) == 256
+    reward = int(row['RewardSpell'])
+    if reward:
+        assert reward_demons[reward] == demon
+    next_quest = int(row['RewardNextQuest']) or int(addon[quest]['NextQuestID'])
+    if next_quest in by_quest:
+        assert next_quest in by_quest and by_quest[next_quest][1] == demon
+    elif next_quest:
+        assert reward, (quest, next_quest)
+    previous = abs(int(addon[quest]['PrevQuestID']))
+    if previous:
+        assert previous in by_quest and by_quest[previous][1] == demon
+    if item:
+        assert int(row['StartItem']) == item and int(addon[quest]['ProvidedItemCount']) == 1
+        assert int(item_rows[item]['spellid_1']) > 0 and int(item_rows[item]['spelltrigger_1']) == 0
+        assert int(row['RequiredNpcOrGo1']) == creature and int(row['RequiredNpcOrGoCount1']) == 1
+        assert int(row['RequiredItemId1']) == item and int(row['RequiredItemCount1']) == 1
+    else:
+        assert creature == 0
+
+rituals = {(1471, 6284, 9221, 5676), (1504, 7464, 9222, 5676), (1689, 6928, 7728, 5676),
+           (1474, 6286, 9223, 5677), (1513, 6626, 9224, 5677), (1739, 6913, 8674, 5677),
+           (1795, 6999, 8712, 6268)}
+assert {(quest, item, int(item_rows[item]['spellid_1']), creature)
+        for quest, _, item, creature in chains if item} == rituals
+focus_templates = sql_rows(core, 'gameobject_template', {37097, 92015, 92388, 105576})
+assert {(int(row['Data0']), int(row['Data1'])) for row in focus_templates} == {(43, 10), (83, 10), (103, 10), (203, 10)}
+assert all(int(row['type']) == 8 for row in focus_templates)
+ip_sql = core / 'modules/mod-individual-progression/data/sql/world/base'
+merged_relations = {}
+for table in ('creature_queststarter', 'creature_questender'):
+    raw = (core / f'data/sql/base/db_world/{table}.sql').read_text()
+    assert re.findall(r'^  `([^`]+)`', raw, re.MULTILINE) == ['id', 'quest']
+    merged_relations[table] = {tuple(map(int, row)) for row in re.findall(r'^\((\d+),(\d+)\)[,;]$', raw, re.MULTILINE)}
+restored_imps = {'zone_tirisfal_glades': (5667, 1470), 'zone_durotar': (5765, 1485),
+                'zone_elwynn_forest': (459, 1598), 'zone_dun_morogh': (460, 1599),
+                'zone_eversong_woods': (15283, 8344)}
+for zone, (giver, quest) in restored_imps.items():
+    restoration = (ip_sql / (zone + '.sql')).read_text()
+    for table in ('creature_queststarter', 'creature_questender'):
+        inserts = re.findall(rf'INSERT INTO `{table}`\s*\(`id`,\s*`quest`\)\s*VALUES\s*([^;]+);', restoration)
+        assert any((giver, quest) in {tuple(map(int, row)) for row in re.findall(r'\((\d+),\s*(\d+)\)', insert)}
+                   for insert in inserts), (zone, table, quest)
+        merged_relations[table].add((giver, quest))
+    assert by_quest[quest][1] == 688
+for table, relations in merged_relations.items():
+    assert set(quests) <= {quest for _, quest in relations}, table
+trainer_sql = re.sub(r'--[^\n]*', '', (ip_sql / 'class_trainers.sql').read_text())
+for trainer in (31, 32):
+    removals = re.findall(rf'DELETE FROM `trainer_spell` WHERE `TrainerId` = {trainer} AND `SpellId` IN \(([^)]+)\)', trainer_sql)
+    assert any(688 in map(int, group.split(',')) for group in removals)
+    assert not re.search(rf'\({trainer},\s*688,', trainer_sql)
+native_summons = sql_rows(core, 'smart_scripts', {567600, 567700, 626800})
+for entry in (567600, 567700, 626800):
+    script = [row for row in native_summons if int(row['entryorguid']) == entry]
+    assert any(int(row['event_param1']) == 3000 and int(row['event_param2']) == 3000 for row in script)
+    assert any(int(row['action_type']) == 2 and int(row['action_param1']) == 14 for row in script)
+    assert any(int(row['action_type']) == 49 and int(row['target_type']) == 7 for row in script)
+
+# Strahad's escort signals the acolyte that creates the live Felhunter focus.
+escort = {(int(row['entryorguid']), int(row['source_type']), int(row['id'])): row
+          for row in sql_rows(core, 'smart_scripts', {6251, 625100, 6252, 625200})}
+for key, fields in {
+    (6251, 0, 0): {'event_type': 19, 'event_param1': 1795, 'link': 1},
+    (6251, 0, 1): {'event_type': 61, 'action_type': 81, 'action_param1': 0, 'link': 2},
+    (6251, 0, 2): {'action_type': 53, 'action_param2': 6251, 'target_type': 1},
+    (6251, 0, 3): {'event_type': 40, 'event_param1': 3, 'event_param2': 6251,
+                   'action_type': 80, 'action_param1': 625100},
+    (625100, 9, 4): {'action_type': 45, 'action_param1': 1, 'action_param2': 1,
+                     'target_type': 9, 'target_param4': 1},
+    (6252, 0, 0): {'event_type': 38, 'event_param1': 1, 'event_param2': 1,
+                   'action_type': 80, 'action_param1': 625200},
+    (625200, 9, 2): {'action_type': 50, 'action_param1': 92388, 'target_type': 8},
+}.items():
+    assert all(int(escort[key][field]) == expected for field, expected in fields.items()), key
+
+context_source = (warlock / 'WarlockAiObjectContext.cpp').read_text()
+for factory in ('WarlockTriggerFactoryInternal', 'WarlockAiObjectContextInternal', 'WarlockValueFactoryInternal'):
+    assert f'creators["warlock demon quest"] = &{factory}::demon_quest;' in context_source
+assert 'valueContexts.Add(new WarlockValueFactoryInternal());' in context_source
+assert 'CalculatedValue<uint32>(botAI, "warlock demon quest", 5)' in header
+assert 'Trigger(botAI, "warlock demon quest")' in header
+trigger_header = (module / 'Bot/Engine/Trigger/Trigger.h').read_text()
+trigger_source = (module / 'Bot/Engine/Trigger/Trigger.cpp').read_text()
+assert 'int32_t checkInterval = 1' in trigger_header
+assert 'checkInterval == 1 ? 1' in trigger_source
+assert re.search(r'if \(checkInterval < 2\)\s+return true;', trigger_source)
+strategy = (warlock / 'Strategy/GenericWarlockNonCombatStrategy.cpp').read_text()
+assert 'NextAction("warlock demon quest", ACTION_NORMAL + 2)' in strategy
+
+quest_handler = (core / 'src/server/game/Handlers/QuestHandler.cpp').read_text()
+assert 'CanTakeQuest' in function(quest_handler, 'void WorldSession::HandleQuestgiverAcceptQuestOpcode(')
+assert 'CanRewardQuest' in function(quest_handler, 'void WorldSession::HandleQuestgiverChooseRewardOpcode(')
+player_quest = (core / 'src/server/game/Entities/Player/PlayerQuest.cpp').read_text()
+native_take = function(player_quest, 'bool Player::CanTakeQuest(')
+for check in ('SatisfyQuestRace', 'SatisfyQuestClass', 'SatisfyQuestLevel',
+              'SatisfyQuestPreviousQuest', 'SatisfyQuestConditions'):
+    assert check in native_take
+assert 'IsObjectMeetToConditions(this, conditions)' in function(player_quest, 'bool Player::SatisfyQuestConditions(')
+item_handler = function((core / 'src/server/game/Handlers/SpellHandler.cpp').read_text(),
+                        'void WorldSession::HandleUseItemOpcode(')
+for check in ('pUser->CanUseItem(pItem)', 'pItem->GetGUID() != itemGUID', 'pUser->CastItemUseSpell(pItem, targets,'):
+    assert check in item_handler
+cast_source = function(items, 'bool UseItemAction::UseItem(Item* item, ObjectGuid goGuid, Item* itemTarget, Unit* unitTarget)')
+assert 'packet << targetFlag << unitTarget->GetGUID().WriteAsPacked();' in cast_source
+assert 'bot->GetSession()->HandleUseItemOpcode(packet);' in cast_source
+precheck = function(cast_source, '    for (uint8 i = 0; i < spellSlotLimit; ++i)')
+focus_check = function((core / 'src/server/game/Grids/Notifiers/GridNotifiers.h').read_text(),
+                       'class GameObjectFocusCheck') + ';'
+native_focus = function((core / 'src/server/game/Spells/Spell.cpp').read_text(), 'SpellCastResult Spell::CheckSpellFocus(')
+assert 'GameObjectFocusCheck go_check(m_caster, m_spellInfo->RequiresSpellFocus)' in native_focus
+assert 'SPELL_FAILED_REQUIRES_SPELL_FOCUS' in native_focus
+rpg = (module / 'Ai/World/Rpg/Action/NewRpgBaseAction.cpp').read_text()
+far_move = function(rpg, 'bool NewRpgBaseAction::MoveFarTo(')
+assert re.search(r'if \(sPlayerbotAIConfig.naturalProgression\)\s+return false;', far_move)
+assert 'path.GetActualEndPosition()' in far_move
+assert 'endDistToDest + 5.0f < disToDest' in far_move
+native_route = function(rpg, 'bool NewRpgBaseAction::MoveToMap(')
+assert 'sContinentRoutes.UsableLinks(bot, route)' in native_route
+assert 'RideTransport(route, transport)' in native_route
+assert 'ContinentRoutes::RouteTo(links, search, sContinentRoutes.Locate(dest))' in native_route
+object_source = (core / 'src/server/game/Entities/Object/Object.cpp').read_text()
+assert 'GetExactDist(&pos) - GetObjectSize()' in function(object_source, 'float WorldObject::GetDistance(Position const& pos)')
+native_dist = function(object_source, 'bool WorldObject::_IsWithinDist(')
+assert 'maxdist += GetObjectSize()' in native_dist and 'maxdist += obj->GetObjectSize()' in native_dist
+for forbidden in ('bot->AddQuest(', 'bot->RewardQuest(', 'CompleteQuest(', 'AreaExploredOrEventHappens(',
+                  'learnSpell(', 'SummonCreature(', 'AddItem(', 'RemovePet(', 'TeleportTo('):
+    assert forbidden not in source, forbidden
+
+quest_values = (module / 'Ai/Base/Value/QuestValues.cpp').read_text()
+relation_map = function(quest_values, 'entryQuestRelationMap EntryQuestRelationMapValue::Calculate()')
+assert 'rMap[quest->RequiredNpcOrGo[objective]][questId] |= relationFlag;' in relation_map
+assert '"item drop list", quest->RequiredItemId[objective]' in relation_map
+assert 'rMap[entry][questId] |= relationFlag;' in relation_map
+assert 'data[questId][flag][entry].push_back(GuidPosition(creData));' in quest_values
+assert 'data[questId][flag][entry].push_back(GuidPosition(goData));' in quest_values
+travel = (module / 'Mgr/Travel/TravelMgr.cpp').read_text()
+assert 'gameobjectData.mapid == point.GetMapId()' in function(travel, 'void FindPointGameObjectData::operator()(')
+
+production = {
+    'table': function(source, 'namespace\n'),
+    'gate': function(source, 'bool CanRunWarlockDemonQuest('),
+    'current': function(source, 'WarlockDemonQuest const* CurrentWarlockDemonQuest('),
+    'value': function(source, 'uint32 WarlockDemonQuestValue::Calculate()'),
+    'trigger': function(source, 'bool WarlockDemonQuestTrigger::IsActive()'),
+    'useful': function(source, 'bool WarlockDemonQuestAction::isUseful()'),
+    'execute': function(source, 'bool WarlockDemonQuestAction::Execute('),
+    'giver': function(source, 'bool WarlockDemonQuestAction::InteractWithQuestGiver('),
+    'move': function(source, 'bool WarlockDemonQuestAction::MoveToQuestLocation('),
+    'travel': function(source, 'bool WarlockDemonQuestAction::MoveToQuestPosition('),
+    'objectives': function(source, 'bool WarlockDemonQuestAction::DoObjectives('),
+    'ritual': function(source, 'bool WarlockDemonQuestAction::UseRitual('),
+    'wrapper': function(items, 'bool UseItemAction::UseItemOnUnit('),
+    'precheck': precheck,
+    'focuscheck': focus_check,
+    'schedule': function(trigger_source, 'bool Trigger::needCheck('),
+    'triggerconstructor': function(trigger_source, 'Trigger::Trigger('),
+    'classes': '\n'.join(function(header, name) + ';' for name in (
+        'struct WarlockDemonQuest', 'class WarlockDemonQuestValue',
+        'class WarlockDemonQuestTrigger', 'class WarlockDemonQuestAction')),
+    'accept': function(rpg, 'bool NewRpgBaseAction::AcceptQuest('),
+    'turnin': function(rpg, 'bool NewRpgBaseAction::TurnInQuest('),
+}
+production['policyinclude'] = '#include "' + str(module / 'Mgr/Travel/ContinentRoutePolicy.h') + '"'
+native_quests = []
+for quest, row in quests.items():
+    fields = [str(quest), str(reward_demons.get(int(row['RewardSpell']), 0)), row['StartItem']]
+    for field, count in (('RequiredNpcOrGo', 4), ('RequiredNpcOrGoCount', 4),
+                         ('RequiredItemId', 6), ('RequiredItemCount', 6)):
+        fields.append('{' + ','.join(row[field + str(index + 1)] for index in range(count)) + '}')
+    native_quests.append('Quest{' + ','.join(fields) + '}')
+production['nativequests'] = ('for(Quest const& native : {' + ',\n'.join(native_quests)
+                             + '}) objectMgr.quests.emplace(native.id,native);')
+production['itemspells'] = '\n'.join(f'itemSpells[{item}] = {row["spellid_1"]};' for item, row in item_rows.items())
+production['relations'] = '\n'.join(
+    'std::map<uint32,uint32> ' + name + '={' + ','.join(
+        '{' + str(quest) + ',' + str(min(entry for entry, relation in merged_relations[table]
+                                      if relation == quest)) + '}' for quest in quests) + '};'
+    for name, table in (('nativeStarters', 'creature_queststarter'), ('nativeEnders', 'creature_questender')))
+
+prelude = r'''
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <optional>
+#include <set>
+#include <string>
+#include <type_traits>
+#include <unordered_map>
+#include <variant>
+#include <vector>
+@@POLICYINCLUDE@@
+using uint8=uint8_t; using uint32=uint32_t; using int32=int32_t;
+constexpr int CLASS_WARLOCK=9, UNIT_STATE_LOST_CONTROL=1, CURRENT_CHANNELED_SPELL=1, CURRENT_GENERIC_SPELL=2;
+constexpr uint32 QUEST_OBJECTIVES_COUNT=4, QUEST_ITEM_OBJECTIVES_COUNT=6, IN_MILLISECONDS=1000;
+constexpr int CMSG_QUESTGIVER_CHOOSE_REWARD=1, CMSG_QUESTGIVER_ACCEPT_QUEST=2, GAMEOBJECT_TYPE_SPELL_FOCUS=8;
+constexpr uint32 UNIT_NPC_FLAG_QUESTGIVER=2;
+constexpr float INTERACTION_DISTANCE=5.0f;
+enum QuestStatus { QUEST_STATUS_NONE=0, QUEST_STATUS_INCOMPLETE=1, QUEST_STATUS_COMPLETE=2, QUEST_STATUS_REWARDED=3 };
+uint32 now=100000;
+uint32 getMSTime() { return now; }
+uint32 GetMSTimeDiffToNow(uint32 before) { return now-before; }
+struct ObjectGuid {
+    uint32 value=0;
+    explicit operator bool() const { return value!=0; }
+    bool operator==(ObjectGuid const&) const=default;
+    static ObjectGuid Empty;
+};
+ObjectGuid ObjectGuid::Empty;
+using GuidVector=std::vector<ObjectGuid>;
+struct Event {};
+struct Player; struct Creature; struct TempSummon; struct WorldPosition; struct GameObject;
+struct Spell { uint32 kind=0; };
+struct WorldPacket {
+    int opcode; std::vector<uint32> values;
+    explicit WorldPacket(int opcode):opcode(opcode){}
+    WorldPacket& operator<<(uint32 n) { values.push_back(n); return *this; }
+    WorldPacket& operator<<(ObjectGuid guid) { values.push_back(guid.value); return *this; }
+    void rpos(uint32) {}
+};
+struct Session {
+    Player* player=nullptr; bool headless=true,accept=true,reward=true; int accepts=0,rewards=0;
+    bool IsHeadless() const { return headless; }
+    void HandleQuestgiverAcceptQuestOpcode(WorldPacket&);
+    void HandleQuestgiverChooseRewardOpcode(WorldPacket&);
+};
+struct Map { bool dungeon=false; bool IsDungeon() const { return dungeon; } };
+struct ItemTemplate { struct Slot { int32 SpellId=0; } Spells[5]; };
+struct Item { uint32 entry=0,count=1; ItemTemplate proto; ItemTemplate const* GetTemplate() const { return &proto; } };
+struct Quest {
+    uint32 id=0,rewardDemon=0,source=0;
+    std::array<int32,QUEST_OBJECTIVES_COUNT> RequiredNpcOrGo{};
+    std::array<uint32,QUEST_OBJECTIVES_COUNT> RequiredNpcOrGoCount{};
+    std::array<uint32,QUEST_ITEM_OBJECTIVES_COUNT> RequiredItemId{},RequiredItemCount{};
+    uint32 GetQuestId() const { return id; }
+    uint32 GetRewChoiceItemsCount() const { return 0; }
+};
+struct QuestStatusData {
+    QuestStatus Status=QUEST_STATUS_NONE;
+    std::array<uint32,QUEST_OBJECTIVES_COUNT> CreatureOrGOCount{};
+};
+struct WorldObject {
+    uint32 guid=1,entry=0,mapId=0; float x=2.0f,z=0,size=0.5f;
+    bool inWorld=true,sameMap=true,samePhase=true,visible=true,los=true,alive=true;
+    virtual ~WorldObject()=default;
+    ObjectGuid GetGUID() const { return {guid}; }
+    uint32 GetEntry() const { return entry; }
+    bool IsInWorld() const { return inWorld; }
+    bool IsAlive() const { return alive; }
+    float GetPositionZ() const { return z; }
+    bool IsWithinDistInMap(WorldObject const* other,float range) const {
+        float const dx=x-other->x,dz=z-other->z,maximum=range+size+other->size;
+        return sameMap&&samePhase&&dx*dx+dz*dz<maximum*maximum;
+    }
+};
+struct Unit:WorldObject { virtual Creature* ToCreature() { return nullptr; } };
+struct Creature:Unit {
+    bool removing=false,canInteract=true,questgiver=true; std::set<uint32> starts,finishes;
+    Creature* ToCreature() override { return this; }
+    virtual TempSummon* ToTempSummon() { return nullptr; }
+    bool IsDuringRemoveFromWorld() const { return removing; }
+    bool hasQuest(uint32 q) const { return starts.contains(q); }
+    bool hasInvolvedQuest(uint32 q) const { return finishes.contains(q); }
+    bool HasNpcFlag(uint32) const { return questgiver; }
+};
+struct TempSummon:Creature {
+    ObjectGuid summoner;
+    TempSummon* ToTempSummon() override { return this; }
+    ObjectGuid GetSummonerGUID() const { return summoner; }
+};
+struct GameObjectTemplate { uint32 type=GAMEOBJECT_TYPE_SPELL_FOCUS; struct { uint32 focusId=43; float dist=10; } spellFocus; };
+struct GameObject:WorldObject {
+    bool spawned=true; GameObjectTemplate info;
+    bool isSpawned() const { return spawned; }
+    uint32 GetGoType() const { return info.type; }
+    GameObjectTemplate const* GetGOInfo() const { return &info; }
+};
+@@FOCUSCHECK@@
+struct Player:Unit {
+    uint32 cls=CLASS_WARLOCK,phase=1; bool random=true,hasSession=true,group=false,teleport=false,
+      battleground=false,arena=false,combat=false,mounted=false,flight=false,flying=false,
+      transport=false,vehicle=false,lostControl=false,casting=false,pet=true,canAdd=true,canReward=true,ownAccess=true,
+      objectiveLos=true;
+    Map map; Session session; Spell channel{CURRENT_CHANNELED_SPELL},generic{CURRENT_GENERIC_SPELL};
+    bool useChannel=false; int stops=0;
+    std::set<uint32> known,available; std::map<uint32,QuestStatusData> quests; std::map<uint32,Item> inventory;
+    Player() { session.player=this; guid=100; x=0; size=1.5f; }
+    uint32 getClass() const { return cls; } Session* GetSession() { return hasSession?&session:nullptr; }
+    bool GetGroup() const { return group; } bool IsBeingTeleported() const { return teleport; }
+    Map* GetMap() { return &map; } bool InBattleground() const { return battleground; } bool InArena() const { return arena; }
+    bool IsInCombat() const { return combat; } bool IsMounted() const { return mounted; }
+    bool IsInFlight() const { return flight; } bool IsFlying() const { return flying; }
+    bool GetTransport() const { return transport; } bool GetVehicle() const { return vehicle; }
+    bool HasUnitState(int) const { return lostControl; } bool IsNonMeleeSpellCast(bool) const { return casting; }
+    bool HasSpell(uint32 n) const { return known.contains(n); } bool GetPet() const { return pet; }
+    QuestStatus GetQuestStatus(uint32 q) const { return quests.contains(q)?quests.at(q).Status:QUEST_STATUS_NONE; }
+    bool GetQuestRewardStatus(uint32 q) const { return GetQuestStatus(q)==QUEST_STATUS_REWARDED; }
+    auto const& getQuestStatusMap() const { return quests; }
+    Item* GetItemByEntry(uint32 i) { return inventory.contains(i)?&inventory.at(i):nullptr; }
+    uint32 GetItemCount(uint32 i) const { return inventory.contains(i)?inventory.at(i).count:0; }
+    bool CanTakeQuest(Quest const* q,bool) const { return ownAccess&&available.contains(q->id)&&GetQuestStatus(q->id)==QUEST_STATUS_NONE; }
+    bool CanAddQuest(Quest const*,bool) const { return canAdd; }
+    bool CanRewardQuest(Quest const* q,bool) const { return canReward&&GetQuestStatus(q->id)==QUEST_STATUS_COMPLETE; }
+    uint32 GetReqKillOrCastCurrentCount(uint32 q,uint32) const { return quests.contains(q)?quests.at(q).CreatureOrGOCount[0]:0; }
+    bool IsInMap(WorldObject const* o) const { return o->sameMap; }
+    bool InSamePhase(WorldObject const* o) const { return o->samePhase; }
+    bool CanSeeOrDetect(WorldObject const* o) const { return o->visible; }
+    bool IsWithinLOSInMap(WorldObject const* o) const { return o->los; }
+    bool IsWithinLOS(float,float,float) const { return objectiveLos; }
+    float GetDistance(WorldObject const* o) const { return std::max(0.0f,std::abs(o->x-x)-size-o->size); }
+    float GetDistance(WorldPosition const&) const;
+    float GetExactDist(WorldPosition const&) const;
+    void StopMoving() { ++stops; }
+    Spell* GetCurrentSpell(int kind) { return kind==CURRENT_GENERIC_SPELL?&generic:useChannel?&channel:nullptr; }
+    void PlayDistanceSound(uint32) {}
+    uint32 GetMapId() const { return mapId; } uint32 GetPhaseMask() const { return phase; }
+};
+struct ObjectMgr {
+    std::map<uint32,Quest> quests; std::map<uint32,GameObjectTemplate> objects;
+    Quest const* GetQuestTemplate(uint32 q) const { return quests.contains(q)?&quests.at(q):nullptr; }
+    auto const* GetGameObjectTemplates() const { return &objects; }
+} objectMgr;
+auto* sObjectMgr=&objectMgr;
+std::map<uint32,uint32> itemSpells;
+void Session::HandleQuestgiverAcceptQuestOpcode(WorldPacket& p) {
+    assert(p.opcode==CMSG_QUESTGIVER_ACCEPT_QUEST&&p.values.size()==3); ++accepts;
+    uint32 q=p.values[1]; auto const* quest=objectMgr.GetQuestTemplate(q);
+    if (!accept||!quest||!player->CanTakeQuest(quest,false)||!player->CanAddQuest(quest,false)) return;
+    player->quests[q].Status=QUEST_STATUS_INCOMPLETE;
+    if(quest->source) { auto& item=player->inventory[quest->source]; item.entry=quest->source; item.proto.Spells[0].SpellId=itemSpells[quest->source]; }
+}
+void Session::HandleQuestgiverChooseRewardOpcode(WorldPacket& p) {
+    assert(p.opcode==CMSG_QUESTGIVER_CHOOSE_REWARD&&p.values.size()==3); ++rewards;
+    uint32 q=p.values[1]; auto const* quest=objectMgr.GetQuestTemplate(q);
+    if (!reward||!quest||!player->CanRewardQuest(quest,false)) return;
+    player->quests[q].Status=QUEST_STATUS_REWARDED;
+    if(quest->rewardDemon) player->known.insert(quest->rewardDemon);
+}
+struct Config { bool naturalProgression=true,continentTravel=false; float SightDistance=100; std::set<uint32> IgnoredQuests; } sPlayerbotAIConfig;
+struct RandomMgr { bool IsRandomBot(Player* p) const { return p->random; } } sRandomPlayerbotMgr;
+struct SpellInfo { uint32 RequiresSpellFocus=43; };
+struct SpellMgr {
+    std::map<uint32,SpellInfo> spells;
+    SpellInfo const* GetSpellInfo(uint32 id) const { return spells.contains(id)?&spells.at(id):nullptr; }
+} spellMgr;
+auto* sSpellMgr=&spellMgr;
+struct GameObjectData { uint32 id=0,mapid=0,phaseMask=1; float posX=200,posY=0,posZ=0; };
+std::vector<GameObjectData> spawns; int spawnScans=0;
+struct WorldPosition {
+    uint32 map=0; float x=0,y=0,z=0;
+    WorldPosition()=default;
+    explicit WorldPosition(WorldObject* o):map(o->mapId),x(o->x),z(o->z){}
+    WorldPosition(uint32 m,float a,float b=0,float c=0):map(m),x(a),y(b),z(c){}
+    bool operator==(WorldPosition const&) const=default;
+    uint32 GetMapId() const { return map; }
+    float GetPositionX() const { return x; } float GetPositionY() const { return y; } float GetPositionZ() const { return z; }
+    std::vector<GameObjectData const*> getGameObjectsNear(float,uint32 entry) {
+        ++spawnScans; std::vector<GameObjectData const*> rows;
+        for(auto const& s:spawns) if(s.mapid==map&&s.id==entry) rows.push_back(&s);
+        return rows;
+    }
+};
+float Player::GetExactDist(WorldPosition const& p) const { return std::sqrt((p.x-x)*(p.x-x)+p.y*p.y+(p.z-z)*(p.z-z)); }
+float Player::GetDistance(WorldPosition const& p) const { return std::max(0.0f,GetExactDist(p)-size); }
+enum class QuestRelationFlag:uint32 { objective1=1,objective2=2,objective3=4,objective4=8,questGiver=16,questTaker=32 };
+using questEntryGuidps=std::unordered_map<int32,std::vector<WorldPosition>>;
+using questRelationGuidps=std::unordered_map<uint32,questEntryGuidps>;
+using questGuidpMap=std::unordered_map<uint32,questRelationGuidps>;
+struct GlobalQuestLocations { questGuidpMap data; auto const& RefGet() const { return data; } } locations;
+struct SharedContext { template<class T> GlobalQuestLocations* getGlobalValue(std::string) { return &locations; } } sSharedValueContext;
+struct NewRpgInfo {
+    struct DoQuest { uint32 questId; Quest const* quest; };
+    struct TravelRoute {};
+    std::variant<std::monostate,DoQuest,TravelRoute> data;
+    void ChangeToDoQuest(uint32 id,Quest const* q) { data=DoQuest{id,q}; }
+    void ChangeToTravelRoute() { data=TravelRoute{}; }
+};
+struct ContinentRouteState {
+    WorldPosition destination; bool forMaster=false;
+    void Start(WorldPosition const& target,bool master) { destination=target; forMaster=master; }
+};
+struct Context { GuidVector npcs,objects; uint32 quest=0; };
+template<class T> T GetValue(Context* c,std::string const& name) {
+    if constexpr(std::is_same_v<T,GuidVector>) return name=="nearest npcs"?c->npcs:c->objects;
+    else return c->quest;
+}
+#define AI_VALUE(type,name) GetValue<type>(context,name)
+struct PlayerbotAI {
+    Player* bot; Context context; NewRpgInfo rpgInfo; bool master=false,castResult=true,moveResult=true;
+    int casts=0,castChecks=0,waits=0,moves=0,farMoves=0,routeMoves=0;
+    ContinentRouteState continentRoute;
+    Unit* castTarget=nullptr; Item* castItem=nullptr; Spell* waitedFor=nullptr;
+    std::map<uint32,Unit*> units; std::map<uint32,GameObject*> objects;
+    struct { bool IsPending() const { return false; } } forceRebuff;
+    Player* GetBot() const { return bot; } bool GetMaster() const { return master; }
+    Unit* GetUnit(ObjectGuid g) const { return units.contains(g.value)?units.at(g.value):nullptr; }
+    GameObject* GetGameObject(ObjectGuid g) const { return objects.contains(g.value)?objects.at(g.value):nullptr; }
+    bool CanCastSpell(uint32 id,Unit* target,bool,Item*,Item* item) {
+        ++castChecks; castTarget=target; castItem=item;
+        auto const* info=sSpellMgr->GetSpellInfo(id);
+        if (!info||target!=bot||!item||bot->GetItemByEntry(item->entry)!=item) return false;
+        GameObjectFocusCheck check(bot,info->RequiresSpellFocus);
+        return std::any_of(objects.begin(),objects.end(),[&](auto const& pair){ return check(pair.second); });
+    }
+    bool CanCastSpell(uint32,GameObject*,bool,Item*) { return false; }
+    void WaitForSpellCast(Spell* spell) { assert(spell); ++waits; waitedFor=spell; }
+};
+struct RouteCatalog {
+    bool built=true,allowed=true; int scans=0;
+    std::vector<ContinentRoutes::Link> links;
+    bool Built() const { return built; }
+    ContinentRoutes::Point Locate(WorldPosition const& p) const { return {p.map,p.x,p.y,p.z}; }
+    std::vector<ContinentRoutes::Link> UsableLinks(Player*,ContinentRouteState const&) {
+        ++scans; return allowed?links:std::vector<ContinentRoutes::Link>{};
+    }
+} sContinentRoutes;
+bool pathResult=true;
+struct MovementAction {
+    PlayerbotAI* botAI; Player* bot; Context* context;
+    MovementAction(PlayerbotAI* ai,std::string):botAI(ai),bot(ai->bot),context(&ai->context){}
+    virtual ~MovementAction()=default; virtual bool isUseful(){return true;} virtual bool Execute(Event){return false;}
+    bool MoveTo(GameObject* go,float range) { assert(range>0&&range<go->info.spellFocus.dist); ++botAI->moves; return botAI->moveResult&&pathResult; }
+};
+struct NewRpgBaseAction:MovementAction {
+    using MovementAction::MovementAction;
+    bool MoveFarTo(WorldPosition) { if(!pathResult) return false; ++botAI->farMoves; return botAI->moveResult; }
+    bool MoveToMap(WorldPosition const& target) {
+        botAI->continentRoute.Start(target,false);
+        auto const here=sContinentRoutes.Locate(WorldPosition(bot));
+        auto const links=sContinentRoutes.allowed?sContinentRoutes.links:std::vector<ContinentRoutes::Link>{};
+        auto const search=ContinentRoutes::Explore(links,here,[](auto const&){return true;});
+        if(!pathResult||!ContinentRoutes::RouteTo(links,search,sContinentRoutes.Locate(target)).Found()) return false;
+        ++botAI->routeMoves; return botAI->moveResult;
+    }
+    bool MoveWorldObjectTo(ObjectGuid) { if(!pathResult) return false; ++botAI->moves; return botAI->moveResult; }
+    bool CanInteractWithQuestGiver(Creature* c) { return c->alive&&c->canInteract; }
+    bool IsWithinInteractionDist(Creature* c) { return bot->GetDistance(c)<=INTERACTION_DISTANCE; }
+    bool AcceptQuest(Quest const*,ObjectGuid);
+    bool TurnInQuest(Quest const*,ObjectGuid);
+    uint32 BestRewardIndex(Quest const*) { return 0; }
+};
+struct AiNamedObject {
+    PlayerbotAI* botAI; Player* bot; Context* context;
+    AiNamedObject(PlayerbotAI* ai,std::string):botAI(ai),bot(ai->bot),context(&ai->context){}
+};
+struct Trigger:AiNamedObject {
+    Trigger(PlayerbotAI*,std::string const,int32 checkInterval=1);
+    virtual ~Trigger()=default; virtual bool IsActive(){return false;}
+    virtual bool IsBuffTrigger(){return false;} virtual bool IsDebuffTrigger(){return false;}
+    bool needCheck(uint32);
+    int32 checkInterval; uint32 lastCheckTime;
+};
+@@TRIGGERCONSTRUCTOR@@
+@@SCHEDULE@@
+template<class T> struct CalculatedValue {
+    PlayerbotAI* botAI;
+    CalculatedValue(PlayerbotAI* ai,std::string,int):botAI(ai){}
+    virtual ~CalculatedValue()=default; virtual T Calculate()=0;
+};
+struct UseItemAction {
+    PlayerbotAI* botAI;
+    explicit UseItemAction(PlayerbotAI* ai):botAI(ai){}
+    bool UseItemOnUnit(Item*,Unit*);
+    bool UseItem(Item* item,ObjectGuid,Item* itemTarget,Unit* unitTarget) {
+        Player* bot=botAI->GetBot(); uint32 spellId=0;
+        auto const* itemProto=item->GetTemplate(); uint8 const spellSlotLimit=5;
+        GameObject* goTarget=nullptr;
+        @@PRECHECK@@
+        ++botAI->casts;
+        return botAI->castResult;
+    }
+};
+@@CLASSES@@
+@@ACCEPT@@
+@@TURNIN@@
+@@TABLE@@
+@@GATE@@
+@@CURRENT@@
+@@VALUE@@
+@@TRIGGER@@
+@@USEFUL@@
+@@WRAPPER@@
+@@GIVER@@
+@@MOVE@@
+@@TRAVEL@@
+@@OBJECTIVES@@
+@@RITUAL@@
+@@EXECUTE@@
+'''
+
+tests = r'''
+@@RELATIONS@@
+struct Scenario {
+    Player bot; PlayerbotAI ai{&bot}; WarlockDemonQuestValue value{&ai};
+    WarlockDemonQuestTrigger trigger{&ai}; WarlockDemonQuestAction action{&ai};
+    Creature giver; GameObject focus; TempSummon demon;
+    WarlockDemonQuest const* data;
+    explicit Scenario(uint32 id=1471) {
+        now=100000; sPlayerbotAIConfig={}; objectMgr={}; spellMgr={}; locations={}; sContinentRoutes={};
+        spawns.clear(); spawnScans=0; pathResult=true;
+        @@NATIVEQUESTS@@
+        @@ITEMSPELLS@@
+        data=&*std::find_if(std::begin(WarlockDemonQuests),std::end(WarlockDemonQuests),[id](auto const& row){return row.Quest==id;});
+        bot.quests[id].Status=QUEST_STATUS_INCOMPLETE;
+        giver.guid=2; giver.entry=nativeStarters.at(id); giver.starts.insert(id);
+        if(giver.entry==nativeEnders.at(id)) giver.finishes.insert(id);
+        ai.units[2]=&giver; ai.context.npcs={{2}};
+        locations.data[id][uint32(QuestRelationFlag::questGiver)][giver.entry]={{0,2}};
+        locations.data[id][uint32(QuestRelationFlag::questTaker)][nativeEnders.at(id)]={{0,2}};
+        focus.guid=3; focus.info.spellFocus.focusId=777; ai.objects[3]=&focus; ai.context.objects={{3}};
+        if(data->Item) {
+            auto& item=bot.inventory[data->Item]; item.entry=data->Item;
+            item.proto.Spells[0].SpellId=itemSpells.at(data->Item);
+            // Synthetic native metadata proves that the action reads the runtime focus id.
+            spellMgr.spells[itemSpells.at(data->Item)].RequiresSpellFocus=777;
+        }
+        demon.guid=4; demon.entry=data->Creature; demon.summoner=bot.GetGUID(); ai.units[4]=&demon;
+        ai.context.quest=value.Calculate();
+    }
+    void Offered() { bot.quests.clear(); bot.available.insert(data->Quest); ai.context.quest=value.Calculate(); }
+    void Rewardable() {
+        bot.quests[data->Quest].Status=QUEST_STATUS_COMPLETE;
+        giver.entry=nativeEnders.at(data->Quest); giver.starts.clear(); giver.finishes.insert(data->Quest);
+    }
+    void Objective(uint32 flags,int32 entry,WorldPosition pos) { locations.data[data->Quest][flags][entry]={pos}; }
+    void Crossing() {
+        sPlayerbotAIConfig.continentTravel=true;
+        sContinentRoutes.links.push_back({ContinentRoutes::LinkKind::Transport,123,{0,0,0,0},{1,0,0,0},30});
+        sContinentRoutes.links.push_back({ContinentRoutes::LinkKind::Transport,123,{1,0,0,0},{0,0,0,0},30});
+    }
+};
+int main() {
+    { Scenario s; assert(s.trigger.needCheck(now)&&s.trigger.needCheck(now+200)); }
+    for(auto const& row:WarlockDemonQuests) {
+        Scenario s(row.Quest);
+        assert(s.value.Calculate()==row.Quest&&s.trigger.IsActive()&&s.action.isUseful());
+        s.bot.known.insert(row.Spell); s.ai.context.quest=s.value.Calculate();
+        assert(!s.ai.context.quest&&!s.action.Execute({}));
+        s.bot.known.clear(); s.Offered();
+        assert(s.value.Calculate()==row.Quest);
+        assert(s.action.Execute({})&&s.bot.GetQuestStatus(row.Quest)==QUEST_STATUS_INCOMPLETE&&s.bot.session.accepts==1);
+        if(objectMgr.quests.at(row.Quest).source) assert(s.bot.GetItemByEntry(objectMgr.quests.at(row.Quest).source));
+        s.Rewardable();
+        assert(s.action.Execute({})&&s.bot.GetQuestRewardStatus(row.Quest)&&s.bot.session.rewards==1);
+        assert(s.bot.HasSpell(row.Spell)==bool(objectMgr.quests.at(row.Quest).rewardDemon));
+    }
+    for(auto const& row:WarlockDemonQuests) if(row.Item) {
+        Scenario s(row.Quest);
+        assert(s.action.Execute({})&&s.ai.casts==1&&s.ai.waits==1&&s.ai.castTarget==&s.bot);
+        assert(s.ai.castItem==s.bot.GetItemByEntry(row.Item)&&s.ai.waitedFor==&s.bot.generic);
+        assert(s.bot.GetQuestStatus(row.Quest)==QUEST_STATUS_INCOMPLETE&&!s.bot.HasSpell(row.Spell)&&s.bot.GetPet());
+        assert(std::get<NewRpgInfo::DoQuest>(s.ai.rpgInfo.data).questId==row.Quest);
+        s.bot.quests[row.Quest].CreatureOrGOCount[0]=1;
+        assert(!s.action.Execute({})&&s.ai.casts==1);
+    }
+    { Scenario s; s.bot.useChannel=true; assert(s.action.Execute({})&&s.ai.waitedFor==&s.bot.channel); }
+    { Scenario s; s.ai.castResult=false; assert(!s.action.Execute({})&&s.ai.waits==0); }
+    { Scenario s; s.bot.inventory.clear(); assert(!s.action.Execute({})&&s.ai.casts==0); }
+    { Scenario s; spellMgr.spells.clear(); assert(!s.action.Execute({})&&s.ai.casts==0); }
+    { Scenario s; spellMgr.spells.begin()->second.RequiresSpellFocus=0; assert(!s.action.Execute({})&&s.ai.casts==0); }
+    auto rejected=[](auto change) {
+        Scenario s; change(s);
+        assert(!CanRunWarlockDemonQuest(&s.ai)&&!s.value.Calculate()&&!s.trigger.IsActive()&&!s.action.isUseful());
+        assert(!s.action.Execute({})&&s.ai.casts==0&&s.ai.moves==0&&s.ai.farMoves==0);
+    };
+    rejected([](auto&){sPlayerbotAIConfig.naturalProgression=false;});
+    rejected([](auto& s){s.ai.bot=nullptr;});
+    rejected([](auto& s){s.bot.cls=3;});
+    rejected([](auto& s){s.bot.hasSession=false;});
+    rejected([](auto& s){s.bot.session.headless=false;});
+    rejected([](auto& s){s.bot.random=false;});
+    rejected([](auto& s){s.ai.master=true;});
+    rejected([](auto& s){s.bot.group=true;});
+    rejected([](auto& s){s.bot.alive=false;});
+    rejected([](auto& s){s.bot.inWorld=false;});
+    rejected([](auto& s){s.bot.teleport=true;});
+    rejected([](auto& s){s.bot.map.dungeon=true;});
+    rejected([](auto& s){s.bot.battleground=true;});
+    rejected([](auto& s){s.bot.arena=true;});
+    rejected([](auto& s){s.bot.combat=true;});
+    rejected([](auto& s){s.bot.mounted=true;});
+    rejected([](auto& s){s.bot.flight=true;});
+    rejected([](auto& s){s.bot.flying=true;});
+    rejected([](auto& s){s.bot.transport=true;});
+    rejected([](auto& s){s.bot.vehicle=true;});
+    rejected([](auto& s){s.bot.lostControl=true;});
+    rejected([](auto& s){s.bot.casting=true;});
+    { Scenario s; sPlayerbotAIConfig.IgnoredQuests.insert(s.data->Quest); assert(!s.action.Execute({})); }
+    { Scenario s; s.bot.known.insert(s.data->Spell); assert(!s.action.Execute({})&&s.ai.casts==0); }
+    { Scenario s; s.bot.quests[s.data->Quest].Status=QUEST_STATUS_REWARDED; assert(!s.value.Calculate()); }
+    { Scenario s; s.Offered(); s.bot.ownAccess=false; assert(!s.value.Calculate()&&!s.action.Execute({})); }
+    { Scenario s; s.Offered(); s.bot.canAdd=false; assert(!s.value.Calculate()&&!s.action.Execute({})); }
+    { Scenario s; s.Offered(); s.bot.available.clear(); assert(!s.value.Calculate()&&!s.action.Execute({})); }
+    { Scenario s; s.Offered(); locations.data[s.data->Quest][16].clear();
+      s.Objective(16,s.giver.entry,{1,1}); assert(!s.value.Calculate()&&!s.action.Execute({})); }
+    { Scenario s; s.Offered(); s.Objective(16,s.giver.entry,{0,20});
+      s.bot.available.insert(1504); locations.data[1504][16][nativeStarters.at(1504)]={{0,10}};
+      assert(s.value.Calculate()==1504); }
+    { Scenario s; s.Offered(); s.bot.session.accept=false;
+      assert(!s.action.Execute({})&&s.bot.GetQuestStatus(s.data->Quest)==QUEST_STATUS_NONE&&s.bot.session.accepts==1); }
+    { Scenario s; s.bot.quests[s.data->Quest].Status=QUEST_STATUS_COMPLETE; s.bot.session.reward=false;
+      assert(!s.action.Execute({})&&!s.bot.GetQuestRewardStatus(s.data->Quest)&&s.bot.session.rewards==1); }
+    { Scenario s; s.bot.quests[s.data->Quest].Status=QUEST_STATUS_COMPLETE; s.bot.canReward=false;
+      assert(!s.action.Execute({})&&s.bot.session.rewards==0); }
+    for(auto field:{&Creature::removing,&Creature::canInteract}) {
+        Scenario s; s.Offered(); s.giver.*field=(field==&Creature::removing);
+        assert(!s.action.Execute({})&&s.bot.session.accepts==0);
+    }
+    for(auto field:{&WorldObject::inWorld,&WorldObject::sameMap,&WorldObject::samePhase,&WorldObject::visible,&WorldObject::alive}) {
+        Scenario s; s.Offered(); s.giver.*field=false;
+        assert(!s.action.Execute({})&&s.bot.session.accepts==0);
+    }
+    { Scenario s; s.Offered(); s.giver.starts.clear(); assert(!s.action.Execute({})&&s.bot.session.accepts==0); }
+    { Scenario s; s.Offered(); s.giver.x=20; assert(s.action.Execute({})&&s.ai.moves==1&&s.bot.session.accepts==0); }
+    { Scenario s; s.Offered(); s.giver.los=false; assert(s.action.Execute({})&&s.ai.moves==1&&s.bot.session.accepts==0); }
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{0,200});
+      assert(s.action.Execute({})&&s.ai.farMoves==1&&s.bot.session.accepts==0); }
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{0,200}); pathResult=false;
+      assert(!s.action.Execute({})&&s.ai.farMoves==0); }
+    for(auto field:{&WorldObject::inWorld,&WorldObject::sameMap,&WorldObject::samePhase,&WorldObject::visible}) {
+        Scenario s; s.focus.*field=false; assert(!s.action.Execute({})&&s.ai.castChecks==0);
+    }
+    { Scenario s; s.focus.spawned=false; assert(!s.action.Execute({})&&s.ai.castChecks==0); }
+    { Scenario s; s.focus.info.type=3; assert(!s.action.Execute({})&&s.ai.castChecks==0); }
+    { Scenario s; s.focus.info.spellFocus.focusId=778; assert(!s.action.Execute({})&&s.ai.castChecks==0); }
+    { Scenario s; s.focus.info.spellFocus.focusId=778; spellMgr.spells.begin()->second.RequiresSpellFocus=778;
+      assert(s.action.Execute({})&&s.ai.casts==1); }
+    { Scenario s; s.focus.info.spellFocus.dist=20; s.focus.x=15;
+      assert(s.action.Execute({})&&s.ai.casts==1&&s.ai.moves==0); }
+    { Scenario s; s.focus.x=15; assert(s.action.Execute({})&&s.ai.moves==1&&s.ai.castChecks==0); }
+    { Scenario s; s.ai.context.npcs.push_back({4}); assert(s.action.Execute({})&&s.ai.casts==0); }
+    { Scenario s; s.ai.context.npcs.push_back({4}); s.demon.summoner={200}; assert(s.action.Execute({})&&s.ai.casts==1); }
+    { Scenario s; s.ai.context.npcs.push_back({4}); s.demon.alive=false; assert(s.action.Execute({})&&s.ai.casts==1); }
+    { Scenario s; s.ai.context.objects.clear(); objectMgr.objects[100].spellFocus.focusId=777;
+      spawns={{100,0,1,200,0,0}}; assert(s.action.Execute({})&&s.ai.farMoves==1);
+      assert(s.action.Execute({})&&spawnScans==1); }
+    { Scenario s; s.ai.context.objects.clear(); objectMgr.objects[100].spellFocus.focusId=777;
+      spawns={{100,0,2,200,0,0},{100,1,1,200,0,0}}; assert(!s.action.Execute({})&&s.ai.farMoves==0); }
+    { Scenario s; s.ai.context.objects.clear(); objectMgr.objects[100].spellFocus.focusId=778;
+      spawns={{100,0,1,200,0,0}}; assert(!s.action.Execute({})&&s.ai.farMoves==0); }
+    { Scenario s; s.ai.context.objects.clear(); objectMgr.objects[100].spellFocus.focusId=777;
+      spawns={{100,0,1,200,0,0}}; pathResult=false; assert(!s.action.Execute({})&&s.ai.farMoves==0); }
+    { Scenario s(1795); s.ai.context.objects.clear(); s.giver.entry=6251; s.giver.questgiver=false;
+      assert(s.action.Execute({})&&s.ai.casts==0&&s.ai.moves==0);
+      s.giver.x=20; assert(s.action.Execute({})&&s.ai.moves==1);
+      s.giver.x=2; s.giver.questgiver=true; assert(!s.action.Execute({})); }
+    { Scenario s(1470); s.Objective(1,1501,{0,200}); assert(s.action.Execute({})&&s.ai.farMoves==1);
+      assert(std::get<NewRpgInfo::DoQuest>(s.ai.rpgInfo.data).questId==1470);
+      s.bot.inventory[6281]={6281,3}; assert(!s.action.Execute({})&&s.ai.farMoves==1); }
+    { Scenario s(1470); s.Objective(1,1501,{1,200}); assert(!s.action.Execute({})&&s.ai.farMoves==0); }
+    { Scenario s(1470); s.Objective(1,1501,{0,20}); assert(!s.action.Execute({})&&s.ai.farMoves==0); }
+    { Scenario s(1470); s.Objective(1,1501,{0,20,0,8}); assert(s.action.Execute({})&&s.ai.farMoves==1); }
+    { Scenario s(1470); s.Objective(1,1501,{0,20}); s.bot.objectiveLos=false;
+      assert(s.action.Execute({})&&s.ai.farMoves==1); }
+    { Scenario s(1598); s.Objective(1,-85563,{0,20,0,8}); assert(s.action.Execute({})&&s.ai.farMoves==1);
+      s.Objective(1,-85563,{0,1}); now+=60001; assert(!s.action.Execute({})&&s.ai.farMoves==1); }
+    { Scenario s(1598); s.Objective(1,-85563,{0,0,0,3.2f}); assert(s.action.Execute({})&&s.ai.farMoves==1); }
+    { Scenario s(1598); s.Objective(1,-85563,{0,20}); assert(s.action.Execute({})&&s.ai.farMoves==1); }
+    { Scenario s(1470); s.Objective(1,1501,{1,2}); s.Crossing();
+      assert(s.action.Execute({})&&s.ai.routeMoves==1&&s.ai.farMoves==0);
+      assert(std::holds_alternative<NewRpgInfo::TravelRoute>(s.ai.rpgInfo.data));
+      int const scans=sContinentRoutes.scans;
+      assert(s.action.Execute({})&&sContinentRoutes.scans==scans);
+      s.bot.transport=true; auto const destination=s.ai.continentRoute.destination;
+      assert(!s.action.Execute({})&&s.ai.continentRoute.destination==destination);
+      s.bot.transport=false; s.bot.mapId=1;
+      assert(!s.action.Execute({})&&std::holds_alternative<NewRpgInfo::DoQuest>(s.ai.rpgInfo.data));
+      assert(sContinentRoutes.scans>scans); }
+    { Scenario s(1470); s.Objective(1,1501,{1,200}); s.Crossing(); sContinentRoutes.allowed=false;
+      assert(!s.action.Execute({})&&s.ai.routeMoves==0);
+      int const scans=sContinentRoutes.scans; assert(!s.action.Execute({})&&sContinentRoutes.scans==scans);
+      now+=60001; assert(!s.action.Execute({})&&sContinentRoutes.scans>scans); }
+    { Scenario s(1470); s.Objective(1,1501,{1,200}); s.Crossing(); sContinentRoutes.built=false;
+      assert(!s.action.Execute({})&&s.ai.routeMoves==0); }
+    { Scenario s(1470); s.Objective(1,1501,{1,200}); s.Crossing(); sPlayerbotAIConfig.continentTravel=false;
+      assert(!s.action.Execute({})&&s.ai.routeMoves==0); }
+    { Scenario s(1470); s.Objective(1,1501,{1,200}); s.Crossing(); pathResult=false;
+      assert(!s.action.Execute({})&&s.ai.routeMoves==0); }
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{1,20}); s.Crossing();
+      assert(s.value.Calculate()==s.data->Quest&&s.action.Execute({})&&s.ai.routeMoves==1); }
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{1,20}); s.Crossing();
+      sPlayerbotAIConfig.continentTravel=false; assert(!s.value.Calculate()); }
+    { Scenario s; s.ai.context.objects.clear(); s.ai.context.npcs.clear(); s.bot.mapId=1; s.Crossing();
+      assert(s.action.Execute({})&&s.ai.routeMoves==1&&s.ai.continentRoute.destination.map==0); }
+    { Scenario s; s.Offered(); s.giver.x=20; s.Crossing();
+      assert(s.action.Execute({})&&s.ai.routeMoves==1&&s.bot.session.accepts==0); }
+    { Scenario s; s.focus.x=15; s.Crossing(); assert(s.action.Execute({})&&s.ai.routeMoves==1&&s.ai.casts==0); }
+    std::cout<<"Warlock demon quests: native chains, own access, quest packets, owned rituals, focus, pending summons and checked native routes passed\n";
+}
+'''
+
+mutations = [
+    ('ritual wait checked every engine tick', 'classes', 'Trigger(botAI, "warlock demon quest")',
+     'Trigger(botAI, "warlock demon quest", 5)'),
+    ('live actor ownership revalidated', 'current', 'if (!CanRunWarlockDemonQuest(botAI))', 'if (false)'),
+    ('already learned demon skipped', 'current', 'if (bot->HasSpell(spell))', 'if (false)'),
+    ('ignored quest skipped', 'current', 'sPlayerbotAIConfig.IgnoredQuests.count(data.Quest)', 'false'),
+    ('own native quest access required', 'current', '!bot->CanTakeQuest(quest, false)', 'false'),
+    ('own quest log capacity required', 'current', '!bot->CanAddQuest(quest, false)', 'false'),
+    ('same map required without travel', 'table', 'pos.GetMapId() == _bot->GetMapId()', 'true'),
+    ('configured earned routes required', 'table', 'sPlayerbotAIConfig.continentTravel && sContinentRoutes.Built()', 'true'),
+    ('nearest eligible native giver selected', 'current', 'costs->Cost(pos) < distance',
+     'costs->Cost(pos) <= distance && !available'),
+    ('accepted packet result rechecked', 'giver', '&& bot->GetQuestStatus(quest->GetQuestId()) != QUEST_STATUS_NONE', ''),
+    ('reward packet result rechecked', 'giver', '&& bot->GetQuestRewardStatus(quest->GetQuestId())', ''),
+    ('native giver interaction required', 'giver', '!CanInteractWithQuestGiver(creature) ||', ''),
+    ('giver phase required', 'giver', '!bot->InSamePhase(creature) ||', ''),
+    ('giver visibility required', 'giver', '!bot->CanSeeOrDetect(creature) ||', ''),
+    ('giver relation required', 'giver', '!(reward ? creature->hasInvolvedQuest(quest->GetQuestId()) : creature->hasQuest(quest->GetQuestId()))', 'false'),
+    ('giver line of sight required', 'giver', '!IsWithinInteractionDist(creature) || !bot->IsWithinLOSInMap(creature)', '!IsWithinInteractionDist(creature)'),
+    ('native giver route required', 'travel', 'MoveFarTo(pos)', 'true'),
+    ('native crossing required', 'travel', 'if (!MoveToMap(pos))', 'if (false)'),
+    ('route execution configuration required', 'travel',
+     'if (!sPlayerbotAIConfig.continentTravel || !sContinentRoutes.Built())', 'if (false)'),
+    ('travel controller receives goal', 'travel', 'botAI->rpgInfo.ChangeToTravelRoute();', ''),
+    ('objective still needed', 'table', 'bot->GetItemCount(quest->RequiredItemId[index]) < quest->RequiredItemCount[index]', 'true'),
+    ('cross-map objectives routed first', 'objectives', '_objectivePos.GetMapId() != bot->GetMapId()', 'false'),
+    ('objective map cache retained during crossing', 'objectives', '_objectiveMap != bot->GetMapId()',
+     '_objectivePos.GetMapId() != bot->GetMapId()'),
+    ('unsuccessful objective search cached', 'objectives', '_objectivePos != WorldPosition() && !ObjectiveNeeded',
+     '!ObjectiveNeeded'),
+    ('quest chest approached', 'objectives', '_objectiveIsGameObject ||', ''),
+    ('elevated quest target approached', 'objectives', 'std::abs(bot->GetPositionZ() - _objectivePos.GetPositionZ()) > 3.0f', 'false'),
+    ('obscured quest target approached', 'objectives', '!bot->IsWithinLOS(_objectivePos.GetPositionX(), _objectivePos.GetPositionY(), _objectivePos.GetPositionZ())', 'false'),
+    ('exact quest objective distance required', 'objectives', 'bot->GetExactDist(_objectivePos)', 'bot->GetDistance(_objectivePos)'),
+    ('credited ritual not repeated', 'ritual', 'if (bot->GetReqKillOrCastCurrentCount(data.Quest, data.Creature))', 'if (false)'),
+    ('own source item required', 'ritual', 'if (!item)', 'if (false)'),
+    ('native summon hostility delay respected', 'ritual', 'return true;  // Wait here', 'return false;  // Wait here'),
+    ('only own summon blocks ritual', 'ritual', 'creature->ToTempSummon()->GetSummonerGUID() == bot->GetGUID()', 'true'),
+    ('only living summon blocks ritual', 'ritual', 'creature->IsAlive() &&', ''),
+    ('spawned focus required', 'ritual', '!focus->isSpawned() ||', ''),
+    ('focus phase required', 'ritual', '!bot->InSamePhase(focus) ||', ''),
+    ('focus visible required', 'ritual', '!bot->CanSeeOrDetect(focus) ||', ''),
+    ('native focus type required', 'ritual', 'focus->GetGoType() != GAMEOBJECT_TYPE_SPELL_FOCUS ||', ''),
+    ('runtime focus id required', 'ritual', 'focus->GetGOInfo()->spellFocus.focusId != spell->RequiresSpellFocus', 'false'),
+    ('native focus range required', 'ritual', 'float const range = focus->GetGOInfo()->spellFocus.dist;', 'float const range = 5.0f;'),
+    ('owned item kept in cast validation', 'precheck', 'false, itemTarget, item)', 'false, itemTarget, nullptr)'),
+    ('generic ritual cast waited', 'ritual', 'cast ? cast : bot->GetCurrentSpell(CURRENT_GENERIC_SPELL)', 'cast'),
+    ('native focus spawn phase required', 'ritual', 'if (spawn->phaseMask & bot->GetPhaseMask())', 'if (true)'),
+    ('native focus spawn id required', 'ritual', 'entry.second.spellFocus.focusId == _focusId', 'true'),
+    ('native focus route required', 'ritual', 'return MoveToQuestPosition(nearest);', 'return true;'),
+    ('only active Strahad escort waited', 'ritual', '!strahad->HasNpcFlag(UNIT_NPC_FLAG_QUESTGIVER)', 'true'),
+]
+for label, predicate in (
+        ('earned play mode', 'sPlayerbotAIConfig.naturalProgression'),
+        ('warlock class', 'bot->getClass() == CLASS_WARLOCK'),
+        ('headless session', 'bot->GetSession()->IsHeadless()'),
+        ('random ownership', 'sRandomPlayerbotMgr.IsRandomBot(bot)'),
+        ('no human controller', '!botAI->GetMaster()'),
+        ('solo character', '!bot->GetGroup()'),
+        ('living character', 'bot->IsAlive()'),
+        ('character in world', 'bot->IsInWorld()'),
+        ('no teleport in progress', '!bot->IsBeingTeleported()'),
+        ('outside instance', '!bot->GetMap()->IsDungeon()'),
+        ('outside battleground', '!bot->InBattleground()'),
+        ('outside arena', '!bot->InArena()'),
+        ('outside combat', '!bot->IsInCombat()'),
+        ('unmounted character', '!bot->IsMounted()'),
+        ('no flight path', '!bot->IsInFlight()'),
+        ('no flying character', '!bot->IsFlying()'),
+        ('no moving transport', '!bot->GetTransport()'),
+        ('no vehicle', '!bot->GetVehicle()'),
+        ('own control', '!bot->HasUnitState(UNIT_STATE_LOST_CONTROL)'),
+        ('no overlapping cast', '!bot->IsNonMeleeSpellCast(true)')):
+    mutations.append((label, 'gate', predicate, 'true'))
+for label, key, old, _ in mutations:
+    assert old in production[key], label
+
+
+def build(directory, parts, name):
+    text = prelude + tests
+    for key, value in parts.items():
+        text = text.replace('@@' + key.upper() + '@@', value)
+    path = directory / (name + '.cpp')
+    path.write_text(text)
+    binary = directory / name
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers',
+                    *SANITIZER_FLAGS, str(path), '-o', str(binary)], check=True)
+    return run_fixture([str(binary)])
+
+
+with tempfile.TemporaryDirectory(prefix='portable-warlock-demons-') as temporary:
+    directory = Path(temporary)
+    result = build(directory, production, 'demons')
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit('Warlock demon quest fixture failed')
+
+    def rejected(numbered):
+        index, (label, key, old, new) = numbered
+        assert old in production[key], label
+        mutant = {**production, key: production[key].replace(old, new)}
+        return build(directory, mutant, f'mutant-{index}').returncode != 0
+
+    for (label, *_), rejected_mutant in zip(mutations, in_parallel(rejected, enumerate(mutations))):
+        if not rejected_mutant:
+            raise SystemExit('Warlock demon quest mutation survived: ' + label)
+        print('Warlock demon quest mutation rejected: ' + label)

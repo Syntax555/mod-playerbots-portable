@@ -36,7 +36,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "731ffda58b050329c36494f415426d28f9cdced2",
+      "revision": "c6c56bc5cd06bea7268b3fed9fe79c7384449c86",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "08e5a03f99b648745b840707327f7c803ed51aa1"
@@ -67,7 +67,8 @@
         "mod-playerbots-ghost-navmesh-walks": "1b306cc9166376c3f4052f5184c017b9d3069a86",
         "mod-playerbots-continent-travel": "35c358ef4afef2bfdc6c17162e718382b40a91df",
         "mod-playerbots-island-routes": "e18f82403c6496fa309ff12478ec1eccd2709315",
-        "mod-playerbots-flight-master-discovery": "731ffda58b050329c36494f415426d28f9cdced2"
+        "mod-playerbots-flight-master-discovery": "731ffda58b050329c36494f415426d28f9cdced2",
+        "mod-playerbots-earned-warlock-demons": "c6c56bc5cd06bea7268b3fed9fe79c7384449c86"
       }
     },
     {
