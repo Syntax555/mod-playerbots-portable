@@ -63,11 +63,16 @@ fixtures pass. Use native core/module functions before adding replacements.
   ghost legs on long runs and bodies off the navigation mesh, such as in cities.
 - [ ] Validate [continent travel](configuration.md#continent-travel) in game: waiting,
   boarding and leaving at every ship, zeppelin and turtle stop, missed departures
-  and full docks; portals in Shattrath, Dalaran and the capitals, the Dark Portal
-  and Thalassian Pass; mage teleports with and without runes, hearthstones and
+  and full docks; the Thunder Bluff, Undercity and Freewind elevators and the
+  Deeprun Tram, including neighbouring doors and lifts; portals in Shattrath,
+  Dalaran and the capitals, Darnassus to Rut'theran, the Dark Portal and
+  Thalassian Pass; mage teleports with and without runes, hearthstones and
   discovered flights to a dock; faction and earned-era refusals; companions left
-  on another continent; route times. Measure planning cost with the 2,500-bot
-  target.
+  on another continent or island; travel-data islands that split walkable areas;
+  route times. Measure planning cost with the 2,500-bot target.
+- [ ] Validate flight master discovery in game: zones with several flight
+  masters, unreachable or hostile ones, Rut'theran from Teldrassil's canopy and
+  detours during a route.
 - [ ] Test [combat profiles](combat-profiles.md) for every class on random bots,
   controlled altbots and SelfBots: automatic/manual selection, relog/AI resets,
   combat refusal, retained travel/loot settings and owned-item upgrades.

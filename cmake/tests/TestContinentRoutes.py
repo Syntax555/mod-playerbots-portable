@@ -1,12 +1,14 @@
-"""Check that bots change maps only over links an ordinary player can take.
+"""Check that bots change maps and islands only over links an ordinary player can take.
 
-The production route planner, link catalog, Individual Progression arrival
-gate, transport docking test, flight search, companion trigger and the RPG
-start of continent travel run against doubles that answer as the core and
-Individual Progression do. Native contracts the doubles rely on are asserted
-from the pinned sources. The route execution code is checked to use only the
-core's area trigger, game object, spell, item and taxi handlers. Mutation
-checks confirm that each gate is required. No realm is started.
+The production route planner, walk islands, link catalog with ships, lifts,
+portals and area triggers, Individual Progression arrival gate, transport
+docking and lift tests, flight search, flight master discovery, companion
+trigger and the RPG start of travel run against doubles that answer as the
+core, the playerbots travel data and Individual Progression do. Native
+contracts and the shipped travel data the doubles rely on are asserted from the
+pinned sources. Route execution is checked to use only the core's area
+trigger, game object, spell, item, taxi and flight-master interaction handlers.
+Mutation checks confirm that each gate is required. No realm is started.
 """
 
 import os
@@ -61,6 +63,15 @@ transport_mgr_header = read(core / 'src/server/game/Maps/TransportMgr.h')
 transport_mgr = read(core / 'src/server/game/Maps/TransportMgr.cpp')
 transport = read(core / 'src/server/game/Entities/Transport/Transport.cpp')
 misc_handler = read(core / 'src/server/game/Handlers/MiscHandler.cpp')
+rpg_trigger = read(module / 'Ai/World/Rpg/Trigger/NewRpgTrigger.cpp')
+travel_node = read(module / 'Mgr/Travel/TravelNode.h')
+database = read(module / 'Db/PlayerbotsDatabase.cpp')
+taxi_handler = read(core / 'src/server/game/Handlers/TaxiHandler.cpp')
+map_source = read(core / 'src/server/game/Maps/Map.cpp')
+game_object = read(core / 'src/server/game/Entities/GameObject/GameObject.h')
+player_source = read(core / 'src/server/game/Entities/Player/Player.cpp')
+world_data = core / 'data/sql/base/db_world'
+travel_data = core / 'modules/mod-playerbots/data/sql/playerbots/base'
 
 
 def value(source, name):
@@ -101,6 +112,72 @@ assert 'return sIndividualProgression->GetPlayerProgressionFromQuests(player) >=
     ip_main, 'bool IndividualProgression::hasPassedProgression(Player* player, ProgressionState state) const')
 assert re.search(r'if \(enabled && strictEarnedProgression\)\s*return false;',
                  function(ip_main, 'bool IndividualProgression::isBotAccount(const Player* player)'))
+path_types = function(travel_node, 'enum class TravelNodePathType : uint8') + ';'
+# Islands and lifts come from the playerbots travel tables in the column order of these queries.
+assert '"SELECT id, name, map_id, x, y, z, linked FROM playerbots_travelnode"' in database
+assert '"SELECT node_id, to_node_id,type,object,distance,swim_distance, extra_cost,calculated, ' in database
+assert '[[nodiscard]] bool IsWorldMap() const { return map_type == MAP_COMMON; }' in dbc_structure
+# The core finds a static transport only when it is the one nearest the passenger.
+assert 'if (GameObject* staticTrans = worldobject->FindNearestGameObjectOfType(GAMEOBJECT_TYPE_TRANSPORT, 75.0f))' in \
+    function(map_source, 'Transport* Map::GetTransportForPos(')
+assert ('Transport* ToTransport() { if (GetGOInfo()->type == GAMEOBJECT_TYPE_MO_TRANSPORT || GetGOInfo()->type == '
+        'GAMEOBJECT_TYPE_TRANSPORT) return reinterpret_cast<Transport*>(this); else return nullptr; }') in game_object
+assert 'GameObjectModel* m_model;' in game_object
+learn = function(taxi_handler, 'bool WorldSession::SendLearnNewTaxiNode(Creature* unit)')
+assert 'uint32 curloc = sObjectMgr->GetNearestTaxiNode(*unit, GetPlayer()->GetTeamId(true));' in learn
+assert 'if (GetPlayer()->m_taxi.SetTaximaskNode(curloc))' in learn
+assert 'info.taxiNodeId = sObjectMgr->GetNearestTaxiNode(x, y, z, mapId, TEAM_ALLIANCE);' in travel
+interaction = function(player_source, 'Creature* Player::GetNPCIfCanInteractWith(ObjectGuid const& guid, uint32 npcflagmask)')
+
+
+def sql_tuples(path, pattern):
+    return [match.groups() for match in re.finditer(pattern, path.read_text(encoding='utf-8', errors='replace'),
+                                                     re.MULTILINE)]
+
+
+# The shipped travel data separates the islands the planner relies on, and its lifts are spawned.
+nodes = {int(i): (name, int(m), float(x), float(y), float(z)) for i, name, m, x, y, z in sql_tuples(
+    travel_data / 'playerbots_travelnode.sql', r"^\((\d+), '((?:[^'\\]|\\.)*)', (\d+), (-?[\d.]+), (-?[\d.]+), (-?[\d.]+)")}
+links = [tuple(map(int, row)) for row in sql_tuples(travel_data / 'playerbots_travelnode_link.sql',
+                                                     r"^\((\d+), (\d+), (\d+), (\d+),")]
+parent = {node: node for node in nodes}
+
+
+def root(node):
+    while parent[node] != node:
+        parent[node] = parent[parent[node]]
+        node = parent[node]
+    return node
+
+
+for first, second, kind, _ in links:
+    if kind == value(path_types, 'walk') and first in nodes and second in nodes and nodes[first][1] == nodes[second][1]:
+        parent[root(first)] = root(second)
+
+
+def island(name):
+    found = [node for node, row in nodes.items() if row[0] == name]
+    assert found, name
+    return {root(node) for node in found}
+
+
+assert island('Night Elf start').isdisjoint(island('Ruttheran Village flightMaster'))
+assert island('Night Elf start').isdisjoint(island('Darkshore Auberdine'))
+assert island('Thunder Bluff flightMaster').isdisjoint(island('Orc and Troll start'))
+assert island('Human start') & island('Dwarf and Gnome start')
+lift = value(path_types, 'transport')
+tram = [(first, second) for first, second, kind, entry in links if kind == lift and entry == 176080]
+assert tram and all(nodes[a][1] == nodes[b][1] == 369 and root(a) != root(b) for a, b in tram)
+spawns = [row for row in sql_tuples(world_data / 'gameobject.sql', r"^\(\d+,(\d+),(\d+),\d+,\d+,\d+,\d+,(-?[\d.]+),(-?[\d.]+)")
+          if row[0] in ('4170', '176080')]
+templates = {entry: kind for entry, kind in sql_tuples(world_data / 'gameobject_template.sql', r"^\((4170|176080),(\d+),")}
+assert templates == {'4170': str(value(shared, 'GAMEOBJECT_TYPE_TRANSPORT')),
+                     '176080': str(value(shared, 'GAMEOBJECT_TYPE_TRANSPORT'))}
+for entry in (4170, 176080):
+    stops = [nodes[n] for first, second, kind, item in links if kind == lift and item == entry for n in (first, second)]
+    assert any(int(spawn[1]) == stop[1] and ((float(spawn[2]) - stop[2]) ** 2 + (float(spawn[3]) - stop[3]) ** 2)
+               ** 0.5 <= value(routes_header, 'LiftSpawnYards') for spawn in spawns if int(spawn[0]) == entry
+               for stop in stops), entry
 ip_zones = set(re.findall(r'AREA_\w+', function(ip_player, 'static bool IsTBCRaceStartingZone(')))
 starting_zone = function(progression, 'bool IsTbcRaceStartingZone(uint32 zoneId)')
 assert set(re.findall(r'AREA_\w+', starting_zone)) == ip_zones and len(ip_zones) == 8
@@ -118,8 +195,10 @@ def defines(names, *sources):
 natives = defines(sorted(ip_zones), area_defines, ip_header) + '\n' + '\n'.join([
     defines(['MAP_OUTLAND', 'MAP_NORTHREND'], area_defines),
     defines(['RACE_HUMAN', 'RACE_BLOODELF', 'RACE_DRAENEI', 'GAMEOBJECT_TYPE_GOOBER', 'GAMEOBJECT_TYPE_MO_TRANSPORT',
-             'GAMEOBJECT_TYPE_SPELLCASTER', 'SPELL_EFFECT_TELEPORT_UNITS', 'SPELL_EFFECT_TRIGGER_SPELL',
-             'SPELLFAMILY_GENERIC', 'SPELLFAMILY_MAGE'], shared),
+             'GAMEOBJECT_TYPE_SPELLCASTER', 'GAMEOBJECT_TYPE_TRANSPORT', 'SPELL_EFFECT_TELEPORT_UNITS',
+             'SPELL_EFFECT_TRIGGER_SPELL', 'SPELLFAMILY_GENERIC', 'SPELLFAMILY_MAGE'], shared),
+    defines(['MAP_COMMON', 'MAP_INSTANCE'], dbc_enums),
+    f'constexpr float INTERACTION_DISTANCE = {re.search(r"#define INTERACTION_DISTANCE\s+([\d.]+f)", read(core / "src/server/game/Entities/Object/ObjectDefines.h"))[1]};',
     defines(['FACTION_MASK_ALLIANCE', 'FACTION_MASK_HORDE'], dbc_enums),
     *(f'constexpr ProgressionState {name} = ProgressionState({value(ip_header, name)});'
       for name in ('PROGRESSION_PRE_TBC', 'PROGRESSION_TBC_TIER_5')),
@@ -137,7 +216,10 @@ execution = {name: function(rpg_base, signature) for name, signature in {
     'board': 'bool NewRpgBaseAction::BoardTransport(ContinentRouteState& route)',
     'ride': 'bool NewRpgBaseAction::RideTransport(ContinentRouteState& route, Transport* transport)',
     'straight': 'bool NewRpgBaseAction::MoveStraightTo(WorldPosition const& point)',
+    'lift board': 'bool NewRpgBaseAction::BoardLift(ContinentRouteState& route)',
+    'lift ride': 'bool NewRpgBaseAction::RideLift(ContinentRouteState& route, Transport* lift)',
 }.items()}
+execution['discover'] = function(rpg, 'bool NewRpgDiscoverFlightAction::Execute(Event /*event*/)')
 execution['route action'] = function(rpg, 'bool NewRpgTravelRouteAction::Execute(Event /*event*/)')
 execution['master action'] = function(rpg, 'bool TravelToMasterAction::Execute(Event /*event*/)')
 FORBIDDEN = ('TeleportTo', 'Relocate(', 'AddPassenger', 'ResurrectPlayer', 'SetTaxiCheater', 'AddItem', 'StoreNewItem',
@@ -160,6 +242,13 @@ def assert_ordinary(bodies):
     take = bodies['take']
     assert 'if (bot->IsInAreaTriggerRadius(trigger))\n            return UseLinkObject(route);' in take
     assert 'bot->GetExactDist2d(from) <= INTERACTION_DISTANCE - 2.5f' in take
+    board = bodies['lift board']
+    assert 'if (!ContinentTravel::OnTransport(lift, bot->GetPhaseMask(), link.from.x, link.from.y, link.from.z))' in board
+    assert board.index('ContinentTravel::OnTransport(lift') < board.index('MoveStraightTo(from);')
+    discover = bodies['discover']
+    learn = 'bot->GetSession()->SendLearnNewTaxiNode(flightMaster);'
+    assert ('if (flightMaster && bot->GetNPCIfCanInteractWith(flightMaster->GetGUID(), UNIT_NPC_FLAG_FLIGHTMASTER))\n'
+            '        ' + learn) in discover and discover.count('SendLearnNewTaxiNode') == 1
 
 
 assert_ordinary(execution)
@@ -169,6 +258,14 @@ for label, name, old, new in [
     ('remote area trigger', 'take', 'if (bot->IsInAreaTriggerRadius(trigger))', 'if (true)'),
     ('flight without discovered route', 'overland', '!CanUseTaxiNodes(bot, nodes) || ', ''),
     ('triggered teleport spell', 'use', 'botAI->CastSpell(link.object, bot)', 'botAI->CastSpell(link.object, bot, true)'),
+    ('lift boarded away from its stop', 'lift board',
+     'if (!ContinentTravel::OnTransport(lift, bot->GetPhaseMask(), link.from.x, link.from.y, link.from.z))',
+     'if (false)'),
+    ('flight point learned without speaking', 'discover',
+     'flightMaster && bot->GetNPCIfCanInteractWith(flightMaster->GetGUID(), UNIT_NPC_FLAG_FLIGHTMASTER)',
+     'flightMaster'),
+    ('flight point granted', 'discover', 'bot->GetSession()->SendLearnNewTaxiNode(flightMaster);',
+     'bot->m_taxi.SetTaximaskNode(master->taxiNodeId);'),
 ]:
     mutated = {**execution, name: execution[name].replace(old, new)}
     assert mutated[name] != execution[name], label
@@ -190,6 +287,17 @@ assert 'GetOption<bool>("Playerbots.ContinentTravel", false)' in config
 assert '\nPlayerbots.ContinentTravel = 0\n' in conf_dist and '\nPlayerbots.RpgStatusProbWeight.TravelRoute = 0\n' in conf_dist
 # The unused upstream Dark Portal actions granted quests without their givers.
 assert 'dark portal' not in action_context and 'dark portal' not in trigger_context
+assert 'creators["new rpg discover flight"] = &ActionContext::new_rpg_discover_flight;' in action_context
+assert 'creators["new rpg discover flight"] = &TriggerContext::discover_flight;' in trigger_context
+assert ('new TriggerNode("new rpg discover flight", {NextAction("new rpg discover flight", ACTION_NORMAL + 1)})'
+        in rpg_strategy)
+assert 'GetOption<bool>("Playerbots.DiscoverFlightMasters", false)' in config
+assert '\nPlayerbots.DiscoverFlightMasters = 0\n' in conf_dist
+# Rut'theran's flight master is offered only where islands keep it apart from Teldrassil's canopy.
+assert '(creatureTemplate->Entry != 3838 || sPlayerbotAIConfig.continentTravel)' in travel
+# Bots stand on a lift the core cannot pick out when a door or another lift is nearer.
+assert ('if (sPlayerbotAIConfig.continentTravel && (!newTransport || !newTransport->ToMotionTransport()))'
+        in function(ai, 'void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)'))
 
 state_declaration = function(routes_header, 'struct ContinentRouteState') + ';'
 catalog_declaration = function(routes_header, 'class ContinentRouteCatalog') + ';'
@@ -208,7 +316,8 @@ production = {
         function(routes, 'uint32 ZoneOf(uint32 areaId)'),
         function(routes, 'uint32 AreaTeam(uint32 areaId)'),
         function(routes, 'uint32 AreaAt(Point const& point)'),
-        function(routes, 'bool IsContinent(uint32 mapId)'),
+        function(routes, 'bool IsWorldMap(uint32 mapId)'),
+        function(routes, 'uint64 IslandCell(uint32 mapId, int32 cellX, int32 cellY)'),
         function(routes, 'bool TeleportDestination(uint32 spellId, Point& to, bool triggered = false)'),
         function(routes, 'bool HasReagents(Player* bot, SpellInfo const* info)'),
         function(routes, 'bool Open(ContinentRouteState const& state, Link const& link)'),
@@ -218,12 +327,19 @@ production = {
         function(routes, 'void ContinentRouteState::ClearLink()'),
         function(routes, 'void ContinentRouteState::ClearFlight()'),
         function(routes, 'uint64 ContinentRouteCatalog::Key(Link const& link)'),
-        function(routes, 'void ContinentRouteCatalog::Add(Link const& link, bool alliance, bool horde)'),
+        function(routes, 'void ContinentRouteCatalog::Add(Link const& added, bool alliance, bool horde)'),
+        function(routes, 'void ContinentRouteCatalog::LoadTravelNodes(TravelNodeData& data)'),
         function(routes, 'void ContinentRouteCatalog::Build()'),
+        function(routes, 'uint32 ContinentRouteCatalog::IslandAt(uint32 mapId, float x, float y, float z) const'),
+        function(routes, 'Point ContinentRouteCatalog::Locate(WorldPosition const& position) const'),
         function(routes, 'bool ContinentRouteCatalog::CanArrive(Player* bot, Point const& to, uint32 arrivalZone)'),
         function(routes, 'std::vector<Link> ContinentRouteCatalog::UsableLinks(Player* bot, ContinentRouteState const& state) const'),
         'namespace ContinentTravel {',
+        function(routes, 'Point ToPoint(WorldPosition const& position)'),
         function(routes, 'bool IsDocked(MotionTransport const* transport, Point const* stop)'),
+        function(routes, 'bool OnTransport(GameObject const* transport, uint32 phaseMask, float x, float y, float z)'),
+        function(routes, 'GameObject* NearestTransport(Player* bot, uint32 entry, float range)'),
+        function(routes, 'Transport* LiftUnder(Player* bot, uint32 entry)'),
         '}',
     ]),
     'progression': '\n'.join([
@@ -231,8 +347,17 @@ production = {
         function(progression, 'bool ContinentRouteProgression::CanArrive(Player* bot, uint32 mapId, float x, float y, '
                               'float z, uint32 zoneId)'),
     ]),
-    'flight': function(travel, 'bool TravelMgr::FindFlightTowards(Player* bot, WorldPosition const& target, '
-                               'FlightMasterInfo const*& origin,'),
+    'flight': '\n'.join([
+        function(travel, 'bool TravelMgr::FindFlightTowards(Player* bot, WorldPosition const& target, '
+                         'FlightMasterInfo const*& origin,'),
+        function(travel, 'TravelMgr::FlightMasterInfo const* TravelMgr::GetNearestFlightMasterInfo(Player* bot) const'),
+    ]),
+    'discover': '\n'.join([
+        function(travel, 'TravelMgr::FlightMasterInfo const* TravelMgr::FindUndiscoveredFlightMaster('),
+        function(rpg, 'bool NewRpgDiscoverFlightAction::Execute(Event /*event*/)'),
+        function(rpg_trigger, 'bool NewRpgDiscoverFlightTrigger::IsActive()'),
+        interaction,
+    ]),
     'taxi': function(ai, 'bool CanUseTaxiNodes(Player* player, std::vector<uint32> const& nodes)'),
     'trigger': function(triggers, 'bool MasterFarAwayTrigger::IsActive()'),
     'start': function(rpg, 'bool NewRpgStatusUpdateAction::StartContinentTravel()'),
@@ -247,6 +372,7 @@ fixture = r'''
 #include <iostream>
 #include <limits>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -255,24 +381,28 @@ fixture = r'''
 #include <vector>
 
 using uint8 = std::uint8_t; using uint16 = std::uint16_t; using uint32 = std::uint32_t; using uint64 = std::uint64_t;
-using int32 = std::int32_t;
+using int32 = std::int32_t; using int16 = std::int16_t;
 template <class... Arguments> inline void LogSink(Arguments const&...) {}
 #define LOG_INFO(...) LogSink(__VA_ARGS__)
 #define LOG_DEBUG(...) LogSink(__VA_ARGS__)
 constexpr uint32 MINUTE = 60, HOUR = 3600, IN_MILLISECONDS = 1000, PHASEMASK_NORMAL = 1;
 enum ProgressionState : uint8 {};
+using ObjectGuid = uint64;
 NATIVES
+PATH_TYPES
 
 inline uint32 nowMs = 100000000;
 inline uint32 getMSTime() { return nowMs; }
 inline uint32 GetMSTimeDiffToNow(uint32 old) { return nowMs - old; }
 
+class Player;
 struct WorldPosition
 {
     uint32 mapId = 0;
     float x = 0.0f, y = 0.0f, z = 0.0f;
     WorldPosition() = default;
     WorldPosition(uint32 map, float x, float y, float z = 0.0f) : mapId(map), x(x), y(y), z(z) {}
+    explicit WorldPosition(Player const* player);
     uint32 GetMapId() const { return mapId; }
     float GetPositionX() const { return x; }
     float GetPositionY() const { return y; }
@@ -302,15 +432,64 @@ struct Store
 struct MapEntry
 {
     uint32 expansion = 0;
-    bool continent = true;
+    uint32 map_type = MAP_COMMON;
     uint32 Expansion() const { return expansion; }
-    bool IsContinent() const { return continent; }
+    bool IsWorldMap() const { return map_type == MAP_COMMON; }
 };
 struct AreaTableEntry { uint32 ID = 0; uint32 zone = 0; uint32 team = 0; };
 struct FactionTemplateEntry { uint32 hostileMask = 0; };
 inline Store<MapEntry> sMapStore;
 inline Store<AreaTableEntry> sAreaTableStore;
 inline Store<FactionTemplateEntry> sFactionTemplateStore;
+
+namespace G3D
+{
+struct Vector3
+{
+    float x, y, z;
+    Vector3(float x, float y, float z) : x(x), y(y), z(z) {}
+};
+struct Ray
+{
+    Vector3 origin, direction;
+    Ray(Vector3 const& origin, Vector3 const& direction) : origin(origin), direction(direction) {}
+};
+}  // namespace G3D
+namespace VMAP { enum class ModelIgnoreFlags : uint32 { Nothing = 0 }; }
+
+// A deck or platform: a horizontal top over a box, hit by rays cast straight down onto it.
+struct GameObjectModel
+{
+    float minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f, top = 0.0f;
+    bool intersectRay(G3D::Ray const& ray, float& maxDist, bool, uint32, VMAP::ModelIgnoreFlags) const
+    {
+        assert(ray.direction.z == -1.0f && ray.direction.x == 0.0f && ray.direction.y == 0.0f);
+        float const drop = ray.origin.z - top;
+        if (ray.origin.x < minX || ray.origin.x > maxX || ray.origin.y < minY || ray.origin.y > maxY || drop < 0.0f ||
+            drop > maxDist)
+            return false;
+        maxDist = drop;
+        return true;
+    }
+};
+
+class Transport;
+class MotionTransport;
+class GameObject
+{
+public:
+    uint32 entry = 0;
+    uint32 type = GAMEOBJECT_TYPE_TRANSPORT;
+    uint32 mapId = 0;
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    GameObjectModel* m_model = nullptr;
+    virtual ~GameObject() = default;
+    uint32 GetEntry() const { return entry; }
+    float GetPositionX() const { return x; }
+    float GetPositionY() const { return y; }
+    float GetPositionZ() const { return z; }
+    Transport* ToTransport();
+};
 
 // Areas by map and x coordinate; the base map answers for the whole continent.
 class Map
@@ -319,7 +498,9 @@ public:
     uint32 id = 0;
     bool instanceable = false;
     std::map<int, uint32> areas;
+    std::vector<Transport*> transports;
     bool Instanceable() const { return instanceable; }
+    std::vector<Transport*> const& GetAllTransports() const { return transports; }
     uint32 GetAreaId(uint32 phase, float x, float, float) const
     {
         assert(phase == PHASEMASK_NORMAL);
@@ -356,10 +537,21 @@ struct TransportMgr
 inline TransportMgr transportMgr;
 #define sTransportMgr (&transportMgr)
 
-class Transport { public: virtual ~Transport() = default; };
+class Transport : public GameObject
+{
+public:
+    virtual MotionTransport* ToMotionTransport() { return nullptr; }
+};
+inline Transport* GameObject::ToTransport()
+{
+    return type == GAMEOBJECT_TYPE_MO_TRANSPORT || type == GAMEOBJECT_TYPE_TRANSPORT ? static_cast<Transport*>(this)
+                                                                                     : nullptr;
+}
 class MotionTransport : public Transport
 {
 public:
+    MotionTransport() { type = GAMEOBJECT_TYPE_MO_TRANSPORT; }
+    MotionTransport* ToMotionTransport() override { return this; }
     TransportTemplate const* path = nullptr;
     uint32 progress = 0;
     uint32 GetPeriod() const { return path->pathTime; }
@@ -436,11 +628,47 @@ struct SpellMgr
 inline SpellMgr spellMgr;
 #define sSpellMgr (&spellMgr)
 
-class WorldSession { public: uint8 expansion = 2; uint8 Expansion() const { return expansion; } };
 struct PlayerTaxi
 {
     std::set<uint32> known;
     bool IsTaximaskNodeKnown(uint32 node) const { return known.contains(node); }
+};
+constexpr uint32 UNIT_NPC_FLAG_FLIGHTMASTER = 0x2000;
+constexpr uint32 CREATURE_TYPE_FLAG_VISIBLE_TO_GHOSTS = 1, CREATURE_TYPE_FLAG_INTERACT_WHILE_DEAD = 2;
+constexpr int REP_UNFRIENDLY = 2;
+enum NPCFlags : uint32 {};
+struct CreatureTemplate { uint32 type_flags = 0; };
+class Creature
+{
+public:
+    ObjectGuid guid = 0;
+    uint32 entry = 0;
+    uint32 mapId = 0;
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    uint32 node = 0;  // the taxi node nearest the creature for its faction
+    bool alive = true;
+    int reaction = 4;
+    uint32 flags = UNIT_NPC_FLAG_FLIGHTMASTER;
+    ObjectGuid charmer = 0;
+    CreatureTemplate creatureTemplate;
+    ObjectGuid GetGUID() const { return guid; }
+    bool IsAlive() const { return alive; }
+    CreatureTemplate const* GetCreatureTemplate() const { return &creatureTemplate; }
+    bool HasNpcFlag(NPCFlags flag) const { return (flags & flag) == flag; }
+    ObjectGuid GetCharmerGUID() const { return charmer; }
+    int GetReactionTo(Player const*) const { return reaction; }
+    bool IsWithinDistInMap(Player const* player, float distance) const;
+};
+inline std::vector<Creature*> creatures;
+inline std::vector<GameObject*> gameObjects;
+class WorldSession
+{
+public:
+    uint8 expansion = 2;
+    Player* player = nullptr;
+    uint8 Expansion() const { return expansion; }
+    // The core learns the taxi node nearest the flight master for the player's team.
+    bool SendLearnNewTaxiNode(Creature* unit);
 };
 class Player
 {
@@ -450,13 +678,16 @@ public:
     TeamId team = TEAM_ALLIANCE;
     uint8 race = RACE_HUMAN;
     bool gm = false, alive = true, inWorld = true, inFlight = false, teleporting = false, selfBot = false;
-    bool taxiCheater = false, noReagent = false;
+    bool taxiCheater = false, noReagent = false, combat = false;
+    uint32 zone = 0;
     Transport* transport = nullptr;
     Map* map = nullptr;
     WorldSession session;
     PlayerTaxi m_taxi;
     std::set<uint32> spells, cooldowns;
     std::map<uint32, uint32> items;
+    Player() { session.player = this; }
+    Player(Player const&) = delete;
     uint32 m_homebindMapId = 0, m_homebindAreaId = 0;
     float m_homebindX = 0.0f, m_homebindY = 0.0f, m_homebindZ = 0.0f;
     TeamId GetTeamId(bool = false) const { return team; }
@@ -479,9 +710,92 @@ public:
     Transport* GetTransport() const { return transport; }
     Map* GetMap() const { return map; }
     uint32 GetMapId() const { return mapId; }
+    uint32 GetZoneId() const { return zone; }
+    uint32 GetPhaseMask() const { return PHASEMASK_NORMAL; }
+    float GetPositionX() const { return x; }
+    float GetPositionY() const { return y; }
+    float GetPositionZ() const { return z; }
+    bool IsInCombat() const { return combat; }
     float GetExactDist2d(Player const* other) const { return std::hypot(x - other->x, y - other->y); }
+    float GetExactDist2d(GameObject const* other) const { return std::hypot(x - other->x, y - other->y); }
+    float GetExactDist2dSq(WorldPosition const& at) const { return (x - at.x) * (x - at.x) + (y - at.y) * (y - at.y); }
+    float GetDistance(WorldPosition const& at) const
+    { return std::sqrt((x - at.x) * (x - at.x) + (y - at.y) * (y - at.y) + (z - at.z) * (z - at.z)); }
+    GameObject* FindNearestGameObject(uint32 entry, float range) const
+    {
+        GameObject* nearest = nullptr;
+        for (GameObject* object : gameObjects)
+            if (object->entry == entry && object->mapId == mapId &&
+                std::hypot(object->x - x, object->y - y) <= range &&
+                (!nearest || std::hypot(object->x - x, object->y - y) < std::hypot(nearest->x - x, nearest->y - y)))
+                nearest = object;
+        return nearest;
+    }
+    Creature* FindNearestCreature(uint32 entry, float range) const
+    {
+        for (Creature* creature : creatures)
+            if (creature->entry == entry && creature->mapId == mapId &&
+                std::sqrt((creature->x - x) * (creature->x - x) + (creature->y - y) * (creature->y - y) +
+                          (creature->z - z) * (creature->z - z)) <= range)
+                return creature;
+        return nullptr;
+    }
+    Creature* GetNPCIfCanInteractWith(ObjectGuid const& guid, uint32 npcflagmask);
 };
 inline bool IsSelfBot(Player* player) { return player && player->selfBot; }
+inline WorldPosition::WorldPosition(Player const* player) : mapId(player->mapId), x(player->x), y(player->y), z(player->z)
+{
+}
+inline bool Creature::IsWithinDistInMap(Player const* player, float distance) const
+{
+    return player->mapId == mapId && std::sqrt((player->x - x) * (player->x - x) + (player->y - y) * (player->y - y) +
+                                               (player->z - z) * (player->z - z)) <= distance;
+}
+namespace ObjectAccessor
+{
+inline Creature* GetCreatureOrPetOrVehicle(Player const& player, ObjectGuid guid)
+{
+    for (Creature* creature : creatures)
+        if (creature->guid == guid && creature->mapId == player.mapId)
+            return creature;
+    return nullptr;
+}
+}  // namespace ObjectAccessor
+inline bool WorldSession::SendLearnNewTaxiNode(Creature* unit)
+{
+    if (unit->node)
+        player->m_taxi.known.insert(unit->node);
+    return true;
+}
+
+// The playerbots database answers the travel node queries with the rows of these tables.
+enum PlayerbotsDatabaseStatements { PLAYERBOTS_SEL_TRAVELNODE, PLAYERBOTS_SEL_TRAVELNODE_LINK };
+struct Field
+{
+    double number = 0.0;
+    template <class T> T Get() const { return static_cast<T>(number); }
+};
+struct ResultSet
+{
+    std::vector<std::vector<Field>> rows;
+    std::size_t row = 0;
+    Field* Fetch() { return rows[row].data(); }
+    bool NextRow() { return ++row < rows.size(); }
+};
+using PreparedQueryResult = std::shared_ptr<ResultSet>;
+struct PreparedStatement { PlayerbotsDatabaseStatements id; };
+struct PlayerbotsDatabaseConnection
+{
+    std::vector<std::vector<Field>> nodes, links;
+    PreparedStatement statements[2] = {{PLAYERBOTS_SEL_TRAVELNODE}, {PLAYERBOTS_SEL_TRAVELNODE_LINK}};
+    PreparedStatement* GetPreparedStatement(PlayerbotsDatabaseStatements id) { return &statements[id]; }
+    PreparedQueryResult Query(PreparedStatement* statement)
+    {
+        auto const& rows = statement->id == PLAYERBOTS_SEL_TRAVELNODE ? nodes : links;
+        return rows.empty() ? nullptr : std::make_shared<ResultSet>(ResultSet{rows});
+    }
+};
+inline PlayerbotsDatabaseConnection PlayerbotsDatabase;
 
 struct IndividualProgression
 {
@@ -500,7 +814,7 @@ struct IndividualProgression
 inline IndividualProgression individualProgression;
 #define sIndividualProgression (&individualProgression)
 
-struct PlayerbotAIConfig { bool continentTravel = true; bool naturalProgression = true; };
+struct PlayerbotAIConfig { bool continentTravel = true; bool naturalProgression = true; bool discoverFlightMasters = true; };
 inline PlayerbotAIConfig sPlayerbotAIConfig;
 
 #include "ContinentRoutePolicy.h"
@@ -533,16 +847,35 @@ inline TravelNodeMap sTravelNodeMap;
 class TravelMgr
 {
 public:
-    struct FlightMasterInfo { WorldPosition pos; uint32 zoneId; uint32 taxiNodeId; uint32 templateEntry; uint32 dbGuid; };
+    struct FlightMasterInfo
+    {
+        WorldPosition pos;
+        uint32 zoneId;
+        uint32 taxiNodeId;
+        uint32 templateEntry;
+        uint32 dbGuid;
+        uint32 island = 0;
+    };
     std::map<uint32, FlightMasterInfo> allianceFlightMasterCache;
     std::map<uint32, FlightMasterInfo> hordeFlightMasterCache;
-    FlightMasterInfo const* nearest = nullptr;
-    FlightMasterInfo const* GetNearestFlightMasterInfo(Player*) const { return nearest; }
+    FlightMasterInfo const* GetNearestFlightMasterInfo(Player* bot) const;
     bool FindFlightTowards(Player* bot, WorldPosition const& target, FlightMasterInfo const*& origin,
                            std::vector<uint32>& path, WorldPosition& landing) const;
+    FlightMasterInfo const* FindUndiscoveredFlightMaster(Player* bot,
+                                                         std::unordered_map<uint32, uint32> const& rejectedAt) const;
 };
+inline TravelMgr travelMgr;
+#define sTravelMgr travelMgr
 
-struct NewRpgInfo { int travelRoutes = 0; void ChangeToTravelRoute() { ++travelRoutes; } };
+struct NewRpgInfo
+{
+    int travelRoutes = 0;
+    uint32 discoverFlightMaster = 0;
+    uint32 discoverFlightMasterSince = 0;
+    std::unordered_map<uint32, uint32> flightMasterRejectedAt;
+    void ChangeToTravelRoute() { ++travelRoutes; }
+};
+struct Event {};
 class PlayerbotAI
 {
 public:
@@ -567,12 +900,30 @@ public:
     bool hub = false;
     WorldPosition next;
     int selections = 0;
-    bool HasTravelHubOnMap() { return hub; }
+    bool HasTravelHubHere() { return hub; }
     WorldPosition SelectContinentDestination() { ++selections; return next; }
     bool StartContinentTravel();
 };
+class NewRpgDiscoverFlightAction
+{
+public:
+    NewRpgDiscoverFlightAction(PlayerbotAI* ai, Player* player) : botAI(ai), bot(player) {}
+    PlayerbotAI* botAI;
+    Player* bot;
+    std::vector<WorldPosition> moves;
+    bool MoveFarTo(WorldPosition destination) { moves.push_back(destination); return true; }
+    bool Execute(Event event);
+};
+class NewRpgDiscoverFlightTrigger
+{
+public:
+    PlayerbotAI* botAI;
+    Player* bot;
+    bool IsActive();
+};
 '''
-fixture = (fixture.replace('NATIVES', natives).replace('STATE_DECLARATION', state_declaration)
+fixture = (fixture.replace('NATIVES', natives).replace('PATH_TYPES', path_types)
+           .replace('STATE_DECLARATION', state_declaration)
            .replace('CATALOG_DECLARATION', catalog_declaration).replace('TRAVEL_DECLARATION', travel_declaration))
 
 tests = r'''
@@ -617,14 +968,34 @@ bool Has(std::vector<Link> const& links, LinkKind kind, uint32 object, uint32 fr
     return false;
 }
 
+std::size_t Count(std::vector<Link> const& links, LinkKind kind, uint32 object)
+{
+    return std::size_t(std::count_if(links.begin(), links.end(), [&](Link const& link)
+                                     { return link.kind == kind && link.object == object; }));
+}
+
 TaxiPathNodeEntry stops[] = {
     {0, 10.0f, 0.0f, 0.0f, 2}, {0, 500.0f, 0.0f, 0.0f, 0}, {1, 20.0f, 0.0f, 0.0f, 2}, {1, 900.0f, 0.0f, 0.0f, 0},
-    {1, 30.0f, 0.0f, 0.0f, 2}, {1, 40.0f, 0.0f, 0.0f, 2}};
+    {1, 30.0f, 0.0f, 0.0f, 2}, {1, 40.0f, 0.0f, 0.0f, 2}, {1, 8690.0f, 0.0f, 0.0f, 2}, {1, 7500.0f, 0.0f, 0.0f, 0},
+    {1, 6500.0f, 0.0f, 0.0f, 2}};
 
-// Kalimdor (1), Eastern Kingdoms (0), Outland (530); 609 is an instance-like map.
+// Travel node rows as the playerbots tables hold them: id, name, map, x, y, z, linked.
+void Node(double id, double map, double x, double y, double z)
+{
+    PlayerbotsDatabase.nodes.push_back({{id}, {0}, {map}, {x}, {y}, {z}, {1}});
+}
+
+// node, to node, type, object, distance, swim distance, extra cost, calculated.
+void Path(double from, double to, double type, double object = 0, double extra = 0)
+{
+    PlayerbotsDatabase.links.push_back({{from}, {to}, {type}, {object}, {0}, {0}, {extra}, {1}});
+}
+
+// Kalimdor (1), Eastern Kingdoms (0), Outland (530), the Deeprun Tram (369); 609 is an instance.
 void World()
 {
-    sMapStore.rows = {{0, {0, true}}, {1, {0, true}}, {530, {1, true}}, {571, {2, true}}, {609, {2, false}}};
+    sMapStore.rows = {{0, {0, MAP_COMMON}}, {1, {0, MAP_COMMON}}, {530, {1, MAP_COMMON}}, {571, {2, MAP_COMMON}},
+                      {369, {0, MAP_COMMON}}, {609, {2, MAP_INSTANCE}}};
     sAreaTableStore.rows = {{100, {100, 0, 0}}, {101, {101, 100, ContinentRoutes::AreaTeamHorde}},
                             {102, {102, 100, 0}}, {103, {103, 0, ContinentRoutes::AreaTeamAlliance}},
                             {104, {104, 103, 0}}, {200, {AREA_SILVERMOON_CITY, 0, 0}}, {201, {201, 0, 0}}};
@@ -641,10 +1012,17 @@ void World()
                                     {&stops[3], 210000, 210000}}};
     transportMgr.templates[101] = {false, 100000, {{&stops[4], 0, 10000}, {&stops[5], 50000, 60000}}};
     transportMgr.templates[102] = {true, 240000, {{&stops[0], 0, 60000}, {&stops[2], 120000, 180000}}};
+    // Rut'theran -> Auberdine on one map.
+    transportMgr.templates[103] = {false, 200000,
+                                   {{&stops[6], 0, 30000}, {&stops[7], 60000, 60000}, {&stops[8], 90000, 120000}}};
 
     objectMgr = ObjectMgr();
-    for (uint32 entry : {100u, 101u, 102u})
+    for (uint32 entry : {100u, 101u, 102u, 103u})
         objectMgr.templates[entry].type = GAMEOBJECT_TYPE_MO_TRANSPORT;
+    for (uint32 entry : {4170u, 20651u, 9997u, 9998u, 176080u})
+        objectMgr.templates[entry].type = GAMEOBJECT_TYPE_TRANSPORT;
+    objectMgr.templates[12].type = GAMEOBJECT_TYPE_SPELLCASTER;
+    objectMgr.templates[12].spellcaster.spellId = 506;
     objectMgr.templates[7].type = GAMEOBJECT_TYPE_SPELLCASTER;
     objectMgr.templates[7].spellcaster.spellId = 500;
     objectMgr.templates[8].type = GAMEOBJECT_TYPE_GOOBER;
@@ -664,11 +1042,18 @@ void World()
         {5, {10, 0, 1, -9000.0f, 0.0f, 0.0f}},   // teleport into a non-continent
         {6, {11, 0, 1, -9000.0f, 0.0f, 0.0f}},   // same-map portal far enough to save a walk
         {7, {7, 530, 2, -1800.0f, 0.0f, 0.0f}},  // other phase only
+        {20, {4170, 1, 1, -1286.0f, 190.0f, 130.0f}},  // Thunder Bluff elevator
+        {21, {20651, 0, 1, 1596.0f, 302.0f, -41.0f}},  // Undercity elevator door
+        {22, {176080, 369, 1, 5.0f, 2500.0f, 7.0f}},   // Deeprun Tram car
+        {23, {12, 1, 1, 9820.0f, 0.0f, 1300.0f}},      // Darnassus portal down to Rut'theran
+        {24, {9997, 1, 1, 5000.0f, 5000.0f, 0.0f}},    // a lift spawned far from its travel nodes
     };
     objectMgr.triggers = {{4354, {0, -11900.0f, 0.0f, 0.0f}}, {5, {0, 10.0f, 0.0f, 0.0f}},
-                          {6, {0, 10.0f, 0.0f, 0.0f}}};
+                          {6, {0, 10.0f, 0.0f, 0.0f}}, {2173, {0, -8350.0f, 600.0f, 90.0f}},
+                          {2175, {369, 5.0f, 20.0f, 7.0f}}};
     objectMgr.teleports = {{4354, {530, -250.0f, 0.0f, 0.0f}}, {5, {0, 3000.0f, 0.0f, 0.0f}},
-                           {6, {609, 0.0f, 0.0f, 0.0f}}, {7, {1, 0.0f, 0.0f, 0.0f}}};
+                           {6, {609, 0.0f, 0.0f, 0.0f}}, {7, {1, 0.0f, 0.0f, 0.0f}},
+                           {2173, {369, 5.0f, 2520.0f, 7.0f}}, {2175, {0, -4790.0f, -1000.0f, 500.0f}}};
 
     spellMgr = SpellMgr();
     spellMgr.infos[500].Effects[0].Effect = SPELL_EFFECT_TELEPORT_UNITS;
@@ -695,6 +1080,30 @@ void World()
     spellMgr.infos[603].passive = true;
     spellMgr.infos[600].Reagent[0] = 17031;
     spellMgr.infos[600].ReagentCount[0] = 1;
+    spellMgr.infos[506].Effects[0].Effect = SPELL_EFFECT_TELEPORT_UNITS;
+    spellMgr.targets[{506, 0}] = {1, 8705.0f, 0.0f, 5.0f, 0.0f};
+
+    // Islands: Teldrassil's canopy, Rut'theran below it, Kalimdor with Mulgore, Thunder Bluff's mesa,
+    // the two ends of the Deeprun Tram, and the Eastern Kingdoms from Stormwind to Ironforge.
+    PlayerbotsDatabase = PlayerbotsDatabaseConnection();
+    uint32 const walk = uint32(TravelNodePathType::walk), lift = uint32(TravelNodePathType::transport);
+    Node(101, 1, 9800, 0, 1300), Node(102, 1, 9850, 0, 1300), Path(101, 102, walk);
+    Node(103, 1, 8700, 0, 5), Node(104, 1, 8710, 0, 5), Path(103, 104, walk);
+    Node(105, 1, 6510, 0, 0), Node(106, 1, 1500, 0, 0), Node(107, 1, 20, 0, 0);
+    Path(105, 106, walk), Path(106, 107, walk);
+    Node(110, 1, -1286, 190, 69), Node(111, 1, -1300, 200, 69), Path(110, 111, walk), Path(111, 106, walk);
+    Node(112, 1, -1286, 190, 130), Node(113, 1, -1250, 190, 130), Path(112, 113, walk);
+    Node(120, 369, 5, 2510, 7), Node(121, 369, 5, 28, 7);
+    Node(130, 0, -8340, 600, 90), Node(131, 0, -4800, -1000, 500), Path(130, 131, walk);
+    Node(140, 609, 0, 0, 0), Node(141, 0, 1596, 302, -41), Node(142, 0, 1596, 302, -33);
+    Path(110, 112, lift, 4170, 15), Path(112, 110, lift, 4170, 5);
+    Path(120, 121, lift, 176080, 72), Path(121, 120, lift, 176080, 72);
+    Path(141, 142, lift, 20651, 10);                         // an elevator door, not a ride
+    Path(110, 112, lift, 9998, 15);                          // a lift without a spawn
+    Path(110, 112, lift, 9997, 15);                          // a lift spawned elsewhere
+    Path(110, 112, lift, 100, 15);                           // a ship's entry is no lift
+    Path(130, 120, lift, 176080, 15);                        // between maps, though spawned at one stop
+    Path(110, 112, uint32(TravelNodePathType::portal), 4170, 15);  // another kind of travel link
 
     individualProgression = IndividualProgression();
     sPlayerbotAIConfig = PlayerbotAIConfig();
@@ -800,7 +1209,8 @@ int main()
     {
         World();
         sContinentRoutes.Build();
-        assert(sContinentRoutes.Connects(0) && sContinentRoutes.Connects(1) && sContinentRoutes.Connects(530));
+        assert(sContinentRoutes.Built() && sContinentRoutes.Connects(0) && sContinentRoutes.Connects(1));
+        assert(sContinentRoutes.Connects(530) && sContinentRoutes.Connects(369));
         assert(!sContinentRoutes.Connects(609) && !sContinentRoutes.Connects(571));
 
         Player horde;
@@ -811,7 +1221,7 @@ int main()
         std::vector<Link> links = sContinentRoutes.UsableLinks(&horde, state);
         // The ship docks at a Horde dock in Kalimdor; both directions ride the same cycle.
         assert(Has(links, LinkKind::Transport, 100, 0) && Has(links, LinkKind::Transport, 100, 1));
-        assert(!Has(links, LinkKind::Transport, 101) && !Has(links, LinkKind::Transport, 102));
+        assert(Count(links, LinkKind::Transport, 101) == 2 && !Has(links, LinkKind::Transport, 102));
         for (Link const& link : links)
             if (link.kind == LinkKind::Transport && link.from.map == 0)
                 assert(link.to.map == 1 && link.to.x == 20.0f && std::fabs(link.seconds - 180.0f) < 0.01f);
@@ -900,9 +1310,10 @@ int main()
 
     // Flights towards a link use only discovered routes and land closest to the target.
     {
+        World();
+        sContinentRoutes.Build();
         TravelMgr travel;
         TravelMgr::FlightMasterInfo origin{{0, 0.0f, 0.0f}, 1, 10, 1, 1};
-        travel.nearest = &origin;
         travel.allianceFlightMasterCache = {{1, origin}, {2, {{0, 900.0f, 0.0f}, 2, 11, 2, 2}},
                                             {3, {{0, 950.0f, 0.0f}, 2, 12, 3, 3}}, {4, {{0, 990.0f, 0.0f}, 2, 14, 4, 4}},
                                             {5, {{1, 1000.0f, 0.0f}, 3, 15, 5, 5}}};
@@ -915,12 +1326,26 @@ int main()
         assert(!travel.FindFlightTowards(&bot, target, from, path, landing));
         bot.m_taxi.known = {11, 12, 14, 15};
         assert(travel.FindFlightTowards(&bot, target, from, path, landing));
-        assert((path == std::vector<uint32>{10, 12} && landing.x == 950.0f && from == &origin));
+        assert((path == std::vector<uint32>{10, 12} && landing.x == 950.0f && from->dbGuid == 1));
         bot.m_taxi.known.insert(13);
         assert(travel.FindFlightTowards(&bot, target, from, path, landing));
         assert((path == std::vector<uint32>{10, 13, 14} && landing.x == 990.0f));
-        travel.nearest = nullptr;
+        bot.mapId = 530;
         assert(!travel.FindFlightTowards(&bot, target, from, path, landing));
+
+        // On Rut'theran the canopy's flight master is not the nearest one, nor a landing for a target there.
+        uint32 const below = sContinentRoutes.IslandAt(1, 8700, 0, 5), canopy = sContinentRoutes.IslandAt(1, 9800, 0, 1300);
+        travel.allianceFlightMasterCache = {{1, {{1, 8750.0f, 0.0f, 1300.0f}, 3, 30, 1, 1, canopy}},
+                                            {2, {{1, 8800.0f, 0.0f, 5.0f}, 3, 31, 2, 2, below}},
+                                            {3, {{1, 6600.0f, 0.0f, 0.0f}, 4, 32, 3, 3, sContinentRoutes.IslandAt(1, 6510, 0, 0)}},
+                                            {4, {{1, 6530.0f, 0.0f, 1300.0f}, 4, 33, 4, 4, canopy}}};
+        sTravelNodeMap.paths = {{{31, 32}, {31, 32}}, {{31, 33}, {31, 33}}, {{30, 33}, {30, 33}}};
+        Player elf;
+        elf.mapId = 1, elf.x = 8700.0f, elf.z = 5.0f;
+        elf.m_taxi.known = {32, 33};
+        assert(travel.GetNearestFlightMasterInfo(&elf)->dbGuid == 2);
+        assert(travel.FindFlightTowards(&elf, WorldPosition(1, 6520.0f, 0.0f, 0.0f), from, path, landing));
+        assert((from->dbGuid == 2 && path == std::vector<uint32>{31, 32} && landing.x == 6600.0f));
     }
 
     // Companions follow their master over links only to a connected map or far away.
@@ -968,6 +1393,12 @@ int main()
         bot.map = &kingdoms;
         bot.alive = false;
         assert(!trigger.IsActive());
+        // Below Teldrassil's canopy the master is near but out of walking reach.
+        bot.alive = true, bot.map = &kalimdor, bot.mapId = 1, bot.x = 8700.0f, bot.z = 5.0f;
+        master.map = &kalimdor, master.mapId = 1, master.x = 9805.0f, master.z = 1300.0f;
+        assert(trigger.IsActive());
+        master.x = 8705.0f, master.z = 5.0f;
+        assert(!trigger.IsActive());
         ai.master = nullptr;
         bot.alive = true;
         assert(!trigger.IsActive());
@@ -1013,9 +1444,183 @@ int main()
         assert(ai.continentRoute.hasLink);
         ai.continentRoute.Start(WorldPosition(1, 520.0f + ContinentTravel::TargetMovedYards + 1.0f, 0.0f), false);
         assert(!ai.continentRoute.hasLink);
+
+        // A route to another island of the same map resumes until the bot walks where its destination is.
+        sContinentRoutes.Build();
+        ai.continentRoute.Finish();
+        bot.mapId = 1, bot.x = 9810.0f, bot.z = 1300.0f;
+        ai.continentRoute.Start(WorldPosition(1, 6520.0f, 0.0f, 0.0f), false);
+        int const before = status.selections;
+        assert(status.StartContinentTravel() && status.selections == before && ai.continentRoute.Active());
+        bot.x = 6515.0f, bot.z = 0.0f;
+        status.hub = true;
+        assert(!status.StartContinentTravel() && !ai.continentRoute.Active());
     }
 
-    std::cout << "Continent routes: earned links, faction, era, failures, docking, flights, companions and RPG travel\n";
+    // Walking between islands is priced, not forbidden; nodes join only on their own map.
+    {
+        Point const bottom{1, 10.0f, 0.0f, 0.0f, 1}, top{1, 0.0f, 0.0f, 100.0f, 2};
+        std::vector<Link> links = {Make(LinkKind::Lift, 7, {1, 0.0f, 0.0f, 0.0f, 1}, {1, 0.0f, 0.0f, 100.0f, 2}, 40.0f)};
+        assert((Objects(links, Plan(links, bottom, top)) == std::vector<uint32>{7}));
+        auto const walk = Plan({}, bottom, top);
+        assert(walk.Found() && walk.links.empty() && walk.seconds > ContinentRoutes::IslandPenaltySeconds);
+        assert(!ContinentRoutes::SameArea(bottom, top) && ContinentRoutes::SameArea(bottom, Point{1, 50.0f, 0.0f, 0.0f, 0}));
+        assert(ContinentRoutes::SameArea(bottom, Point{1, 50.0f, 0.0f, 0.0f, 1}) && !ContinentRoutes::SameArea(bottom, Point{0}));
+        std::vector<ContinentRoutes::TravelNode> nodes = {{1, {0}}, {2, {0}}, {3, {1}}, {4, {0}}, {5, {0}}};
+        std::vector<std::pair<uint32, uint32>> walks = {{1, 2}, {2, 3}, {9, 4}, {4, 5}};
+        auto const islands = ContinentRoutes::Islands(nodes, walks);
+        assert(islands[0] == islands[1] && islands[2] != islands[0] && islands[3] == islands[4]);
+        assert(islands[3] != islands[0] && std::count(islands.begin(), islands.end(), 0u) == 0);
+    }
+
+    // The travel data's islands, lifts, the Deeprun Tram and ships on one map lead bots everywhere.
+    {
+        World();
+        sContinentRoutes.Build();
+        uint32 const canopy = sContinentRoutes.IslandAt(1, 9800, 0, 1300), below = sContinentRoutes.IslandAt(1, 8700, 0, 5);
+        uint32 const kalimdor = sContinentRoutes.IslandAt(1, 6510, 0, 0), mesa = sContinentRoutes.IslandAt(1, -1250, 190, 130);
+        assert(canopy && below && kalimdor && mesa && canopy != below && below != kalimdor && mesa != kalimdor);
+        assert(kalimdor == sContinentRoutes.IslandAt(1, 20, 0, 0) && kalimdor == sContinentRoutes.IslandAt(1, -1300, 200, 69));
+        assert(sContinentRoutes.IslandAt(1, 10100, 0, 1300) == 0 && sContinentRoutes.IslandAt(609, 0, 0, 0) == 0);
+        assert(sContinentRoutes.IslandAt(369, 5, 2510, 7) != sContinentRoutes.IslandAt(369, 5, 28, 7));
+        assert(sContinentRoutes.Locate(WorldPosition(1, 8705.0f, 0.0f, 5.0f)).island == below);
+
+        Player human;
+        individualProgression.stages[&human] = PROGRESSION_TBC_TIER_5;
+        ContinentRouteState state;
+        std::vector<Link> const links = sContinentRoutes.UsableLinks(&human, state);
+        assert(Count(links, LinkKind::Lift, 4170) == 2 && Count(links, LinkKind::Lift, 176080) == 2);
+        assert(!Has(links, LinkKind::Lift, 20651) && !Has(links, LinkKind::Lift, 9998) && !Has(links, LinkKind::Lift, 100));
+        assert(!Has(links, LinkKind::Lift, 9997));
+        assert(Count(links, LinkKind::Transport, 103) == 2 && Has(links, LinkKind::Portal, 23));
+        assert(Has(links, LinkKind::AreaTrigger, 2173) && Has(links, LinkKind::AreaTrigger, 2175));
+        for (Link const& link : links)
+            if (link.kind == LinkKind::Lift && link.object == 4170 && link.from.z < 100.0f)
+                assert(link.from.island == kalimdor && link.to.island == mesa &&
+                       std::fabs(link.seconds - (15.0f + ContinentRoutes::LiftWaitSeconds)) < 0.01f);
+
+        auto route = [&](WorldPosition from, WorldPosition to)
+        {
+            auto const search = Explore(links, sContinentRoutes.Locate(from), [](Link const&) { return true; });
+            return Objects(links, RouteTo(links, search, sContinentRoutes.Locate(to)));
+        };
+        // Teldrassil's canopy -> portal -> Rut'theran -> boat -> Auberdine.
+        assert((route(WorldPosition(1, 9810.0f, 0.0f, 1300.0f), WorldPosition(1, 6520.0f, 0.0f, 0.0f)) ==
+                std::vector<uint32>{23, 103}));
+        // Mulgore -> elevator -> Thunder Bluff.
+        assert((route(WorldPosition(1, -1300.0f, 200.0f, 69.0f), WorldPosition(1, -1250.0f, 190.0f, 130.0f)) ==
+                std::vector<uint32>{4170}));
+        // Stormwind -> Deeprun Tram -> Ironforge, quicker than the long walk.
+        assert((route(WorldPosition(0, -8345.0f, 600.0f, 90.0f), WorldPosition(0, -4795.0f, -1000.0f, 500.0f)) ==
+                std::vector<uint32>{2173, 176080, 2175}));
+        // Within one island the walk stays.
+        assert(route(WorldPosition(1, 1500.0f, 0.0f, 0.0f), WorldPosition(1, 20.0f, 0.0f, 0.0f)).empty());
+
+        // Without travel data there are no islands, and nothing changes for maps.
+        PlayerbotsDatabase = PlayerbotsDatabaseConnection();
+        sContinentRoutes.Build();
+        assert(sContinentRoutes.IslandAt(1, 9800, 0, 1300) == 0 && !Has(sContinentRoutes.UsableLinks(&human, state),
+                                                                         LinkKind::Lift, 4170));
+    }
+
+    // Lifts are stood on, kept and picked out by their model under the bot.
+    {
+        Map world;
+        Player bot;
+        bot.map = &world, bot.mapId = 1, bot.z = 100.0f;
+        GameObjectModel deck{-5.0f, 5.0f, -5.0f, 5.0f, 100.0f};
+        Transport lift;
+        lift.entry = 4170, lift.mapId = 1, lift.m_model = &deck;
+        MotionTransport ship;
+        ship.entry = 100, ship.mapId = 1, ship.x = 30.0f, ship.m_model = &deck;
+        gameObjects = {&lift};
+        world.transports = {&ship};
+        assert(ContinentTravel::OnTransport(&lift, 1, 0.0f, 0.0f, 100.0f) && ContinentTravel::OnTransport(&lift, 1, 0.0f, 0.0f, 101.5f));
+        assert(!ContinentTravel::OnTransport(&lift, 1, 0.0f, 0.0f, 97.0f) && !ContinentTravel::OnTransport(&lift, 1, 0.0f, 0.0f, 103.0f));
+        assert(!ContinentTravel::OnTransport(&lift, 1, 10.0f, 0.0f, 100.0f) && !ContinentTravel::OnTransport(nullptr, 1, 0, 0, 0));
+        assert(!ContinentTravel::LiftUnder(&bot, 0) && ContinentTravel::LiftUnder(&bot, 4170) == &lift);
+        bot.transport = &lift;
+        assert(ContinentTravel::LiftUnder(&bot, 0) == &lift);
+        bot.z = 110.0f;
+        assert(!ContinentTravel::LiftUnder(&bot, 0) && !ContinentTravel::LiftUnder(&bot, 4170));
+        bot.z = 100.0f;
+        bot.transport = &ship;
+        assert(!ContinentTravel::LiftUnder(&bot, 0));
+        assert(ContinentTravel::NearestTransport(&bot, 100, 50.0f) == &ship);
+        assert(ContinentTravel::NearestTransport(&bot, 4170, 50.0f) == &lift && !ContinentTravel::NearestTransport(&bot, 7, 50.0f));
+        gameObjects.clear();
+    }
+
+    // Random bots speak to the flight master of each zone they reach on their island.
+    {
+        World();
+        sContinentRoutes.Build();
+        uint32 const below = sContinentRoutes.IslandAt(1, 8700, 0, 5), canopy = sContinentRoutes.IslandAt(1, 9800, 0, 1300);
+        travelMgr = TravelMgr();
+        travelMgr.allianceFlightMasterCache = {{1, {{1, 8720.0f, 0.0f, 5.0f}, 141, 20, 3838, 1, below}},
+                                               {2, {{1, 8705.0f, 0.0f, 5.0f}, 999, 21, 3839, 2, below}},
+                                               {3, {{1, 8701.0f, 0.0f, 1300.0f}, 141, 22, 3840, 3, canopy}},
+                                               {4, {{1, 8730.0f, 0.0f, 5.0f}, 141, 23, 3841, 4, below}}};
+        Player bot;
+        Map kalimdor;
+        bot.map = &kalimdor, bot.mapId = 1, bot.x = 8700.0f, bot.z = 5.0f, bot.zone = 141;
+        PlayerbotAI ai;
+        std::unordered_map<uint32, uint32> rejected;
+        assert(travelMgr.FindUndiscoveredFlightMaster(&bot, rejected)->dbGuid == 1);
+        bot.m_taxi.known = {20};
+        assert(travelMgr.FindUndiscoveredFlightMaster(&bot, rejected)->dbGuid == 4);
+        rejected[4] = nowMs;
+        assert(!travelMgr.FindUndiscoveredFlightMaster(&bot, rejected));
+        nowMs += ContinentTravel::FlightMasterRetryMs;
+        assert(travelMgr.FindUndiscoveredFlightMaster(&bot, rejected)->dbGuid == 4);
+        bot.taxiCheater = true;
+        assert(!travelMgr.FindUndiscoveredFlightMaster(&bot, rejected));
+        bot.taxiCheater = false;
+        bot.m_taxi.known.clear();
+
+        NewRpgDiscoverFlightTrigger trigger{&ai, &bot};
+        assert(trigger.IsActive());
+        for (int condition = 0; condition < 5; ++condition)
+        {
+            if (condition == 0) sPlayerbotAIConfig.discoverFlightMasters = false;
+            if (condition == 1) bot.combat = true;
+            if (condition == 2) bot.inFlight = true;
+            if (condition == 3) ai.continentRoute.hasLink = true, ai.continentRoute.usedAt = nowMs;
+            MotionTransport boat;
+            if (condition == 4) bot.transport = &boat;
+            assert(!trigger.IsActive());
+            sPlayerbotAIConfig.discoverFlightMasters = true;
+            bot.combat = bot.inFlight = false;
+            ai.continentRoute.ClearLink();
+            bot.transport = nullptr;
+        }
+
+        Creature master;
+        master.guid = 77, master.entry = 3838, master.mapId = 1, master.x = 8720.0f, master.z = 5.0f, master.node = 20;
+        creatures = {&master};
+        NewRpgDiscoverFlightAction discover(&ai, &bot);
+        assert(discover.Execute(Event{}) && discover.moves.size() == 1 && discover.moves[0].x == 8720.0f);
+        assert(!bot.m_taxi.IsTaximaskNodeKnown(20));
+        bot.x = 8717.0f;
+        assert(discover.Execute(Event{}) && bot.m_taxi.IsTaximaskNodeKnown(20) && discover.moves.size() == 1);
+        assert(travelMgr.FindUndiscoveredFlightMaster(&bot, ai.rpgInfo.flightMasterRejectedAt)->dbGuid == 4);
+        // A hostile master is not spoken to and is given up on.
+        bot.m_taxi.known.clear();
+        master.reaction = REP_UNFRIENDLY;
+        assert(discover.Execute(Event{}) && !bot.m_taxi.IsTaximaskNodeKnown(20) &&
+               ai.rpgInfo.flightMasterRejectedAt.contains(1));
+        // A master not reached in time is given up on as well.
+        ai.rpgInfo = NewRpgInfo();
+        master.reaction = 4;
+        bot.x = 8600.0f;
+        assert(discover.Execute(Event{}));
+        nowMs += ContinentTravel::DiscoveryTimeoutMs;
+        assert(!discover.Execute(Event{}) && ai.rpgInfo.flightMasterRejectedAt.contains(1));
+        creatures.clear();
+    }
+
+    std::cout << "Continent routes: earned links, islands, lifts, faction, era, failures, docking, flights, discovery, "
+                 "companions and RPG travel\n";
 }
 '''
 
@@ -1035,9 +1640,7 @@ def build(directory, sources, name):
 
 mutations = [
     ('unusable links planned', 'policy', 'if (!allowed[i] || settled[i + 1])', 'if (settled[i + 1])'),
-    ('walking between maps', 'policy', ('return a.map == b.map ? Distance(a, b) * WalkDetour / RunSpeed : '
-                                        'std::numeric_limits<float>::infinity();'),
-     'return Distance(a, b) * WalkDetour / RunSpeed;'),
+    ('walking between maps', 'policy', 'if (a.map != b.map)\n        return std::numeric_limits<float>::infinity();\n', ''),
     ('one end of a link in hostile territory', 'policy',
      'return departureAreaTeam != hostile && arrivalAreaTeam != hostile;',
      'return departureAreaTeam != hostile || arrivalAreaTeam != hostile;'),
@@ -1066,9 +1669,8 @@ mutations = [
      'if (bot->HasSpellCooldown(spell.spellId))'),
     ('hearthstone on cooldown', 'routes', ' && !bot->HasSpellCooldown(SPELL_HEARTHSTONE)', ''),
     ('hostile portal faction', 'routes', 'horde = !(faction->hostileMask & FACTION_MASK_HORDE);', 'horde = true;'),
-    ('portal into an instance', 'routes', '!TeleportDestination(spellId, link.to) || !IsContinent(link.to.map) ||',
+    ('portal into an instance', 'routes', '!TeleportDestination(spellId, link.to) || !IsWorldMap(link.to.map) ||',
      '!TeleportDestination(spellId, link.to) ||'),
-    ('same-map transport stops', 'routes', 'if (departure->Node->mapid == arrival->Node->mapid || ', 'if ('),
     ('instance transports', 'routes', 'if (!path || path->inInstance || !path->pathTime)', 'if (!path || !path->pathTime)'),
     ('subzone without its zone team', 'routes', 'if (area->team || !area->zone)', 'if (true)'),
     ('triggered teleports missed', 'routes', '!triggered && info->Effects[i].Effect == SPELL_EFFECT_TRIGGER_SPELL',
@@ -1076,7 +1678,7 @@ mutations = [
     ('generic teleport spells', 'routes', "info->SpellFamilyName == SPELLFAMILY_GENERIC || ", ''),
     ('teleports without a skill line', 'routes', 'abilities.first == abilities.second',
      '(abilities.first == abilities.second && !spellId)'),
-    ('other phases', 'routes', ' || !(data.phaseMask & PHASEMASK_NORMAL)', ''),
+    ('other phases', 'routes', ' || !(spawn.phaseMask & PHASEMASK_NORMAL)', ''),
     ('moving transport counted as docked', 'routes', ' || timer >= frame.DepartureTime', ''),
     ('undiscovered flight', 'flight',
      'nodes.empty() || !CanUseTaxiNodes(bot, std::vector<uint32>(nodes.begin() + 1, nodes.end()))', 'nodes.empty()'),
@@ -1091,10 +1693,54 @@ mutations = [
     ('master aboard a transport', 'trigger', '        master->GetTransport() ||', '       '),
     ('companion travels from an instance', 'trigger', 'bot->IsInFlight() ||\n        bot->GetMap()->Instanceable())',
      'bot->IsInFlight())'),
-    ('travel despite a local camp', 'start', 'if (HasTravelHubOnMap())\n        return false;', ''),
-    ('route never resumes', 'start', 'if (bot->GetMapId() != route.destination.GetMapId() &&', 'if (false &&'),
+    ('travel despite a local camp', 'start', 'if (HasTravelHubHere())\n        return false;', ''),
+    ('route never resumes', 'start', ('if (!ContinentRoutes::SameArea(sContinentRoutes.Locate(WorldPosition(bot)),\n'
+                                      '                                       sContinentRoutes.Locate(route.destination)) &&'),
+     'if (false &&'),
     ('companion route taken over', 'start', 'if (botAI->GetMaster())\n            return false;', ''),
     ('route without time budget', 'start', ' &&\n            GetMSTimeDiffToNow(route.startedAt) < ContinentTravel::RouteTimeoutMs', ''),
+    ('walking across islands free', 'policy', ' + (SeparateIslands(a, b) ? IslandPenaltySeconds : 0.0f)', ''),
+    ('islands joined across maps', 'policy', ' && nodes[a->second].at.map == nodes[b->second].at.map', ''),
+    ('one area across islands', 'policy', 'return a.map == b.map && !SeparateIslands(a, b);', 'return a.map == b.map;'),
+    ('instanced maps travelled', 'routes', 'return entry && entry->IsWorldMap();', 'return entry != nullptr;'),
+    ('travel nodes of instanced maps', 'routes', 'if (IsWorldMap(mapId))\n                data.nodes', 'if (true)\n                data.nodes'),
+    ('other travel links read as lifts', 'routes', 'else if (type == uint8(TravelNodePathType::transport))',
+     'else if (type != uint8(TravelNodePathType::walk))'),
+    ('elevator doors ridden', 'routes', ' ||\n            ContinentRoutes::Distance(from->second, to->second) < ContinentRoutes::MinimumLiftYards', ''),
+    ('lift spawned elsewhere', 'routes', 'if (!spawned)', 'if (!spawned && false)'),
+    ('lift between maps', 'routes', ' ||\n            from->second.map != to->second.map ||', ' ||'),
+    ('islands beyond the node radius', 'routes',
+     'float nearest = ContinentTravel::IslandNodeRadius * ContinentTravel::IslandNodeRadius;',
+     'float nearest = std::numeric_limits<float>::max();'),
+    ('ship taken for a lift', 'routes', 'if (!current->ToMotionTransport() &&\n            OnTransport', 'if (OnTransport'),
+    ('model hit far below', 'routes', 'float distance = 4.0f;', 'float distance = 40.0f;'),
+    ('ships on one map dropped', 'routes', 'if (departure == arrival || ',
+     'if (departure == arrival || departure->Node->mapid == arrival->Node->mapid || '),
+    ('flight master on another island', 'flight',
+     'if (info.pos.GetMapId() != bot->GetMapId() || (island && info.island && info.island != island))',
+     'if (info.pos.GetMapId() != bot->GetMapId() || (island && info.island && false))'),
+    ('landing on another island', 'flight', '!(island && info.island && info.island != island)',
+     '!(island && info.island && false)'),
+    ('discovery in another zone', 'discover', ' || info.zoneId != bot->GetZoneId()', ''),
+    ('discovery on another island', 'discover', ' ||\n            (island && info.island && info.island != island))',
+     ' ||\n            (island && info.island && false))'),
+    ('discovered master revisited', 'discover', ' || bot->m_taxi.IsTaximaskNodeKnown(info.taxiNodeId)', ''),
+    ('rejected master retried at once', 'discover', 'if (rejected != rejectedAt.end() && ', 'if (false && '),
+    ('taxi cheater sent to masters', 'discover', 'if (bot->isTaxiCheater())\n        return nullptr;\n', ''),
+    ('flight point learned without speaking', 'discover',
+     'flightMaster && bot->GetNPCIfCanInteractWith(flightMaster->GetGUID(), UNIT_NPC_FLAG_FLIGHTMASTER)',
+     'flightMaster'),
+    ('flight point learned from afar', 'discover', 'if (bot->GetDistance(master->pos) > INTERACTION_DISTANCE)\n        return MoveFarTo(master->pos);', ''),
+    ('unreachable master kept', 'discover', '>= ContinentTravel::DiscoveryTimeoutMs)', '>= 2 * ContinentTravel::DiscoveryTimeoutMs)'),
+    ('discovery in combat', 'discover', ' || bot->IsInCombat()', ''),
+    ('discovery while boarding', 'discover', 'if (route.hasLink && route.usedAt)', 'if (route.hasLink && false)'),
+    ('discovery switched off', 'discover', 'if (!sPlayerbotAIConfig.discoverFlightMasters || ', 'if ('),
+    ('companion ignores islands', 'trigger', (' ||\n           !ContinentRoutes::SameArea(sContinentRoutes.Locate(WorldPosition(bot)),\n'
+                                              '                                      sContinentRoutes.Locate(WorldPosition(master)));'),
+     ';'),
+    ('route ends on the wrong island', 'start', ('if (!ContinentRoutes::SameArea(sContinentRoutes.Locate(WorldPosition(bot)),\n'
+                                                 '                                       sContinentRoutes.Locate(route.destination)) &&'),
+     'if (bot->GetMapId() != route.destination.GetMapId() &&'),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-continent-routes-') as temporary:
