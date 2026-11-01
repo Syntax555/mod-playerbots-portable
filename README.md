@@ -29,8 +29,9 @@ historical rules, rather than a complete recreation of each earlier expansion.
   dungeons. Player-led groups use Dungeon Clear and native Raid Clear tactics.
   Autonomous routes require ordinary travel and supported event controllers;
   selected encounter shortcuts are guarded.
-- **Earned world activity:** personal-era battlegrounds, ordinary auction
-  trading, outdoor events and native quest-triggered world buffs.
+- **Earned world activity:** continent travel by ship, zeppelin, portal and the
+  bots' own teleports within their earned era, personal-era battlegrounds,
+  ordinary auction trading, outdoor events and native quest-triggered world buffs.
 - **Optional client interfaces:** DragonUI, Questie and Zygor reuse their native
   windows, quest display and guide/gear systems with the character's own data.
   See [addon installation and compatibility](docs/addons.md).

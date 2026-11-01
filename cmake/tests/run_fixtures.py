@@ -56,6 +56,7 @@ GAMEPLAY = (
     "TestBoreanTundra",
     "TestHunterPetTaming",
     "TestHunterTamingLessons",
+    "TestContinentRoutes",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -73,11 +74,13 @@ MODULE_FIXTURES = {
         "TestPlayerbotUpstreamFixes", "TestCorpseRecovery", "TestBotAccountDeletion", "TestEquipmentScoring",
         "TestHunterPetTaming",
         "TestHunterTamingLessons",
+        "TestContinentRoutes",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
         "TestEraWorldContent",
         "TestBoreanTundra",
+        "TestContinentRoutes",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",

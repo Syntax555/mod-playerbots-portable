@@ -98,6 +98,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Ordinary paid training / autonomous talent allocation | Enabled; SelfBot and controlled altbot points remain owner controlled |
 | Autonomous vendor, repair, training, supply and bag visits | Enabled; paid with the bot's own gold |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
+| Travel between continents by ship, zeppelin, portal and the bot's own teleports | Enabled; faction territory and each bot's earned era apply |
 | Automatic use of earned loot upgrades | Enabled |
 | Equipment upgrades / other useful group loot | Need / Greed, subject to native loot eligibility |
 | Teleport recovery and free summon support | Disabled |
@@ -134,6 +135,34 @@ range. Reopen the conversation after a following bot catches up. Learning a
 point does not start a flight. Bots fly only routes whose flight points they have
 discovered, from a flight master within normal interaction range; a following bot
 without the route stays behind and says so.
+
+### Continent travel
+
+`Playerbots.ContinentTravel = 1` lets bots change between the Eastern Kingdoms,
+Kalimdor, Outland and Northrend. A bot plans the shortest estimated route over
+the ships, zeppelins, portals and teleporting area triggers of the world data,
+walks to each departure and takes a discovered flight when that is quicker.
+It waits at the dock or tower, steps aboard the docked transport and leaves at
+its destination stop. Portals and area triggers such as the Dark Portal are
+used in person, through the server's normal checks. A bot also uses its own
+trainer-taught teleport, such as a mage's city teleport with its rune, or its
+hearthstone, when that saves clearly more time than the reagent or cooldown
+costs.
+
+Links that start or end in the other faction's territory, or whose portal is
+hostile to the bot, are skipped. Each arrival must be open to the bot's own
+earned era: Outland needs earned TBC, except for blood elves and draenei in
+their starting zones, and Northrend needs earned Wrath. A link that fails is
+avoided for 30 minutes.
+
+Random bots leave a map that has no inn or camp for their level, such as the
+blood elf and draenei starting islands once they outgrow them, and travel to
+an inn on another map. `Playerbots.RpgStatusProbWeight.TravelRoute = 5` adds an
+occasional move to another map whose zones also suit the bot. Companions whose
+player or SelfBot master is on another continent, or more than 1,500 yards away
+on the same one, travel the same way; `stay` keeps them in place. Bots do not
+open mage portals for others on their own; a player can ask a mage companion to
+`cast` a portal it knows, with its own rune.
 
 Bots use the same roll policy with ordinary players and SelfBot masters.
 `Playerbots.LootNeedRollLevel = 2` permits Need for appropriate equipment
