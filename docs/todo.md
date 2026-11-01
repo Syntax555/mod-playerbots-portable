@@ -52,6 +52,11 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ### Bots, talents and client interfaces
 
+- [ ] Validate [hunter companion acquisition](combat-profiles.md#hunter-companions)
+  in game for all six racial taming-lesson chains, including ordinary quest
+  acceptance, owned rods, interrupted channels, native completion and turn-in.
+  Check first-pet taming, missing paths, other characters' targets, death,
+  feeding and relogs; preserve current, dismissed and stabled pets.
 - [ ] Validate repeated deaths and long corpse runs outside and in dungeons,
   including reduced AI activity, controlled altbots and SelfBots. Check normal
   spirit release, group resurrection waits, reclaim limits and missing routes.
@@ -178,8 +183,8 @@ fixtures pass. Use native core/module functions before adding replacements.
   restored quest, escort and dungeon scripts; and the matching client pack.
 - [ ] Evaluate `IndividualProgression.VanillaHunterPets` and
   `IndividualProgression.WarlockDemonTrainers` before enabling them: existing
-  pets lose untaught abilities, and bots need ordinary taming and grimoire
-  purchases.
+  pets lose untaught abilities, and bots still need historical pet-ability
+  acquisition from additional beasts and ordinary grimoire purchases.
 - [ ] Retain the rated-arena team-era filter while level-70 teams of different
   earned eras can share a native bracket after a TBC-to-Wrath transition.
 - [ ] Resolve historically uncertain XP rules before implementation: Vanilla

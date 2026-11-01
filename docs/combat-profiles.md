@@ -90,3 +90,30 @@ paid respecs and each character's earned era remain authoritative. See
 Source fixtures cover profile selection, native strategy mappings, ownership,
 equipment gates, slot scoring, weapon pairs and era spell-hit talents. Live coverage across every class, era and gear combination
 remains [outstanding](todo.md#gameplay-validation).
+
+## Hunter companions
+
+Under natural progression, solo random hunters without an owned companion use
+their racial taming-lesson quests and owned rods, then finish Training the Beast
+through ordinary quest acceptance and turn-in. They walk to the actual beasts
+and questgivers; the native scripts and rewards supply completion and spells.
+Each character must meet its own quest, race, class, level and era conditions.
+Temporary lesson charms expire normally before the next lesson.
+Quest travel uses spawns on the current map; missing routes can stop acquisition.
+
+Once Tame Beast, Feed Pet and Revive Pet are learned, the bot can tame a visible
+wild beast. The target must meet the hunter's own level, tameability, visibility
+and native spell checks.
+An out-of-range target requires a complete navigation-mesh path; the bot walks
+into range and channels the ordinary spell. Other characters' pets and creatures
+already fighting or tagged for loot are left alone.
+
+Active, dead, dismissed, temporarily unsummoned and stabled pets prevent a new
+acquisition. Controlled altbots and SelfBots retain their owner's pet choices.
+The existing pet strategy handles calling, feeding, healing and resurrection
+through learned spells; feeding consumes suitable owned food.
+
+Hunter pet abilities still follow Wrath training. The historical training option
+remains disabled: learning additional Vanilla abilities from other beasts is
+not part of first-pet acquisition. Full class-quest and live taming coverage
+remains on the [validation checklist](todo.md#gameplay-validation).

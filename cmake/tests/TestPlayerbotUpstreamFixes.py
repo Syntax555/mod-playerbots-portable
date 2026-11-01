@@ -6,7 +6,8 @@ freed at once, as AzerothCore frees unsaved items, and the fixture runs under
 AddressSanitizer. Ignored quest configuration reloads use the native parser and
 quest selection gates. Weapon stones run through the real stone choice and imbue
 action, so a shield is never mistaken for a polearm. Factory refresh checks
-talent persistence and role gear without allowing natural-mode grants. Mutation
+talent persistence and role gear without allowing natural-mode grants. Combat
+wake reactions preserve active casts and channels, including taming aggro. Mutation
 checks remove the guards or restore the previous item loop and confirm that the
 fixture rejects them.
 """
@@ -1024,3 +1025,203 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-refresh-') as tempor
         if not build_refresh(temporary, mutated).returncode:
             raise SystemExit(f'Refresh fixture did not reject: {label}')
         print(f'Refresh mutation rejected: {label}')
+
+
+# Combat reactions run before the main cast delay, so their wake action must
+# retain the native cast/channel decision rather than clear that delay on aggro.
+state_actions = (module / 'Ai/Base/Actions/BotStateActions.cpp').read_text()
+state_triggers = (module / 'Ai/Base/Trigger/BotStateTriggers.cpp').read_text()
+state_trigger_header = (module / 'Ai/Base/Trigger/BotStateTriggers.h').read_text()
+base_source = (module / 'Bot/Engine/PlayerbotAIBase.cpp').read_text()
+unit_source = (core / 'src/server/game/Entities/Unit/Unit.cpp').read_text()
+unit_header = (core / 'src/server/game/Entities/Unit/Unit.h').read_text()
+assert ('IsNonMeleeSpellCast(bool withDelayed, bool skipChanneled = false, bool skipAutorepeat = false,'
+        in unit_header)
+update_ai = function(ai_source, 'void PlayerbotAI::UpdateAI(')
+assert update_ai.index('UpdateAIReaction(') < update_ai.index('if (!CanUpdateAI())')
+reaction_strategy = (module / 'Ai/Base/Strategy/ReactionStrategy.cpp').read_text()
+assert '"combat start"' in reaction_strategy and '"wake on combat start"' in reaction_strategy
+spell_source = (core / 'src/server/game/Spells/Spell.cpp').read_text()
+channel_start = function(spell_source, '    if (m_spellInfo->IsChanneled())\n    {\n        int32 duration')
+assert 'm_spellState = SPELL_STATE_CASTING;' in channel_start
+
+wake_parts = {
+    'cast': function(unit_source, 'bool Unit::IsNonMeleeSpellCast('),
+    'wait': function(ai_source, 'void PlayerbotAI::WaitForSpellCast('),
+    'delay': '\n'.join(function(base_source, signature) for signature in (
+        'void PlayerbotAIBase::SetNextCheckDelay(', 'bool PlayerbotAIBase::CanUpdateAI()',
+        'void PlayerbotAIBase::ResetActionDuration()')),
+    'useful': function(state_actions, 'bool WakeOnCombatStartAction::isUseful()'),
+    'execute': function(state_actions, 'bool WakeOnCombatStartAction::Execute('),
+    'triggerclass': function(state_trigger_header, 'class CombatStartTrigger :') + ';',
+    'trigger': function(state_triggers, 'bool CombatStartTrigger::IsActive()'),
+}
+wake_source = r'''
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <vector>
+using uint32 = std::uint32_t;
+using int32 = std::int32_t;
+enum SpellState { SPELL_STATE_PREPARING, SPELL_STATE_CASTING, SPELL_STATE_DELAYED, SPELL_STATE_FINISHED };
+enum CurrentSpellTypes { CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL, CURRENT_AUTOREPEAT_SPELL };
+enum BotState { BOT_STATE_NON_COMBAT, BOT_STATE_COMBAT, BOT_STATE_DEAD };
+constexpr int SPELL_ATTR2_DO_NOT_RESET_COMBAT_TIMERS = 1, SPELLMOD_DURATION = 2;
+struct SpellInfo {
+    uint32 Id = 1515;
+    bool channel = true;
+    bool HasAttribute(int attribute) const { assert(attribute == SPELL_ATTR2_DO_NOT_RESET_COMBAT_TIMERS); return false; }
+    bool IsChanneled() const { return channel; }
+    int32 GetDuration() const { return 20000; }
+};
+struct Spell {
+    SpellState state = SPELL_STATE_CASTING;
+    SpellInfo info;
+    SpellInfo const* m_spellInfo = &info;
+    SpellState getState() const { return state; }
+    uint32 GetCastTime() const { return info.channel ? 0 : 1500; }
+    SpellInfo const* GetSpellInfo() const { return m_spellInfo; }
+};
+struct Unit {
+    std::array<Spell*, 3> m_currentSpells{};
+    bool IsNonMeleeSpellCast(bool withDelayed, bool skipChanneled = false, bool skipAutorepeat = false,
+                            bool isAutoshoot = false, bool skipInstant = true) const;
+};
+struct Player : Unit {
+    void ApplySpellMod(uint32 id, int mod, int32&) { assert(id == 1515 && mod == SPELLMOD_DURATION); }
+};
+struct Config { uint32 ReactDelay = 100; } sPlayerbotAIConfig;
+struct PlayerbotAIBase {
+    uint32 nextAICheckDelay = 0;
+    void SetNextCheckDelay(uint32 const delay);
+    bool CanUpdateAI();
+    void ResetActionDuration();
+    bool IsActionDurationActive() const { return nextAICheckDelay > 0; }
+};
+struct PlayerbotAI : PlayerbotAIBase {
+    Player* bot;
+    BotState state = BOT_STATE_NON_COMBAT;
+    std::vector<int> attackers;
+    explicit PlayerbotAI(Player* bot) : bot(bot) {}
+    BotState GetState() const { return state; }
+    void WaitForSpellCast(Spell*);
+};
+struct Event {};
+struct WakeOnCombatStartAction {
+    PlayerbotAI* botAI;
+    Player* bot;
+    bool isUseful();
+    bool Execute(Event);
+};
+struct Trigger {
+    PlayerbotAI* botAI;
+    Player* bot;
+    Trigger(PlayerbotAI* ai, std::string const&) : botAI(ai), bot(ai->bot) {}
+    virtual ~Trigger() = default;
+    virtual bool IsActive() { return false; }
+};
+#define AI_VALUE(type, name) (botAI->attackers)
+TRIGGERCLASS
+CAST
+WAIT
+DELAY
+USEFUL
+EXECUTE
+TRIGGER
+int main() {
+    Player bot; PlayerbotAI ai(&bot); WakeOnCombatStartAction wake{&ai, &bot};
+    // Ordinary eating/drinking and travel delays still wake immediately on aggro.
+    for (uint32 delay : {500u, 15000u}) {
+        ai.SetNextCheckDelay(delay);
+        assert(wake.isUseful() && wake.Execute(Event{}) && ai.CanUpdateAI());
+    }
+    for (auto slot : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL}) {
+        Spell spell; spell.info.channel = slot == CURRENT_CHANNELED_SPELL;
+        bot.m_currentSpells[slot] = &spell;
+        for (auto state : {SPELL_STATE_PREPARING, SPELL_STATE_CASTING, SPELL_STATE_DELAYED}) {
+            spell.state = state;
+            ai.WaitForSpellCast(&spell);
+            uint32 delay = ai.nextAICheckDelay;
+            assert(delay == (spell.info.channel ? 20100u : 1600u));
+            // A queued wake is also rejected if a new cast starts before execution.
+            for (int aggro = 0; aggro < 3; ++aggro)
+                assert(!wake.isUseful() && !wake.Execute(Event{}) && ai.nextAICheckDelay == delay);
+        }
+        // The native channel ending or being interrupted allows normal combat wake.
+        spell.state = SPELL_STATE_FINISHED;
+        assert(wake.isUseful() && wake.Execute(Event{}) && ai.CanUpdateAI());
+        bot.m_currentSpells[slot] = nullptr;
+    }
+    {
+        // Auto Shot is repeat fire, not an active cast that should block the reaction.
+        Spell autorepeat; bot.m_currentSpells[CURRENT_AUTOREPEAT_SPELL] = &autorepeat;
+        CombatStartTrigger trigger(&ai); ai.attackers.push_back(1);
+        ai.SetNextCheckDelay(500);
+        assert(trigger.IsActive() && wake.isUseful() && wake.Execute(Event{}) && ai.CanUpdateAI());
+        assert(!trigger.IsActive()); ai.attackers.clear();
+        bot.m_currentSpells[CURRENT_AUTOREPEAT_SPELL] = nullptr;
+    }
+    ai.SetNextCheckDelay(500); ai.state = BOT_STATE_COMBAT;
+    assert(!wake.isUseful() && !wake.Execute(Event{}) && ai.nextAICheckDelay == 500);
+    ai.state = BOT_STATE_NON_COMBAT; ai.ResetActionDuration();
+    assert(!wake.isUseful() && !wake.Execute(Event{}));
+    {
+        // An edge discovered during taming must remain pending until the native
+        // channel completes or is interrupted; it then wakes on the next tick.
+        CombatStartTrigger trigger(&ai);
+        assert(!trigger.IsActive());
+        Spell tame; bot.m_currentSpells[CURRENT_CHANNELED_SPELL] = &tame;
+        ai.WaitForSpellCast(&tame); ai.attackers.push_back(1);
+        for (int tick = 0; tick < 3; ++tick)
+            assert(!trigger.IsActive() && !wake.isUseful());
+        tame.state = SPELL_STATE_FINISHED;
+        assert(trigger.IsActive() && wake.isUseful() && wake.Execute(Event{}) && ai.CanUpdateAI());
+        assert(!trigger.IsActive());
+        bot.m_currentSpells[CURRENT_CHANNELED_SPELL] = nullptr;
+        ai.attackers.clear(); assert(!trigger.IsActive());
+        ai.SetNextCheckDelay(5000); ai.attackers.push_back(2);
+        assert(trigger.IsActive() && wake.Execute(Event{}) && ai.CanUpdateAI());
+        assert(!trigger.IsActive());
+    }
+    std::cout << "Combat wake: active native casts/channels retain delay, queued wakes revalidate, normal wake resumes\n";
+}
+'''
+
+
+def build_wake(directory, parts):
+    text = wake_source
+    for key, body in parts.items():
+        text = text.replace(key.upper() + '\n', body + '\n')
+    source_path = directory / 'wake.cpp'
+    source_path.write_text(text)
+    executable = directory / 'wake'
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    str(source_path), '-o', str(executable)], check=True)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
+
+
+with tempfile.TemporaryDirectory(prefix='portable-playerbot-combat-wake-') as temporary:
+    temporary = Path(temporary)
+    result = build_wake(temporary, wake_parts)
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Combat wake fixture failed (exit {result.returncode})')
+    for label, part, old, new in (
+        ('active cast delay reset', 'useful', '!bot->IsNonMeleeSpellCast(true, false, true) &&', ''),
+        ('channel excluded from cast checks', 'useful', 'IsNonMeleeSpellCast(true, false, true)',
+         'IsNonMeleeSpellCast(true, true, true)'),
+        ('autorepeat blocks combat wake', 'useful', 'IsNonMeleeSpellCast(true, false, true)',
+         'IsNonMeleeSpellCast(true, false, false)'),
+        ('queued wake skips revalidation', 'execute', '    if (!isUseful())\n        return false;\n', ''),
+        ('combat-start edge consumed during a channel', 'trigger',
+         '    if (bot->IsNonMeleeSpellCast(true, false, true))\n        return false;\n', ''),
+    ):
+        mutated = dict(wake_parts)
+        mutated[part] = mutated[part].replace(old, new)
+        assert mutated[part] != wake_parts[part], f'{label} mutation was not applied'
+        result = build_wake(temporary, mutated)
+        if result.returncode == 0 or 'Assertion' not in result.stderr:
+            raise SystemExit(f'Combat wake fixture did not reject: {label}')
+        print(f'Combat wake mutation rejected: {label}')
