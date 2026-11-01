@@ -54,6 +54,8 @@ GAMEPLAY = (
     "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestEraWorldContent", "TestMutualVisibility",
     "TestQuestieEraQuests",
     "TestBoreanTundra",
+    "TestHunterPetTaming",
+    "TestHunterTamingLessons",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -69,6 +71,8 @@ MODULE_FIXTURES = {
     "mod-playerbots": (
         "TestEarnedProgression", "TestNaturalMovement", "TestCombatProfiles", "TestRaidClearEarnedPlay",
         "TestPlayerbotUpstreamFixes", "TestCorpseRecovery", "TestBotAccountDeletion", "TestEquipmentScoring",
+        "TestHunterPetTaming",
+        "TestHunterTamingLessons",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",

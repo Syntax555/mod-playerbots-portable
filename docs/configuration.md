@@ -65,7 +65,7 @@ See the [update guide](updating.md) for manual installation and offline startup.
 | XP, drops, reputation and honor | Normal 1.0 rates |
 | Skills and professions | Trained and improved normally; two primary professions |
 | Talent points | Normal 1.0 rate; historical trees selected by earned era |
-| Hunter pet and warlock demon abilities | Wrath training; Vanilla taming and grimoire training are disabled |
+| Hunter pet and warlock demon abilities | Wrath training; historical beast-ability learning and grimoire training are disabled |
 | New dual-spec purchases | Level 80 in individual mode |
 | Ordinary respecs | Paid trainer path and normal cost history |
 | Dungeon Finder | Disabled |
@@ -235,8 +235,9 @@ profession and raid is not guaranteed. Some upstream encounter actions retain
 special movement or combat shortcuts; the earned-play guards do not cover every
 AI action. Raid Clear's Onyxia tactics are implemented for the native and
 restored Vanilla encounters, but a full clear has not been verified in game;
-see [raid support](bot-dungeons.md#raids). Hunter bots
-do not tame pets, and warlock bots gain Soul Shards only from Drain Soul kills.
+see [raid support](bot-dungeons.md#raids). Solo random hunters with learned
+Tame Beast can [acquire their first pet](combat-profiles.md#hunter-companions);
+warlock bots gain Soul Shards only from Drain Soul kills.
 
 Source fixtures, launcher checks and package verification cover the implemented
 policies and release tooling. Full compilation verifies integration. These

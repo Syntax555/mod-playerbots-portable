@@ -36,7 +36,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "a26ae2e91642580472cf1cdab9de9cdc8adc4e0e",
+      "revision": "e42a915d74b1135e189b430452e78eb8c0b32fdd",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "08e5a03f99b648745b840707327f7c803ed51aa1"
@@ -62,7 +62,8 @@
         "mod-playerbots-weapon-stone-targets": "0cbd354582822103b07cf3f10526e029469a41d9",
         "mod-playerbots-refresh-talents": "f7258883442d6a49b255451601a5f81161477367",
         "mod-playerbots-refresh-role-equipment": "10beb1e82bbaeedb0b3e30ba02ad4559f302357b",
-        "mod-playerbots-automatic-talent-ownership": "a26ae2e91642580472cf1cdab9de9cdc8adc4e0e"
+        "mod-playerbots-automatic-talent-ownership": "a26ae2e91642580472cf1cdab9de9cdc8adc4e0e",
+        "mod-playerbots-earned-hunter-pets": "43c3edc0f8ec55c6a01f56dee21dc597e6e41f0b"
       }
     },
     {
