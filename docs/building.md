@@ -157,6 +157,11 @@ would skip their assertions. The checks include launcher behavior on Windows,
 native gameplay fixtures, generated MPQ mechanics and locales, addon integration,
 package inventories, dependency notices and update recovery.
 
+Gameplay checks run in six parallel shards, each with a 30-minute job limit.
+Linux dependency setup uses Ubuntu's HTTPS mirrors, bounded network retries
+and an eight-minute step limit. Every check must pass before a manual server
+build starts; Windows server compilation has a separate six-hour limit.
+
 ## Client cache changes
 
 When changing client-cached server query data, such as quest or item templates,

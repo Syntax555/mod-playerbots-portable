@@ -25,29 +25,34 @@ class GameplayShardsTests(unittest.TestCase):
             self.assertEqual(0, runner.main(["gameplay"]))
         self.assertEqual(list(runner.GAMEPLAY), [Path(call.args[0][1]).stem for call in run.call_args_list])
 
-    def test_four_shards_are_stable_disjoint_and_exhaustive(self):
-        shards = [runner.gameplay_fixtures(index, 4) for index in range(4)]
-        self.assertTrue(all(shards))
-        flattened = [name for shard in shards for name in shard]
-        self.assertCountEqual(runner.GAMEPLAY, flattened)
-        self.assertEqual(len(flattened), len(set(flattened)))
-        self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
-        self.assertEqual(shards, [runner.gameplay_fixtures(index, 4) for index in range(4)])
-        for shard in shards:
-            positions = [runner.GAMEPLAY.index(name) for name in shard]
-            self.assertEqual(sorted(positions), positions)
+    def test_four_and_six_shards_are_stable_disjoint_and_exhaustive(self):
+        for count in (4, 6):
+            with self.subTest(count=count):
+                shards = [runner.gameplay_fixtures(index, count) for index in range(count)]
+                self.assertTrue(all(shards))
+                flattened = [name for shard in shards for name in shard]
+                self.assertCountEqual(runner.GAMEPLAY, flattened)
+                self.assertEqual(len(flattened), len(set(flattened)))
+                self.assertLessEqual(max(map(len, shards)) - min(map(len, shards)), 1)
+                self.assertEqual(shards, [runner.gameplay_fixtures(index, count) for index in range(count)])
+                for shard in shards:
+                    positions = [runner.GAMEPLAY.index(name) for name in shard]
+                    self.assertEqual(sorted(positions), positions)
 
     def test_matrix_options_execute_only_the_selected_shard(self):
-        with (patch.object(runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run,
-              redirect_stdout(io.StringIO()) as output):
-            self.assertEqual(0, runner.main(["gameplay", "--shard-index", "2", "--shard-count", "4"]))
-        self.assertEqual(list(runner.gameplay_fixtures(2, 4)),
-                         [Path(call.args[0][1]).stem for call in run.call_args_list])
-        self.assertIn("Gameplay shard 3/4", output.getvalue())
-        self.assertIn("fixtures passed in", output.getvalue())
+        for count, index in ((4, 2), (6, 5)):
+            with (self.subTest(count=count, index=index),
+                  patch.object(runner.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run,
+                  redirect_stdout(io.StringIO()) as output):
+                self.assertEqual(0, runner.main(["gameplay", "--shard-index", str(index),
+                                                 "--shard-count", str(count)]))
+                self.assertEqual(list(runner.gameplay_fixtures(index, count)),
+                                 [Path(call.args[0][1]).stem for call in run.call_args_list])
+                self.assertIn(f"Gameplay shard {index + 1}/{count}", output.getvalue())
+                self.assertIn("fixtures passed in", output.getvalue())
 
     def test_invalid_and_empty_shards_cannot_succeed(self):
-        for index, count in ((0, 0), (0, -1), (-1, 4), (4, 4), (0, len(runner.GAMEPLAY) + 1)):
+        for index, count in ((0, 0), (0, -1), (-1, 4), (4, 4), (6, 6), (0, len(runner.GAMEPLAY) + 1)):
             with self.subTest(index=index, count=count):
                 with (patch.object(runner.subprocess, "run") as run, redirect_stderr(io.StringIO()),
                       self.assertRaises(SystemExit) as error):
