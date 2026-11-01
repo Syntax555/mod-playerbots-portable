@@ -8,7 +8,9 @@ ZIP. The manifest must carry the release signature the launcher trusts, and each
 downloaded file must match its SHA-256 hash before installation. An unsigned or
 differently signed manifest is refused and the installed release starts.
 
-The launcher stages the update, replaces managed server files and restarts itself.
+The launcher stages the update. A verified update helper waits for the launcher
+to exit before replacing managed server files and restarting it, so Windows can
+release the running executable's file lock.
 SQL migrations run during normal database/server startup, and managed
 configuration defaults merge where the previous default is still in use.
 Keep a stopped-realm backup before updating an established realm: file rollback
