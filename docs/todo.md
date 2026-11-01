@@ -197,7 +197,6 @@ fixtures pass. Use native core/module functions before adding replacements.
   profession bag must remain equipped while a normal bag upgrades. Cover all
   four slots, full bags, a new bag stored inside its intended replacement and
   no vendor bag purchase while a won or bid-on auction bag awaits collection.
-- [ ] Decide whether unsold-stock memory should survive server restarts.
 
 ## Launcher and updates
 
