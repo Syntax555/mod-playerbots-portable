@@ -349,19 +349,23 @@ int main(){
  Player controlled;controlled.ai=&ownedAI;
  Player clientRandom;clientRandom.session.headless=false;
  Player random;random.ai=&autonomousAI;
- for(Player* player:{&human,&self,&alt,&controlled,&clientRandom}){
-  AutoMaintenanceOnLevelupAction action{player,player->ai?player->ai:&autonomousAI};
-  action.AutoPickTalents();assert(player->builds==0&&player->petCalls==0&&player->resets==0);
+ for(bool natural:{true,false}){
+  sPlayerbotAIConfig.naturalProgression=natural;
+  for(Player* player:{&human,&self,&alt,&controlled,&clientRandom}){
+   AutoMaintenanceOnLevelupAction action{player,player->ai?player->ai:&autonomousAI};
+   action.AutoPickTalents();assert(player->builds==0&&player->petCalls==0&&player->resets==0);
+  }
  }
+ sPlayerbotAIConfig.naturalProgression=true;
  AutoMaintenanceOnLevelupAction action{&random,&autonomousAI};
  action.AutoPickTalents();assert(random.builds==1&&random.petCalls==1&&random.resets==0);
  random.freeTalents=0;action.AutoPickTalents();assert(random.builds==1);
  random.freeTalents=1;sPlayerbotAIConfig.AutoPickTalents=false;action.AutoPickTalents();assert(random.builds==1);
  sPlayerbotAIConfig.naturalProgression=false;
  AutoMaintenanceOnLevelupAction ownerAction{&alt,&ownedAI};
- ownerAction.AutoPickTalents();assert(alt.builds==1&&alt.petCalls==1&&alt.resets==0);
+ ownerAction.AutoPickTalents();assert(alt.builds==0&&alt.petCalls==0&&alt.resets==0);
  sPlayerbotAIConfig.AutoPickTalentsForPlayerControlledBots=false;
- ownerAction.AutoPickTalents();assert(alt.builds==1);
+ ownerAction.AutoPickTalents();assert(alt.builds==0);
  sPlayerbotAIConfig.AutoPickTalents=true;action.AutoPickTalents();assert(random.builds==2&&random.resets==1);
 }
 '''
@@ -384,9 +388,8 @@ with tempfile.TemporaryDirectory(prefix='portable-earned-talents-') as temporary
     subprocess.run([str(executable)], check=True, timeout=TIMEOUT)
     reject_mutants(work, (
         ('controlled character auto talents', 'regression.cpp',
-         ('if (sPlayerbotAIConfig.naturalProgression &&\n'
-         '        (!isRandomBot || !bot->GetSession()->IsHeadless() || botAI->HasGameClientMaster()))\n'
-         '        return;'), ''),
+         ('if (!isRandomBot || !bot->GetSession() || !bot->GetSession()->IsHeadless() || botAI->HasGameClientMaster())\n'
+         '        return;'), 'if (isRandomBot && false)\n        return;'),
         ('player on a random account auto talents', 'regression.cpp', '!bot->GetSession()->IsHeadless() || ', ''),
         ('random companion with a player master auto talents', 'regression.cpp',
          ' || botAI->HasGameClientMaster()', ''),

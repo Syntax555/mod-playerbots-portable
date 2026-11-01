@@ -53,6 +53,7 @@ GAMEPLAY = (
     # Appended so existing fixtures keep their shard.
     "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestEraWorldContent", "TestMutualVisibility",
     "TestQuestieEraQuests",
+    "TestBoreanTundra",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -72,6 +73,7 @@ MODULE_FIXTURES = {
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
         "TestEraWorldContent",
+        "TestBoreanTundra",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",

@@ -76,7 +76,8 @@ per character, and the included Questie Bridge reports that state to Questie:
   stays tracked.
 - Questgivers that are hidden from the character, by the era's visibility
   conditions or by Individual Progression's scripts, no longer show quest
-  markers in its current zone.
+  markers in its current zone. Restrictions from the server's questgiver
+  templates also apply on continent and world maps.
 - Both follow a new tier within a few seconds; no `/reload` is needed.
 
 Each character gets its own snapshot, so characters of different tiers on one
@@ -84,18 +85,29 @@ account or realm see different quests. The bridge reads the server's live
 checks, so Questie matches what the character can accept.
 
 `/qserver quest <quest ID>` shows whether the server reports a quest as
-disabled for the character, and `/qserver giver <NPC ID>` lists observed spawns
-that offer it nothing. In `configs/modules/QuestieBridge.conf`,
+disabled for the character, and `/qserver giver <NPC ID>` shows template
+restrictions and observed spawns that offer it nothing. In
+`configs/modules/QuestieBridge.conf`,
 `QuestieBridge.QuestConditions = 0` turns the quest reports off and
-`QuestieBridge.Questgivers = 0` the questgiver reports.
+`QuestieBridge.Questgivers = 0` the negative questgiver observations.
+`QuestieBridge.QuestgiverTemplates = 0` disables global template restrictions.
 
 Questie's database still supplies locations, prerequisites and rewards: quest
 XP follows its normal rate reports, not era XP changes, and quests it does not
 know cannot appear. Quests Individual Progression restores, such as Vanilla's
-battleground turn-ins, keep only the game's own quest markers. Questgivers are observed only while loaded in the current
-zone, at most 64 unavailable spawns per snapshot; other givers keep their usual
-markers. Trainer and vendor markers are unaffected. If the closed quests would
-not fit into one snapshot, none are sent and Questie shows its usual quests.
+battleground turn-ins, keep only the game's own quest markers. Server template
+restrictions apply on zone, continent and world maps. Loaded questgivers in the
+current zone can override those restrictions only while present at the client's
+viewing distance and passing its visibility checks. Hidden era questgivers remain
+negative observations. At most 64 observations fit in one snapshot; incomplete
+observations or template catalogs are withheld. Trainer and vendor markers are
+unaffected. If the closed quests would not fit into one snapshot, none are sent
+and Questie shows its usual quests.
+An unavailable giver does not hide a daily or weekly quest offered by another
+valid starter.
+
+Questie Bridge and Questie use matching protocol 19 builds. A version mismatch
+restores Questie's static behavior; `/qserver` reports the expected version.
 
 ## Access and compatibility
 
@@ -127,7 +139,7 @@ two seconds and one snapshot request per bot per second. Messages respect the
 ## Source and verification
 
 The [manifest](../versions.lock.json) pins the Questie, MultiBot Bridge and
-Questie Bridge forks. The [upstream integration](https://github.com/Aldori15/Questie/commit/4c7df0caf0c86ddacf8ae31cb7489189c6d811ce)
+Questie Bridge forks. The [upstream integration](https://github.com/Aldori15/Questie/commit/f1b5c606f582c7e588646fde8894919c68eedac5)
 provides progress, roster refresh, identity checks and bindings without a
 separate client implementation. Fork source, installation tooling and update
 instructions are linked in the [Questie README](https://github.com/Syntax555/Questie/tree/335).

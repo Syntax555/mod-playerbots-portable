@@ -1,13 +1,14 @@
-"""Check upstream Playerbots crash, chat, RPG, ignored-quest and weapon-stone guards.
+"""Check upstream Playerbots crash, chat, RPG, ignored-quest, weapon and refresh guards.
 
 The production chat hooks, queued command dispatch, RPG quest-giver search and
 smart item destruction run against small engine stubs. Destroyed items are
 freed at once, as AzerothCore frees unsaved items, and the fixture runs under
 AddressSanitizer. Ignored quest configuration reloads use the native parser and
 quest selection gates. Weapon stones run through the real stone choice and imbue
-action, so a shield is never mistaken for a polearm. Mutation checks remove the
-guards or restore the previous item loop and confirm that the fixture rejects
-them.
+action, so a shield is never mistaken for a polearm. Factory refresh checks
+talent persistence and role gear without allowing natural-mode grants. Mutation
+checks remove the guards or restore the previous item loop and confirm that the
+fixture rejects them.
 """
 
 import argparse
@@ -767,3 +768,259 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-weapon-stones-') as 
     if not build_stones(temporary, mutated).returncode:
         raise SystemExit('Weapon stones fixture did not reject: stone cast on a shield')
     print('Weapon stones mutation rejected: stone cast on a shield')
+
+
+# Refresh remains an opt-out provisioning path: the whole native function must
+# return before even reading bot state while natural progression is enabled.
+factory = (module / 'Bot/Factory/PlayerbotFactory.cpp').read_text()
+automatic_talents = function(factory, 'uint32 PlayerbotFactory::InitTalentsTree(')
+# Keep the native ownership gate before replacing only the allocation engine.
+automatic_talents = (automatic_talents[:automatic_talents.index('    uint32 specTab;')]
+                     + '    talents.emplace_back(increment, use_template, reset);\n    return 1;\n}')
+pet_talents = function(factory, 'void PlayerbotFactory::InitPetTalents()')
+pet_talents = pet_talents[:pet_talents.index('    Pet* pet =')] + '    ++pets;\n}'
+refresh_parts = {
+    'native': '\n'.join(function(source, signature) + ';' for source, signature in (
+        ((core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text(), 'enum ItemModType'),
+        ((core / 'src/server/game/Entities/Item/ItemTemplate.h').read_text(), 'struct _ItemStat'),
+        ((core / 'src/server/game/Entities/Item/Item.h').read_text(), 'enum EnchantmentSlot : uint8'),
+        ((core / 'src/server/game/Entities/Player/Player.h').read_text(), 'enum EquipmentSlots'),
+        ((core / 'src/server/shared/DataStores/DBCEnums.h').read_text(), 'enum ItemEnchantmentType'),
+        ((core / 'src/server/shared/DataStores/DBCStructure.h').read_text(), 'struct SpellItemEnchantmentEntry'),
+        ((core / 'src/server/shared/DataStores/DBCStructure.h').read_text(), 'struct ItemRandomSuffixEntry'),
+    )),
+    'stats': function(factory, 'static void AddRoleStats('),
+    'role': function(factory, 'static bool GearFitsSpecRole('),
+    'ownership': function(factory, 'static bool IsAutonomousRandomBot('),
+    'identity': '\n'.join(function(text, signature) for text, signature in (
+        (ai_source, 'bool IsRealPlayer(Player* player)'),
+        (ai_source, 'bool IsSelfBot(Player* player)'),
+        (ai_source, 'bool PlayerbotAI::HasGameClientMaster()'),
+        ((module / 'Bot/RandomPlayerbotMgr.cpp').read_text(), 'bool RandomPlayerbotMgr::IsRandomBot(Player* bot)'),
+    )),
+    'talents': automatic_talents,
+    'pet': pet_talents,
+    'refresh': function(factory, 'void PlayerbotFactory::Refresh()'),
+}
+refresh_source = r'''
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+#include <map>
+#include <string>
+#include <tuple>
+#include <vector>
+using uint8 = std::uint8_t; using uint32 = std::uint32_t; using int32 = std::int32_t;
+constexpr uint8 CLASS_DRUID=11, CLASS_PALADIN=2, CLASS_SHAMAN=7;
+constexpr uint32 MAX_ITEM_PROTO_STATS=10, MAX_SPELL_ITEM_ENCHANTMENT_EFFECTS=3, MAX_ITEM_ENCHANTMENT_EFFECTS=5;
+constexpr uint8 INVENTORY_SLOT_BAG_0=255;
+enum Powers { POWER_MANA };
+@@NATIVE@@
+struct ItemTemplate {
+    _ItemStat ItemStat[MAX_ITEM_PROTO_STATS]{};
+    uint32 StatsCount=0;
+};
+struct Item {
+    ItemTemplate proto;
+    std::map<uint32,uint32> enchants;
+    int32 property=0; uint32 factor=0;
+    ItemTemplate const* GetTemplate() const { return &proto; }
+    uint32 GetEnchantmentId(EnchantmentSlot slot) const {
+        auto it=enchants.find(slot); return it==enchants.end() ? 0 : it->second;
+    }
+    int32 GetItemRandomPropertyId() const { return property; }
+    uint32 GetItemSuffixFactor() const { return factor; }
+};
+template<class T> struct Store {
+    std::map<uint32,T> rows;
+    T const* LookupEntry(uint32 id) const { auto it=rows.find(id); return it==rows.end() ? nullptr : &it->second; }
+};
+Store<SpellItemEnchantmentEntry> sSpellItemEnchantmentStore;
+Store<ItemRandomSuffixEntry> sItemRandomSuffixStore;
+struct Session { bool headless=true; bool IsHeadless() const { return headless; } };
+struct Guid { uint32 id; uint32 GetCounter() const { return id; } };
+struct PlayerbotAI;
+struct Player {
+    uint8 cls=CLASS_DRUID; uint32 level=80, freePoints=1, spec=1, spent=41, money=17;
+    uint32 id=7;
+    bool caster=false, logged=true;
+    Session session;
+    PlayerbotAI* ai=nullptr;
+    std::map<uint8,Item*> gear;
+    uint8 getClass() const { return cls; }
+    uint32 GetLevel() const { return level; }
+    uint32 GetFreeTalentPoints() const { return freePoints; }
+    Session* GetSession() { return logged ? &session : nullptr; }
+    Guid GetGUID() const { return {id}; }
+    Item* GetItemByPos(uint8 bag,uint8 slot) const {
+        assert(bag==INVENTORY_SLOT_BAG_0); auto it=gear.find(slot); return it==gear.end() ? nullptr : it->second;
+    }
+    void DurabilityRepairAll(bool,float,bool) {}
+    bool isDead() const { return false; }
+    void ResurrectPlayer(float,bool) {}
+    uint32 GetMoney() const { return money; }
+    void SetMoney(uint32 value) { money=value; }
+};
+struct AiFactory {
+    static std::map<uint8,uint32> GetPlayerSpecTabs(Player* bot) { return {{0,bot->spent}}; }
+    static uint32 GetPlayerSpecTab(Player* bot) { return bot->spec; }
+};
+struct PlayerbotAI {
+    Player* master=nullptr;
+    Player* GetMaster() { return master; }
+    bool HasGameClientMaster();
+    static bool IsCaster(Player* bot,bool) { return bot->caster; }
+};
+#define GET_PLAYERBOT_AI(player) ((player) ? (player)->ai : nullptr)
+struct Config {
+    bool naturalProgression=true, EquipAndSpecPersistence=true, AutoPickTalents=true,
+        AutoPickTalentsForPlayerControlledBots=false, LimitTalentsExpansion=true;
+    uint32 EquipAndSpecPersistenceLevel=20, MinEnchantingBotLevel=80;
+} sPlayerbotAIConfig;
+struct RandomPlayerbotMgr {
+    std::map<Player*,uint32> marks;
+    bool IsRandomBot(Player* bot);
+    // GUID 7 is a current character on a configured random-bot account.
+    bool IsRandomBot(uint32 id) { return id==7; }
+    uint32 GetValue(Player* bot,char const*) { return marks[bot]; }
+    void SetValue(Player* bot,char const*,uint32 value) { marks[bot]=value; }
+} sRandomPlayerbotMgr;
+uint32 urand(uint32 lower,uint32) { return lower; }
+#define LOG_INFO(...) ((void)0)
+struct PlayerbotFactory {
+    Player* bot; uint32 level=80; int grants=0, equipment=0, pets=0;
+    std::vector<std::tuple<bool,bool,bool>> talents;
+    explicit PlayerbotFactory(Player* player) : bot(player) {}
+    void Refresh();
+    uint32 InitTalentsTree(bool incremental,bool templates,bool reset);
+    void InitPetTalents();
+    void InitEquipment(bool incremental) { assert(incremental); ++equipment; }
+    FACTORY_METHODS
+};
+@@STATS@@
+@@ROLE@@
+@@IDENTITY@@
+@@OWNERSHIP@@
+@@TALENTS@@
+@@PET@@
+@@REFRESH@@
+int main() {
+    Item caster;
+    caster.proto.StatsCount=1;
+    caster.proto.ItemStat[0]={ITEM_MOD_INTELLECT,12};
+    Player player;
+    player.gear[0]=&caster;
+    PlayerbotFactory natural{&player};
+    natural.Refresh();
+    assert(natural.grants==0 && natural.equipment==0 && natural.talents.empty() && player.money==17);
+    sPlayerbotAIConfig.naturalProgression=false;
+    PlayerbotFactory optOut{&player};
+    optOut.Refresh();
+    assert(optOut.grants>0 && optOut.equipment==1 && optOut.talents.size()==1);
+    assert(optOut.talents[0]==std::tuple(true,true,true));
+    optOut.Refresh();
+    assert(optOut.equipment==1); // Mark prevents replacing a hybrid's gear every refresh.
+    ++player.spec;
+    optOut.Refresh();
+    assert(optOut.equipment==2);
+    Player human; human.id=1; human.session.headless=false;
+    Player self; self.session.headless=false;
+    PlayerbotAI selfAI{&self}, ownedAI{&human}, autonomousAI;
+    self.ai=&selfAI;
+    Player alt; alt.id=8; alt.ai=&ownedAI;
+    Player controlled; controlled.ai=&ownedAI;
+    Player unownedAlt; unownedAlt.id=8; unownedAlt.ai=&autonomousAI;
+    Player clientRandom; clientRandom.session.headless=false;
+    Player noSession; noSession.logged=false;
+    sPlayerbotAIConfig.AutoPickTalentsForPlayerControlledBots=true;
+    for (bool persistent : {true,false}) {
+        sPlayerbotAIConfig.EquipAndSpecPersistence=persistent;
+        for (Player* owned : {&human,&self,&alt,&controlled,&unownedAlt,&clientRandom,&noSession}) {
+            owned->gear=player.gear;
+            PlayerbotFactory owner{owned};
+            owner.Refresh();
+            assert(owner.grants==0 && owner.equipment==0 && owner.talents.empty() && owned->money==17);
+            owner.InitTalentsTree(true,true,true);
+            assert(owner.talents.empty()); // Every automatic factory caller keeps owner choices.
+            owner.InitPetTalents();
+            assert(owner.pets==0);
+        }
+    }
+    sPlayerbotAIConfig.EquipAndSpecPersistence=true;
+    sPlayerbotAIConfig.AutoPickTalents=false;
+    PlayerbotFactory disabled{&player};
+    disabled.Refresh();
+    assert(disabled.talents.empty());
+    sPlayerbotAIConfig.AutoPickTalents=true;
+    player.freePoints=0;
+    disabled.Refresh();
+    assert(disabled.talents.empty());
+    player.caster=true;
+    assert(GearFitsSpecRole(&player));
+    player.caster=false;
+    assert(!GearFitsSpecRole(&player));
+    caster.enchants[PROP_ENCHANTMENT_SLOT_0]=11;
+    sSpellItemEnchantmentStore.rows[11].type[0]=ITEM_ENCHANTMENT_TYPE_STAT;
+    sSpellItemEnchantmentStore.rows[11].spellid[0]=ITEM_MOD_STRENGTH;
+    sSpellItemEnchantmentStore.rows[11].amount[0]=15;
+    assert(GearFitsSpecRole(&player)); // Fixed random property stats count.
+    sSpellItemEnchantmentStore.rows[11].amount[0]=0;
+    caster.property=-7; caster.factor=200;
+    sItemRandomSuffixStore.rows[7].Enchantment[0]=11;
+    sItemRandomSuffixStore.rows[7].AllocationPct[0]=1000;
+    assert(GearFitsSpecRole(&player)); // Suffix factor supplies 20 strength.
+    caster.proto.ItemStat[0].ItemStatValue=20;
+    assert(GearFitsSpecRole(&player)); // Ties retain existing equipment.
+    caster.proto.ItemStat[0].ItemStatValue=21;
+    assert(!GearFitsSpecRole(&player));
+    player.spent=0;
+    assert(GearFitsSpecRole(&player));
+    player.spent=41; player.cls=8;
+    assert(GearFitsSpecRole(&player)); // Role heuristic applies only to hybrids.
+    std::cout << "Refresh: natural progression refuses provisioning; opt-out talents, role stats and one-time equipment refresh passed\n";
+}
+'''
+refresh_source = refresh_source.replace('FACTORY_METHODS', '\n'.join(
+    f'void {name}() {{ ++grants; }}' for name in re.findall(
+        r'^\s+(\w+)\(\);$', refresh_parts['refresh'], re.MULTILINE) if name != 'InitPetTalents'))
+
+
+def build_refresh(directory, parts):
+    text = refresh_source
+    for key, value in parts.items():
+        text = text.replace('@@' + key.upper() + '@@', value)
+    source_path = directory / 'refresh.cpp'
+    source_path.write_text(text)
+    executable = directory / 'refresh'
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    str(source_path), '-o', str(executable)], check=True)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
+
+
+with tempfile.TemporaryDirectory(prefix='portable-playerbot-refresh-') as temporary:
+    temporary = Path(temporary)
+    result = build_refresh(temporary, refresh_parts)
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Refresh fixture failed (exit {result.returncode})')
+    for label, part, old, new in (
+        ('natural provisioning', 'refresh', 'sPlayerbotAIConfig.naturalProgression || ', ''),
+        ('controlled refresh', 'refresh', ' || !IsAutonomousRandomBot(bot)', ''),
+        ('controlled automatic talents', 'talents', 'if (!IsAutonomousRandomBot(bot))', 'if (false)'),
+        ('controlled pet talents', 'pet', 'if (!IsAutonomousRandomBot(bot))', 'if (false)'),
+        ('client on random account', 'ownership', '!bot->GetSession()->IsHeadless() ||', ''),
+        ('controlled random companion', 'ownership', 'return !ai || !ai->HasGameClientMaster();',
+         'return !ai || ai->HasGameClientMaster();'),
+        ('spent talent points', 'refresh', 'bot->GetFreeTalentPoints() > 0 &&', ''),
+        ('repeated regear', 'refresh', 'sRandomPlayerbotMgr.GetValue(bot, "gearRoleSpec") != specMark &&', ''),
+        ('missing suffix stats', 'stats', 'if (!amount)', 'if (false)'),
+    ):
+        mutated = dict(refresh_parts)
+        mutated[part] = mutated[part].replace(old, new)
+        assert mutated[part] != refresh_parts[part], f'{label} mutation was not applied'
+        if not build_refresh(temporary, mutated).returncode:
+            raise SystemExit(f'Refresh fixture did not reject: {label}')
+        print(f'Refresh mutation rejected: {label}')
