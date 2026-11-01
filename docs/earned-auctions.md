@@ -73,11 +73,18 @@ beat vendoring by at least the deposit. Buyers use the same upper valuation.
 This heuristic cannot reproduce every rare item's player market value.
 
 After two unsold returns or listing refusals, that item variant is vendored
-instead of relisted for a week, or three listing durations if longer. Returns within one
-listing duration count once; a completed sale clears the record. Restarting
-forgets this in-memory record. Bots can also vendor surplus when bags reach
-80% usage or deposits are unaffordable or uneconomic. Natural upkeep does not
-disenchant; ordinary surplus protection also applies to vendor sales.
+instead of relisted for a week, or three listing durations if longer. Returns
+within one listing duration count once; a completed sale clears the record.
+
+Unsold-stock history is deliberately limited to the current worldserver process:
+it is temporary pricing feedback, not a saved auction or inventory record. A
+restart clears it, so previously rejected stock may be listed again and pay new
+deposits. Existing auctions, items, gold and mail retain their ordinary saved
+state.
+
+Bots can also vendor surplus when bags reach 80% usage or deposits are
+unaffordable or uneconomic. Natural upkeep does not disenchant; ordinary surplus
+protection also applies to vendor sales.
 
 ## Travel and mail delivery
 
