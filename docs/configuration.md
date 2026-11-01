@@ -98,7 +98,8 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Ordinary paid training / autonomous talent allocation | Enabled; SelfBot and controlled altbot points remain owner controlled |
 | Autonomous vendor, repair, training, supply and bag visits | Enabled; paid with the bot's own gold |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
-| Travel between continents by ship, zeppelin, portal and the bot's own teleports | Enabled; faction territory and each bot's earned era apply |
+| Random bots speak to the flight master of each zone they reach to discover its flight point | Enabled; normal interaction range and reaction apply |
+| Travel between continents and islands by ship, zeppelin, elevator, tram, portal and the bot's own teleports | Enabled; faction territory and each bot's earned era apply |
 | Automatic use of earned loot upgrades | Enabled |
 | Equipment upgrades / other useful group loot | Need / Greed, subject to native loot eligibility |
 | Teleport recovery and free summon support | Disabled |
@@ -139,11 +140,15 @@ without the route stays behind and says so.
 ### Continent travel
 
 `Playerbots.ContinentTravel = 1` lets bots change between the Eastern Kingdoms,
-Kalimdor, Outland and Northrend. A bot plans the shortest estimated route over
-the ships, zeppelins, portals and teleporting area triggers of the world data,
-walks to each departure and takes a discovered flight when that is quicker.
-It waits at the dock or tower, steps aboard the docked transport and leaves at
-its destination stop. Portals and area triggers such as the Dark Portal are
+Kalimdor, Outland and Northrend, and between the parts of a continent that are
+not joined on foot: Teldrassil's canopy and Rut'theran Village, Thunder Bluff's
+mesas, Freewind Post and the ends of the Deeprun Tram between Stormwind and
+Ironforge. The walking areas come from the Playerbots travel data. A bot plans
+the shortest estimated route over the ships, zeppelins, elevators, trams,
+portals and teleporting area triggers of the world data, walks to each
+departure and takes a discovered flight when that is quicker. It waits beside
+the dock, tower or shaft, steps on when the transport stands there and steps off
+at its destination stop. Portals and area triggers such as the Dark Portal are
 used in person, through the server's normal checks. A bot also uses its own
 trainer-taught teleport, such as a mage's city teleport with its rune, or its
 hearthstone, when that saves clearly more time than the reagent or cooldown
@@ -155,14 +160,21 @@ earned era: Outland needs earned TBC, except for blood elves and draenei in
 their starting zones, and Northrend needs earned Wrath. A link that fails is
 avoided for 30 minutes.
 
-Random bots leave a map that has no inn or camp for their level, such as the
-blood elf and draenei starting islands once they outgrow them, and travel to
-an inn on another map. `Playerbots.RpgStatusProbWeight.TravelRoute = 5` adds an
-occasional move to another map whose zones also suit the bot. Companions whose
-player or SelfBot master is on another continent, or more than 1,500 yards away
+Random bots leave a map or island that has no inn or camp for their level, such
+as Teldrassil or the blood elf and draenei starting islands once they outgrow
+them, and travel to an inn elsewhere; they choose grind spots and camps they can
+walk to. `Playerbots.RpgStatusProbWeight.TravelRoute = 5` adds an occasional
+move to another map whose zones also suit the bot. Companions whose player or
+SelfBot master is on another continent or island, or more than 1,500 yards away
 on the same one, travel the same way; `stay` keeps them in place. Bots do not
 open mage portals for others on their own; a player can ask a mage companion to
 `cast` a portal it knows, with its own rune.
+
+`Playerbots.DiscoverFlightMasters = 1` sends random bots to the friendly flight
+master of each zone they reach, on the part of the zone they can walk to, to
+discover its flight point by speaking to it, as a player does. A flight master
+they cannot reach or speak to within ten minutes is skipped for an hour.
+Flight points are never granted without that visit.
 
 Bots use the same roll policy with ordinary players and SelfBot masters.
 `Playerbots.LootNeedRollLevel = 2` permits Need for appropriate equipment
