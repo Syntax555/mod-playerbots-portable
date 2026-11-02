@@ -3,10 +3,10 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "07065587bdb8ce2b4f45fbae0c1cb43fc3854520",
+    "revision": "61b1a6bba1c3a3fdaa30477ad18c746607870e4c",
     "upstream": {
       "url": "https://github.com/Grimfeather/azerothcore-wotlk.git",
-      "revision": "38db9bb1b588a2562ebcb052af1175a9429e32e6"
+      "revision": "0d754d1921261dfd939f91060ebc022eae280f71"
     },
     "forkChanges": {
       "azerothcore-era-shatter": "1076b54f2319ec434c22cce2e0b901f694c275ed",
@@ -29,7 +29,8 @@
       "azerothcore-item-update-queue": "28a0197d26ada32e4b34856db71efcf3586dbe07",
       "azerothcore-aura-state-snapshot": "28b5cbe6c0c8591d893dabaf648f6ccb794a4ca7",
       "azerothcore-unconnected-aura-updates": "8931c036ef6f6dea9f62a5c41415fcb559325b93",
-      "azerothcore-mutual-visibility": "07065587bdb8ce2b4f45fbae0c1cb43fc3854520"
+      "azerothcore-mutual-visibility": "07065587bdb8ce2b4f45fbae0c1cb43fc3854520",
+      "azerothcore-attack-swing-state": "61b1a6bba1c3a3fdaa30477ad18c746607870e4c"
     }
   },
   "modules": [
@@ -78,10 +79,10 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "9575e57ed734c654c0e089ddf95529ea261b5b9f",
+      "revision": "728dba97c42100e5537452ab510a07304b063c96",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
-        "revision": "09dcdb3ff5eec7685cf7d039220452354301d96e"
+        "revision": "5041dbed46425f376e87b6fcfb26938c1c81fbd7"
       },
       "forkChanges": {
         "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
@@ -105,23 +106,28 @@
         "mod-individual-progression-restored-era-quests": "82dd543136be13fe2c9918c366c83a8476d3861d",
         "mod-individual-progression-single-heeding-the-call": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4",
         "mod-individual-progression-borean-persuasion": "a9347655e7bd21a2ab1db7d939e9acdf84bec0db",
-        "mod-individual-progression-shaman-water-spirit": "9575e57ed734c654c0e089ddf95529ea261b5b9f"
+        "mod-individual-progression-shaman-water-spirit": "9575e57ed734c654c0e089ddf95529ea261b5b9f",
+        "mod-individual-progression-profession-tier-cap": "728dba97c42100e5537452ab510a07304b063c96",
+        "mod-individual-progression-expansion-gear-lock": "728dba97c42100e5537452ab510a07304b063c96",
+        "mod-individual-progression-personal-raid-entrances": "728dba97c42100e5537452ab510a07304b063c96",
+        "mod-individual-progression-howling-fjord-timers": "728dba97c42100e5537452ab510a07304b063c96"
       }
     },
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "e0e38cf1938e4f2526f64575ddf12dd5b70ddb74",
+      "revision": "03c801c59a31c8bd4a6a839169dab79b421d8989",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-        "revision": "db160a9fa372dbd97d51d7f59a7bbb85645edfef"
+        "revision": "6f81199b987dd7919b3d4896bf1b6d5b9e63a169"
       },
       "forkChanges": {
         "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
         "mod-dungeon-clear-build-warnings": "8297c0afbdde6010c4ef91906b584da9d09c1f16",
         "mod-dungeon-clear-earned-shortcut-guards": "10b305cad830574c21b4928a7250e952d76fa503",
         "mod-dungeon-clear-earned-death-recovery": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422",
-        "mod-dungeon-clear-earned-forced-pulls": "e0e38cf1938e4f2526f64575ddf12dd5b70ddb74"
+        "mod-dungeon-clear-earned-forced-pulls": "e0e38cf1938e4f2526f64575ddf12dd5b70ddb74",
+        "mod-dungeon-clear-molten-core-order": "03c801c59a31c8bd4a6a839169dab79b421d8989"
       }
     },
     {
@@ -196,14 +202,15 @@
     {
       "name": "mod-questie-bridge",
       "url": "https://github.com/Syntax555/mod-questie-bridge.git",
-      "revision": "3a010d7084798cb38598f4dee807a29acd99a38b",
+      "revision": "d3409f48748f0b3df90b61c8ff63fb9e3cb047ef",
       "upstream": {
         "url": "https://github.com/Aldori15/mod-questie-bridge.git",
-        "revision": "7a62da55de9de29a77b4562cc15f3d382a4f1f0b"
+        "revision": "21bbefc4a01b462d24fdaeb3b9e4e5db872220a6"
       },
       "forkChanges": {
         "mod-questie-bridge-era-quests": "7193c3c4995f4242a23b679f576160633195221c",
-        "mod-questie-bridge-protocol19-era-quests": "3a010d7084798cb38598f4dee807a29acd99a38b"
+        "mod-questie-bridge-protocol19-era-quests": "3a010d7084798cb38598f4dee807a29acd99a38b",
+        "mod-questie-bridge-protocol20-era-quests": "d3409f48748f0b3df90b61c8ff63fb9e3cb047ef"
       }
     },
     {
@@ -351,10 +358,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "0188619ac8b6ba75e79ba1c8c2a521a6e7949d2f",
+      "revision": "2d49dd00dd28e21d5e66d1ab593e964eff271a9e",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "f154bd5cf4982359619896c354904da1e212ebd3"
+        "revision": "0198b0eb768aa47773d2e381b2ee27a13ec41006"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -370,14 +377,16 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "ed5bc85f50d78595a05de46801b39d0a9c3cecdb",
+      "revision": "7da7f4da09da411e285346e84f09a43337165136",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "f1b5c606f582c7e588646fde8894919c68eedac5"
+        "revision": "42140b2ba24fca8bae82fec1694006887a23af8c"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",
-      "forkChanges": {}
+      "forkChanges": {
+        "questie-protocol20-conditions": "84cbd9e96cb0269a36695c580cdbaff9abaf0604"
+      }
     },
     {
       "name": "ZygorGuidesViewerRM",

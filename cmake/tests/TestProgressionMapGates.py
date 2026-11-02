@@ -37,6 +37,9 @@ module = args.source or core / 'modules/mod-individual-progression'
 player_source = (module / 'src/IndividualProgressionPlayer.cpp').read_text()
 progression_source = (module / 'src/IndividualProgression.cpp').read_text()
 header = (module / 'src/IndividualProgression.h').read_text()
+raid_header = (module / 'src/naxx40Scripts/naxxramas_40.h').read_text()
+player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
+assert 'Difficulty GetDifficulty(bool isRaid) const { return isRaid ? m_raidDifficulty : m_dungeonDifficulty; }' in player_header
 areas = (core / 'src/server/game/Maps/AreaDefines.h').read_text()
 
 # A null session is the native way to send no chat: the formatted
@@ -75,7 +78,7 @@ natives = '\n'.join((
     function(progression_source, 'uint8 IndividualProgression::GetPlayerProgressionFromQuests('),
     function(progression_source, 'bool IndividualProgression::hasPassedProgression('),
 ))
-enums = '\n'.join((enum(areas, 'AreaTableIDs'), enum(areas, 'MapIDs'),
+enums = '\n'.join((enum(areas, 'AreaTableIDs'), enum(areas, 'MapIDs'), enum(raid_header, 'NX40AttunementQuests'),
                    *(enum(header, name) for name in ('ProgressionQuestIDs', 'ProgressionAreas', 'DungeonKeys',
                                                        'ProgressionState'))))
 
@@ -90,6 +93,7 @@ prelude = r'''
 using uint8 = std::uint8_t; using uint16 = std::uint16_t; using uint32 = std::uint32_t;
 constexpr uint8 RACE_HUMAN = 1, RACE_BLOODELF = 10, RACE_DRAENEI = 11;
 constexpr uint32 QUEST_STATUS_NONE = 0, QUEST_STATUS_REWARDED = 6;
+constexpr uint32 RAID_DIFFICULTY_10MAN_HEROIC = 2;
 constexpr uint32 STORMWIND_HARBOR = 4411; // the gate's own ship-dock area constant
 @ENUMS@
 struct Unit;
@@ -118,6 +122,8 @@ struct Player
     int teleports = 0;
     bool IsInWorld() const { return inWorld; }
     bool IsGameMaster() const { return gm; }
+    uint32 raidDifficulty = 0;
+    uint32 GetDifficulty(bool) const { return raidDifficulty; }
     uint32 GetLevel() const { return level; }
     uint8 getRace() const { return race; }
     uint32 GetAreaId() const { return area; }
@@ -148,7 +154,8 @@ struct ObjectMgr
 auto* sObjectMgr = &objectManager;
 struct IndividualProgression
 {
-    bool enabled = true, normal = true, attuned = false;
+    bool enabled = true, normal = true, attuned = false, requireNaxxStrath = true;
+    bool IsStrictDefaultProgression() const { return true; }
     int progressionLimit = 0, tbcRacesProgressionLevel = 8, RequiredZulGurubProgression = 3, RequiredZulAmanProgression = 12;
     static inline uint8 accountStage = 0;
     uint8 GetPlayerProgressionFromQuests(Player* player) const;
@@ -232,6 +239,22 @@ int main()
     }
     assert(refusals > 1000 && messages > 1000);
 
+    // Completed progression does not replace the old raids' personal attunements.
+    Player veteran; Stage(veteran, 18); veteran.level = 80;
+    veteran.raidDifficulty = RAID_DIFFICULTY_10MAN_HEROIC;
+    progression.attuned = true;
+    assert(!Check(veteran, MAP_ONYXIAS_LAIR).allowed);
+    veteran.items.insert(ITEM_DRAKEFIRE_AMULET);
+    assert(Check(veteran, MAP_ONYXIAS_LAIR).allowed);
+    assert(!Check(veteran, MAP_NAXXRAMAS).allowed);
+    veteran.quests[NAXX40_ENTRANCE_FLAG] = QUEST_STATUS_REWARDED;
+    assert(Check(veteran, MAP_NAXXRAMAS).allowed);
+    progression.attuned = false;
+    assert(!Check(veteran, MAP_NAXXRAMAS).allowed);
+    // Wrath's normal version retains its separate entry requirements.
+    veteran.raidDifficulty = 0;
+    assert(Check(veteran, MAP_NAXXRAMAS).allowed);
+
     // Remote source checks can reach Outland before its base map exists.
     Player bloodElf; bloodElf.race = RACE_BLOODELF; Stage(bloodElf, 7);
     mapManager.map.zone = AREA_EVERSONG_WOODS; mapManager.loaded = false;
@@ -285,6 +308,13 @@ def build(gate_source, hook_source, bridge_source, starting_source=starting_zone
 
 
 mutations = (
+    ('high-level Onyxia key', gates, '!player->HasItemCount(ITEM_DRAKEFIRE_AMULET))', 'false)',
+     '!Check(veteran, MAP_ONYXIAS_LAIR).allowed'),
+    ('high-level Naxx attunement', gates, '!sIndividualProgression->isAttuned(player) ||', 'false ||',
+     '!Check(veteran, MAP_NAXXRAMAS).allowed'),
+    ('high-level Naxx entrance quest', gates,
+     '(sIndividualProgression->requireNaxxStrath && player->GetQuestStatus(NAXX40_ENTRANCE_FLAG) != QUEST_STATUS_REWARDED)',
+     'false', '!Check(veteran, MAP_NAXXRAMAS).allowed'),
     ('ship return in checks', gates, 'if (!session)\n                return false;\n', '', 'check.teleports == 0'),
     ('refusal text in checks', gates, 'ChatHandler(session)', 'ChatHandler(player->GetSession())',
      'check.messages == 0'),

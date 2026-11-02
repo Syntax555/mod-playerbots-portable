@@ -62,6 +62,11 @@ GAMEPLAY = (
     "TestQuestObjectRelations",
     "TestShamanTotemQuests",
     "TestShamanWaterSpirit",
+    "TestCombatSwing",
+    "TestProfessionTierCap",
+    "TestMoltenCoreRoster",
+    "TestEraRaidEntrances",
+    "TestHowlingFjord",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -71,6 +76,7 @@ CORE_FIXTURES = (
     "TestEarnedArenaCore", "TestEraExperience", "TestWindowsResourceIncludes", "TestFormationMovement",
     "TestSpellCancelCasters", "TestItemUpdateQueue", "TestAuraUpdates", "TestMutualVisibility",
     "TestCoreBuildWarnings", "TestCoreExperience", "TestNativeBankTransfers", "TestEraIgnite",
+    "TestCombatSwing",
 )
 
 MODULE_FIXTURES = {
@@ -92,9 +98,13 @@ MODULE_FIXTURES = {
         "TestBoreanTundra",
         "TestContinentRoutes",
         "TestShamanWaterSpirit",
+        "TestProfessionTierCap",
+        "TestEraRaidEntrances",
+        "TestHowlingFjord",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",
+        "TestMoltenCoreRoster",
     ),
     "mod-quest-loot-party": ("TestProfileKeys",),
     "mod-world-buff-bots": ("TestWorldBuffEvents",),

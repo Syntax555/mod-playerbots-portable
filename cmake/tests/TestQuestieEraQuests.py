@@ -5,7 +5,8 @@ markers and hide their givers with visibility conditions or awareness scripts. T
 production snapshot code runs against Player, Creature, map, quest and disable doubles: the
 quests a character's conditions refuse are reported like disabled quests, all or nothing,
 and a hidden questgiver counts as offering no quest unless its quests are hidden anyway.
-Protocol 19 also carries template restrictions and GUID-scoped positive observations.
+Protocol 20 also carries template restrictions and GUID-scoped positive observations.
+The native bounded condition catalog supplies supported predicates without QUESTDISABLES.
 Mutations remove condition, visibility, authority and complete-snapshot checks.
 """
 
@@ -42,6 +43,8 @@ hidden_check = ('bool const hidden = !player->CanSeeObjectByVisibilityConditions
                 '                                || (creature->IsAIEnabled && !creature->AI()->CanBeSeen(player));')
 assert hidden_check in source
 giver_block = function(source, '                if (capabilities & (Questgivers | QuestgiverTemplates))')
+bounded_guard = 'if ((capabilities & QuestConditions) && !HasCapability(common.Caps, "QUESTDISABLES"))'
+bounded_block = function(source, '                ' + bounded_guard)
 cache = (bridge / 'QuestieBridgeStateCache.h').read_text()
 late = source[source.index('                std::size_t const lateRows'):start]
 capability = function(source, 'bool HasCapability(std::string const& caps, std::string_view capability)')
@@ -61,13 +64,18 @@ assert 'QuestieBridge.QuestConditions = 1' in (core / 'modules/mod-questie-bridg
 quests = (core / 'src/server/game/Entities/Player/PlayerQuest.cpp').read_text()
 assert 'GetConditionsForNotGroupedEntry(CONDITION_SOURCE_TYPE_QUEST_AVAILABLE, qInfo->GetQuestId())' in function(
     quests, 'bool Player::SatisfyQuestConditions(Quest const* qInfo, bool msg)')
+condition_header = (core / 'src/server/game/Conditions/ConditionMgr.h').read_text()
+assert 'typedef std::list<Condition*> ConditionList;' in condition_header
+assert 'ConditionList GetConditionsForNotGroupedEntry(ConditionSourceType sourceType, uint32 entry);' in condition_header
+assert 'ConditionList GetConditionReferences(uint32 refId);' in condition_header
+assert re.search(r'CONDITION_SOURCE_TYPE_QUEST_AVAILABLE\s*= 19,', condition_header)
 objects = (core / 'src/server/game/Entities/Object/Object.cpp').read_text()
 hidden = function(objects, 'bool HiddenFrom(WorldObject const* object, Player const* player)')
 assert '(creature->IsAIEnabled && !creature->AI()->CanBeSeen(player)) || !player->CanSeeObjectByVisibilityConditions(object)' in hidden
 questie = args.addon or repository / '.module-cache/prepared-source-addons/Questie-335'
 client = (questie / 'Modules/Network/QuestieServer.lua').read_text()
-assert 'local PREFIX, PROTOCOL_VERSION = "QSTSVR", "19"' in client
-assert 'constexpr std::uint32_t ProtocolVersion = 19;' in (bridge / 'QuestieBridgeProtocol.h').read_text()
+assert 'local PREFIX, PROTOCOL_VERSION = "QSTSVR", "20"' in client
+assert 'constexpr std::uint32_t ProtocolVersion = 20;' in (bridge / 'QuestieBridgeProtocol.h').read_text()
 assert '[17] = "QUESTGIVERTEMPLATES"' in client
 assert 'elseif kind == "D" and result.caps.QUESTDISABLES and #fields == 2 and id and id > 0 then' in client
 assert re.search(r'if not spawnId or spawnId == 0 or giverCount >= 64 or not fields\[4\]:match', client)
@@ -90,7 +98,9 @@ fixture = r'''
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <list>
 #include <map>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <string>
@@ -133,6 +143,26 @@ struct ObjectMgr
     std::multimap<uint32, uint32> const* GetCreatureQuestRelationMap() const { return &relations; }
 } objects;
 ObjectMgr* sObjectMgr = &objects;
+struct Condition
+{
+    uint32 ConditionType = 8, ConditionValue1 = 0, ConditionValue2 = 0, ConditionValue3 = 0;
+    uint32 ElseGroup = 0, ReferenceId = 0, ScriptId = 0, ConditionTarget = 0, SourceGroup = 0, SourceId = 0;
+    bool NegativeCondition = false;
+};
+enum { CONDITION_SOURCE_TYPE_QUEST_AVAILABLE = 19 };
+struct ConditionMgr
+{
+    std::map<uint32, std::list<Condition*>> lists;
+    uint32 lookups = 0;
+    std::list<Condition*> GetConditionsForNotGroupedEntry(int, uint32 id)
+    {
+        ++lookups;
+        auto found = lists.find(id);
+        return found == lists.end() ? std::list<Condition*>{} : found->second;
+    }
+    std::list<Condition*> GetConditionReferences(uint32) const { return {}; }
+} conditionManager;
+ConditionMgr* sConditionMgr = &conditionManager;
 struct Player;
 struct CreatureAI { bool visible = true; bool CanBeSeen(Player const*) const { return visible; } };
 struct Creature
@@ -209,9 +239,12 @@ std::vector<std::string> Snapshot(Player* player, std::string caps, std::size_t 
     }
     std::vector<std::string> rows(existing, "E:1:0:0:0");
     std::string playerCaps = common.Caps;
+    std::optional<QuestieBridge::QuestConditionIndex> conditions;
+    bool conditionsBuilt = false;
 @LATE@
 @LOCKED@
 @GIVERS@
+@BOUNDED@
     if (sentCaps) *sentCaps = std::move(playerCaps);
     rows.erase(rows.begin(), rows.begin() + existing);
     return rows;
@@ -312,10 +345,35 @@ int main()
     rows = Snapshot(&player, "EVENTS,QUESTDISABLES", 0,
         QuestConditions | Questgivers | QuestgiverTemplates, {}, &sentCaps);
     assert(!HasCapability(sentCaps, "QUESTGIVERS") && !HasCapability(sentCaps, "QUESTGIVERTEMPLATES"));
-    std::cout << "Questie era quests: conditions, hidden givers, protocol 19 visibility and complete catalogs passed\n";
+    // The native bounded catalog covers supported conditions without a disables catalog.
+    Condition later{8, 66008}, previous{8, 66004};
+    conditionManager.lists = {{11123, {&later}}, {8859, {&previous}}};
+    conditionManager.lookups = 0;
+    rows = Snapshot(&player, "EVENTS,QUESTDISABLES", 0, QuestConditions, {}, &sentCaps);
+    assert(Has(rows, "D:8859") && !Has(rows, "C:8859") && conditionManager.lookups == 0);
+    rows = Snapshot(&player, "EVENTS", 0, QuestConditions, {}, &sentCaps);
+    assert(Has(rows, "P:QC_COUNT:1") && Has(rows, "C:8859") && !Has(rows, "C:11123"));
+    assert(!Has(rows, "D:8859") && HasCapability(sentCaps, "QUESTCONDITIONS"));
+    rows = Snapshot(&player, "EVENTS", 0, 0, {}, &sentCaps);
+    assert(!Has(rows, "C:8859") && !HasCapability(sentCaps, "QUESTCONDITIONS"));
+    rows = Snapshot(&player, "EVENTS", 4096, QuestConditions, {}, &sentCaps);
+    assert(!Has(rows, "C:8859") && !HasCapability(sentCaps, "QUESTCONDITIONS"));
+    std::vector<Quest> extraQuests(513);
+    for (uint32 i = 0; i < extraQuests.size(); ++i)
+    {
+        extraQuests[i].id = 90000 + i;
+        objects.quests[extraQuests[i].id] = &extraQuests[i];
+        conditionManager.lists[extraQuests[i].id] = {&later};
+        player.opens[extraQuests[i].id] = {99, 99};
+    }
+    rows = Snapshot(&player, "EVENTS", 0, QuestConditions, {}, &sentCaps);
+    assert(!Has(rows, "C:8859") && !HasCapability(sentCaps, "QUESTCONDITIONS"));
+    rows = Snapshot(&player, "EVENTS,QUESTDISABLES", 0, QuestConditions, {}, &sentCaps);
+    assert(Has(rows, "D:8859") && Has(rows, "D:90000") && Has(rows, "D:90512"));
+    std::cout << "Questie era quests: conditions, hidden givers, protocol 20 visibility and complete catalogs passed\n";
 }
 '''.replace('@HELPERS@', helpers).replace('@CAPABILITY@', capability).replace('@DISABLED@', disabled).replace(
-    '@LATE@', late).replace('@LOCKED@', locked_block).replace('@GIVERS@', giver_block).replace('@CACHE@', cache)
+    '@LATE@', late).replace('@LOCKED@', locked_block).replace('@GIVERS@', giver_block).replace('@CACHE@', cache).replace('@BOUNDED@', bounded_block)
 
 
 def build(directory, executable):
@@ -333,6 +391,7 @@ with tempfile.TemporaryDirectory(prefix='questie-era-quests-') as temporary:
     reject_mutants(work, (
         ('refused quests not reported', 'Fixture.cpp', 'if (!disabled(questId) && !satisfied(questId))',
          'if (!disabled(questId) && !satisfied(questId) && false)'),
+        ('duplicate bounded condition scan', 'Fixture.cpp', bounded_guard, 'if (capabilities & QuestConditions)'),
         ('hidden givers ignored', 'Fixture.cpp', hidden_check, 'bool const hidden = false;'),
         ('client visibility ignored', 'Fixture.cpp', 'player->HaveAtClient(creature) &&', ''),
         ('distance check ignored', 'Fixture.cpp', 'player->CanSeeOrDetect(creature, false, true)',

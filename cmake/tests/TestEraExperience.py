@@ -66,6 +66,13 @@ ip_player = (module / 'src/IndividualProgressionPlayer.cpp').read_text()
 era_source = (module / 'src/EraExperience.cpp').read_text()
 policy = (module / 'src/EraExperiencePolicy.h').read_text()
 
+account_security = function(read('src/server/game/Accounts/AccountMgr.cpp'),
+                            'uint32 AccountMgr::GetSecurity(uint32 accountId)')
+assert 'return (result) ? (*result)[0].Get<uint8>() : uint32(SEC_PLAYER);' in account_security
+security_levels = read('src/common/Common.h')
+assert re.search(r'SEC_PLAYER\s*= 0,', security_levels)
+assert re.search(r'SEC_GAMEMASTER\s*= 2,', security_levels)
+
 # Native contracts of the hooks. RewardQuest computes the experience, then the
 # hook may change it, before the quest counts as rewarded and the completion
 # hook runs; at the realm maximum it pays GetRewMoneyMaxLevel instead.
@@ -468,6 +475,7 @@ enum ServerConfigs { CONFIG_MAX_PLAYER_LEVEL, CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_
     RATE_XP_QUEST_DF, RATE_REST_MAX_BONUS, RATE_REWARD_BONUS_MONEY };
 enum UpdateFields { PLAYER_BYTES_2=1, PLAYER_NEXT_LEVEL_XP=2, PLAYER_REST_STATE_EXPERIENCE=3 };
 enum TeamId { TEAM_ALLIANCE, TEAM_HORDE };
+enum AccountTypes { SEC_PLAYER=0, SEC_GAMEMASTER=2 };
 struct World {
     std::map<int,uint32> ints; std::map<int,float> rates;
     // WorldConfig defaults, which Initialize restores before OnAfterConfigLoad.
@@ -553,7 +561,7 @@ struct Unit {
     float GetTotalAuraMultiplier(AuraType auratype) const;
     float GetTotalAuraMultiplier(AuraType auraType,std::function<bool(AuraEffect const*)> const& predicate) const;
 };
-struct Player; struct WorldPacket;
+struct Player; struct WorldPacket; struct ItemTemplate;
 struct WorldSession {
     uint32 account=1, recruiter=0; bool recruits=false, bot=false; Player* _player=nullptr;
     uint32 GetAccountId() const { return account; }
@@ -627,6 +635,7 @@ struct ChatHandler {
     template<class... Args> void PSendSysMessage(char const*,Args&&...) {}
 };
 struct AccountMgr {
+    static uint32 GetSecurity(uint32) { return SEC_PLAYER; }
     static bool GetName(uint32 account,std::string& name) { name=account>=1000 ? "RNDBOT"+std::to_string(account) : "PLAYER"; return true; }
 };
 class PlayerScript {
