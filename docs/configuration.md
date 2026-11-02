@@ -98,6 +98,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Ordinary paid training / autonomous talent allocation | Enabled; SelfBot and controlled altbot points remain owner controlled |
 | Autonomous vendor, repair, training, supply and bag visits | Enabled; paid with the bot's own gold |
 | Learn visited flight points when the player or SelfBot master speaks to the flight master | Enabled; player and bot must both be able to interact with that NPC |
+| Bind at the inn where the player or SelfBot master makes its home | Enabled; player and bot must both be able to interact with that innkeeper |
 | Random bots speak to the flight master of each zone they reach to discover its flight point | Enabled; normal interaction range and reaction apply |
 | Travel between continents and islands by ship, zeppelin, elevator, tram, portal and the bot's own teleports | Enabled; faction territory and each bot's earned era apply |
 | Automatic use of earned loot upgrades | Enabled |
@@ -137,6 +138,11 @@ point does not start a flight. Bots fly only routes whose flight points they hav
 discovered, from a flight master within normal interaction range; a following bot
 without the route stays behind and says so.
 
+`Playerbots.BindHomeWithMaster = 1` binds those companions at the innkeeper
+where you make the inn your home, under the same range rules; each bot that
+binds says so. A companion already standing at the innkeeper binds by speaking
+to it itself, so bots that are still walking up miss that bind.
+
 ### Continent travel
 
 `Playerbots.ContinentTravel = 1` lets bots change between the Eastern Kingdoms,
@@ -166,7 +172,9 @@ them, and travel to an inn elsewhere; they choose grind spots and camps they can
 walk to. `Playerbots.RpgStatusProbWeight.TravelRoute = 5` adds an occasional
 move to another map whose zones also suit the bot. Companions whose player or
 SelfBot master is on another continent or island, or more than 1,500 yards away
-on the same one, travel the same way; `stay` keeps them in place. Bots do not
+on the same one, travel the same way; `stay` keeps them in place. A companion
+bound at your inn follows your hearthstone with its own when its hearthstone is
+ready and walking would take longer. Bots do not
 open mage portals for others on their own; a player can ask a mage companion to
 `cast` a portal it knows, with its own rune.
 

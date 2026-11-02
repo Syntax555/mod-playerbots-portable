@@ -70,6 +70,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   discovered flights to a dock; faction and earned-era refusals; companions left
   on another continent or island; travel-data islands that split walkable areas;
   route times. Measure planning cost with the 2,500-bot target.
+- [ ] Validate home binding with the master in game: companions in and out of
+  innkeeper range, several companions at once, and following the master's
+  hearthstone to the shared inn and from another continent.
 - [ ] Validate flight master discovery in game: zones with several flight
   masters, unreachable or hostile ones, Rut'theran from Teldrassil's canopy and
   detours during a route.
