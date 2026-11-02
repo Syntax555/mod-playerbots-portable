@@ -20,7 +20,7 @@ quest runner.
 | Hunter | The project supplies no taming-lesson bot actions. | Six racial lesson chains and first-pet acquisition have dedicated actions. Historical pet ability acquisition remains separate. |
 | Rogue | Matching startup letter and scroll flags already exist. | Poison, lockpicking, keys and event handling remain to be audited. |
 | Priest | Trainer edits do not replace the existing historical racial quest and spell integration. | Restored racial rewards and paid ranks have personal-era gates; complete bot runs still need validation. |
-| Shaman | Earth quest flag changes and Water quest text already exist. | Vanilla Horde totem actions handle Sapta, wells, spirits and brazier interactions. Draenei and optional equipment chains remain separate work. |
+| Shaman | Earth quest flag changes and Water quest text already exist. | Horde and Draenei totem actions handle owned quest items, wells, spirits and ritual objects. Optional equipment chains and complete live runs remain open. |
 | Mage | Matching startup quest flags and trainer handling already exist. | Magecraft, Fragmented Magic and other class sequences remain to be audited. |
 | Warlock | Imp and Felsteed quest relations, orb prerequisites and inspected quest starters already exist. | The 43-step basic-demon action supplies bot handling absent from the reference project. Mounts, later demons and optional chains remain separate. |
 | Druid | Existing native quest scripts and trainer restoration supply quest content. | Bear, Aquatic Form and cure-event bot sequences still need implementation and validation. |
