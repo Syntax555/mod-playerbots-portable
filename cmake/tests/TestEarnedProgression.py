@@ -97,7 +97,9 @@ struct Database {
 int nameQueries=0;
 template<class... Args> void LogError(Args const&...) {}
 #define LOG_ERROR(...) LogError(__VA_ARGS__)
-struct AccountMgr { static bool GetName(uint32 account, std::string& name) {
+constexpr int SEC_GAMEMASTER = 2;
+struct AccountMgr { static int GetSecurity(uint32) { return 0; }
+static bool GetName(uint32 account, std::string& name) {
     ++nameQueries; name = "RNDBOT" + std::to_string(account); return true; } };
 struct Pet { void GivePetXP(uint32) {} };
 struct Player {
@@ -114,7 +116,7 @@ struct IndividualProgression {
     bool enabled=true, disableDefaultProgression=false, strictEarnedProgression=false;
     uint8 tbcRacesProgressionLevel=8, deathKnightProgressionLevel=13, BotAccountsMaxLevel=80;
     std::string botAccountsRegex, excludedAccountsRegex;
-    struct AccountMatch { bool excluded=false, bot=false; };
+    struct AccountMatch { bool excluded=false, bot=false, gm=false; };
     std::regex _excludedAccountsRegex, _botAccountsRegex;
     bool _excludedAccountsEnabled=false, _botAccountsEnabled=false;
     std::unordered_map<uint32,AccountMatch> _accountMatchCache;

@@ -212,6 +212,7 @@ struct ObjectMgr {
 } objects;
 auto* sObjectMgr=&objects;
 struct AccountMgr { inline static int queries=0;
+    static int GetSecurity(uint32) { return 0; }
     static bool GetName(uint32 account,std::string& name) {
         ++queries; name="RNDBOT"+std::to_string(account); return true;
     }
@@ -250,7 +251,7 @@ struct IndividualProgression {
     void UpdateProgressionState(Player*,ProgressionState) const;
     void checkIPProgression(Player*);
     void checkKillProgression(Player*,Creature*);
-    struct AccountMatch { bool excluded=false, bot=false; };
+    struct AccountMatch { bool excluded=false, bot=false, gm=false; };
     std::regex _excludedAccountsRegex, _botAccountsRegex;
     bool _excludedAccountsEnabled=false, _botAccountsEnabled=false;
     std::unordered_map<uint32,AccountMatch> _accountMatchCache;

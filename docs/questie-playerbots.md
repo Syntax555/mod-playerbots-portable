@@ -106,7 +106,7 @@ and Questie shows its usual quests.
 An unavailable giver does not hide a daily or weekly quest offered by another
 valid starter.
 
-Questie Bridge and Questie use matching protocol 19 builds. A version mismatch
+Questie Bridge and Questie use matching protocol 20 builds. A version mismatch
 restores Questie's static behavior; `/qserver` reports the expected version.
 
 ## Access and compatibility

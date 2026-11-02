@@ -47,11 +47,15 @@ fixtures pass. Use native core/module functions before adding replacements.
   `playerbots.conf` without overwriting explicit destination values.
 - [ ] Validate guarded world-data repairs in game: priest rank chains, AQ event
   dragon menus, Drijya's escort (10310), Summoner Kanthin's patrol and
-  duplicate Sunfury Magisters. MySQL replay and source fixtures do not
+  duplicate Sunfury Magisters; Howling Fjord's Dead Man's Debt, Stairway to
+  Mercy and Mimicking Nature's Call. MySQL replay and source fixtures do not
   establish running-realm behavior.
 
 ### Bots, talents and client interfaces
 
+- [ ] Validate profession-rank caps with trainers, rank books and spell learning
+  at tiers 0, 8 and 13, including bots, GM/excluded accounts and config reloads.
+  Verify that login preserves existing skills, achievements, titles and gear.
 - [ ] Validate [hunter companion acquisition](combat-profiles.md#hunter-companions)
   in game for all six racial taming-lesson chains, including ordinary quest
   acceptance, owned rods, interrupted channels, native completion and turn-in.
@@ -266,7 +270,8 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Evaluate newer CMaNGOS Classic/TBC database snapshots before importing
   them: replay their migrations, regenerate historical quest and era-world
   data, and verify the TBC `QuestLevel=-1` changes against era XP rules. Keep
-  the reference core pins aligned with the verified source data.
+  the CMaNGOS Classic/TBC and VMaNGOS reference core pins aligned with the
+  verified source data.
 - [ ] Submit the prepared Individual Progression empty-filter fix when upstream
   permissions permit. Track the generic core proposals and remove local hunks
   only after accepted compatible fixes are pinned and checked; see

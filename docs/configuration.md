@@ -266,6 +266,15 @@ client needs the matching [EraTalents addon and MPQ](era-talents.md).
 Riding prices follow earned era, while acquisition levels remain 40/60/70.
 General vendor/trainer prices and the auction market use shared data.
 
+`IndividualProgression.ProfessionTierCap = 1` limits newly learned profession
+ranks to Artisan (300) before tier 8 and Master (375) before tier 13. Trainers,
+rank books and spell learning enforce the same cap for players and bots.
+Existing skills, achievements and titles remain intact. GM accounts are exempt;
+account exclusions apply only outside strict progression.
+`IndividualProgression.LockLaterExpansionGear` remains
+disabled by default; enabling it restricts new equipment by expansion while
+preserving equipment already worn at login.
+
 Battleground matching separates earned eras, with fixed per-instance scores,
 reinforcements and Warsong timers. Ordinary minimum team sizes apply.
 Bot Strand, random battleground and arena participation is disabled. See the
