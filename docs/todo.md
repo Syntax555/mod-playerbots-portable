@@ -70,6 +70,10 @@ fixtures pass. Use native core/module functions before adding replacements.
   discovered flights to a dock; faction and earned-era refusals; companions left
   on another continent or island; travel-data islands that split walkable areas;
   route times. Measure planning cost with the 2,500-bot target.
+- [ ] Validate companions riding with their player in game: Deeprun Tram cars,
+  Thunder Bluff and Undercity elevators beside their doors, ships and zeppelins,
+  several companions on one car, missed departures and the next ride after the
+  player arrives.
 - [ ] Validate home binding with the master in game: companions in and out of
   innkeeper range, several companions at once, and following the master's
   hearthstone to the shared inn and from another continent.

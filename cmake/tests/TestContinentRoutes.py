@@ -58,6 +58,11 @@ ip_main = read(ip_source / 'IndividualProgression.cpp')
 shared = read(core / 'src/server/shared/SharedDefines.h')
 dbc_enums = read(core / 'src/server/shared/DataStores/DBCEnums.h')
 dbc_structure = read(core / 'src/server/shared/DataStores/DBCStructure.h')
+follow = read(module / 'Ai/Base/Actions/FollowActions.cpp')
+transport_mgr = read(core / 'src/server/game/Maps/TransportMgr.cpp')
+transport_mgr_header = read(core / 'src/server/game/Maps/TransportMgr.h')
+go_data = read(core / 'src/server/game/Entities/GameObject/GameObjectData.h')
+terrain = read(core / 'src/server/game/Grids/GridTerrainData.h')
 area_defines = read(core / 'src/server/game/Maps/AreaDefines.h')
 transport_mgr_header = read(core / 'src/server/game/Maps/TransportMgr.h')
 transport_mgr = read(core / 'src/server/game/Maps/TransportMgr.cpp')
@@ -198,6 +203,8 @@ natives = defines(sorted(ip_zones), area_defines, ip_header) + '\n' + '\n'.join(
              'GAMEOBJECT_TYPE_SPELLCASTER', 'GAMEOBJECT_TYPE_TRANSPORT', 'SPELL_EFFECT_TELEPORT_UNITS',
              'SPELL_EFFECT_TRIGGER_SPELL', 'SPELLFAMILY_GENERIC', 'SPELLFAMILY_MAGE'], shared),
     defines(['MAP_COMMON', 'MAP_INSTANCE'], dbc_enums),
+    defines(['GO_STATE_ACTIVE', 'GO_STATE_READY'], go_data),
+    f'constexpr float INVALID_HEIGHT = {re.search(r"#define INVALID_HEIGHT\s+(-?[\d.]+f)", terrain)[1]};',
     f'constexpr float INTERACTION_DISTANCE = {re.search(r"#define INTERACTION_DISTANCE\s+([\d.]+f)", read(core / "src/server/game/Entities/Object/ObjectDefines.h"))[1]};',
     defines(['FACTION_MASK_ALLIANCE', 'FACTION_MASK_HORDE'], dbc_enums),
     *(f'constexpr ProgressionState {name} = ProgressionState({value(ip_header, name)});'
@@ -222,6 +229,7 @@ execution = {name: function(rpg_base, signature) for name, signature in {
 execution['discover'] = function(rpg, 'bool NewRpgDiscoverFlightAction::Execute(Event /*event*/)')
 execution['route action'] = function(rpg, 'bool NewRpgTravelRouteAction::Execute(Event /*event*/)')
 execution['master action'] = function(rpg, 'bool TravelToMasterAction::Execute(Event /*event*/)')
+execution['follow step'] = function(follow, 'bool FollowAction::StepOnto(WorldPosition const& point)')
 FORBIDDEN = ('TeleportTo', 'Relocate(', 'AddPassenger', 'ResurrectPlayer', 'SetTaxiCheater', 'AddItem', 'StoreNewItem',
              'ModifyMoney', 'learnSpell', 'AddQuest', 'RewardQuest', 'SetTaximaskNode', 'CastSpell(link.object, bot, true')
 
@@ -245,6 +253,7 @@ def assert_ordinary(bodies):
     board = bodies['lift board']
     assert 'if (!ContinentTravel::OnTransport(lift, bot->GetPhaseMask(), link.from.x, link.from.y, link.from.z))' in board
     assert board.index('ContinentTravel::OnTransport(lift') < board.index('MoveStraightTo(from);')
+    assert 'MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false, false);' in bodies['follow step']
     discover = bodies['discover']
     learn = 'bot->GetSession()->SendLearnNewTaxiNode(flightMaster);'
     assert ('if (flightMaster && bot->GetNPCIfCanInteractWith(flightMaster->GetGUID(), UNIT_NPC_FLAG_FLIGHTMASTER))\n'
@@ -258,6 +267,8 @@ for label, name, old, new in [
     ('remote area trigger', 'take', 'if (bot->IsInAreaTriggerRadius(trigger))', 'if (true)'),
     ('flight without discovered route', 'overland', '!CanUseTaxiNodes(bot, nodes) || ', ''),
     ('triggered teleport spell', 'use', 'botAI->CastSpell(link.object, bot)', 'botAI->CastSpell(link.object, bot, true)'),
+    ('companion step teleports', 'follow step', 'bot->GetMotionMaster()->MovePoint(0, x, y, z,',
+     'bot->TeleportTo(bot->GetMapId(), x, y, z, 0.0f); (void)(0,'),
     ('lift boarded away from its stop', 'lift board',
      'if (!ContinentTravel::OnTransport(lift, bot->GetPhaseMask(), link.from.x, link.from.y, link.from.z))',
      'if (false)'),
@@ -295,6 +306,18 @@ assert 'GetOption<bool>("Playerbots.DiscoverFlightMasters", false)' in config
 assert '\nPlayerbots.DiscoverFlightMasters = 0\n' in conf_dist
 # Rut'theran's flight master is offered only where islands keep it apart from Teldrassil's canopy.
 assert '(creatureTemplate->Entry != 3838 || sPlayerbotAIConfig.continentTravel)' in travel
+# Following decides boarding, riding, leaving and waiting through the tested companion step, on world maps only,
+# before the upstream ship handling, and does not wait for the formation distance to board or leave a car.
+follow_execute = function(follow, 'bool FollowAction::Execute(Event /*event*/)')
+assert 'if (sPlayerbotAIConfig.continentTravel && map && !map->Instanceable())' in follow_execute
+assert (follow_execute.index('ContinentTravel::CompanionRide(bot, transport, point)')
+        < follow_execute.index('if (transport && transport->IsStaticTransport())\n            transport = nullptr;'))
+assert 'bot->StopMovingOnCurrentPos();\n                    return true;' in follow_execute
+assert ('carrier != ride && ((carrier && carrier->IsStaticTransport()) || (ride && ride->IsStaticTransport()))'
+        in function(follow, 'bool FollowAction::isUseful()'))
+# The transport check takes a companion aboard the car its master stands on.
+assert ('if (Transport* carrier = master->GetTransport(); carrier && carrier->IsStaticTransport())\n'
+        '                    lift = carrier->GetEntry();' in function(ai, 'void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)'))
 # Bots stand on a lift the core cannot pick out when a door or another lift is nearer.
 assert ('if (sPlayerbotAIConfig.continentTravel && (!newTransport || !newTransport->ToMotionTransport()))'
         in function(ai, 'void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)'))
@@ -313,6 +336,18 @@ assert constants.count('constexpr') == 3
 assert 'ITEM_HEARTHSTONE = 6948;' in constants and 'SPELL_HEARTHSTONE = 8690;' in constants
 hearthstone = re.search(r"^\(6948,.*$", read(core / 'data/sql/base/db_world/item_template.sql'), re.MULTILINE)
 assert hearthstone and "'Hearthstone'" in hearthstone[0] and ',8690,' in hearthstone[0].replace(' ', '')
+
+deck_constants = '\n'.join(line for line in routes.splitlines()
+                           if re.match(r'constexpr float (DeckProbeStep|DeckHeightTolerance) = ', line))
+assert deck_constants.count('constexpr') == 2
+animation_types = '\n'.join([
+    function(dbc_structure, 'struct TransportAnimationEntry') + ';',
+    function(dbc_structure, 'struct TransportRotationEntry') + ';',
+    *re.findall(r'^typedef std::map<uint32, Transport(?:Animation|Rotation)Entry const\*> \w+;$', transport_mgr_header,
+                re.MULTILINE),
+    function(transport_mgr_header, 'struct TransportAnimation') + ';',
+])
+assert animation_types.count('typedef') == 2
 
 production = {
     'policy': policy,
@@ -345,8 +380,14 @@ production = {
         function(routes, 'bool OnTransport(GameObject const* transport, uint32 phaseMask, float x, float y, float z)'),
         function(routes, 'GameObject* NearestTransport(Player* bot, uint32 entry, float range)'),
         function(routes, 'Transport* LiftUnder(Player* bot, uint32 entry)'),
+        'namespace {', deck_constants, function(routes, 'std::vector<WorldPosition> DryGround('), '}',
+        function(routes, 'bool HoldsStill(Transport const* transport, uint32 ms)'),
+        function(routes, 'bool FindBoardingPoint(Player* bot, Transport* transport, WorldPosition& point)'),
+        function(routes, 'bool FindLandingPoint(Player* bot, Transport* transport, WorldPosition& point)'),
+        function(routes, 'Ride CompanionRide(Player* bot, Transport* carrier, WorldPosition& point)'),
         '}',
     ]),
+    'animation': function(transport_mgr, 'bool TransportAnimation::GetAnimNode('),
     'progression': '\n'.join([
         'namespace {', starting_zone, '}',
         function(progression, 'bool ContinentRouteProgression::CanArrive(Player* bot, uint32 mapId, float x, float y, '
@@ -451,9 +492,13 @@ namespace G3D
 {
 struct Vector3
 {
-    float x, y, z;
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    Vector3() = default;
     Vector3(float x, float y, float z) : x(x), y(y), z(z) {}
+    Vector3 operator-(Vector3 const& other) const { return {x - other.x, y - other.y, z - other.z}; }
+    float squaredLength() const { return x * x + y * y + z * z; }
 };
+struct Quat {};
 struct Ray
 {
     Vector3 origin, direction;
@@ -480,6 +525,17 @@ struct GameObjectModel
 
 class Transport;
 class MotionTransport;
+class StaticTransport;
+#define ASSERT(condition, ...) assert(condition)
+ANIMATION_TYPES
+struct GameObjectValue
+{
+    struct
+    {
+        uint32 PathProgress = 0;
+        TransportAnimation const* AnimationInfo = nullptr;
+    } Transport;
+};
 class GameObject
 {
 public:
@@ -488,11 +544,17 @@ public:
     uint32 mapId = 0;
     float x = 0.0f, y = 0.0f, z = 0.0f;
     GameObjectModel* m_model = nullptr;
+    GameObjectValue goValue;
+    uint32 state = GO_STATE_READY;
     virtual ~GameObject() = default;
     uint32 GetEntry() const { return entry; }
     float GetPositionX() const { return x; }
     float GetPositionY() const { return y; }
     float GetPositionZ() const { return z; }
+    GameObjectValue const* GetGOValue() const { return &goValue; }
+    uint32 GetGoState() const { return state; }
+    bool IsStaticTransport() const { return type == GAMEOBJECT_TYPE_TRANSPORT; }
+    StaticTransport const* ToStaticTransport() const;
     Transport* ToTransport();
 };
 
@@ -504,7 +566,14 @@ public:
     bool instanceable = false;
     std::map<int, uint32> areas;
     std::vector<Transport*> transports;
+    float floor = 0.0f;  // flat dry ground under the whole map
     bool Instanceable() const { return instanceable; }
+    float GetHeight(uint32 phase, float, float, float z, bool, float maxSearchDist) const
+    {
+        assert(phase == PHASEMASK_NORMAL);
+        return z >= floor && z - floor <= maxSearchDist ? floor : INVALID_HEIGHT;
+    }
+    bool IsInWater(uint32, float, float, float, float) const { return false; }
     std::vector<Transport*> const& GetAllTransports() const { return transports; }
     uint32 GetAreaId(uint32 phase, float x, float, float) const
     {
@@ -551,6 +620,22 @@ inline Transport* GameObject::ToTransport()
 {
     return type == GAMEOBJECT_TYPE_MO_TRANSPORT || type == GAMEOBJECT_TYPE_TRANSPORT ? static_cast<Transport*>(this)
                                                                                      : nullptr;
+}
+// A lift or tram car that the core moves along its animation, cycling it or pausing at either end.
+class StaticTransport : public Transport
+{
+public:
+    uint32 pause = 0;
+    uint32 GetPauseTime() const { return pause; }
+    uint32 GetPeriod() const
+    {
+        return goValue.Transport.AnimationInfo ? goValue.Transport.AnimationInfo->TotalTime : GetPauseTime() + 2;
+    }
+    uint32 GetPathProgress() const { return goValue.Transport.PathProgress; }
+};
+inline StaticTransport const* GameObject::ToStaticTransport() const
+{
+    return type == GAMEOBJECT_TYPE_TRANSPORT ? dynamic_cast<StaticTransport const*>(this) : nullptr;
 }
 class MotionTransport : public Transport
 {
@@ -726,6 +811,8 @@ public:
     float GetExactDist2dSq(WorldPosition const& at) const { return (x - at.x) * (x - at.x) + (y - at.y) * (y - at.y); }
     float GetDistance(WorldPosition const& at) const
     { return std::sqrt((x - at.x) * (x - at.x) + (y - at.y) * (y - at.y) + (z - at.z) * (z - at.z)); }
+    float GetExactDist(WorldPosition const& at) const { return GetDistance(at); }
+    float GetCollisionHeight() const { return 2.0f; }
     GameObject* FindNearestGameObject(uint32 entry, float range) const
     {
         GameObject* nearest = nullptr;
@@ -928,6 +1015,7 @@ public:
 };
 '''
 fixture = (fixture.replace('NATIVES', natives).replace('PATH_TYPES', path_types)
+           .replace('ANIMATION_TYPES', animation_types)
            .replace('STATE_DECLARATION', state_declaration)
            .replace('CATALOG_DECLARATION', catalog_declaration).replace('TRAVEL_DECLARATION', travel_declaration))
 
@@ -1415,6 +1503,19 @@ int main()
         assert(trigger.IsActive());
         master.x = 8705.0f, master.z = 5.0f;
         assert(!trigger.IsActive());
+        // A bot on a lift or tram car steps off as it follows before a route of its own starts.
+        master.x = 9805.0f, master.z = 1300.0f;
+        assert(trigger.IsActive());
+        StaticTransport car;
+        bot.transport = &car;
+        assert(!trigger.IsActive());
+        ai.continentRoute.hasLink = true;
+        ai.continentRoute.link.kind = LinkKind::Lift;
+        assert(trigger.IsActive());
+        ai.continentRoute.link.kind = LinkKind::Transport;
+        assert(!trigger.IsActive());
+        ai.continentRoute.hasLink = false;
+        bot.transport = nullptr;
         ai.master = nullptr;
         bot.alive = true;
         assert(!trigger.IsActive());
@@ -1587,6 +1688,88 @@ int main()
         gameObjects.clear();
     }
 
+    // A car holds still only while its animation keeps it at a stop, or a paused one at the end it waits at.
+    TransportAnimationEntry const atStop{0, 0, 0.0f, 0.0f, 0.0f}, leaving{0, 20000, 0.0f, 0.0f, 0.0f},
+        away{0, 30000, 100.0f, 0.0f, 0.0f}, back{0, 40000, 0.0f, 0.0f, 0.0f};
+    TransportAnimation cycle;
+    cycle.Path = {{0, &atStop}, {20000, &leaving}, {30000, &away}, {40000, &back}};
+    cycle.TotalTime = 40000;
+    {
+        StaticTransport car;
+        car.goValue.Transport.AnimationInfo = &cycle;
+        car.goValue.Transport.PathProgress = 1000;
+        assert(ContinentTravel::HoldsStill(&car, 19000) && !ContinentTravel::HoldsStill(&car, 19500));
+        car.goValue.Transport.PathProgress = 25000;
+        assert(!ContinentTravel::HoldsStill(&car, 250));
+        car.goValue.Transport.PathProgress = 39900;
+        assert(!ContinentTravel::HoldsStill(&car, 1000));
+        car.pause = 5000;
+        for (uint32 state : {GO_STATE_READY, GO_STATE_ACTIVE})
+        {
+            car.state = state;
+            car.goValue.Transport.PathProgress = 0;
+            assert(ContinentTravel::HoldsStill(&car, 60000) == (state == GO_STATE_READY));
+            car.goValue.Transport.PathProgress = 5000;
+            assert(ContinentTravel::HoldsStill(&car, 60000) == (state == GO_STATE_ACTIVE));
+            car.goValue.Transport.PathProgress = 2500;
+            assert(!ContinentTravel::HoldsStill(&car, 0));
+        }
+        StaticTransport fixed;
+        MotionTransport ship;
+        assert(ContinentTravel::HoldsStill(&fixed, 60000) && !ContinentTravel::HoldsStill(&ship, 0));
+        assert(!ContinentTravel::HoldsStill(nullptr, 0));
+    }
+
+    // Companions board their master's car while it waits, ride still, step off with the master once it
+    // stands and wait for a car or ship that left without them.
+    {
+        World();
+        Map world;
+        Player bot;
+        bot.map = &world, bot.x = 8.0f;
+        GameObjectModel deck{-3.0f, 3.0f, -3.0f, 3.0f, 0.0f}, otherDeck{97.0f, 103.0f, -3.0f, 3.0f, 0.0f};
+        StaticTransport car, other;
+        car.m_model = &deck, other.m_model = &otherDeck, other.x = 100.0f;
+        car.goValue.Transport.AnimationInfo = other.goValue.Transport.AnimationInfo = &cycle;
+        car.goValue.Transport.PathProgress = other.goValue.Transport.PathProgress = 1000;
+        WorldPosition point;
+        using ContinentTravel::Ride;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Board);
+        assert(point == WorldPosition(0, 1.0f, 0.0f, 0.0f));
+        car.goValue.Transport.PathProgress = 17500;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
+        car.goValue.Transport.PathProgress = 1000;
+        deck.top = 10.0f;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
+        deck.top = 0.0f;
+        bot.x = 70.0f;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
+        bot.x = 60.0f;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Board);
+
+        // Riding with the master the bot keeps still; when the master steps off it follows at a stop.
+        bot.x = 2.0f, bot.transport = &car;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
+        assert(ContinentTravel::CompanionRide(&bot, nullptr, point) == Ride::Leave);
+        assert(point == WorldPosition(0, 5.0f, 0.0f, 0.5f));
+        assert(ContinentTravel::CompanionRide(&bot, &other, point) == Ride::Leave);
+        car.goValue.Transport.PathProgress = 25000;
+        assert(ContinentTravel::CompanionRide(&bot, nullptr, point) == Ride::Hold);
+
+        // Ships: the follow logic boards a docked one; a sailing one is waited for, not chased.
+        bot.transport = nullptr;
+        MotionTransport ship;
+        ship.path = transportMgr.GetTransportTemplate(100);
+        assert(ContinentTravel::CompanionRide(&bot, &ship, point) == Ride::Follow);
+        ship.progress = 90000;
+        assert(ContinentTravel::CompanionRide(&bot, &ship, point) == Ride::Hold);
+        bot.transport = &ship;
+        assert(ContinentTravel::CompanionRide(&bot, &ship, point) == Ride::Follow);
+        assert(ContinentTravel::CompanionRide(&bot, nullptr, point) == Ride::Follow);
+        bot.transport = nullptr;
+        assert(ContinentTravel::CompanionRide(&bot, nullptr, point) == Ride::Follow);
+    }
+
     // Random bots speak to the flight master of each zone they reach on their island.
     {
         World();
@@ -1678,6 +1861,23 @@ resume_area = re.search(r'!ContinentRoutes::SameArea\(sContinentRoutes.Locate\(W
                         r'sContinentRoutes.Locate\(route.destination\)\)', production['start'])[0]
 
 mutations = [
+    ('boarding a car about to leave', 'routes', 'distance <= CompanionBoardingYards && HoldsStill(carrier, walk)',
+     'distance <= CompanionBoardingYards && (HoldsStill(carrier, walk) || true)'),
+    ('boarding a car out of reach', 'routes', 'distance <= CompanionBoardingYards && HoldsStill(carrier, walk)',
+     'HoldsStill(carrier, walk)'),
+    ('stepping off a moving car', 'routes', 'HoldsStill(ride, StepOffMs) && FindLandingPoint',
+     '(HoldsStill(ride, StepOffMs) || true) && FindLandingPoint'),
+    ('chasing a sailing ship', 'routes', 'ride == carrier || IsDocked(ship, nullptr) ? Ride::Follow',
+     'ride == carrier || IsDocked(ship, nullptr) || true ? Ride::Follow'),
+    ('walking about on the master\'s car', 'routes', 'if (ride == carrier || !FindBoardingPoint',
+     'if (!FindBoardingPoint'),
+    ('a moving car counted still', 'routes', '(at - start).squaredLength() > 0.01f', '(at - start).squaredLength() < 0.0f'),
+    ('a paused car still at either end', 'routes', 'progress == (car->GetGoState() == GO_STATE_READY ? 0 : pause)',
+     '(progress == 0 || progress == pause)'),
+    ('route planned from a car', 'trigger', 'ride && ride->IsStaticTransport() && !(route.hasLink',
+     'ride && ride->IsStaticTransport() && false && !(route.hasLink'),
+    ('a route\'s own lift ride stopped', 'trigger', '!(route.hasLink && route.link.kind == ContinentRoutes::LinkKind::Lift)',
+     '!(route.hasLink && false)'),
     ('unusable links planned', 'policy', 'if (!allowed[i] || settled[i + 1])', 'if (settled[i + 1])'),
     ('walking between maps', 'policy', 'if (a.map != b.map)\n        return std::numeric_limits<float>::infinity();\n', ''),
     ('one end of a link in hostile territory', 'policy',
