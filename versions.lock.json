@@ -36,7 +36,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "cc8f5efc7a22e0f004342f105b9a30619fe0ab39",
+      "revision": "25b4820d604800ac03ac7807d0dcde47935db6a8",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "08e5a03f99b648745b840707327f7c803ed51aa1"
@@ -69,13 +69,14 @@
         "mod-playerbots-island-routes": "e18f82403c6496fa309ff12478ec1eccd2709315",
         "mod-playerbots-flight-master-discovery": "731ffda58b050329c36494f415426d28f9cdced2",
         "mod-playerbots-earned-warlock-demons": "c6c56bc5cd06bea7268b3fed9fe79c7384449c86",
-        "mod-playerbots-bind-home-with-master": "cc8f5efc7a22e0f004342f105b9a30619fe0ab39"
+        "mod-playerbots-bind-home-with-master": "cc8f5efc7a22e0f004342f105b9a30619fe0ab39",
+        "mod-playerbots-earned-shaman-totems": "25b4820d604800ac03ac7807d0dcde47935db6a8"
       }
     },
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "a9347655e7bd21a2ab1db7d939e9acdf84bec0db",
+      "revision": "9575e57ed734c654c0e089ddf95529ea261b5b9f",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "09dcdb3ff5eec7685cf7d039220452354301d96e"
@@ -101,7 +102,8 @@
         "mod-individual-progression-era-awareness-bounds": "ac003b9427e44b23e103f69f0d52d067f0fe8217",
         "mod-individual-progression-restored-era-quests": "82dd543136be13fe2c9918c366c83a8476d3861d",
         "mod-individual-progression-single-heeding-the-call": "853a93c7bb07090fd69ed5f8ca4776ed44de6aa4",
-        "mod-individual-progression-borean-persuasion": "a9347655e7bd21a2ab1db7d939e9acdf84bec0db"
+        "mod-individual-progression-borean-persuasion": "a9347655e7bd21a2ab1db7d939e9acdf84bec0db",
+        "mod-individual-progression-shaman-water-spirit": "9575e57ed734c654c0e089ddf95529ea261b5b9f"
       }
     },
     {

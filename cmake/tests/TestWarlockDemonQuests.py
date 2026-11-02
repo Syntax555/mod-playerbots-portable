@@ -31,6 +31,8 @@ module = args.source or core / 'modules/mod-playerbots/src'
 warlock = module / 'Ai/Class/Warlock'
 source = (warlock / 'WarlockDemonQuests.cpp').read_text()
 header = (warlock / 'WarlockDemonQuests.h').read_text()
+shared = (module / 'Ai/World/Rpg/Action/ClassQuestAction.cpp').read_text()
+shared_header = (module / 'Ai/World/Rpg/Action/ClassQuestAction.h').read_text()
 items = (module / 'Ai/Base/Actions/UseItemAction.cpp').read_text()
 
 # Ritual metadata is native quest content; prerequisites carry the demon unlocked
@@ -77,7 +79,7 @@ assert {(int(row['Data0']), int(row['Data1'])) for row in focus_templates} == {(
 assert all(int(row['type']) == 8 for row in focus_templates)
 ip_sql = core / 'modules/mod-individual-progression/data/sql/world/base'
 merged_relations = {}
-for table in ('creature_queststarter', 'creature_questender'):
+for table in ('creature_queststarter', 'creature_questender', 'gameobject_queststarter', 'gameobject_questender'):
     raw = (core / f'data/sql/base/db_world/{table}.sql').read_text()
     assert re.findall(r'^  `([^`]+)`', raw, re.MULTILINE) == ['id', 'quest']
     merged_relations[table] = {tuple(map(int, row)) for row in re.findall(r'^\((\d+),(\d+)\)[,;]$', raw, re.MULTILINE)}
@@ -92,8 +94,17 @@ for zone, (giver, quest) in restored_imps.items():
                    for insert in inserts), (zone, table, quest)
         merged_relations[table].add((giver, quest))
     assert by_quest[quest][1] == 688
-for table, relations in merged_relations.items():
+for table in ('creature_queststarter', 'creature_questender'):
+    relations = merged_relations[table]
     assert set(quests) <= {quest for _, quest in relations}, table
+assert (34, 140) in merged_relations['gameobject_queststarter']
+assert (33, 140) in merged_relations['gameobject_questender']
+go_quest = sql_rows(core, 'quest_template', {140})[0]
+repeatable_quest = sql_rows(core, 'quest_template', {1462})[0]
+repeatable_addon = sql_rows(core, 'quest_template_addon', {1462})[0]
+assert int(repeatable_addon['SpecialFlags']) & 1
+go_templates = sql_rows(core, 'gameobject_template', {33, 34})
+assert all(int(row['type']) == 2 and row['IconName'] != 'Point' for row in go_templates)
 trainer_sql = re.sub(r'--[^\n]*', '', (ip_sql / 'class_trainers.sql').read_text())
 for trainer in (31, 32):
     removals = re.findall(rf'DELETE FROM `trainer_spell` WHERE `TrainerId` = {trainer} AND `SpellId` IN \(([^)]+)\)', trainer_sql)
@@ -138,9 +149,16 @@ strategy = (warlock / 'Strategy/GenericWarlockNonCombatStrategy.cpp').read_text(
 assert 'NextAction("warlock demon quest", ACTION_NORMAL + 2)' in strategy
 
 quest_handler = (core / 'src/server/game/Handlers/QuestHandler.cpp').read_text()
-assert 'CanTakeQuest' in function(quest_handler, 'void WorldSession::HandleQuestgiverAcceptQuestOpcode(')
-assert 'CanRewardQuest' in function(quest_handler, 'void WorldSession::HandleQuestgiverChooseRewardOpcode(')
+native_accept = function(quest_handler, 'void WorldSession::HandleQuestgiverAcceptQuestOpcode(')
+native_reward = function(quest_handler, 'void WorldSession::HandleQuestgiverChooseRewardOpcode(')
+assert 'CanTakeQuest' in native_accept
+assert 'CanRewardQuest' in native_reward
+for handler, relation in ((native_accept, 'hasQuest'), (native_reward, 'hasInvolvedQuest')):
+    assert 'TYPEMASK_GAMEOBJECT' in handler and relation in handler
 player_quest = (core / 'src/server/game/Entities/Player/PlayerQuest.cpp').read_text()
+assert 'RemoveActiveQuest(quest_id, false);' in function(player_quest, 'void Player::RewardQuest(')
+assert 'if (!qInfo->IsRepeatable())' in function(player_quest, 'bool Player::GetQuestRewardStatus(')
+assert '!qInfo->IsRepeatable() && IsQuestRewarded(quest_id)' in function(player_quest, 'QuestStatus Player::GetQuestStatus(')
 native_take = function(player_quest, 'bool Player::CanTakeQuest(')
 for check in ('SatisfyQuestRace', 'SatisfyQuestClass', 'SatisfyQuestLevel',
               'SatisfyQuestPreviousQuest', 'SatisfyQuestConditions'):
@@ -160,6 +178,25 @@ native_focus = function((core / 'src/server/game/Spells/Spell.cpp').read_text(),
 assert 'GameObjectFocusCheck go_check(m_caster, m_spellInfo->RequiresSpellFocus)' in native_focus
 assert 'SPELL_FAILED_REQUIRES_SPELL_FOCUS' in native_focus
 rpg = (module / 'Ai/World/Rpg/Action/NewRpgBaseAction.cpp').read_text()
+native_interact = function(rpg, 'bool NewRpgBaseAction::CanInteractWithQuestGiver(')
+assert 'go->GetGoType() == GAMEOBJECT_TYPE_QUESTGIVER' in native_interact
+assert 'go->GetGOInfo()->IconName == "Point"' in native_interact
+assert 'go->IsWithinDistInMap(bot)' in function(rpg, 'bool NewRpgBaseAction::IsWithinInteractionDist(')
+go_source = (core / 'src/server/game/Entities/GameObject/GameObject.cpp').read_text()
+assert 'GetGOQuestRelationBounds(GetEntry())' in function(go_source, 'bool GameObject::hasQuest(')
+assert 'GetGOQuestInvolvedRelationBounds(GetEntry())' in function(go_source, 'bool GameObject::hasInvolvedQuest(')
+assert 'case GAMEOBJECT_TYPE_QUESTGIVER:' in function(go_source, 'float GameObject::GetInteractionDistance(')
+assert 'return 5.5555553f;' in function(go_source, 'float GameObject::GetInteractionDistance(')
+assert 'return GetExactDist(&pos) <= radius;' in function(go_source, 'bool GameObject::IsAtInteractDistance(Position const&')
+assert 'IsInMap(player) && InSamePhase(player) && IsAtInteractDistance(player)' in function(
+    go_source, 'bool GameObject::IsWithinDistInMap(Player const*')
+value_context = (module / 'Ai/Base/ValueContext.h').read_text()
+assert 'creators["nearest game objects no los"] = &ValueContext::nearest_game_objects_no_los;' in value_context
+assert 'new NearestGameObjects(botAI, sPlayerbotAIConfig.SightDistance, true)' in value_context
+nearest_objects = function((module / 'Ai/Base/Value/NearestGameObjects.cpp').read_text(),
+                           'GuidVector NearestGameObjects::Calculate()')
+assert 'result.push_back(go->GetGUID());' in nearest_objects
+assert not re.search(r'^\s*if \([^\n]*IsWithinLOSInMap', nearest_objects, re.MULTILINE)
 far_move = function(rpg, 'bool NewRpgBaseAction::MoveFarTo(')
 assert re.search(r'if \(sPlayerbotAIConfig.naturalProgression\)\s+return false;', far_move)
 assert 'path.GetActualEndPosition()' in far_move
@@ -174,7 +211,7 @@ native_dist = function(object_source, 'bool WorldObject::_IsWithinDist(')
 assert 'maxdist += GetObjectSize()' in native_dist and 'maxdist += obj->GetObjectSize()' in native_dist
 for forbidden in ('bot->AddQuest(', 'bot->RewardQuest(', 'CompleteQuest(', 'AreaExploredOrEventHappens(',
                   'learnSpell(', 'SummonCreature(', 'AddItem(', 'RemovePet(', 'TeleportTo('):
-    assert forbidden not in source, forbidden
+    assert forbidden not in source + shared, forbidden
 
 quest_values = (module / 'Ai/Base/Value/QuestValues.cpp').read_text()
 relation_map = function(quest_values, 'entryQuestRelationMap EntryQuestRelationMapValue::Calculate()')
@@ -183,40 +220,54 @@ assert '"item drop list", quest->RequiredItemId[objective]' in relation_map
 assert 'rMap[entry][questId] |= relationFlag;' in relation_map
 assert 'data[questId][flag][entry].push_back(GuidPosition(creData));' in quest_values
 assert 'data[questId][flag][entry].push_back(GuidPosition(goData));' in quest_values
+assert 'int32 entry = goData.id * -1;' in function(quest_values, 'void FindQuestObjectData::operator()(GameObjectData const&')
 travel = (module / 'Mgr/Travel/TravelMgr.cpp').read_text()
 assert 'gameobjectData.mapid == point.GetMapId()' in function(travel, 'void FindPointGameObjectData::operator()(')
 
 production = {
     'table': function(source, 'namespace\n'),
-    'gate': function(source, 'bool CanRunWarlockDemonQuest('),
+    'gate': function(shared, 'bool CanRunClassQuest('),
+    'warlockgate': function(source, 'bool CanRunWarlockDemonQuest('),
+    'locations': function(shared, 'questRelationGuidps const* ClassQuestLocations('),
+    'routeconstructor': function(shared, 'ClassQuestRouteCosts::ClassQuestRouteCosts('),
+    'routecost': function(shared, 'float ClassQuestRouteCosts::Cost('),
+    'nearest': function(shared, 'WorldPosition NearestClassQuestLocation('),
+    'needed': function(shared, 'bool ClassQuestObjectiveNeeded('),
     'current': function(source, 'WarlockDemonQuest const* CurrentWarlockDemonQuest('),
     'value': function(source, 'uint32 WarlockDemonQuestValue::Calculate()'),
     'trigger': function(source, 'bool WarlockDemonQuestTrigger::IsActive()'),
     'useful': function(source, 'bool WarlockDemonQuestAction::isUseful()'),
     'execute': function(source, 'bool WarlockDemonQuestAction::Execute('),
-    'giver': function(source, 'bool WarlockDemonQuestAction::InteractWithQuestGiver('),
-    'move': function(source, 'bool WarlockDemonQuestAction::MoveToQuestLocation('),
-    'travel': function(source, 'bool WarlockDemonQuestAction::MoveToQuestPosition('),
-    'objectives': function(source, 'bool WarlockDemonQuestAction::DoObjectives('),
+    'giver': function(shared, 'bool ClassQuestAction::InteractWithQuestGiver('),
+    'move': function(shared, 'bool ClassQuestAction::MoveToQuestLocation('),
+    'travel': function(shared, 'bool ClassQuestAction::MoveToQuestPosition('),
+    'objectives': function(shared, 'bool ClassQuestAction::DoObjectives('),
     'ritual': function(source, 'bool WarlockDemonQuestAction::UseRitual('),
     'wrapper': function(items, 'bool UseItemAction::UseItemOnUnit('),
     'precheck': precheck,
     'focuscheck': focus_check,
     'schedule': function(trigger_source, 'bool Trigger::needCheck('),
     'triggerconstructor': function(trigger_source, 'Trigger::Trigger('),
-    'classes': '\n'.join(function(header, name) + ';' for name in (
+    'classes': '\n'.join(function(shared_header, name) + ';' for name in (
+        'class ClassQuestRouteCosts', 'class ClassQuestAction')) + '\n' +
+        '\n'.join(function(header, name) + ';' for name in (
         'struct WarlockDemonQuest', 'class WarlockDemonQuestValue',
         'class WarlockDemonQuestTrigger', 'class WarlockDemonQuestAction')),
     'accept': function(rpg, 'bool NewRpgBaseAction::AcceptQuest('),
     'turnin': function(rpg, 'bool NewRpgBaseAction::TurnInQuest('),
+    'relationmap': relation_map,
+    'gospawnrelations': function(quest_values, 'void FindQuestObjectData::operator()(GameObjectData const&'),
+    'gonativerelations': '\n'.join(function(go_source, name) for name in (
+        'bool GameObject::hasQuest(', 'bool GameObject::hasInvolvedQuest(')),
 }
 production['policyinclude'] = '#include "' + str(module / 'Mgr/Travel/ContinentRoutePolicy.h') + '"'
 native_quests = []
-for quest, row in quests.items():
+for quest, row in {**quests, 140: go_quest, 1462: repeatable_quest}.items():
     fields = [str(quest), str(reward_demons.get(int(row['RewardSpell']), 0)), row['StartItem']]
     for field, count in (('RequiredNpcOrGo', 4), ('RequiredNpcOrGoCount', 4),
                          ('RequiredItemId', 6), ('RequiredItemCount', 6)):
         fields.append('{' + ','.join(row[field + str(index + 1)] for index in range(count)) + '}')
+    fields.append('true' if quest == 1462 else 'false')
     native_quests.append('Quest{' + ','.join(fields) + '}')
 production['nativequests'] = ('for(Quest const& native : {' + ',\n'.join(native_quests)
                              + '}) objectMgr.quests.emplace(native.id,native);')
@@ -248,6 +299,7 @@ using uint8=uint8_t; using uint32=uint32_t; using int32=int32_t;
 constexpr int CLASS_WARLOCK=9, UNIT_STATE_LOST_CONTROL=1, CURRENT_CHANNELED_SPELL=1, CURRENT_GENERIC_SPELL=2;
 constexpr uint32 QUEST_OBJECTIVES_COUNT=4, QUEST_ITEM_OBJECTIVES_COUNT=6, IN_MILLISECONDS=1000;
 constexpr int CMSG_QUESTGIVER_CHOOSE_REWARD=1, CMSG_QUESTGIVER_ACCEPT_QUEST=2, GAMEOBJECT_TYPE_SPELL_FOCUS=8;
+constexpr int GAMEOBJECT_TYPE_QUESTGIVER=2;
 constexpr uint32 UNIT_NPC_FLAG_QUESTGIVER=2;
 constexpr float INTERACTION_DISTANCE=5.0f;
 enum QuestStatus { QUEST_STATUS_NONE=0, QUEST_STATUS_INCOMPLETE=1, QUEST_STATUS_COMPLETE=2, QUEST_STATUS_REWARDED=3 };
@@ -262,6 +314,8 @@ struct ObjectGuid {
 };
 ObjectGuid ObjectGuid::Empty;
 using GuidVector=std::vector<ObjectGuid>;
+using QuestRelations=std::multimap<uint32,uint32>;
+using QuestRelationBounds=std::pair<QuestRelations::const_iterator,QuestRelations::const_iterator>;
 struct Event {};
 struct Player; struct Creature; struct TempSummon; struct WorldPosition; struct GameObject;
 struct Spell { uint32 kind=0; };
@@ -286,8 +340,10 @@ struct Quest {
     std::array<int32,QUEST_OBJECTIVES_COUNT> RequiredNpcOrGo{};
     std::array<uint32,QUEST_OBJECTIVES_COUNT> RequiredNpcOrGoCount{};
     std::array<uint32,QUEST_ITEM_OBJECTIVES_COUNT> RequiredItemId{},RequiredItemCount{};
+    bool repeatable=false;
     uint32 GetQuestId() const { return id; }
     uint32 GetRewChoiceItemsCount() const { return 0; }
+    bool IsRepeatable() const { return repeatable; }
 };
 struct QuestStatusData {
     QuestStatus Status=QUEST_STATUS_NONE;
@@ -322,12 +378,19 @@ struct TempSummon:Creature {
     TempSummon* ToTempSummon() override { return this; }
     ObjectGuid GetSummonerGUID() const { return summoner; }
 };
-struct GameObjectTemplate { uint32 type=GAMEOBJECT_TYPE_SPELL_FOCUS; struct { uint32 focusId=43; float dist=10; } spellFocus; };
+struct GameObjectTemplate {
+    uint32 type=GAMEOBJECT_TYPE_SPELL_FOCUS; std::string IconName;
+    struct { uint32 focusId=43; float dist=10; } spellFocus;
+};
 struct GameObject:WorldObject {
     bool spawned=true; GameObjectTemplate info;
     bool isSpawned() const { return spawned; }
     uint32 GetGoType() const { return info.type; }
     GameObjectTemplate const* GetGOInfo() const { return &info; }
+    bool hasQuest(uint32) const;
+    bool hasInvolvedQuest(uint32) const;
+    using WorldObject::IsWithinDistInMap;
+    bool IsWithinDistInMap(Player const*) const;
 };
 @@FOCUSCHECK@@
 struct Player:Unit {
@@ -370,11 +433,28 @@ struct Player:Unit {
     uint32 GetMapId() const { return mapId; } uint32 GetPhaseMask() const { return phase; }
 };
 struct ObjectMgr {
+    using QuestMap=std::map<uint32,Quest*>;
     std::map<uint32,Quest> quests; std::map<uint32,GameObjectTemplate> objects;
+    QuestMap questTemplates; QuestRelations creatureStarters,creatureEnders,goStarters,goEnders;
     Quest const* GetQuestTemplate(uint32 q) const { return quests.contains(q)?&quests.at(q):nullptr; }
     auto const* GetGameObjectTemplates() const { return &objects; }
+    QuestMap const& GetQuestTemplates() {
+        questTemplates.clear(); for(auto& [id,q]:quests) questTemplates[id]=&q; return questTemplates;
+    }
+    auto const* GetCreatureQuestRelationMap() const { return &creatureStarters; }
+    auto const* GetCreatureQuestInvolvedRelationMap() const { return &creatureEnders; }
+    auto const* GetGOQuestRelationMap() const { return &goStarters; }
+    auto const* GetGOQuestInvolvedRelationMap() const { return &goEnders; }
+    QuestRelationBounds GetGOQuestRelationBounds(uint32 entry) const { return goStarters.equal_range(entry); }
+    QuestRelationBounds GetGOQuestInvolvedRelationBounds(uint32 entry) const { return goEnders.equal_range(entry); }
 } objectMgr;
 auto* sObjectMgr=&objectMgr;
+@@GONATIVERELATIONS@@
+bool GameObject::IsWithinDistInMap(Player const* p) const {
+    // Synthetic no-display metadata exercises the native exact-distance fallback.
+    float const dx=x-p->x,dz=z-p->z;
+    return sameMap&&samePhase&&dx*dx+dz*dz<=5.5555553f*5.5555553f;
+}
 std::map<uint32,uint32> itemSpells;
 void Session::HandleQuestgiverAcceptQuestOpcode(WorldPacket& p) {
     assert(p.opcode==CMSG_QUESTGIVER_ACCEPT_QUEST&&p.values.size()==3); ++accepts;
@@ -387,7 +467,8 @@ void Session::HandleQuestgiverChooseRewardOpcode(WorldPacket& p) {
     assert(p.opcode==CMSG_QUESTGIVER_CHOOSE_REWARD&&p.values.size()==3); ++rewards;
     uint32 q=p.values[1]; auto const* quest=objectMgr.GetQuestTemplate(q);
     if (!reward||!quest||!player->CanRewardQuest(quest,false)) return;
-    player->quests[q].Status=QUEST_STATUS_REWARDED;
+    if(quest->IsRepeatable()) player->quests.erase(q);
+    else player->quests[q].Status=QUEST_STATUS_REWARDED;
     if(quest->rewardDemon) player->known.insert(quest->rewardDemon);
 }
 struct Config { bool naturalProgression=true,continentTravel=false; float SightDistance=100; std::set<uint32> IgnoredQuests; } sPlayerbotAIConfig;
@@ -405,6 +486,7 @@ struct WorldPosition {
     WorldPosition()=default;
     explicit WorldPosition(WorldObject* o):map(o->mapId),x(o->x),z(o->z){}
     WorldPosition(uint32 m,float a,float b=0,float c=0):map(m),x(a),y(b),z(c){}
+    explicit WorldPosition(GameObjectData const& go):map(go.mapid),x(go.posX),y(go.posY),z(go.posZ){}
     bool operator==(WorldPosition const&) const=default;
     uint32 GetMapId() const { return map; }
     float GetPositionX() const { return x; } float GetPositionY() const { return y; } float GetPositionZ() const { return z; }
@@ -417,9 +499,17 @@ struct WorldPosition {
 float Player::GetExactDist(WorldPosition const& p) const { return std::sqrt((p.x-x)*(p.x-x)+p.y*p.y+(p.z-z)*(p.z-z)); }
 float Player::GetDistance(WorldPosition const& p) const { return std::max(0.0f,GetExactDist(p)-size); }
 enum class QuestRelationFlag:uint32 { objective1=1,objective2=2,objective3=4,objective4=8,questGiver=16,questTaker=32 };
+using entryQuestRelationMap=std::unordered_map<int32,std::unordered_map<uint32,uint32>>;
 using questEntryGuidps=std::unordered_map<int32,std::vector<WorldPosition>>;
 using questRelationGuidps=std::unordered_map<uint32,questEntryGuidps>;
 using questGuidpMap=std::unordered_map<uint32,questRelationGuidps>;
+using GuidPosition=WorldPosition;
+struct EntryQuestRelationMapValue { entryQuestRelationMap Calculate(); };
+struct FindQuestObjectData {
+    entryQuestRelationMap relationMap; questGuidpMap data;
+    void operator()(GameObjectData const&);
+};
+#define GAI_VALUE2(type,name,qualifier) std::vector<int32>{}
 struct GlobalQuestLocations { questGuidpMap data; auto const& RefGet() const { return data; } } locations;
 struct SharedContext { template<class T> GlobalQuestLocations* getGlobalValue(std::string) { return &locations; } } sSharedValueContext;
 struct NewRpgInfo {
@@ -435,7 +525,11 @@ struct ContinentRouteState {
 };
 struct Context { GuidVector npcs,objects; uint32 quest=0; };
 template<class T> T GetValue(Context* c,std::string const& name) {
-    if constexpr(std::is_same_v<T,GuidVector>) return name=="nearest npcs"?c->npcs:c->objects;
+    if constexpr(std::is_same_v<T,GuidVector>) {
+        if(name=="nearest npcs") return c->npcs;
+        if(name=="nearest game objects no los") return c->objects;
+        return {};
+    }
     else return c->quest;
 }
 #define AI_VALUE(type,name) GetValue<type>(context,name)
@@ -488,7 +582,11 @@ struct NewRpgBaseAction:MovementAction {
     }
     bool MoveWorldObjectTo(ObjectGuid) { if(!pathResult) return false; ++botAI->moves; return botAI->moveResult; }
     bool CanInteractWithQuestGiver(Creature* c) { return c->alive&&c->canInteract; }
+    bool CanInteractWithQuestGiver(GameObject* go) {
+        return botAI->GetGameObject(go->GetGUID())==go&&go->GetGoType()==GAMEOBJECT_TYPE_QUESTGIVER&&go->info.IconName!="Point";
+    }
     bool IsWithinInteractionDist(Creature* c) { return bot->GetDistance(c)<=INTERACTION_DISTANCE; }
+    bool IsWithinInteractionDist(GameObject* go) { return go->IsWithinDistInMap(bot); }
     bool AcceptQuest(Quest const*,ObjectGuid);
     bool TurnInQuest(Quest const*,ObjectGuid);
     uint32 BestRewardIndex(Quest const*) { return 0; }
@@ -529,6 +627,12 @@ struct UseItemAction {
 @@TURNIN@@
 @@TABLE@@
 @@GATE@@
+@@WARLOCKGATE@@
+@@LOCATIONS@@
+@@ROUTECONSTRUCTOR@@
+@@ROUTECOST@@
+@@NEAREST@@
+@@NEEDED@@
 @@CURRENT@@
 @@VALUE@@
 @@TRIGGER@@
@@ -540,6 +644,8 @@ struct UseItemAction {
 @@OBJECTIVES@@
 @@RITUAL@@
 @@EXECUTE@@
+@@RELATIONMAP@@
+@@GOSPAWNRELATIONS@@
 '''
 
 tests = r'''
@@ -583,8 +689,67 @@ struct Scenario {
         sContinentRoutes.links.push_back({ContinentRoutes::LinkKind::Transport,123,{1,0,0,0},{0,0,0,0},30});
     }
 };
+struct ClassQuestProbe:ClassQuestAction {
+    explicit ClassQuestProbe(PlayerbotAI* ai):ClassQuestAction(ai,"fixture class quest"){}
+    using ClassQuestAction::InteractWithQuestGiver;
+    using ClassQuestAction::MoveToQuestLocation;
+};
+struct GameObjectScenario:Scenario {
+    ClassQuestProbe questAction{&ai}; Quest const* quest;
+    GameObjectScenario():quest(objectMgr.GetQuestTemplate(140)) {
+        bot.quests.clear(); bot.available={140}; ai.context.npcs.clear();
+        focus.entry=34; focus.info.type=GAMEOBJECT_TYPE_QUESTGIVER;
+        objectMgr.goStarters.emplace(34,140); objectMgr.goEnders.emplace(33,140);
+        FindQuestObjectData worker; worker.relationMap=EntryQuestRelationMapValue().Calculate();
+        worker(GameObjectData{34,0,1,200,0,0}); worker(GameObjectData{33,0,1,300,0,0});
+        locations.data=worker.data;
+    }
+    bool Accept() { return questAction.InteractWithQuestGiver(quest,false); }
+    bool Reward() { return questAction.InteractWithQuestGiver(quest,true); }
+    void Rewardable() { bot.quests[140].Status=QUEST_STATUS_COMPLETE; focus.entry=33; }
+};
 int main() {
     { Scenario s; assert(s.trigger.needCheck(now)&&s.trigger.needCheck(now+200)); }
+    { Scenario s; s.bot.cls=3;
+      assert(CanRunClassQuest(&s.ai,3)&&!CanRunClassQuest(&s.ai,CLASS_WARLOCK)&&!CanRunWarlockDemonQuest(&s.ai)); }
+    { GameObjectScenario s;
+      assert(locations.data[140][16].contains(-34)&&locations.data[140][32].contains(-33));
+      assert(!locations.data[140][16].contains(-33)&&!locations.data[140][32].contains(-34));
+      assert(s.Accept()&&s.bot.GetQuestStatus(140)==QUEST_STATUS_INCOMPLETE&&s.bot.session.accepts==1);
+      s.Rewardable(); assert(s.Reward()&&s.bot.GetQuestRewardStatus(140)&&s.bot.session.rewards==1); }
+    { GameObjectScenario s; s.bot.session.accept=false;
+      assert(!s.Accept()&&s.bot.GetQuestStatus(140)==QUEST_STATUS_NONE&&s.bot.session.accepts==1); }
+    { GameObjectScenario s; s.Rewardable(); s.bot.session.reward=false;
+      assert(!s.Reward()&&!s.bot.GetQuestRewardStatus(140)&&s.bot.session.rewards==1); }
+    { GameObjectScenario s; s.Rewardable(); s.bot.canReward=false;
+      assert(!s.Reward()&&s.bot.session.rewards==0); }
+    { GameObjectScenario s; s.focus.entry=33; assert(!s.Accept()&&s.bot.session.accepts==0); }
+    { GameObjectScenario s; s.Rewardable(); s.focus.entry=34; assert(!s.Reward()&&s.bot.session.rewards==0); }
+    for(auto field:{&WorldObject::inWorld,&WorldObject::sameMap,&WorldObject::samePhase,&WorldObject::visible}) {
+        GameObjectScenario s; s.focus.*field=false; assert(!s.Accept()&&s.bot.session.accepts==0);
+    }
+    { GameObjectScenario s; s.focus.spawned=false; assert(!s.Accept()&&s.bot.session.accepts==0); }
+    { GameObjectScenario s; s.focus.info.type=GAMEOBJECT_TYPE_SPELL_FOCUS; assert(!s.Accept()&&s.bot.session.accepts==0); }
+    { GameObjectScenario s; s.focus.info.IconName="Point"; assert(!s.Accept()&&s.bot.session.accepts==0); }
+    { GameObjectScenario s; s.focus.x=5.4f; assert(s.Accept()&&s.bot.session.accepts==1&&s.ai.moves==0); }
+    { GameObjectScenario s; s.focus.x=6.0f; assert(s.Accept()&&s.bot.session.accepts==0&&s.ai.moves==1); }
+    { GameObjectScenario s; s.focus.los=false; assert(s.Accept()&&s.bot.session.accepts==0&&s.ai.moves==1); }
+    { GameObjectScenario s; s.focus.x=20; pathResult=false; assert(!s.Accept()&&s.bot.session.accepts==0); }
+    { GameObjectScenario s; s.Crossing(); s.focus.x=20;
+      assert(s.Accept()&&s.ai.routeMoves==1&&s.bot.session.accepts==0); }
+    { GameObjectScenario s; s.ai.context.objects.clear();
+      ClassQuestRouteCosts costs(&s.ai);
+      assert(NearestClassQuestLocation(140,16,costs)==WorldPosition(0,200));
+      assert(NearestClassQuestLocation(140,32,costs)==WorldPosition(0,300));
+      assert(s.questAction.MoveToQuestLocation(s.quest,false)&&s.ai.farMoves==1);
+      assert(s.questAction.MoveToQuestLocation(s.quest,true)&&s.ai.farMoves==2); }
+    for(bool accepted:{false,true}) {
+        Scenario s; ClassQuestProbe action(&s.ai); auto const* quest=objectMgr.GetQuestTemplate(1462);
+        s.giver.finishes.insert(1462); s.bot.quests[1462].Status=QUEST_STATUS_COMPLETE; s.bot.session.reward=accepted;
+        assert(action.InteractWithQuestGiver(quest,true)==accepted&&s.bot.session.rewards==1);
+        assert(s.bot.GetQuestStatus(1462)==(accepted?QUEST_STATUS_NONE:QUEST_STATUS_COMPLETE));
+        assert(!s.bot.GetQuestRewardStatus(1462));
+    }
     for(auto const& row:WarlockDemonQuests) {
         Scenario s(row.Quest);
         assert(s.value.Calculate()==row.Quest&&s.trigger.IsActive()&&s.action.isUseful());
@@ -751,12 +916,12 @@ mutations = [
     ('ignored quest skipped', 'current', 'sPlayerbotAIConfig.IgnoredQuests.count(data.Quest)', 'false'),
     ('own native quest access required', 'current', '!bot->CanTakeQuest(quest, false)', 'false'),
     ('own quest log capacity required', 'current', '!bot->CanAddQuest(quest, false)', 'false'),
-    ('same map required without travel', 'table', 'pos.GetMapId() == _bot->GetMapId()', 'true'),
-    ('configured earned routes required', 'table', 'sPlayerbotAIConfig.continentTravel && sContinentRoutes.Built()', 'true'),
+    ('same map required without travel', 'routecost', 'pos.GetMapId() == _bot->GetMapId()', 'true'),
+    ('configured earned routes required', 'routeconstructor', 'sPlayerbotAIConfig.continentTravel && sContinentRoutes.Built()', 'true'),
     ('nearest eligible native giver selected', 'current', 'costs->Cost(pos) < distance',
      'costs->Cost(pos) <= distance && !available'),
     ('accepted packet result rechecked', 'giver', '&& bot->GetQuestStatus(quest->GetQuestId()) != QUEST_STATUS_NONE', ''),
-    ('reward packet result rechecked', 'giver', '&& bot->GetQuestRewardStatus(quest->GetQuestId())', ''),
+    ('reward packet result rechecked', 'giver', 'bot->GetQuestRewardStatus(quest->GetQuestId()) ||', 'true ||'),
     ('native giver interaction required', 'giver', '!CanInteractWithQuestGiver(creature) ||', ''),
     ('giver phase required', 'giver', '!bot->InSamePhase(creature) ||', ''),
     ('giver visibility required', 'giver', '!bot->CanSeeOrDetect(creature) ||', ''),
@@ -767,12 +932,12 @@ mutations = [
     ('route execution configuration required', 'travel',
      'if (!sPlayerbotAIConfig.continentTravel || !sContinentRoutes.Built())', 'if (false)'),
     ('travel controller receives goal', 'travel', 'botAI->rpgInfo.ChangeToTravelRoute();', ''),
-    ('objective still needed', 'table', 'bot->GetItemCount(quest->RequiredItemId[index]) < quest->RequiredItemCount[index]', 'true'),
+    ('objective still needed', 'needed', 'bot->GetItemCount(quest->RequiredItemId[index]) < quest->RequiredItemCount[index]', 'true'),
     ('cross-map objectives routed first', 'objectives', '_objectivePos.GetMapId() != bot->GetMapId()', 'false'),
     ('objective map cache retained during crossing', 'objectives', '_objectiveMap != bot->GetMapId()',
      '_objectivePos.GetMapId() != bot->GetMapId()'),
-    ('unsuccessful objective search cached', 'objectives', '_objectivePos != WorldPosition() && !ObjectiveNeeded',
-     '!ObjectiveNeeded'),
+    ('unsuccessful objective search cached', 'objectives', '_objectivePos != WorldPosition() && !ClassQuestObjectiveNeeded',
+     '!ClassQuestObjectiveNeeded'),
     ('quest chest approached', 'objectives', '_objectiveIsGameObject ||', ''),
     ('elevated quest target approached', 'objectives', 'std::abs(bot->GetPositionZ() - _objectivePos.GetPositionZ()) > 3.0f', 'false'),
     ('obscured quest target approached', 'objectives', '!bot->IsWithinLOS(_objectivePos.GetPositionX(), _objectivePos.GetPositionY(), _objectivePos.GetPositionZ())', 'false'),
@@ -794,10 +959,29 @@ mutations = [
     ('native focus spawn id required', 'ritual', 'entry.second.spellFocus.focusId == _focusId', 'true'),
     ('native focus route required', 'ritual', 'return MoveToQuestPosition(nearest);', 'return true;'),
     ('only active Strahad escort waited', 'ritual', '!strahad->HasNpcFlag(UNIT_NPC_FLAG_QUESTGIVER)', 'true'),
+    ('native gameobject enders populate takers', 'relationmap', 'sObjectMgr->GetGOQuestInvolvedRelationMap()',
+     'sObjectMgr->GetGOQuestRelationMap()'),
+    ('native gameobject entries stay signed', 'gospawnrelations', 'int32 entry = goData.id * -1;', 'int32 entry = goData.id;'),
+    ('gameobject no-los producer used', 'giver', '"nearest game objects no los"', '"nearest game objects"'),
+    ('gameobject in world required', 'giver', '!go->IsInWorld() ||', ''),
+    ('gameobject spawn required', 'giver', '!go->isSpawned() ||', ''),
+    ('gameobject map required', 'giver', '!bot->IsInMap(go) ||', ''),
+    ('gameobject phase required', 'giver', '!bot->InSamePhase(go) ||', ''),
+    ('gameobject visible required', 'giver', '!bot->CanSeeOrDetect(go) ||', ''),
+    ('native gameobject interaction required', 'giver', '!CanInteractWithQuestGiver(go) ||', ''),
+    ('gameobject relation required', 'giver',
+     '!(reward ? go->hasInvolvedQuest(quest->GetQuestId()) : go->hasQuest(quest->GetQuestId()))', 'false'),
+    ('native gameobject interaction range required', 'giver', '!IsWithinInteractionDist(go) ||', ''),
+    ('gameobject line of sight required', 'giver', '!IsWithinInteractionDist(go) || !bot->IsWithinLOSInMap(go)',
+     '!IsWithinInteractionDist(go)'),
+    ('repeatable reward completion recognized', 'giver', 'quest->IsRepeatable() && before == QUEST_STATUS_COMPLETE',
+     'false && before == QUEST_STATUS_COMPLETE'),
+    ('repeatable reward packet result rechecked', 'giver',
+     'bot->GetQuestStatus(quest->GetQuestId()) == QUEST_STATUS_NONE', 'true'),
 ]
 for label, predicate in (
         ('earned play mode', 'sPlayerbotAIConfig.naturalProgression'),
-        ('warlock class', 'bot->getClass() == CLASS_WARLOCK'),
+        ('requested class', 'bot->getClass() == classId'),
         ('headless session', 'bot->GetSession()->IsHeadless()'),
         ('random ownership', 'sRandomPlayerbotMgr.IsRandomBot(bot)'),
         ('no human controller', '!botAI->GetMaster()'),
@@ -816,7 +1000,7 @@ for label, predicate in (
         ('no vehicle', '!bot->GetVehicle()'),
         ('own control', '!bot->HasUnitState(UNIT_STATE_LOST_CONTROL)'),
         ('no overlapping cast', '!bot->IsNonMeleeSpellCast(true)')):
-    mutations.append((label, 'gate', predicate, 'true'))
+    mutations.append((label, 'gate', predicate, 'classId != 0' if label == 'requested class' else 'true'))
 for label, key, old, _ in mutations:
     assert old in production[key], label
 

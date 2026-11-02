@@ -191,11 +191,18 @@ fixtures pass. Use native core/module functions before adding replacements.
   [class quest guide](class-quests.md#priest-training). Check teacher access,
   prerequisites, ordinary turn-in, earned rank 1 and paid later ranks; do not
   infer autonomous completion from the restored quest data.
-- [ ] **Shaman:** Audit racial Call of Earth, Fire, Water and Air chains,
-  including 1518/1521/9451, 1527/9555, 96/9509 and 1531/1532/9554. Check
-  source items, elemental encounters, native quest credit, totem rewards and
-  subsequent paid spells; scripted objectives need explicit handling if the
-  ordinary quest actions cannot perform them.
+- [ ] **Shaman:** Live-verify the 33-step Vanilla Horde totem and recovery
+  action for Orc, Troll and Tauren: owned Sapta, invisible spirits, all three
+  waterskin focuses, normal brazier acceptance/turn-in and earned continent
+  routes. Test the native quest-100 start event, duplicate-spirit refusal,
+  death/relog/despawn recovery, normal abandon/reaccept and full bags.
+  Add the Draenei chains 9451/9555/9509/9554 and audit optional equipment,
+  dungeon and raid quests before claiming all Shaman class quests complete.
+  See [totem coverage](class-quests.md#autonomous-shaman-totem-quests) and the
+  [nine-class source comparison](class-quest-comparison.md).
+- [ ] Extend the shared quest-object relation format for item slots 5 and 6
+  if a selected quest requires them. Objective bits 0–3 currently share the
+  map with giver/taker flags; extending the loop alone would mix those roles.
 - [ ] **Mage:** Audit class quest chains and their era-specific prerequisites,
   including Magecraft (8250), Fragmented Magic (9364) and Attunement to Dalaran
   (12172/12173). Verify actual rewards and trainer requirements before treating
