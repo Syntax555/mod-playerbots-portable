@@ -174,7 +174,13 @@ move to another map whose zones also suit the bot. Companions whose player or
 SelfBot master is on another continent or island, or more than 1,500 yards away
 on the same one, travel the same way; `stay` keeps them in place. A companion
 bound at your inn follows your hearthstone with its own when its hearthstone is
-ready and walking would take longer. Bots do not
+ready and walking would take longer.
+
+Companions near you step onto the elevator or tram car you stand on while it
+waits at their level, keep still during the ride and step off after you. Ships
+and zeppelins are boarded while docked. A companion that misses its ride waits
+instead of chasing it, then takes the next one after you arrive. Inside
+dungeons and raids, following keeps its previous behavior. Bots do not
 open mage portals for others on their own; a player can ask a mage companion to
 `cast` a portal it knows, with its own rune.
 
