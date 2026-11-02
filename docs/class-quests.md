@@ -101,6 +101,33 @@ historical demon grimoire purchases remain pending. End-to-end live verification
 for all four Vanilla warlock races is still required; see the
 [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
+## Autonomous shaman totem quests
+
+Solo, headless random shamans using natural progression can pursue the Vanilla
+Horde Earth, Fire, Water and Air chains. The action recognizes 28 main quests
+and five native recovery quests. It stops a totem family when the character
+owns its totem or has already earned its final reward. Ordinary trainers still
+control paid spell training; the Air reward's Swift Wind buff is not a learned
+spell.
+
+Bots use their own Sapta at the matching native shrine before approaching
+invisible spirits. This includes Earth delivery quests that the core already
+marks complete before the spirit can be seen. Empty waterskins are filled at
+their spell's native focus, including destinations on another continent.
+Kills, loot, brazier acceptance and turn-in use the ordinary core handlers.
+
+Call of Water (100) starts the native purified-spirit event when accepted at
+its brazier or Tiev Mordune. This start behavior follows the pinned Classic and
+TBC quest scripts. Nearby living spirits prevent duplicate summons. When an
+unrewarded quest 100 has waited without its spirit, a bot can abandon that empty
+quest and accept it again normally. It retains the rewards of earlier steps.
+Other Sapta and spirit recovery still follows the native quest requirements.
+
+Draenei chains, optional class equipment quests and complete live runs remain
+on the [class audit](todo.md#dungeons-raids-and-outdoor-content). The
+[source comparison](class-quest-comparison.md) distinguishes existing quest
+restoration from class-specific bot actions.
+
 ## Client installation
 
 Install the release's matching EraTalents addon and `Data/patch-V.mpq` with WoW
@@ -124,7 +151,7 @@ and packaged license notices identify the exact source revisions and adaptations
 SQL updates run through the ordinary database updater.
 
 This integration restores the listed priest families and quest-taught lessons,
-and adds the scoped warlock automation described above. Other class quests
-retain the core and Individual Progression support. It does not provide three
+and adds the scoped warlock and shaman automation described above. Other class
+quests retain the core and Individual Progression support. It does not provide three
 complete historical quest databases or certify every class quest and scripted
 objective.

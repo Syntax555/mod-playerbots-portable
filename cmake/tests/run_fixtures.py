@@ -59,6 +59,9 @@ GAMEPLAY = (
     "TestContinentRoutes",
     "TestWarlockDemonQuests",
     "TestQuestGrindTargets",
+    "TestQuestObjectRelations",
+    "TestShamanTotemQuests",
+    "TestShamanWaterSpirit",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -79,12 +82,16 @@ MODULE_FIXTURES = {
         "TestContinentRoutes",
         "TestWarlockDemonQuests",
         "TestQuestGrindTargets",
+        "TestQuestObjectRelations",
+        "TestShamanTotemQuests",
+        "TestShamanWaterSpirit",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
         "TestEraWorldContent",
         "TestBoreanTundra",
         "TestContinentRoutes",
+        "TestShamanWaterSpirit",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",
