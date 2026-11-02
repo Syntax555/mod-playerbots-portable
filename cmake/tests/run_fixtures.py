@@ -67,6 +67,8 @@ GAMEPLAY = (
     "TestMoltenCoreRoster",
     "TestEraRaidEntrances",
     "TestHowlingFjord",
+    "TestIpWorldFixes",
+    "TestIpCommandSafety",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -101,6 +103,8 @@ MODULE_FIXTURES = {
         "TestProfessionTierCap",
         "TestEraRaidEntrances",
         "TestHowlingFjord",
+        "TestIpWorldFixes",
+        "TestIpCommandSafety",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",

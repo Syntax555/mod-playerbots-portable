@@ -38,6 +38,8 @@ trainer_states = function((core / 'src/server/game/Entities/Creature/Trainer.h')
                           'enum class SpellState : uint8')
 header = (module / 'src/IndividualProgression.h').read_text()
 commands = (module / 'src/cs_individualProgression.cpp').read_text()
+chat_source = (core / 'src/server/game/Chat/Chat.cpp').read_text()
+assert 'return m_session ? m_session->GetPlayer() : nullptr;' in function(chat_source, 'Player* ChatHandler::GetPlayer() const')
 
 
 # Strict boss credit uses the core's same-instance and distance contracts, but
@@ -108,7 +110,8 @@ for signature in ('    static bool HandleSetBotIndividualProgressionCommand(',
                   '    static bool HandleAttuneIndividualProgressionCommand('):
     body = function(commands, signature)
     unused = '        (void)location;\n' if 'Attune' in signature else ''
-    command_guards.append(body[:body.index('        Player* player =')] +
+    boundary = '        if (location.empty())' if 'Attune' in signature else '        Group* group'
+    command_guards.append(body[:body.index(boundary)] +
                           unused + '        ++unguardedCalls;\n        return true;\n    }')
 
 prelude = r'''
@@ -221,7 +224,8 @@ template<class... Args> void LogError(Args const&...) {}
 #define LOG_ERROR(...) LogError(__VA_ARGS__)
 struct TalentEntry { uint32 Row=0; };
 int unguardedCalls=0;
-struct ChatHandler { Session* session=nullptr; int messages=0;
+struct ChatHandler { Session* session=nullptr; int messages=0; Player* actor=nullptr;
+    Player* GetPlayer() const { return session ? actor : nullptr; }
     Session* GetSession() const { return session; }
     void SendSysMessage(char const*) { ++messages; }
     template<class... Args> void PSendSysMessage(char const*,Args...) { ++messages; }
@@ -431,7 +435,7 @@ int main() {
     progression.UpdateGroupAttunement(&player,"mc");
     progression.UpdateAccountReputation(1,1,&player);
     assert(unguardedCalls==0);
-    ChatHandler handler{&player.session};
+    ChatHandler handler{&player.session}; handler.actor=&player;
     assert(!Command::HandleSetBotIndividualProgressionCommand(&handler));
     assert(!Command::HandleSetRepIndividualProgressionCommand(&handler));
     assert(!Command::HandleAttuneIndividualProgressionCommand(&handler,"mc"));

@@ -79,10 +79,10 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "728dba97c42100e5537452ab510a07304b063c96",
+      "revision": "84e9513391e1556be36f400fc2cb4f82deb6d9ba",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
-        "revision": "5041dbed46425f376e87b6fcfb26938c1c81fbd7"
+        "revision": "e2c2ed0508986f9a138cf5694101e65d2809a366"
       },
       "forkChanges": {
         "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
@@ -110,7 +110,9 @@
         "mod-individual-progression-profession-tier-cap": "728dba97c42100e5537452ab510a07304b063c96",
         "mod-individual-progression-expansion-gear-lock": "728dba97c42100e5537452ab510a07304b063c96",
         "mod-individual-progression-personal-raid-entrances": "728dba97c42100e5537452ab510a07304b063c96",
-        "mod-individual-progression-howling-fjord-timers": "728dba97c42100e5537452ab510a07304b063c96"
+        "mod-individual-progression-howling-fjord-timers": "728dba97c42100e5537452ab510a07304b063c96",
+        "mod-individual-progression-command-safety": "84e9513391e1556be36f400fc2cb4f82deb6d9ba",
+        "mod-individual-progression-upstream-world-interactions": "84e9513391e1556be36f400fc2cb4f82deb6d9ba"
       }
     },
     {

@@ -281,7 +281,8 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 - [ ] Validate Grimfeather's Individual Progression and core changes in game:
   the original Alterac Valley layout, mines, quests and Playerbots tactics;
-  restored quest, escort and dungeon scripts; and the matching client pack.
+  mining its ore with ordinary skill requirements; Windsor's Great Masquerade
+  phase, restored quest, escort and dungeon scripts; and the matching client pack.
 - [ ] Evaluate `IndividualProgression.VanillaHunterPets` and
   `IndividualProgression.WarlockDemonTrainers` before enabling them: existing
   pets lose untaught abilities, and bots still need historical pet-ability
