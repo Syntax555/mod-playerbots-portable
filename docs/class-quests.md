@@ -104,8 +104,9 @@ for all four Vanilla warlock races is still required; see the
 ## Autonomous shaman totem quests
 
 Solo, headless random shamans using natural progression can pursue the Vanilla
-Horde Earth, Fire, Water and Air chains. The action recognizes 28 main quests
-and five native recovery quests. It stops a totem family when the character
+Horde and Draenei Earth, Fire, Water and Air chains. The action recognizes 52 main
+quests and five native Horde recovery quests. Draenei content follows the
+character's own TBC eligibility. It stops a totem family when the character
 owns its totem or has already earned its final reward. Ordinary trainers still
 control paid spell training; the Air reward's Swift Wind buff is not a learned
 spell.
@@ -123,7 +124,16 @@ unrewarded quest 100 has waited without its spirit, a bot can abandon that empty
 quest and accept it again normally. It retains the rewards of earlier steps.
 Other Sapta and spirit recovery still follows the native quest requirements.
 
-Draenei chains, optional class equipment quests and complete live runs remain
+Draenei bots open their owned Fireproof Satchel and use its Ritual Torch at
+the Wickerman Effigy. They fill the Empty Bota Bag at Stardust Ruins and use
+their Skin of Purest Water at the Barrel of Filth. Native events create Hauteur
+and Tel'athion; ordinary combat and loot earn the required quest items. A living
+opponent or a corpse the bot can loot prevents another ritual. Water quests can
+use the character's own Water Breathing potion while underwater without an
+existing breathing aura. Optional return orbs and Susurrus's flight are not
+automated; bots use ordinary travel back to their questgivers.
+
+Optional class equipment quests and complete live runs remain
 on the [class audit](todo.md#dungeons-raids-and-outdoor-content). The
 [source comparison](class-quest-comparison.md) distinguishes existing quest
 restoration from class-specific bot actions.

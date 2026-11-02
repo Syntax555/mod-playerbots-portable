@@ -196,7 +196,13 @@ fixtures pass. Use native core/module functions before adding replacements.
   waterskin focuses, normal brazier acceptance/turn-in and earned continent
   routes. Test the native quest-100 start event, duplicate-spirit refusal,
   death/relog/despawn recovery, normal abandon/reaccept and full bags.
-  Add the Draenei chains 9451/9555/9509/9554 and audit optional equipment,
+  Live-verify the 24 Draenei steps through 9451/9555/9509/9554: ordinary satchel
+  opening and loot, both ritual objects, native delayed summons, owned Water
+  Breathing potions, underwater paths to Aqueous and the Stardust Ruins crossing.
+  Check full bags, evade/despawn retry and missing quest items after relog.
+  Optional return orbs and Susurrus's flight remain unaudited; use ordinary
+  travel. Audit the cosmetic Temper/Hauteur Reborn reward scene after 9467
+  separately; it grants no required quest credit. Audit optional equipment,
   dungeon and raid quests before claiming all Shaman class quests complete.
   See [totem coverage](class-quests.md#autonomous-shaman-totem-quests) and the
   [nine-class source comparison](class-quest-comparison.md).

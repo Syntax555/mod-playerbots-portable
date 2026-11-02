@@ -34,13 +34,14 @@ source = (shaman / 'ShamanTotemQuests.cpp').read_text()
 header = (shaman / 'ShamanTotemQuests.h').read_text()
 
 families = {
-    5175: {1516, 1517, 1518, 1519, 1520, 1521, 1462, 1463},
-    5176: {1522, 1523, 1524, 1525, 1526, 1527, 2983, 2984, 1464},
-    5177: {63, 96, 100, 220, 972, 1103, 1528, 1529, 1530, 1534, 1535, 1536, 2985, 2986},
-    5178: {1531, 1532},
+    5175: {1516, 1517, 1518, 1519, 1520, 1521, 1462, 1463, 9449, 9450, 9451},
+    5176: {1522, 1523, 1524, 1525, 1526, 1527, 2983, 2984, 1464, 9461, 9462, 9464, 9465, 9467, 9468, 9555},
+    5177: {63, 96, 100, 220, 972, 1103, 1528, 1529, 1530, 1534, 1535, 1536, 2985, 2986,
+           9500, 9501, 9502, 9503, 9504, 9508, 9509, 10490},
+    5178: {1531, 1532, 9547, 9551, 9552, 9553, 9554, 10491},
 }
 expected_quests = {quest: totem for totem, quests in families.items() for quest in quests}
-assert len(expected_quests) == 33
+assert len(expected_quests) == 57
 quests = {int(row['ID']): row for row in sql_rows(core, 'quest_template', set(expected_quests))}
 addons = {int(row['ID']): row for row in sql_rows(core, 'quest_template_addon', set(expected_quests))}
 for quest, row in quests.items():
@@ -54,10 +55,15 @@ for quest, row in quests.items():
         assert next_quest in expected_quests, (quest, next_quest)
         assert expected_quests[quest] == expected_quests[next_quest]
 
-for quest, totem in ((1518, 5175), (1521, 5175), (1527, 5176), (96, 5177), (1531, 5178), (1532, 5178)):
+for quest, totem in ((1518, 5175), (1521, 5175), (1527, 5176), (96, 5177), (1531, 5178), (1532, 5178),
+                    (9451, 5175), (9555, 5176), (9509, 5177), (9554, 5178)):
     assert int(quests[quest]['RewardItem1']) == totem
     assert int(quests[quest]['RewardAmount1']) == 1
 assert {int(quests[quest]['RewardSpell']) for quest in (1531, 1532)} == {8385}
+quest_def = (core / 'src/server/game/Quests/QuestDef.h').read_text()
+assert int(re.search(r'QUEST_SPECIAL_FLAGS_AUTO_ACCEPT\s*=\s*(0x[\da-fA-F]+|\d+)', quest_def)[1], 0) == 4
+assert int(re.search(r'QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT\s*=\s*(0x[\da-fA-F]+|\d+)', quest_def)[1], 0) == 2
+assert {int(addons[quest]['SpecialFlags']) for quest in (9449, 9451)} == {4}
 
 # The first Earth journey completes on acceptance; visibility remains a separate
 # owned-item step before speaking to the spirit.
@@ -73,15 +79,27 @@ for zone, quest in (('zone_durotar', 1517), ('zone_mulgore', 1520)):
     assert any(quest in map(int, group.split(',')) for group in groups)
 
 sapta_items = {6635: 8202, 6636: 8898, 6637: 8899}
-water_items = {7766: (9586, 7769, 224), 7768: (9583, 7771, 226), 7767: (9584, 7770, 223)}
-items = {int(row['entry']): row for row in sql_rows(core, 'item_template', set(sapta_items) | set(water_items))}
+water_items = {7766: (9586, 7769, 224), 7768: (9583, 7771, 226), 7767: (9584, 7770, 223),
+               23749: (30226, 23750, 223)}
+draenei_items = {23682: 30212, 23751: 30408, 23871: 7178}
+items = {int(row['entry']): row for row in sql_rows(
+    core, 'item_template', set(sapta_items) | set(water_items) | set(draenei_items) | {24336})}
 for item, spell in {**sapta_items, **{item: row[0] for item, row in water_items.items()}}.items():
     assert int(items[item]['spellid_1']) == spell
     assert int(items[item]['spelltrigger_1']) == 0
     assert int(items[item]['spellcharges_1']) == -1
-for quest, item in ((1535, 7766), (1536, 7768), (1534, 7767)):
+for quest, item in ((1535, 7766), (1536, 7768), (1534, 7767), (9504, 23749)):
     assert int(quests[quest]['StartItem']) == item
     assert int(quests[quest]['RequiredItemId1']) == water_items[item][1]
+for item, spell in draenei_items.items():
+    assert int(items[item]['spellid_1']) == spell
+    assert int(items[item]['spelltrigger_1']) == 0
+    assert int(items[item]['spellcharges_1']) == (-1 if item == 23871 else 0)
+assert int(quests[9467]['StartItem']) == 24336 and int(items[24336]['Flags']) & 4
+assert int(items[24336]['lockid']) == 0
+satchel_loot = sql_rows(core, 'item_loot_template', {24336})
+assert {int(row['Item']) for row in satchel_loot} == {23682, 24335}
+assert int(quests[9501]['StartItem']) == 23871 and int(addons[9501]['ProvidedItemCount']) == 1
 for quest, sapta in ((972, 6637), (1462, 6635), (1463, 6635), (1464, 6636)):
     assert int(addons[quest]['SpecialFlags']) & 1
     assert int(quests[quest]['QuestType']) == 0
@@ -132,16 +150,56 @@ for forbidden in ('bot->AddQuest(', 'bot->RewardQuest(', 'CompleteQuest(', 'Area
 
 item_source = (module / 'Ai/Base/Actions/UseItemAction.cpp').read_text()
 item_cast = function(item_source, 'bool UseItemAction::UseItem(Item* item, ObjectGuid goGuid, Item* itemTarget, Unit* unitTarget)')
+open_source = (module / 'Ai/Base/Actions/OpenItemAction.cpp').read_text()
+open_item = function(open_source, 'void OpenItemAction::OpenItem(')
+assert 'bot->GetSession()->HandleOpenItemOpcode(packet);' in open_item
+assert 'GetValue<LootObject>("loot target")->Set(lootObject);' in open_item
+open_native = function((core / 'src/server/game/Handlers/SpellHandler.cpp').read_text(),
+                       'void WorldSession::HandleOpenItemOpcode(')
+assert 'GetItemByPos(bagIndex, slot)' in open_native
+assert 'proto->HasFlag(ITEM_FLAG_HAS_LOOT)' in open_native
+assert 'SendLoot' in open_native
+native_effects = (core / 'src/server/game/Spells/SpellEffects.cpp').read_text()
+open_lock = function(native_effects, 'void Spell::EffectOpenLock(')
+assert 'CanOpenLock(effIndex, lockId, skillId, reqSkillValue, skillValue)' in open_lock
+assert 'SendLoot(guid, LOOT_SKINNING);' in open_lock
+assert 'gameObjTarget->Use(unitCaster);' in function(native_effects, 'void Spell::SendLoot(')
+go_use = function(go_source, 'void GameObject::Use(')
+assert 'GetMap()->ScriptsStart(sEventScripts, info->goober.eventId, player, this);' in go_use
+ritual_objects = {int(row['entry']): row for row in sql_rows(core, 'gameobject_template', {181672, 181699})}
+ritual_events = sql_rows(core, 'event_scripts', {10626, 10685})
+for entry, quest, lock, event, creature in ((181672, 9467, 1660, 10626, 17206),
+                                           (181699, 9508, 1663, 10685, 17359)):
+    row = ritual_objects[entry]
+    assert (int(row['type']), int(row['Data0']), int(row['Data1']), int(row['Data2'])) == (10, lock, quest, event)
+    assert any(int(row['id']) == event and int(row['delay']) == 2 and int(row['command']) == 10
+               and int(row['datalong']) == creature and int(row['datalong2']) == 900000 for row in ritual_events)
 native_focus = function((core / 'src/server/game/Grids/Notifiers/GridNotifiers.h').read_text(),
                        'class GameObjectFocusCheck') + ';'
 assert 'bot->GetSession()->HandleUseItemOpcode(packet);' in item_cast
 native_cast = function((module / 'Bot/PlayerbotAI.cpp').read_text(), 'bool PlayerbotAI::CanCastSpell(uint32 spellid, Unit*')
 assert 'spell->m_CastItem = castItem;' in native_cast
 assert 'SpellCastResult result = spell->CheckCast(true);' in native_cast
+native_go_cast = function((module / 'Bot/PlayerbotAI.cpp').read_text(),
+                          'bool PlayerbotAI::CanCastSpell(uint32 spellid, GameObject*')
+assert 'spell->m_CastItem = castItem;' in native_go_cast
+assert 'spell->m_targets.SetGOTarget(goTarget);' in native_go_cast
+assert 'SpellCastResult result = spell->CheckCast(true);' in native_go_cast
+go_target_packet = function(item_cast, '    if (goTarget)')
+assert 'targetFlag = TARGET_FLAG_GAMEOBJECT;' in go_target_packet
+assert 'packet << targetFlag;' in go_target_packet and 'packet << goGuid.WriteAsPacked();' in go_target_packet
+native_player_header = (core / 'src/server/game/Entities/Player/Player.h').read_text()
+assert re.search(r'#define\s+INVENTORY_SLOT_BAG_0\s+255\b', native_player_header)
+for name, value in (('INVENTORY_SLOT_ITEM_START', 23), ('INVENTORY_SLOT_ITEM_END', 39),
+                    ('INVENTORY_SLOT_BAG_START', 19), ('INVENTORY_SLOT_BAG_END', 23)):
+    assert re.search(r'\b' + name + r'\s*=\s*' + str(value) + r'\b', native_player_header)
 native_spell = (core / 'src/server/game/Spells/Spell.cpp').read_text()
 assert 'castResult = CheckSpellFocus();' in function(native_spell, 'SpellCastResult Spell::CheckCast(')
 assert 'GameObjectFocusCheck go_check(m_caster, m_spellInfo->RequiresSpellFocus);' in function(
     native_spell, 'SpellCastResult Spell::CheckSpellFocus()')
+assert 'm_CastItem->GetEntry() == lockInfo->Index[j]' in function(native_spell, 'SpellCastResult Spell::CanOpenLock(')
+native_spell_header = (core / 'src/server/game/Spells/Spell.h').read_text()
+assert 'return m_casttime;' in function(native_spell_header, 'int32 GetCastTime() const')
 nearest_objects = function((module / 'Ai/Base/Value/NearestGameObjects.cpp').read_text(),
                            'GuidVector NearestGameObjects::Calculate()')
 nearest_check = function((module / 'Ai/Base/Value/NearestGameObjects.h').read_text(),
@@ -149,12 +207,18 @@ nearest_check = function((module / 'Ai/Base/Value/NearestGameObjects.h').read_te
 assert 'result.push_back(go->GetGUID());' in nearest_objects
 assert 'u->isSpawned() && u->GetGOInfo()' in nearest_check
 assert 'CanSeeOrDetect' not in nearest_objects + nearest_check
+corpse_source = (module / 'Ai/Base/Value/NearestCorpsesValue.cpp').read_text()
+assert 'return !u->IsAlive();' in function(corpse_source, 'class AnyDeadUnitInObjectRangeCheck')
+loot_rights = function((core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text(),
+                       'bool Player::isAllowedToLoot(')
 native_worldobject = (core / 'src/server/game/Entities/Object/Object.cpp').read_text()
 assert 'IsInMap(obj) && InSamePhase(obj) && _IsWithinDist(' in function(
     native_worldobject, 'bool WorldObject::IsWithinDistInMap(')
 native_distance = function(native_worldobject, 'bool WorldObject::_IsWithinDist(')
 assert 'maxdist += GetObjectSize();' in native_distance
 assert 'maxdist += obj->GetObjectSize();' in native_distance
+native_unit = (core / 'src/server/game/Entities/Unit/Unit.cpp').read_text()
+assert 'LIQUID_MAP_UNDER_WATER' in function(native_unit, 'bool Unit::IsUnderWater() const')
 native_take = function((core / 'src/server/game/Entities/Player/PlayerQuest.cpp').read_text(), 'bool Player::CanTakeQuest(')
 assert 'SatisfyQuestConditions(quest, msg)' in native_take
 native_remove = function((core / 'src/server/game/Handlers/QuestHandler.cpp').read_text(),
@@ -186,10 +250,17 @@ production = {
     'useful': function(source, 'bool ShamanTotemQuestAction::isUseful()'),
     'execute': function(source, 'bool ShamanTotemQuestAction::Execute('),
     'focused': function(source, 'bool ShamanTotemQuestAction::UseFocusedQuestItem('),
+    'ritual': function(source, 'bool ShamanTotemQuestAction::UseDraeneiRitual('),
     'reset': function(source, 'void ShamanTotemQuestAction::ResetWaterWait('),
     'water': function(source, 'bool ShamanTotemQuestAction::WaitForWaterSpirit('),
     'restart': function(source, 'bool ShamanTotemQuestAction::RestartWaterQuest('),
     'wrapper': function(item_source, 'bool UseItemAction::UseItemOnUnit('),
+    'gowrapper': function(item_source, 'bool UseItemAction::UseItemOnGameObject('),
+    'findopen': function((module / 'Bot/PlayerbotAI.cpp').read_text(), 'Item* PlayerbotAI::FindOpenableItem() const'),
+    'findinventory': function((module / 'Bot/PlayerbotAI.cpp').read_text(), 'Item* PlayerbotAI::FindItemInInventory('),
+    'openexecute': function(open_source, 'bool OpenItemAction::Execute('),
+    'openitem': open_item,
+    'lootrights': loot_rights,
     'precheck': function(item_cast, '    for (uint8 i = 0; i < spellSlotLimit; ++i)'),
     'focuscheck': native_focus,
     'scheduler': scheduler,
@@ -207,7 +278,10 @@ for quest, row in quests.items():
 production['nativequests'] = ('for(Quest const& q : {' + ',\n'.join(native_quests)
                              + '}) objectMgr.quests.emplace(q.id,q);')
 production['items'] = '\n'.join(
-    f'objectMgr.items[{item}].Spells[0].SpellId={row["spellid_1"]};' for item, row in items.items())
+    f'objectMgr.items[{item}].Spells[0].SpellId={row["spellid_1"]};'
+    f'objectMgr.items[{item}].Flags={row["Flags"]};objectMgr.items[{item}].LockID={row["lockid"]};'
+    f'objectMgr.items[{item}].ItemId={item};'
+    for item, row in items.items())
 relations = {}
 for name in ('creature_queststarter', 'creature_questender', 'gameobject_queststarter', 'gameobject_questender'):
     raw = (core / f'data/sql/base/db_world/{name}.sql').read_text()
@@ -241,6 +315,7 @@ prelude = r'''
 #include <optional>
 #include <queue>
 #include <set>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -250,8 +325,11 @@ using uint8=uint8_t; using uint16=uint16_t; using uint32=uint32_t; using int32=i
 using Milliseconds=std::chrono::milliseconds;
 constexpr uint32 CLASS_SHAMAN=7, CLASS_WARLOCK=9, IN_MILLISECONDS=1000, MINUTE=60;
 constexpr uint32 QUEST_OBJECTIVES_COUNT=4, QUEST_ITEM_OBJECTIVES_COUNT=6, MAX_QUEST_LOG_SIZE=25;
-constexpr uint32 CURRENT_CHANNELED_SPELL=1,CURRENT_GENERIC_SPELL=2,GAMEOBJECT_TYPE_SPELL_FOCUS=8;
-constexpr uint32 CMSG_QUESTLOG_REMOVE_QUEST=1;
+constexpr uint32 CURRENT_CHANNELED_SPELL=1,CURRENT_GENERIC_SPELL=2,GAMEOBJECT_TYPE_SPELL_FOCUS=8,GAMEOBJECT_TYPE_GOOBER=10;
+constexpr uint32 CMSG_QUESTLOG_REMOVE_QUEST=1,CMSG_OPEN_ITEM=2,ITEM_FLAG_HAS_LOOT=4,SPELL_AURA_WATER_BREATHING=82;
+constexpr uint8 INVENTORY_SLOT_BAG_0=255,INVENTORY_SLOT_ITEM_START=23,INVENTORY_SLOT_ITEM_END=39;
+constexpr uint8 INVENTORY_SLOT_BAG_START=19,INVENTORY_SLOT_BAG_END=23,EQUIP_ERR_OK=0;
+enum {LOOT_CORPSE,LOOT_SKINNING,MASTER_LOOT,FREE_FOR_ALL,ROUND_ROBIN,GROUP_LOOT,NEED_BEFORE_GREED};
 constexpr float INTERACTION_DISTANCE=5.0f;
 enum QuestStatus { QUEST_STATUS_NONE,QUEST_STATUS_INCOMPLETE,QUEST_STATUS_COMPLETE,QUEST_STATUS_REWARDED };
 uint32 now=100000;
@@ -272,9 +350,16 @@ struct ObjectGuid { uint32 value=0; explicit operator bool()const{return value!=
 ObjectGuid ObjectGuid::Empty;
 using GuidVector=std::vector<ObjectGuid>;
 struct Event{}; struct Player; struct Creature; struct GameObject; struct WorldPosition;
-struct Spell{};
-struct ItemTemplate { struct Slot{int32 SpellId=0;} Spells[5]; };
-struct Item { uint32 entry=0,count=1; ItemTemplate proto; ItemTemplate const* GetTemplate()const{return &proto;} };
+struct Spell {uint32 castTime=0;int32 GetCastTime()const{return int32(castTime);}};
+struct ItemTemplate { struct Slot{int32 SpellId=0;} Spells[5];uint32 Flags=0,LockID=0,ItemId=0;std::string Name1="native quest item";
+    bool HasFlag(uint32 flag)const{return Flags&flag;} };
+struct Item { uint32 entry=0,count=1;uint8 bag=INVENTORY_SLOT_BAG_0,slot=INVENTORY_SLOT_ITEM_START;
+    bool locked=false;ItemTemplate proto;
+    ItemTemplate const* GetTemplate()const{return &proto;} bool IsLocked()const{return locked;}
+    uint8 GetBagSlot()const{return bag;}uint8 GetSlot()const{return slot;}
+    ObjectGuid GetGUID()const{return {entry};}
+};
+struct Bag:Item {uint8 GetBagSize()const{return 0;}};
 struct Quest {
     uint32 id=0,source=0,totem=0; bool repeatable=false;
     std::array<int32,4> RequiredNpcOrGo{};
@@ -298,12 +383,22 @@ struct WorldObject {
     float GetExactDist(WorldPosition const&)const;
 };
 struct Unit:WorldObject { virtual Creature* ToCreature(){return nullptr;} };
+struct Loot {
+    bool empty=false,forAll=false,forPlayer=true,overThreshold=false;int loot_type=LOOT_CORPSE;ObjectGuid roundRobinPlayer;
+    bool isLooted()const{return empty;}bool hasItemForAll()const{return forAll;}
+    bool hasItemFor(Player const*)const{return forPlayer;}bool hasOverThresholdItem()const{return overThreshold;}
+};
+struct Group {int GetLootMethod()const{return FREE_FOR_ALL;}};
 struct Creature:Unit {
-    bool removing=false; std::set<uint32> starts,ends; uint32 requiresAura=0;
+    bool removing=false,damageEnough=true,lootDisabled=false;Player* lootRecipient=nullptr;Loot loot;
+    std::set<uint32> starts,ends; uint32 requiresAura=0;
     Creature* ToCreature()override{return this;}
     bool IsDuringRemoveFromWorld()const{return removing;}
     bool hasQuest(uint32 id)const{return starts.contains(id);}
     bool hasInvolvedQuest(uint32 id)const{return ends.contains(id);}
+    bool isDead()const{return !alive;}bool IsDamageEnoughForLootingAndReward()const{return damageEnough;}
+    bool IsLootRewardDisabled()const{return lootDisabled;}Player* GetLootRecipient()const{return lootRecipient;}
+    ObjectGuid GetLootRecipientGUID()const;Group* GetLootRecipientGroup()const{return nullptr;}
 };
 struct GameObjectTemplate { uint32 type=8; struct{uint32 focusId=63;float dist=50;uint32 serverOnly=0;}spellFocus; };
 struct GameObject:WorldObject {
@@ -347,15 +442,16 @@ struct QuestLogRemoveQuest {
 };
 }
 struct Session {
-    Player* player=nullptr;bool allowRemove=true;uint32 removes=0;
+    Player* player=nullptr;bool allowRemove=true,allowOpen=true;uint32 removes=0,opens=0,openedEntry=0;
     void HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemoveQuest&);
+    void HandleOpenItemOpcode(WorldPacket&);
 };
 struct Player:Unit {
     uint32 cls=CLASS_SHAMAN;Session session;
     std::map<uint32,QuestStatus> quests;std::map<uint32,Item> inventory;
     std::map<uint32,uint32> bank;std::set<uint32> available,auras;
     std::array<uint32,MAX_QUEST_LOG_SIZE> slots{};
-    bool ownAccess=true,canAdd=true,canReward=true;int stops=0;
+    bool ownAccess=true,canAdd=true,canReward=true,inWater=false,underWater=false,pendingBind=false;int stops=0;
     // These select the session's post-use spell result, not a pre-existing cast.
     bool resultIsChannel=false,resultInstant=false,castActive=false;
     Spell genericSpell,channelSpell;
@@ -369,7 +465,23 @@ struct Player:Unit {
         return value>=count;
     }
     Item* GetItemByEntry(uint32 id){return inventory.contains(id)?&inventory.at(id):nullptr;}
+    Item* GetItemByPos(uint8 bag,uint8 slot){
+        for(auto& [entry,item]:inventory)if(item.entry&&item.bag==bag&&item.slot==slot)return &item;
+        return nullptr;
+    }
+    Item& StoreOwnedItem(uint32 id,ItemTemplate const& proto){
+        auto& item=inventory[id];
+        if(!item.entry){uint8 slot=INVENTORY_SLOT_ITEM_START;
+            while(GetItemByPos(INVENTORY_SLOT_BAG_0,slot))++slot;
+            assert(slot<INVENTORY_SLOT_ITEM_END);item.slot=slot;
+        }
+        item.entry=id;item.count=1;item.proto=proto;return item;
+    }
+    uint8 CanUseItem(ItemTemplate const*)const{return EQUIP_ERR_OK;}
     bool HasAura(uint32 id)const{return auras.contains(id);}
+    bool HasAuraType(uint32 type)const{return type==SPELL_AURA_WATER_BREATHING&&(auras.contains(7178)||auras.contains(546));}
+    bool IsUnderWater()const{return underWater;}bool HasPendingBind()const{return pendingBind;}
+    Group* GetGroup()const{return nullptr;}bool isAllowedToLoot(Creature const*);
     bool CanTakeQuest(Quest const* q,bool)const{return ownAccess&&available.contains(q->id)&&GetQuestStatus(q->id)==QUEST_STATUS_NONE;}
     bool CanAddQuest(Quest const*,bool)const{return canAdd;}
     bool CanRewardQuest(Quest const* q,bool)const{return canReward&&GetQuestStatus(q->id)==QUEST_STATUS_COMPLETE;}
@@ -378,6 +490,7 @@ struct Player:Unit {
     uint32 GetPhaseMask()const{return phaseMask;}
     bool IsInMap(WorldObject const* o)const{return mapId==o->mapId;}
     bool InSamePhase(WorldObject const* o)const{return phaseMask&o->phaseMask;}
+    bool IsWithinLOSInMap(WorldObject const* o)const{return o->los;}
     bool CanSeeOrDetect(WorldObject const* o)const{
         auto const* creature=dynamic_cast<Creature const*>(o);
         auto const* object=dynamic_cast<GameObject const*>(o);
@@ -389,9 +502,17 @@ struct Player:Unit {
         return !castActive||resultInstant?nullptr:id==CURRENT_CHANNELED_SPELL?(resultIsChannel?&channelSpell:nullptr):&genericSpell;
     }
 };
+ObjectGuid Creature::GetLootRecipientGUID()const{return lootRecipient?lootRecipient->GetGUID():ObjectGuid::Empty;}
+@@LOOTRIGHTS@@
 void Session::HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemoveQuest& q){
     ++removes;if(!allowRemove||q.Slot>=MAX_QUEST_LOG_SIZE)return;
     player->quests.erase(player->slots[q.Slot]);player->slots[q.Slot]=0;
+}
+void Session::HandleOpenItemOpcode(WorldPacket& packet){
+    ++opens;assert(packet.opcode==CMSG_OPEN_ITEM&&packet.data.size()==2);
+    for(auto const& [entry,item]:player->inventory)
+        if(item.GetBagSlot()==packet.data[0]&&item.GetSlot()==packet.data[1]&&allowOpen&&
+            item.GetTemplate()->HasFlag(ITEM_FLAG_HAS_LOOT)&&!item.IsLocked())openedEntry=entry;
 }
 struct ObjectMgr {
     std::map<uint32,Quest> quests;std::map<uint32,ItemTemplate> items;std::map<uint32,GameObjectTemplate> objects;
@@ -416,16 +537,21 @@ struct NewRpgInfo {
     std::variant<std::monostate,DoQuest,TravelRoute> data;
     void ChangeToDoQuest(uint32 id,Quest const* q){data=DoQuest{id,q};}
 };
-struct Context {GuidVector npcs,objects;uint32 quest=0;};
+struct LootObject {ObjectGuid guid;};
+struct LootValue {LootObject value;void Set(LootObject const& loot){value=loot;}};
+struct Context {GuidVector npcs,corpses,objects;uint32 quest=0;LootValue loot;
+    template<class T>LootValue* GetValue(std::string const&){static_assert(std::is_same_v<T,LootObject>);return &loot;}
+};
 template<class T>T GetValue(Context* c,std::string const& name){
-    if constexpr(std::is_same_v<T,GuidVector>)return name=="nearest npcs"?c->npcs:c->objects;
+    if constexpr(std::is_same_v<T,GuidVector>)return name=="nearest npcs"?c->npcs:name=="nearest corpses"?c->corpses:c->objects;
     else return c->quest;
 }
 #define AI_VALUE(type,name) GetValue<type>(context,name)
 struct PlayerbotAI {
     Player* bot;Context context;NewRpgInfo rpgInfo;bool canRun=true,castResult=true,moveResult=true;
     bool acceptResult=true,rewardResult=true,routes=true;uint32 casts=0,castChecks=0,waits=0,moves=0,accepts=0,rewards=0,objectives=0;
-    WorldPosition movedTo;uint32 interacted=0;Item* castItem=nullptr;Unit* castTarget=nullptr;Spell* waitedFor=nullptr;
+    WorldPosition movedTo;uint32 interacted=0;Item* castItem=nullptr;Unit* castTarget=nullptr;GameObject* castObject=nullptr;
+    Spell* waitedFor=nullptr;
     std::map<uint32,Unit*> units;std::map<uint32,GameObject*> objects;
     Player* GetBot()const{return bot;}
     Unit* GetUnit(ObjectGuid guid)const{return units.contains(guid.value)?units.at(guid.value):nullptr;}
@@ -433,11 +559,22 @@ struct PlayerbotAI {
     bool CanCastSpell(uint32 id,Unit* target,bool,Item*,Item* item){
         ++castChecks;castTarget=target;castItem=item;
         auto const* info=spellMgr.GetSpellInfo(id);
-        if(!info||target!=bot||!item||bot->GetItemByEntry(item->entry)!=item)return false;
+        if(!info||target!=bot||!item||bot->GetItemByEntry(item->entry)!=item||id==30212||id==30408)return false;
+        if(!info->RequiresSpellFocus)return true;
         GameObjectFocusCheck check(bot,info->RequiresSpellFocus);
         return std::any_of(objects.begin(),objects.end(),[&](auto const& pair){return check(pair.second);});
     }
-    bool CanCastSpell(uint32,GameObject*,bool,Item*){return false;}
+    bool CanCastSpell(uint32 spell,GameObject* target,bool,Item* item){
+        ++castChecks;castObject=target;castItem=item;
+        if(!target||!item||bot->GetItemByEntry(item->entry)!=item||!target->spawned||!bot->IsInMap(target)||
+            !bot->InSamePhase(target)||!bot->CanSeeOrDetect(target)||!target->IsWithinDistInMap(bot,INTERACTION_DISTANCE)||
+            !bot->IsWithinLOSInMap(target))return false;
+        return (spell==30212&&item->entry==23682&&target->entry==181672)||
+            (spell==30408&&item->entry==23751&&target->entry==181699);
+    }
+    Item* FindItemInInventory(std::function<bool(ItemTemplate const*)>)const;
+    Item* FindOpenableItem()const;
+    Context* GetAiObjectContext(){return &context;}void TellMaster(std::string const&){}
     void WaitForSpellCast(Spell* spell){assert(spell);++waits;waitedFor=spell;}
 };
 struct Config {std::set<uint32> IgnoredQuests;}sPlayerbotAIConfig;
@@ -478,16 +615,25 @@ template<class T>struct CalculatedValue {
 struct UseItemAction {
     PlayerbotAI* botAI;explicit UseItemAction(PlayerbotAI* ai):botAI(ai){}
     bool UseItemOnUnit(Item*,Unit*);
-    bool UseItem(Item* item,ObjectGuid,Item* itemTarget,Unit* unitTarget){
+    bool UseItemOnGameObject(Item*,ObjectGuid);
+    bool UseItem(Item* item,ObjectGuid guid,Item* itemTarget,Unit* unitTarget=nullptr){
         Player* bot=botAI->GetBot();uint32 spellId=0;auto const* itemProto=item->GetTemplate();
-        uint8 const spellSlotLimit=5;GameObject* goTarget=nullptr;
+        uint8 const spellSlotLimit=5;GameObject* goTarget=guid?botAI->GetGameObject(guid):nullptr;
         @@PRECHECK@@
         if(!botAI->castResult)return false;
         ++botAI->casts;bot->castActive=true;
-        if(item->entry==6635||item->entry==6636||item->entry==6637)bot->auras.insert(spellId);
+        if(item->entry==6635||item->entry==6636||item->entry==6637||item->entry==23871)bot->auras.insert(spellId);
         return true;
     }
 };
+struct OpenItemAction {
+    PlayerbotAI* botAI;Player* bot;explicit OpenItemAction(PlayerbotAI* ai):botAI(ai),bot(ai->GetBot()){}
+    bool Execute(Event);void OpenItem(Item*,uint8,uint8);
+};
+@@FINDOPEN@@
+@@FINDINVENTORY@@
+@@OPENEXECUTE@@
+@@OPENITEM@@
 @@CLASSES@@
 @@TABLE@@
 @@CURRENT@@
@@ -495,7 +641,9 @@ struct UseItemAction {
 @@TRIGGER@@
 @@USEFUL@@
 @@WRAPPER@@
+@@GOWRAPPER@@
 @@FOCUSED@@
+@@RITUAL@@
 @@RESET@@
 @@WATER@@
 @@RESTART@@
@@ -512,7 +660,7 @@ bool ClassQuestAction::InteractWithQuestGiver(Quest const* q,bool reward){
         if(reward){
             ++botAI->rewards;
             if(!botAI->rewardResult||!bot->CanRewardQuest(q,false))return false;
-            for(auto item:q->RewardItem)if(item){auto& got=bot->inventory[item];got.entry=item;got.count=1;got.proto=objectMgr.items[item];}
+            for(auto item:q->RewardItem)if(item)bot->StoreOwnedItem(item,objectMgr.items[item]);
             if(q->repeatable)bot->quests.erase(q->id);else bot->quests[q->id]=QUEST_STATUS_REWARDED;
             for(auto& slot:bot->slots)if(slot==q->id)slot=0;
             return true;
@@ -520,7 +668,7 @@ bool ClassQuestAction::InteractWithQuestGiver(Quest const* q,bool reward){
         ++botAI->accepts;
         if(!botAI->acceptResult||!bot->CanTakeQuest(q,false)||!bot->CanAddQuest(q,false))return false;
         bot->quests[q->id]=QUEST_STATUS_INCOMPLETE;
-        if(q->source){auto& got=bot->inventory[q->source];got.entry=q->source;got.count=1;got.proto=objectMgr.items[q->source];}
+        if(q->source)bot->StoreOwnedItem(q->source,objectMgr.items[q->source]);
         bool complete=true;
         for(uint32 i=0;i<4;++i)if(q->RequiredNpcOrGoCount[i])complete=false;
         for(uint32 i=0;i<6;++i)if(q->RequiredItemCount[i]&&!bot->HasItemCount(q->RequiredItemId[i],q->RequiredItemCount[i]))complete=false;
@@ -544,8 +692,12 @@ struct Scenario {
         @@ITEMS@@
         for(auto const& [item,proto]:objectMgr.items)spellMgr.spells[proto.Spells[0].SpellId]={63};
         spellMgr.spells[9586]={224};spellMgr.spells[9583]={226};spellMgr.spells[9584]={223};
+        spellMgr.spells[30226]={223};spellMgr.spells[30212]={0};spellMgr.spells[30408]={0};spellMgr.spells[7178]={0};
         for(uint32 item:{5175u,5176u,5177u,5178u})if(item!=objectMgr.quests.at(id).totem)bot.bank[item]=1;
         if(id==63||id==96||id==100||id==972||id==1103||id==1536)bot.mapId=0;
+        if(id>=9449)bot.mapId=530;
+        if(id==9508)bot.genericSpell.castTime=bot.channelSpell.castTime=3000;
+        if(id==9467)bot.resultInstant=true;
         bot.quests[id]=QUEST_STATUS_INCOMPLETE;bot.slots[0]=id;bot.available.insert(id);
         auto const& q=objectMgr.quests.at(id);if(q.source)Give(q.source);
         // Purified Manifestation has native relations but no static spawn.
@@ -556,7 +708,7 @@ struct Scenario {
         questLocations[63][32][-113791]={{0,2}};
         ai.context.quest=value.Calculate();
     }
-    void Give(uint32 item){auto& got=bot.inventory[item];got.entry=item;got.count=1;got.proto=objectMgr.items[item];}
+    void Give(uint32 item){bot.StoreOwnedItem(item,objectMgr.items[item]);}
     Creature* AddNpc(uint32 entry,uint32 quest,bool reward){
         auto c=std::make_unique<Creature>();c->entry=entry;c->guid=uint32(ai.units.size()+10);c->mapId=bot.mapId;
         if(entry==5891)c->requiresAura=8202;
@@ -574,12 +726,22 @@ struct Scenario {
     }
     void Focus(uint32 item,uint32 creature=0){
         Give(item);auto const spell=objectMgr.items.at(item).Spells[0].SpellId;
-        focus.entry=item==7766?107046:item==7768?107045:item==7767?107047:63674;
+        focus.entry=item==7766?107046:item==7768?107045:(item==7767||item==23749)?107047:63674;
         focus.guid=500;focus.mapId=bot.mapId;focus.info.spellFocus.focusId=spellMgr.spells.at(spell).RequiresSpellFocus;
-        focus.info.spellFocus.serverOnly=item==7766||item==7768||item==7767;
+        focus.info.spellFocus.serverOnly=item==7766||item==7768||item==7767||item==23749;
         focus.info.spellFocus.dist=10;objectMgr.objects[focus.entry]=focus.info;
         ai.objects[500]=&focus;ai.context.objects.push_back({500});spawns.push_back({focus.entry,bot.mapId,1,2,0,0});
         if(creature)questLocations[id][1][int32(creature)]={{bot.mapId,2}};
+    }
+    void Ritual(){
+        assert(id==9467||id==9508);bot.inventory.erase(24336);Give(id==9467?23682:23751);
+        focus.entry=id==9467?181672:181699;focus.guid=501;focus.mapId=bot.mapId;focus.info.type=GAMEOBJECT_TYPE_GOOBER;
+        ai.objects[501]=&focus;ai.context.objects.push_back({501});spawns.push_back({focus.entry,bot.mapId,1,2,0,0});
+    }
+    Creature* RitualMob(bool alive=true){
+        auto* mob=AddNpc(id==9467?17206:17359,0,false);mob->alive=alive;
+        if(!alive){ai.context.npcs.pop_back();ai.context.corpses.push_back(mob->GetGUID());mob->lootRecipient=&bot;}
+        return mob;
     }
     void Offered(){bot.quests.erase(id);bot.slots[0]=0;bot.available.insert(id);ai.context.quest=value.Calculate();}
     void SpiritAt(uint32 entry,float x){
@@ -600,7 +762,8 @@ int main(){
     {Scenario s;s.ai.canRun=false;assert(!s.Current()&&!s.action.Execute({})&&!s.trigger.IsActive()&&!s.action.isUseful());}
     {Scenario s;s.Offered();s.bot.ownAccess=false;assert(!s.Current());}
     {Scenario s;s.Offered();s.bot.canAdd=false;assert(!s.Current());}
-    for(auto [quest,terminal]:{std::array<uint32,2>{1517,1518},{1520,1521},{1526,1527},{63,96},{1531,1531},{1532,1532}}){
+    for(auto [quest,terminal]:{std::array<uint32,2>{1517,1518},{1520,1521},{1526,1527},{63,96},{1531,1531},{1532,1532},
+                             {9450,9451},{9465,9555},{9503,9509},{9553,9554}}){
       Scenario s(quest);s.bot.quests[terminal]=QUEST_STATUS_REWARDED;
       assert(TotemEarned(&s.bot,objectMgr.quests.at(quest).totem)&&!s.Current());}
     {Scenario s(1516);s.Offered();s.bot.available.insert(1519);s.AddNpc(5888,1519,false);
@@ -683,6 +846,100 @@ int main(){
       s.bot.auras.insert(objectMgr.items.at(item).Spells[0].SpellId);assert(s.Current()==quest);}
     {Scenario s(1103);s.bot.quests[1103]=QUEST_STATUS_INCOMPLETE;s.bot.available.insert(972);
       assert(s.Current()==972);s.Give(6637);assert(s.Current()==1103&&RequiredSapta(&s.bot,1103)==0);}
+    {Scenario s(9449);s.Offered();assert(s.action.Execute({})&&s.bot.GetQuestStatus(9449)==QUEST_STATUS_COMPLETE);
+      assert(s.action.Execute({})&&s.bot.GetQuestRewardStatus(9449)&&s.ai.casts==0);}
+    {Scenario s(9451);s.Offered();assert(s.action.Execute({})&&s.bot.HasItemCount(23671));
+      assert(s.bot.GetQuestStatus(9451)==QUEST_STATUS_COMPLETE&&s.action.Execute({})&&s.bot.HasItemCount(5175));}
+    {Scenario s(9450);assert(!s.action.Execute({})&&s.ai.objectives==1&&s.ai.casts==0);}
+    {Scenario s(9504);s.Focus(23749);spawns[0].mapid=1;s.focus.mapId=1;
+      assert(s.action.Execute({})&&s.ai.moves==1&&s.ai.movedTo.map==1&&s.ai.casts==0);
+      s.bot.mapId=1;assert(s.action.Execute({})&&s.ai.casts==1&&s.ai.castTarget==&s.bot);}
+    {Scenario s(9467);s.Give(23682);std::swap(s.bot.GetItemByEntry(23682)->slot,s.bot.GetItemByEntry(24336)->slot);
+      assert(s.action.Execute({})&&s.bot.session.opens==1&&s.bot.session.openedEntry==24336);
+      assert(s.ai.context.loot.value.guid==s.bot.GetItemByEntry(24336)->GetGUID()&&s.ai.casts==0);
+      // Ordinary loot responses populate the inventory after native opening.
+      s.bot.inventory.erase(24336);s.Ritual();assert(s.action.Execute({})&&s.ai.casts==1);}
+    {Scenario s(9467);s.bot.GetItemByEntry(24336)->proto.LockID=1;s.bot.GetItemByEntry(24336)->locked=true;
+      assert(!s.action.Execute({})&&s.bot.session.opens==0&&s.ai.casts==0);}
+    for(uint32 quest:{9467u,9508u}){
+      Scenario s(quest);s.Ritual();assert(s.action.Execute({})&&s.ai.casts==1&&s.ai.castObject==&s.focus);
+      assert(s.ai.castItem==s.bot.GetItemByEntry(quest==9467?23682:23751)&&s.ai.waits==(quest==9467?0u:1u));
+      auto* state=std::get_if<NewRpgInfo::DoQuest>(&s.ai.rpgInfo.data);assert(state&&state->questId==quest);
+      assert(s.bot.GetQuestStatus(quest)==QUEST_STATUS_INCOMPLETE);
+    }
+    {Scenario s(9467);s.Ritual();s.bot.inventory.erase(23682);assert(!s.action.Execute({})&&s.ai.castChecks==0);}
+    {Scenario s(9508);s.Ritual();s.bot.resultIsChannel=true;
+      assert(s.action.Execute({})&&s.ai.waitedFor==&s.bot.channelSpell);}
+    {Scenario s(9467);s.Ritual();assert(s.action.Execute({})&&s.ai.waits==0);}
+    {Scenario s(9508);s.Ritual();s.ai.castResult=false;assert(!s.action.Execute({})&&s.ai.waits==0);
+      s.ai.castResult=true;assert(s.action.Execute({})&&s.ai.casts==1);}
+    {Scenario s(9508);s.Ritual();s.ai.rpgInfo.ChangeToDoQuest(9450,objectMgr.GetQuestTemplate(9450));
+      assert(s.action.Execute({})&&std::get<NewRpgInfo::DoQuest>(s.ai.rpgInfo.data).questId==9508);}
+    for(uint32 quest:{9467u,9508u}){
+      Scenario s(quest);s.Ritual();s.RitualMob();
+      assert(!s.action.Execute({})&&s.ai.casts==0&&std::get<NewRpgInfo::DoQuest>(s.ai.rpgInfo.data).questId==quest);
+    }
+    {Scenario s(9508);s.Ritual();s.RitualMob(false);assert(!s.action.Execute({})&&s.ai.casts==0);}
+    {Scenario s(9508);s.Ritual();s.ai.context.npcs.push_back({9999});assert(s.action.Execute({})&&s.ai.casts==1);}
+    {Scenario s(9508);s.Ritual();Player other;other.alive=false;other.guid=9999;s.ai.units[9999]=&other;
+      s.ai.context.corpses.push_back({9999});assert(s.action.Execute({})&&s.ai.casts==1);}
+    for(uint32 mode=0;mode<6;++mode){Scenario s(9508);s.Ritual();auto* mob=s.RitualMob();
+      if(mode==0)mob->entry=17206;else if(mode==1)mob->inWorld=false;else if(mode==2)mob->mapId=0;
+      if(mode==3)mob->phaseMask=2;else if(mode==4)mob->visible=false;
+      if(mode==5){s.ai.context.npcs.pop_back();mob->alive=false;s.ai.context.corpses.push_back(mob->GetGUID());mob->loot.empty=true;}
+      assert(s.action.Execute({})&&s.ai.casts==1);
+    }
+    for(uint32 mode=0;mode<5;++mode){Scenario s(9508);s.Ritual();auto* corpse=s.RitualMob(false);
+      if(mode==0)corpse->lootRecipient=nullptr;else if(mode==1)corpse->loot.empty=true;
+      if(mode==2)corpse->damageEnough=false;else if(mode==3)corpse->lootDisabled=true;
+      if(mode==4)corpse->loot.forPlayer=false;
+      assert(s.action.Execute({})&&s.ai.casts==1);
+    }
+    for(uint32 mode=0;mode<8;++mode){Scenario s(9508);s.Ritual();
+      if(mode==0)s.focus.entry=181672;else if(mode==1)s.focus.inWorld=false;else if(mode==2)s.focus.spawned=false;
+      if(mode==3)s.focus.mapId=0;else if(mode==4)s.focus.phaseMask=2;else if(mode==5)s.focus.visible=false;
+      if(mode==6)s.focus.info.type=GAMEOBJECT_TYPE_SPELL_FOCUS;else if(mode==7)s.focus.x=30;
+      assert(!s.action.Execute({})&&s.ai.castChecks==0);
+    }
+    {Scenario s(9508);s.Ritual();s.focus.x=40;spawns[0].posX=40;
+      assert(s.action.Execute({})&&s.ai.moves==1&&s.ai.castChecks==0);}
+    {Scenario s(9508);s.Ritual();s.focus.los=false;
+      assert(s.action.Execute({})&&s.ai.moves==1&&s.ai.castChecks==0);}
+    {Scenario s(9508);s.Ritual();s.ai.objects.erase(501);assert(!s.action.Execute({})&&s.ai.castChecks==0);}
+    {Scenario s(9508);s.Ritual();spawns[0].phaseMask=2;assert(!s.action.Execute({})&&s.ai.castChecks==0);}
+    {Scenario s(9508);s.Ritual();spawns[0].mapid=1;s.focus.mapId=1;
+      assert(s.action.Execute({})&&s.ai.moves==1&&s.ai.movedTo.map==1&&s.ai.casts==0);}
+    {Scenario s(9508);s.Ritual();spawns[0].mapid=1;s.focus.mapId=1;s.ai.routes=false;
+      assert(!s.action.Execute({})&&s.ai.moves==0&&s.ai.castChecks==0);}
+    {Scenario s(9508);s.Ritual();spawns[0].posX=80;spawns.push_back({181699,530,1,2,0,0});
+      assert(s.action.Execute({})&&s.ai.casts==1&&s.ai.moves==0);}
+    {Scenario s(9508);s.Ritual();s.ai.castResult=false;assert(!s.action.Execute({}));uint32 scans=spawnScans;
+      assert(!s.action.Execute({})&&spawnScans==scans);now+=60000;
+      assert(!s.action.Execute({})&&spawnScans>scans);}
+    {Scenario s(9508);s.Ritual();s.ai.castResult=false;assert(!s.action.Execute({}));uint32 scans=spawnScans;
+      s.bot.mapId=0;assert(s.action.Execute({})&&spawnScans>scans&&s.ai.movedTo.map==530);}
+    {Scenario s(9508);s.Ritual();assert(s.action.Execute({}));now+=1999;
+      assert(s.action.Execute({})&&s.ai.casts==1);s.RitualMob();now+=1;
+      assert(!s.action.Execute({})&&s.ai.casts==1);}
+    {Scenario s(9508);s.Ritual();assert(s.action.Execute({}));now+=6000;
+      assert(s.action.Execute({})&&s.ai.casts==1);now+=2000;
+      assert(s.action.Execute({})&&s.ai.casts==2);}
+    {Scenario s(9508);s.Ritual();assert(s.action.Execute({}));s.bot.mapId=0;s.focus.mapId=0;spawns[0].mapid=0;
+      assert(s.action.Execute({})&&s.ai.casts==2);}
+    {Scenario s(9467);s.Ritual();assert(s.action.Execute({}));s.bot.quests.erase(9467);s.bot.available.erase(9467);
+      s.bot.bank[5176]=1;s.bot.bank.erase(5177);s.bot.quests[9508]=QUEST_STATUS_INCOMPLETE;s.id=9508;s.Ritual();
+      s.bot.resultInstant=false;s.bot.genericSpell.castTime=3000;
+      assert(s.action.Execute({})&&s.ai.casts==2);}
+    {Scenario s(9501);s.bot.underWater=true;assert(s.action.Execute({})&&s.ai.casts==1&&s.bot.HasAura(7178));
+      assert(s.ai.castTarget==&s.bot&&s.ai.castItem==s.bot.GetItemByEntry(23871)&&s.bot.stops==1);
+      assert(!s.action.Execute({})&&s.ai.casts==1&&s.ai.objectives==1);}
+    {Scenario s(9501);s.bot.inWater=true;assert(!s.action.Execute({})&&s.ai.casts==0);}
+    {Scenario s(9501);s.bot.underWater=true;s.bot.auras.insert(546);
+      assert(!s.action.Execute({})&&s.ai.casts==0&&s.bot.HasItemCount(23871));}
+    {Scenario s(9501);s.bot.underWater=true;s.bot.inventory.erase(23871);
+      assert(!s.action.Execute({})&&s.ai.casts==0&&s.ai.objectives==1);}
+    {Scenario s(9501);s.bot.underWater=true;s.ai.castResult=false;assert(!s.action.Execute({})&&s.ai.casts==0&&s.ai.objectives==0);}
+    {Scenario s(9450);s.Give(23871);s.bot.underWater=true;assert(!s.action.Execute({})&&s.ai.casts==0);}
     {Scenario s(100);s.bot.quests[100]=QUEST_STATUS_COMPLETE;
       assert(s.action.Execute({})&&s.bot.session.removes==0&&s.ai.casts==0);
       now+=44999;assert(s.action.Execute({})&&s.bot.session.removes==0);
@@ -728,7 +985,7 @@ int main(){
       assert(s.action.Execute({})&&s.ai.accepts==0);now+=29000;
       assert(s.action.Execute({})&&s.ai.accepts==0);now+=16000;
       assert(s.action.Execute({})&&s.ai.interacted==1103&&s.ai.accepts==1);}
-    std::cout<<"Shaman totems: native33quests, ownedSapta, runtimefocuses, waterskins and nativeWater wait/recovery passed\n";
+    std::cout<<"Shaman totems: native57quests, ownedSapta, Draenei ritual objects, bags, breathing and nativeWater recovery passed\n";
 }
 '''
 
@@ -800,13 +1057,74 @@ mutations = [
     ('restarted Water ritual gets a fresh wait', 'reset', '_waterRecoveryReady = false;', ''),
     ('rewarded Tiev recovery resets the previous ritual wait', 'execute',
      'data->Quest == WaterSpiritRecovery && reward && bot->GetQuestRewardStatus(WaterSpiritRecovery)', 'false'),
+    ('underwater breathing potion keeps its Water quest scope', 'execute', 'data->Totem == WaterTotem &&', ''),
+    ('breathing potion is saved until actually underwater', 'execute', 'bot->IsUnderWater() &&', ''),
+    ('existing breathing aura preserves the owned potion', 'execute', '!bot->HasAuraType(SPELL_AURA_WATER_BREATHING)', 'true'),
+    ('breathing potion must be owned', 'execute', 'GetItemByEntry(WaterBreathingPotion)', 'GetItemByEntry(23682)'),
+    ('breathing potion targets its owner', 'execute', 'UseItemOnUnit(potion, bot)', 'UseItemOnUnit(potion, nullptr)'),
+    ('native satchel opening precedes the Fire ritual', 'execute',
+     'data->Quest == 9467 && bot->GetItemByEntry(FireproofSatchel)', 'false'),
+    ('absent satchel allows the owned torch step', 'execute', '&& bot->GetItemByEntry(FireproofSatchel)', ''),
+    ('native container selector requires loot flag', 'findopen', 'itemTemplate->HasFlag(ITEM_FLAG_HAS_LOOT) &&', ''),
+    ('native container selector preserves item locks', 'findopen',
+     '(itemTemplate->LockID == 0 || !this->bot->GetItemByEntry(itemTemplate->ItemId)->IsLocked())', 'true'),
+    ('Draenei ritual establishes ordinary quest grind state', 'execute',
+     'botAI->rpgInfo.ChangeToDoQuest(data->Quest, quest);', ''),
+    ('a different quest grind state is replaced', 'execute', '|| state->questId != data->Quest', ''),
+    ('native corpse scan preserves earned loot before another ritual', 'ritual',
+     '{"nearest npcs", "nearest corpses"}', '{"nearest npcs"}'),
+    ('ritual suppresses duplicates only for its own creature entry', 'ritual',
+     'creature->GetEntry() == creatureEntry &&', 'creatureEntry != 0 &&'),
+    ('ritual tolerates missing units and player corpses', 'ritual', 'if (creature &&', 'if ('),
+    ('ritual opponent must be in world', 'ritual', 'creature->IsInWorld() &&', ''),
+    ('ritual opponent must share the player map', 'ritual', 'bot->IsInMap(creature) &&', ''),
+    ('ritual opponent must share the player phase', 'ritual', 'bot->InSamePhase(creature) &&', ''),
+    ('ritual opponent must be visible to the player', 'ritual', 'bot->CanSeeOrDetect(creature) &&', ''),
+    ('a living ritual opponent yields to ordinary combat', 'ritual', 'creature->IsAlive() ||', ''),
+    ('an owned lootable corpse yields to ordinary looting', 'ritual', 'bot->isAllowedToLoot(creature)', 'false'),
+    ('empty and unowned corpses do not block ordinary retries', 'ritual',
+     '(creature->IsAlive() || bot->isAllowedToLoot(creature))', 'true'),
+    ('owned Draenei ritual item required', 'ritual', 'if (!item)', 'if (false)'),
+    ('ritual native spawn phase checked', 'ritual', 'if (!(spawn->phaseMask & bot->GetPhaseMask()))', 'if (false)'),
+    ('ritual search includes the destination continent', 'ritual', 'WorldPosition origin;', 'WorldPosition origin(bot);'),
+    ('nearest native ritual object selected', 'ritual',
+     'if (cost < nearest)', 'if (cost < nearest && _ritualPosition == WorldPosition())'),
+    ('ritual map changes invalidate its cached native search', 'ritual', '_ritualMap != bot->GetMapId() ||', ''),
+    ('ritual quest changes invalidate its cached native search', 'ritual', '_ritualQuest != quest->GetQuestId() ||', ''),
+    ('native ritual search expires after a minute', 'ritual',
+     'GetMSTimeDiffToNow(_ritualChecked) >= MINUTE * IN_MILLISECONDS', 'false'),
+    ('new ritual quest or map clears pending use', 'ritual', '_ritualUsed = 0;', ''),
+    ('native ritual spawn must exist', 'ritual', 'if (_ritualPosition == WorldPosition())', 'if (false)'),
+    ('native delayed ritual gets a pending use window', 'ritual',
+     'GetMSTimeDiffToNow(_ritualUsed) < _ritualWait', 'false'),
+    ('Water cast duration contributes to the native event wait', 'ritual', '(cast ? cast->GetCastTime() : 0)', '0'),
+    ('live ritual object entry checked', 'ritual', 'object->GetEntry() != objectEntry ||', ''),
+    ('live ritual object must still resolve', 'ritual', 'if (!object ||', 'if ('),
+    ('live ritual object world state checked', 'ritual', '!object->IsInWorld() ||', ''),
+    ('live ritual object spawn checked', 'ritual', '!object->isSpawned() ||', ''),
+    ('live ritual object map checked', 'ritual', '!bot->IsInMap(object) ||', ''),
+    ('live ritual object phase checked', 'ritual', '!bot->InSamePhase(object) ||', ''),
+    ('live ritual object visibility checked', 'ritual', '!bot->CanSeeOrDetect(object) ||', ''),
+    ('live ritual object type checked', 'ritual', 'object->GetGoType() != GAMEOBJECT_TYPE_GOOBER ||', ''),
+    ('live ritual object matches the chosen native spawn', 'ritual',
+     'object->GetExactDist(_ritualPosition) > INTERACTION_DISTANCE', 'false'),
+    ('ritual item use requires native interaction range', 'ritual',
+     '!object->IsWithinDistInMap(bot, INTERACTION_DISTANCE) ||', ''),
+    ('ritual item use requires line of sight', 'ritual', '|| !bot->IsWithinLOSInMap(object)', ''),
+    ('ritual item targets the native gameobject', 'ritual',
+     'UseItemOnGameObject(item, guid)', 'UseItemOnGameObject(item, ObjectGuid::Empty)'),
+    ('owned gameobject item retained in native cast validation', 'precheck',
+     'CanCastSpell(spellId, goTarget, false, item)', 'CanCastSpell(spellId, goTarget, false, nullptr)'),
+    ('generic ritual cast is waited', 'ritual', 'cast = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL);', 'cast = nullptr;'),
+    ('instant ritual safely omits an absent cast wait', 'ritual',
+     'if (cast)\n            botAI->WaitForSpellCast(cast);', 'botAI->WaitForSpellCast(cast);'),
 ]
-for quest in (1518, 1521, 1527, 1531, 1532):
+for quest in (1518, 1521, 1527, 1531, 1532, 9451, 9555, 9509, 9554):
     mutations.append((f'rewarded terminal quest {quest} skips its chain', 'table',
                       f'bot->GetQuestRewardStatus({quest})', 'false'))
 mutations.append(('rewarded Water terminal quest skips its chain', 'table',
                   'bot->GetQuestRewardStatus(ReturnWaterQuest)', 'false'))
-for quest in (1535, 1536, 1534):
+for quest in (1535, 1536, 1534, 9504):
     mutations.append((f'waterskin step {quest} uses its native source item', 'execute',
                       f'data->Quest == {quest}', 'false'))
 for label, key, old, _ in mutations:
