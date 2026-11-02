@@ -1,9 +1,9 @@
-"""Exercise follower flight-point learning against isolated native core fixtures.
+"""Exercise follower flight-point learning and home binding against isolated native core fixtures.
 
-The actual action, packet forwarding and strategy execute with the core's real
-WorldPacket, ByteBuffer and ObjectGuid types. Native interaction and taxi-node
-methods supply their own guards; fixtures provide NPC/world state and recording
-sessions. This does not launch a realm or replace the full Windows build.
+The actual actions, packet forwarding and strategy execute with the core's real
+WorldPacket, ByteBuffer and ObjectGuid types. Native interaction, taxi-node and
+bind-point methods supply their own guards; fixtures provide NPC/world state and
+recording sessions. This does not launch a realm or replace the full Windows build.
 """
 
 import argparse
@@ -18,6 +18,7 @@ from FixtureSupport import (
     cxx,
     function,
     prepared_core,
+    reject_mutants,
     source_argument,
 )
 
@@ -39,6 +40,14 @@ player = (core / 'src/server/game/Entities/Player/Player.cpp').read_text()
 taxi = (core / 'src/server/game/Handlers/TaxiHandler.cpp').read_text()
 taxi_header = (core / 'src/server/game/Entities/Player/PlayerTaxi.h').read_text()
 external = (module / 'Bot/Engine/ExternalEventHelper.cpp').read_text()
+npc_handler = (core / 'src/server/game/Handlers/NPCHandler.cpp').read_text()
+opcodes = (core / 'src/server/game/Server/Protocol/Opcodes.cpp').read_text()
+
+# A master's bind is one innkeeper GUID that the core checks with the interaction guard companions repeat.
+binder = function(npc_handler, 'void WorldSession::HandleBinderActivateOpcode')
+assert 'recvData >> npcGUID;' in binder and 'recvData' not in binder.split('recvData >> npcGUID;')[1]
+assert 'GetNPCIfCanInteractWith(npcGUID, UNIT_NPC_FLAG_INNKEEPER)' in binder and 'SendBindPoint(unit);' in binder
+assert re.search(r'DEFINE_HANDLER\(CMSG_BINDER_ACTIVATE,[^\n]+&WorldSession::HandleBinderActivateOpcode', opcodes)
 
 action_context = (module / 'Ai/Base/WorldPacketActionContext.h').read_text()
 trigger_context = (module / 'Ai/Base/WorldPacketTriggerContext.h').read_text()
@@ -46,11 +55,16 @@ assert 'creators["learn taxi"] = &WorldPacketActionContext::learn_taxi;' in acti
 assert 'return new LearnTaxiAction(botAI);' in action_context
 assert 'creators["learn taxi"] = &WorldPacketTriggerContext::learn_taxi;' in trigger_context
 assert 'return new WorldPacketTrigger(botAI, "learn taxi");' in trigger_context
+assert 'creators["bind home"] = &WorldPacketActionContext::bind_home;' in action_context
+assert 'return new BindHomeAction(botAI);' in action_context
+assert 'creators["bind home"] = &WorldPacketTriggerContext::bind_home;' in trigger_context
+assert 'return new WorldPacketTrigger(botAI, "bind home");' in trigger_context
 
 registrations = '\n'.join(re.findall(
     r'^    (?:masterIncomingPacketHandlers\.AddHandler|_masterTaxiPacketHandlers\.emplace)\([^\n]+$',
     ai, re.MULTILINE))
-assert registrations.count('_masterTaxiPacketHandlers.emplace') == 2
+assert registrations.count('_masterTaxiPacketHandlers.emplace') == 3
+assert '_masterTaxiPacketHandlers.emplace(CMSG_BINDER_ACTIVATE, "bind home");' in registrations
 pending_start = ai.index('    if (_masterTaxiPacketPending.load())')
 pending_end = ai.index('\n    masterOutgoingPacketHandlers.Handle(helper);', pending_start)
 pending_delivery = ai[pending_start:pending_end]
@@ -85,11 +99,12 @@ fixture = r'''
 #define GET_PLAYERBOT_AI(player) ((player) ? (player)->botAI : nullptr)
 
 constexpr uint32 UNIT_NPC_FLAG_FLIGHTMASTER = 1;
+constexpr uint32 UNIT_NPC_FLAG_INNKEEPER = 4;
 constexpr uint32 CREATURE_TYPE_FLAG_VISIBLE_TO_GHOSTS = 1;
 constexpr uint32 CREATURE_TYPE_FLAG_INTERACT_WHILE_DEAD = 2;
 constexpr int REP_UNFRIENDLY = 2;
 constexpr float INTERACTION_DISTANCE = 5.0f;
-enum NPCFlags : uint32 { FlightMasterFlag = UNIT_NPC_FLAG_FLIGHTMASTER };
+enum NPCFlags : uint32 { FlightMasterFlag = UNIT_NPC_FLAG_FLIGHTMASTER, InnkeeperFlag = UNIT_NPC_FLAG_INNKEEPER };
 
 class Player;
 class PlayerbotAI;
@@ -116,6 +131,8 @@ public:
     CreatureTemplate const* GetCreatureTemplate() const { return &creatureTemplate; }
     bool IsWithinDistInMap(Player* player, float distance) const;
     ObjectGuid GetGUID() const { return guid; }
+    std::vector<std::pair<Player*, uint32>> casts;
+    void CastSpell(Player* target, uint32 spellId, bool) { casts.emplace_back(target, spellId); }
 };
 
 class TaxiMaskFixture
@@ -129,11 +146,24 @@ public:
 class WorldSession
 {
 public:
-    Player* player = nullptr;
+    Player* _player = nullptr;
     std::vector<WorldPacket> sent;
-    Player* GetPlayer() { return player; }
+    Player* GetPlayer() { return _player; }
     void SendPacket(WorldPacket const* packet) { sent.push_back(*packet); }
     bool SendLearnNewTaxiNode(Creature* creature);
+    void SendBindPoint(Creature* npc);
+};
+
+struct Map
+{
+    bool instanceable = false;
+    bool Instanceable() const { return instanceable; }
+};
+inline std::map<std::pair<uint32, uint32>, Map> maps;
+struct PlayerMenu
+{
+    int closed = 0;
+    void SendCloseGossip() { ++closed; }
 };
 
 class Player
@@ -152,15 +182,14 @@ public:
     PlayerbotAI* botAI = nullptr;
     TaxiMaskFixture m_taxi;
     WorldSession session;
-    Player() { session.player = this; }
+    PlayerMenu menu;
+    PlayerMenu* PlayerTalkClass = &menu;
+    Player() { session._player = this; }
     bool IsAlive() const { return alive; }
     bool IsInWorld() const { return inWorld; }
     bool IsInFlight() const { return inFlight; }
     bool IsBeingTeleported() const { return beingTeleported; }
-    void const* GetMap() const
-    {
-        return reinterpret_cast<void const*>(std::uintptr_t(1 + mapId + instanceId * 65536));
-    }
+    Map* GetMap() const { return &maps[{mapId, instanceId}]; }
     uint32 GetTeamId(bool = false) const { return team; }
     ObjectGuid GetGUID() const { return guid; }
     WorldSession* GetSession() { return &session; }
@@ -194,11 +223,24 @@ struct ScriptManager
 };
 inline ScriptManager scriptManager;
 #define sScriptMgr (&scriptManager)
-struct PlayerbotAIConfig { bool LearnFlightPathsWithMaster = false; };
+struct PlayerbotAIConfig { bool LearnFlightPathsWithMaster = false; bool BindHomeWithMaster = false; };
 inline PlayerbotAIConfig playerbotAIConfig;
 #define sPlayerbotAIConfig playerbotAIConfig
 bool IsRealPlayer(Player* player);
 bool IsSelfBot(Player* player);
+class PlayerbotTextMgr
+{
+public:
+    static PlayerbotTextMgr& instance()
+    {
+        static PlayerbotTextMgr texts;
+        return texts;
+    }
+    std::string GetBotTextOrDefault(std::string, std::string defaultText, std::map<std::string, std::string>)
+    {
+        return defaultText;
+    }
+};
 
 PACKET_HELPER
 
@@ -218,6 +260,12 @@ PENDING_FIELDS
     bool HasGameClientMaster();
     void HandleMasterIncomingPacket(WorldPacket const& packet, Player* packetMaster = nullptr);
     void DeliverTaxiPacket(ExternalEventHelper& helper);
+    std::vector<std::string> told;
+    bool TellMaster(std::string const text)
+    {
+        told.push_back(text);
+        return true;
+    }
 };
 
 class Action
@@ -250,8 +298,12 @@ class AiObjectContext
 {
 public:
     std::unique_ptr<Trigger> learn;
+    std::unique_ptr<Trigger> bind;
     explicit AiObjectContext(PlayerbotAI* ai);
-    Trigger* GetTrigger(std::string const& name) { return name == "learn taxi" ? learn.get() : nullptr; }
+    Trigger* GetTrigger(std::string const& name)
+    {
+        return name == "learn taxi" ? learn.get() : name == "bind home" ? bind.get() : nullptr;
+    }
 };
 class ExternalEventHelper
 {
@@ -309,6 +361,7 @@ fixture = fixture.replace('REGISTRATIONS', registrations)
 
 tests = r'''
 #include "Fixture.h"
+#include "BindHomeAction.h"
 #include "LearnTaxiAction.h"
 #include "WorldPacketHandlerStrategy.h"
 
@@ -318,14 +371,16 @@ struct Scenario
     Player bot;
     Creature flightMaster;
     Creature otherFlightMaster;
+    Creature innkeeper;
     PlayerbotAI ai;
     std::unique_ptr<PlayerbotAI> selfMasterAI;
     PlayerbotMgr manager;
     AiObjectContext context;
     ExternalEventHelper helper;
     LearnTaxiAction action;
+    BindHomeAction bindAction;
     explicit Scenario(bool selfBotMaster = false)
-        : ai(&bot, &master), manager(&master), context(&ai), helper(&context), action(&ai)
+        : ai(&bot, &master), manager(&master), context(&ai), helper(&context), action(&ai), bindAction(&ai)
     {
         if (selfBotMaster)
             selfMasterAI = std::make_unique<PlayerbotAI>(&master, &master);
@@ -334,13 +389,18 @@ struct Scenario
         flightMaster.guid.Set(0xF130000011003344ULL);
         otherFlightMaster.guid.Set(0xF130000022003355ULL);
         otherFlightMaster.node[0] = 18;
+        innkeeper.guid.Set(0xF130000033003366ULL);
+        innkeeper.flags = UNIT_NPC_FLAG_INNKEEPER;
         ObjectAccessor::creatures.clear();
         ObjectAccessor::creatures[{0, flightMaster.guid}] = &flightMaster;
         ObjectAccessor::creatures[{0, otherFlightMaster.guid}] = &otherFlightMaster;
+        ObjectAccessor::creatures[{0, innkeeper.guid}] = &innkeeper;
+        maps.clear();
         manager.bots.emplace(bot.guid, &bot);
         randomManager.bots.clear();
         scriptManager.learned.clear();
         sPlayerbotAIConfig.LearnFlightPathsWithMaster = true;
+        sPlayerbotAIConfig.BindHomeWithMaster = true;
     }
     WorldPacket Click(uint16 opcode = CMSG_GOSSIP_HELLO)
     {
@@ -362,6 +422,28 @@ struct Scenario
         manager.HandleMasterIncomingPacket(packet);
         assert(packet.size() == 8 && packet.rpos() == 0 && packet.wpos() == 8);
         return Deliver();
+    }
+    WorldPacket Bind()
+    {
+        WorldPacket packet(CMSG_BINDER_ACTIVATE);
+        packet << innkeeper.guid;
+        return packet;
+    }
+    bool DeliverBind()
+    {
+        ai.DeliverTaxiPacket(helper);
+        Event event = context.bind->Check();
+        context.bind->Reset();
+        return !(!event) && bindAction.isUseful() && bindAction.Execute(event);
+    }
+    bool ClickAndBind()
+    {
+        manager.HandleMasterIncomingPacket(Bind());
+        return DeliverBind();
+    }
+    void Unbound()
+    {
+        assert(innkeeper.casts.empty() && bot.session.sent.empty() && bot.menu.closed == 0 && ai.told.empty());
     }
     void Unchanged()
     {
@@ -585,7 +667,8 @@ int main()
         assert(!s.ai._pendingMasterTaxiPacket && !s.Deliver());
         s.Unchanged();
     }
-    for (uint16 opcode : {uint16(CMSG_TAXINODE_STATUS_QUERY), uint16(CMSG_ACTIVATETAXI), uint16(CMSG_QUESTGIVER_HELLO)})
+    for (uint16 opcode : {uint16(CMSG_TAXINODE_STATUS_QUERY), uint16(CMSG_ACTIVATETAXI), uint16(CMSG_QUESTGIVER_HELLO),
+                          uint16(CMSG_BINDER_ACTIVATE)})
     {
         Scenario s;
         assert(!s.ClickAndLearn(opcode));
@@ -648,17 +731,138 @@ int main()
         assert(scriptManager.learned.size() == 1);
     }
 
+    // Companions bind at the innkeeper of their master's bind, each speaking to it itself.
+    for (bool selfBotMaster : {false, true})
+    {
+        Scenario s(selfBotMaster);
+        s.manager.HandleMasterIncomingPacket(s.Bind());
+        assert(s.ai._masterTaxiPacketPending.load() && s.ai._pendingMasterTaxiPacket->size() == 16);
+        assert(s.DeliverBind());
+        assert(!s.ai._masterTaxiPacketPending.load() && !s.ai._pendingMasterTaxiPacket);
+        assert(s.innkeeper.casts.size() == 1 && s.innkeeper.casts[0].first == &s.bot);
+        assert(s.innkeeper.casts[0].second == 3286);
+        assert(s.bot.session.sent.size() == 1 && s.bot.session.sent[0].GetOpcode() == SMSG_TRAINER_BUY_SUCCEEDED);
+        assert(s.bot.menu.closed == 1 && s.master.menu.closed == 0 && s.master.session.sent.empty());
+        assert(s.ai.told.size() == 1 && s.ai.told[0] == "This inn is my new home");
+        assert(!s.context.learn->Check() && scriptManager.learned.empty() && s.bot.money == 123456);
+    }
+    for (bool masterSide : {false, true})
+        for (int condition = 0; condition < 8; ++condition)
+        {
+            Scenario s;
+            Player& player = masterSide ? s.master : s.bot;
+            if (condition == 0) player.mapId = 1;
+            if (condition == 1) player.x = INTERACTION_DISTANCE + 0.01f;
+            if (condition == 2) player.alive = false;
+            if (condition == 3) player.inWorld = false;
+            if (condition == 4) player.inFlight = true;
+            if (condition == 5) s.innkeeper.reaction = REP_UNFRIENDLY;
+            if (condition == 6) player.beingTeleported = true;
+            if (condition == 7) player.instanceId = 1;
+            assert(!s.ClickAndBind());
+            s.Unbound();
+        }
+    for (int condition = 0; condition < 5; ++condition)
+    {
+        Scenario s;
+        if (condition == 0) s.innkeeper.flags = UNIT_NPC_FLAG_FLIGHTMASTER;
+        if (condition == 1) s.innkeeper.alive = false;
+        if (condition == 2) s.innkeeper.charmer.Set(77);
+        if (condition == 3) ObjectAccessor::creatures.erase({0, s.innkeeper.guid});
+        if (condition == 4) maps[{0, 0}].instanceable = true;
+        bool const bound = s.ClickAndBind();
+        assert(condition == 4 ? bound && s.bot.session.sent.empty() : !bound);
+        assert(s.innkeeper.casts.empty() && s.bot.menu.closed == 0);
+    }
+    {
+        Scenario s;
+        s.bot.x = INTERACTION_DISTANCE;
+        assert(s.ClickAndBind() && s.innkeeper.casts.size() == 1);
+    }
+
+    // The bind switch is opt-in, gates queueing, delivery and the action, and leaves flight clicks alone.
+    {
+        Scenario s;
+        sPlayerbotAIConfig.BindHomeWithMaster = false;
+        s.manager.HandleMasterIncomingPacket(s.Bind());
+        assert(!s.ai._pendingMasterTaxiPacket && !s.bindAction.isUseful() && !s.DeliverBind());
+        s.Unbound();
+        assert(s.ClickAndLearn());
+    }
+    {
+        Scenario s;
+        s.manager.HandleMasterIncomingPacket(s.Bind());
+        sPlayerbotAIConfig.BindHomeWithMaster = false;
+        s.ai.DeliverTaxiPacket(s.helper);
+        assert(!s.ai._pendingMasterTaxiPacket && !s.context.bind->Check());
+        s.Unbound();
+    }
+    {
+        Scenario s;
+        sPlayerbotAIConfig.LearnFlightPathsWithMaster = false;
+        s.manager.HandleMasterIncomingPacket(s.Click());
+        assert(!s.ai._pendingMasterTaxiPacket);
+        assert(s.ClickAndBind() && s.innkeeper.casts.size() == 1);
+        assert(!s.bot.m_taxi.IsTaximaskNodeKnown(17) && scriptManager.learned.empty());
+    }
+
+    // Only the bot's own master binds it, checked again at delivery; free bots never follow.
+    {
+        Scenario s;
+        Player impostor;
+        impostor.guid.Set(999);
+        s.ai.HandleMasterIncomingPacket(s.Bind(), &impostor);
+        assert(!s.ai._pendingMasterTaxiPacket && !s.DeliverBind());
+        s.Unbound();
+    }
+    {
+        Scenario s;
+        s.manager.HandleMasterIncomingPacket(s.Bind());
+        Player replacement;
+        replacement.guid.Set(999);
+        s.ai.master = &replacement;
+        assert(s.ai.HasGameClientMaster() && replacement.GetNPCIfCanInteractWith(s.innkeeper.guid, UNIT_NPC_FLAG_INNKEEPER));
+        assert(!s.DeliverBind());
+        s.Unbound();
+    }
+    {
+        Scenario s;
+        s.manager.bots.clear();
+        randomManager.bots.emplace(s.bot.guid, &s.bot);
+        assert(s.ClickAndBind());
+    }
+    {
+        Scenario s;
+        s.manager.bots.clear();
+        s.ai.master = nullptr;
+        randomManager.bots.emplace(s.bot.guid, &s.bot);
+        assert(!s.ClickAndBind());
+        s.Unbound();
+    }
+    for (std::size_t size : {0u, 7u, 9u, 16u})
+    {
+        Scenario s;
+        WorldPacket invalid(CMSG_BINDER_ACTIVATE);
+        std::vector<uint8> bytes(size, 0x11);
+        if (size) invalid.append(bytes.data(), bytes.size());
+        s.manager.HandleMasterIncomingPacket(invalid);
+        assert(!s.ai._pendingMasterTaxiPacket && !s.DeliverBind());
+        s.Unbound();
+    }
+
     // The real default strategy queues the registered action alongside original handlers.
     {
         Scenario s;
         WorldPacketHandlerStrategy strategy(&s.ai);
         std::vector<TriggerNode*> triggers;
         strategy.InitTriggers(triggers);
-        bool learn = false, gossip = false, taxi = false;
+        bool learn = false, bind = false, gossip = false, taxi = false;
         for (auto* trigger : triggers)
         {
             if (trigger->name == "learn taxi")
                 learn = trigger->actions.size() == 1 && trigger->actions[0].name == "learn taxi";
+            if (trigger->name == "bind home")
+                bind = trigger->actions.size() == 1 && trigger->actions[0].name == "bind home";
             if (trigger->name == "gossip hello")
                 gossip = trigger->actions.size() == 1 && trigger->actions[0].name == "trainer";
             if (trigger->name == "activate taxi")
@@ -666,9 +870,9 @@ int main()
                        trigger->actions[1].name == "taxi";
             delete trigger;
         }
-        assert(learn && gossip && taxi);
+        assert(learn && bind && gossip && taxi);
     }
-    std::cout << "Follower flight-point learning: native packets, real/SelfBot masters, interaction guards, ownership, coalescing and idempotence passed\n";
+    std::cout << "Follower flight-point learning and home binding: native packets, real/SelfBot masters, interaction guards, ownership, coalescing and idempotence passed\n";
 }
 '''
 
@@ -679,39 +883,39 @@ production = '\n'.join([
     function(guid, 'ByteBuffer& operator>>(ByteBuffer& buf, ObjectGuid& guid)'),
     function(player, 'Creature* Player::GetNPCIfCanInteractWith'),
     function(taxi, 'bool WorldSession::SendLearnNewTaxiNode'),
+    function(npc_handler, 'void WorldSession::SendBindPoint'),
     function(ai, 'bool IsRealPlayer(Player* player)'),
     function(ai, 'bool IsSelfBot(Player* player)'),
     function(ai, 'bool PlayerbotAI::HasGameClientMaster()'),
     function(ai, 'void PacketHandlingHelper::AddHandler'),
     function(ai, 'void PacketHandlingHelper::Handle('),
     function(ai, 'void PacketHandlingHelper::AddPacket'),
+    function(ai, 'bool RepeatsMasterClick(uint16 opcode)'),
     function(ai, 'void PlayerbotAI::HandleMasterIncomingPacket'),
     function(external, 'void ExternalEventHelper::HandlePacket'),
     manager_delivery,
     'void PlayerbotAI::DeliverTaxiPacket(ExternalEventHelper& helper)\n{\n' + pending_delivery + '\n}',
 ])
 
-with tempfile.TemporaryDirectory(prefix='portable-master-flight-') as temporary:
-    temporary = Path(temporary)
-    (temporary / 'Fixture.h').write_text(fixture)
-    for header in ('Action.h', 'Playerbots.h', 'PlayerbotAIConfig.h', 'Trigger.h', 'PassThroughStrategy.h'):
-        (temporary / header).write_text('#include "Fixture.h"\n')
-    (temporary / 'production.cpp').write_text(
-        '#include "Fixture.h"\n#include "WorldPacketTrigger.h"\n'
-        'AiObjectContext::AiObjectContext(PlayerbotAI* ai) : learn(std::make_unique<WorldPacketTrigger>(ai, "learn taxi")) {}\n'
-        + production)
-    (temporary / 'tests.cpp').write_text(tests)
-    production_sources = []
-    for relative in ('Ai/Base/Actions/LearnTaxiAction', 'Ai/Base/Trigger/WorldPacketTrigger',
-                     'Ai/Base/Strategy/WorldPacketHandlerStrategy'):
-        for suffix in ('.cpp', '.h'):
-            origin = module / (relative + suffix)
-            copied = temporary / origin.name
-            copied.write_bytes(origin.read_bytes())
-            if suffix == '.cpp':
-                production_sources.append(str(copied))
+mutations = [
+    ('bind without the master at the inn', 'BindHomeAction.cpp',
+     'Creature* innkeeper = master->GetNPCIfCanInteractWith(', 'Creature* innkeeper = bot->GetNPCIfCanInteractWith('),
+    ('bind without the bot at the inn', 'BindHomeAction.cpp',
+     'bot->GetNPCIfCanInteractWith(innkeeperGuid, UNIT_NPC_FLAG_INNKEEPER) != innkeeper', 'false'),
+    ('bind for another master', 'BindHomeAction.cpp', 'if (packetMasterGuid != master->GetGUID())', 'if (false)'),
+    ('bind while switched off', 'BindHomeAction.cpp', 'return sPlayerbotAIConfig.BindHomeWithMaster && ', 'return '),
+    ('binds queued while switched off', 'production.cpp', 'return sPlayerbotAIConfig.BindHomeWithMaster;', 'return true;'),
+    ('pending bind delivered after switching off', 'production.cpp',
+     'if (taxiPacket && RepeatsMasterClick(taxiPacket->GetOpcode()))', 'if (taxiPacket)'),
+    ('flight clicks follow the bind switch', 'production.cpp', 'if (opcode == CMSG_BINDER_ACTIVATE)', 'if (true)'),
+]
+copied_sources = ('Ai/Base/Actions/LearnTaxiAction', 'Ai/Base/Actions/BindHomeAction', 'Ai/Base/Trigger/WorldPacketTrigger',
+                  'Ai/Base/Strategy/WorldPacketHandlerStrategy')
+
+
+def build(directory, executable):
     includes = [
-        temporary,
+        directory,
         module / 'Ai/Base/Actions',
         module / 'Ai/Base/Trigger',
         module / 'Ai/Base/Strategy',
@@ -723,13 +927,34 @@ with tempfile.TemporaryDirectory(prefix='portable-master-flight-') as temporary:
         core / 'src/server/game/Server/Protocol',
         core / 'src/server/game/Entities/Object',
     ]
-    executable = temporary / 'flight-learning'
     command = [cxx(), '-std=c++20', '-pthread', '-Wall', '-Wextra', '-Werror', '-g', '-O1',
                *SANITIZER_FLAGS]
     command += [argument for path in includes for argument in ('-I', str(path))]
-    command += [str(temporary / 'production.cpp'), str(temporary / 'tests.cpp'),
-                *production_sources, '-o', str(executable)]
-    subprocess.run(command, check=True)
+    sources = [directory / 'production.cpp', directory / 'tests.cpp',
+               *(directory / (Path(relative).name + '.cpp') for relative in copied_sources)]
+    return command + [str(source) for source in sources] + ['-o', str(executable)]
+
+
+with tempfile.TemporaryDirectory(prefix='portable-master-flight-') as temporary:
+    temporary = Path(temporary)
+    (temporary / 'Fixture.h').write_text(fixture)
+    for header in ('Action.h', 'Playerbots.h', 'PlayerbotAIConfig.h', 'PlayerbotTextMgr.h', 'Trigger.h',
+                   'PassThroughStrategy.h'):
+        (temporary / header).write_text('#include "Fixture.h"\n')
+    (temporary / 'production.cpp').write_text(
+        '#include "Fixture.h"\n#include "WorldPacketTrigger.h"\n'
+        'AiObjectContext::AiObjectContext(PlayerbotAI* ai)\n'
+        '    : learn(std::make_unique<WorldPacketTrigger>(ai, "learn taxi")),\n'
+        '      bind(std::make_unique<WorldPacketTrigger>(ai, "bind home")) {}\n'
+        + production)
+    (temporary / 'tests.cpp').write_text(tests)
+    for relative in copied_sources:
+        for suffix in ('.cpp', '.h'):
+            origin = module / (relative + suffix)
+            (temporary / origin.name).write_bytes(origin.read_bytes())
+    executable = temporary / 'flight-learning'
+    subprocess.run(build(temporary, executable), check=True)
     subprocess.run([str(executable)], check=True, timeout=30,
                    env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=1:abort_on_error=1',
                         'UBSAN_OPTIONS': 'halt_on_error=1:print_stacktrace=1'})
+    reject_mutants(temporary, mutations, build, 'Follower home binding')

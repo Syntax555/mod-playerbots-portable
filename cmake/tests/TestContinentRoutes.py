@@ -1290,6 +1290,17 @@ int main()
                 assert(link.anywhere && link.to.map == 0 && link.to.x == -9000.0f);
         alliance.cooldowns.insert(8690);
         assert(!Has(sContinentRoutes.UsableLinks(&alliance, state), LinkKind::Hearthstone, 6948));
+
+        // A companion bound at its master's inn follows a far hearth with its own hearthstone, and walks a near one.
+        alliance.cooldowns.clear();
+        links = sContinentRoutes.UsableLinks(&alliance, state);
+        Point const inn{0, -9000.0f, 0.0f, 0.0f};
+        ContinentRoutes::Route const far = Plan(links, {0, -9000.0f + ContinentTravel::CompanionFarYards, 0.0f, 0.0f}, inn);
+        assert(far.links.size() == 1 && links[far.links[0]].kind == LinkKind::Hearthstone);
+        assert(Plan(links, {0, -8100.0f, 0.0f, 0.0f}, inn).links.empty());
+        alliance.cooldowns.insert(8690);
+        links = sContinentRoutes.UsableLinks(&alliance, state);
+        assert(Plan(links, {0, -9000.0f + ContinentTravel::CompanionFarYards, 0.0f, 0.0f}, inn).links.empty());
     }
 
     // A transport counts as docked at a stop only while the core keeps it waiting there.
