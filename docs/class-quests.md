@@ -138,6 +138,51 @@ on the [class audit](todo.md#dungeons-raids-and-outdoor-content). The
 [source comparison](class-quest-comparison.md) distinguishes existing quest
 restoration from class-specific bot actions.
 
+## Autonomous druid class quests
+
+Solo, headless random druids using natural progression can pursue 32 native
+quest variants: 14 for Bear Form, eight for Aquatic Form and ten for Cure Poison.
+These include alternative introductions; one character follows its eligible
+racial chain. The core retains race, level, prerequisite and personal-era
+checks. A learned ability or an earned final reward ends that family.
+
+Bots follow the Great Bear Spirit's full dialogue and use their owned dust at
+the Moonkin Stone matching its native summon event. Ordinary combat creates
+Lunaclaw's spirit, and its dialogue supplies quest credit. Moonglade teaching
+comes from the native introductory quest; existing travel can use the bot's
+own learned teleport normally. No ability or quest credit is granted by the
+bot action.
+
+If an incomplete Body and Heart quest has lost its dust, the bot waits at the
+native ritual site for Lunaclaw or its spirit. It can abandon and accept that
+empty event quest again normally when neither appears and no dust is owned,
+including in the bank. This recovery is restricted to quests 6001/6002 and
+refuses required items, source-drop items or explicit creature objectives.
+Aquatic quests retain their earned components.
+
+The lake trial uses ordinary Bauble Container loot and the native Shrine
+Bauble spell. Bots collect both pendant halves, travel to Remulos's shrine
+and use their owned Agility half with its Endurance reagent. Native casting
+consumes the components and creates the pendant. Source-drop items use the
+core's quest-loot eligibility; existing opening and loot actions retain their
+ordinary access and inventory checks.
+Cross-continent steps require enabled
+[continent travel](configuration.md#continent-travel) and the character's own
+usable routes.
+
+Cure quests fill owned samplers at their spell's native focus and use the
+owned ten-charge salve on the matching sick animal species. Native scripts
+transform the animals and award cure credit. Reached empty or recently cured
+spawns are temporarily skipped. The required Earthroot can be bought from
+eligible native vendors with the character's own gold; limited stock, prices,
+visibility, range and bag space remain in force. Other ingredients use normal
+fungus loot or kodo combat. Unavailable stock or funds can delay completion;
+the action does not grant herbs or gathering skills.
+
+Complete live runs, underwater navigation, the optional level-50 equipment
+chain and TBC Swift Flight remain on the
+[class audit](todo.md#dungeons-raids-and-outdoor-content).
+
 ## Client installation
 
 Install the release's matching EraTalents addon and `Data/patch-V.mpq` with WoW
@@ -161,7 +206,7 @@ and packaged license notices identify the exact source revisions and adaptations
 SQL updates run through the ordinary database updater.
 
 This integration restores the listed priest families and quest-taught lessons,
-and adds the scoped warlock and shaman automation described above. Other class
+and adds the scoped warlock, shaman and druid automation described above. Other class
 quests retain the core and Individual Progression support. It does not provide three
 complete historical quest databases or certify every class quest and scripted
 objective.

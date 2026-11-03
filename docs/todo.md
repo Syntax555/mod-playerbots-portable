@@ -233,11 +233,17 @@ fixtures pass. Use native core/module functions before adding replacements.
   Doomguard quests. Historical demon grimoire purchases remain unimplemented;
   keep `WarlockDemonTrainers` disabled until evaluated. See the
   [implemented scope](class-quests.md#autonomous-warlock-demon-quests).
-- [ ] **Druid:** Audit racial form and class-spell quests, including Aquatic
-  Form (31/5061), Body and Heart (6001/6002) and Power over Poison (6125/6130).
-  Verify ordinary underwater travel, quest items, native rewards and trainer
-  requirements for each earned era; existing form combat actions alone do not
-  establish that the prerequisite quests can be completed.
+- [ ] **Druid:** Live-verify the 32 basic Bear, Aquatic and Cure Poison variants
+  for Night Elf and Tauren. Check full spirit dialogues, the faction's native
+  Moonkin Stone, Lunaclaw combat/spirit and missing-dust recovery after relog.
+  Check the timed Bauble, both owned pendant halves, underwater navigation and
+  earned continent routes through Aquatic Form (31/5061). Verify sample ambushes,
+  ten-charge salve targeting, creature entry changes and empty-spawn retries.
+  Check Earthroot vendor stock, prices, own gold, full bags and other reagent
+  collection through Power over Poison (6125/6130). See
+  [implemented scope](class-quests.md#autonomous-druid-class-quests).
+  Audit the optional level-50 equipment chain 9063/9052/9051/9053 and TBC Swift
+  Flight separately, including the earned heroic Sethekk/Anzu requirement.
 - [ ] **Death knight:** Audit the Acherus starting chain, including The
   Emblazoned Runeblade (12619), Into the Realm of Shadows (12687) and The Light
   of Dawn (12801), before claiming autonomous completion. Random death-knight

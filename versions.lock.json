@@ -37,7 +37,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "191aad2da6aaf0299c50cd0442d30f0be217f8f4",
+      "revision": "a1ea90e1da39b934e9189d40967b496e3a45a4f1",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "08e5a03f99b648745b840707327f7c803ed51aa1"
@@ -73,7 +73,8 @@
         "mod-playerbots-bind-home-with-master": "cc8f5efc7a22e0f004342f105b9a30619fe0ab39",
         "mod-playerbots-earned-shaman-totems": "25b4820d604800ac03ac7807d0dcde47935db6a8",
         "mod-playerbots-earned-draenei-totems": "9efdb786e7731edb96df6c6222cf669ed51eb574",
-        "mod-playerbots-companion-rides": "191aad2da6aaf0299c50cd0442d30f0be217f8f4"
+        "mod-playerbots-companion-rides": "191aad2da6aaf0299c50cd0442d30f0be217f8f4",
+        "mod-playerbots-earned-druid-quests": "a1ea90e1da39b934e9189d40967b496e3a45a4f1"
       }
     },
     {

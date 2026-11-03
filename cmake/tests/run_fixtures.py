@@ -69,6 +69,7 @@ GAMEPLAY = (
     "TestHowlingFjord",
     "TestIpWorldFixes",
     "TestIpCommandSafety",
+    "TestDruidClassQuests",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -93,6 +94,7 @@ MODULE_FIXTURES = {
         "TestQuestObjectRelations",
         "TestShamanTotemQuests",
         "TestShamanWaterSpirit",
+        "TestDruidClassQuests",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
