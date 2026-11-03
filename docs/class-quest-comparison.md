@@ -23,7 +23,7 @@ quest runner.
 | Shaman | Earth quest flag changes and Water quest text already exist. | Horde and Draenei totem actions handle owned quest items, wells, spirits and ritual objects. Optional equipment chains and complete live runs remain open. |
 | Mage | Matching startup quest flags and trainer handling already exist. | Magecraft, Fragmented Magic and other class sequences remain to be audited. |
 | Warlock | Imp and Felsteed quest relations, orb prerequisites and inspected quest starters already exist. | The 43-step basic-demon action supplies bot handling absent from the reference project. Mounts, later demons and optional chains remain separate. |
-| Druid | Existing native quest scripts and trainer restoration supply quest content. | Bear, Aquatic Form and cure-event bot sequences still need implementation and validation. |
+| Druid | Existing native quest scripts and trainer restoration supply quest content. | The 32-variant Bear, Aquatic Form and Cure Poison action uses native spirit dialogues, items, loot and material purchases. Complete live runs, equipment and Swift Flight remain open. |
 
 The inspected Shaman changes include Earth quests 1516–1518 and 1520–1521,
 and Water quests 96, 100, 220 and 1530. Warlock comparisons include Imp quests
