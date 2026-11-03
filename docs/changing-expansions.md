@@ -180,6 +180,15 @@ battleground no longer places. Individual Progression's Isle of Quel'Danas phase
 choose their own quest variants, and the Magisters' Terrace dailies stay out of
 Shattrath's shared daily pools so that lower tiers keep a daily on their days.
 
+Creature levels and combat statistics are shared world data. Individual
+Progression's historical creatures use the base health and damage table of
+their original era; a later expansion's table must not inflate the historical
+health multiplier. Outdoor bosses and guards that retained stock Wrath levels
+receive their historical values where the era bases do not already set them.
+These shared values do not switch when an individual character earns another
+era. Wrath's city training dummies appear from tier 13, including the lower-level
+variants; invisible quest and spell helpers retain their native behavior.
+
 ## Battleground access and rules
 
 Classic battlegrounds use ordinary level requirements. Tier 8 opens Eye of the

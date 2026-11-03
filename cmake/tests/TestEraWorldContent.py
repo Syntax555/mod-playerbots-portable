@@ -38,10 +38,13 @@ updates = ip / 'data/sql/world/updates'
 update_path, restored_path, restored_era_path = (updates / 'zz_2026_10_31_01_era_world_content.sql',
                                                  updates / '2026_10_31_02_restored_vanilla_quest_givers.sql',
                                                  updates / '2026_10_31_03_restored_era_quests.sql')
-update = update_path.read_text()
+dummy_path = updates / 'zz_2026_11_03_02_era_training_dummies.sql'
+dummy_update = dummy_path.read_text()
+update = update_path.read_text() + dummy_update
 # Quests returned to their givers, replayed before the era gates as the native updater orders them by name.
 restored = restored_path.read_text() + restored_era_path.read_text()
 assert restored_path.name < restored_era_path.name < update_path.name
+assert update_path.name < dummy_path.name
 RESTORED = {2881: 7884, 8411: 6176, 8579: 15503, 8830: 15731, 8831: 15731}
 # Vanilla's battleground reputation turn-ins: giver and ender, and the ceiling of the quest's level bracket.
 BATTLEGROUND = {7788: (14733, 29), 7871: (14733, 39), 7872: (14733, 49), 7873: (14733, 59), 8291: (14733, 69),
@@ -53,6 +56,11 @@ ENDERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.item
 # Guard Didier at Light's Hope Chapel and Seer Nakha in Garadar, in Individual Progression's free GUID block.
 SPAWNS = {677001: (16226, 0, 2305.3, -5286.12), 677002: (23265, 530, -1333.53, 7221.96)}
 TBC, WRATH = 66008, 66013
+DUMMIES = {31144, 31146, 32542, 32543, 32545, 32546, 32666, 32667}
+dummy_templates = sql_rows(core, 'creature_template', DUMMIES)
+assert all(r['ScriptName'] == 'npc_training_dummy' and not int(r['flags_extra']) & 128 for r in dummy_templates)
+dummy_ai = (core / 'src/server/scripts/World/npcs_special.cpp').read_text()
+assert 'damage = 0;' in function(dummy_ai, 'struct npc_training_dummy : NullCreatureAI')
 
 # Native contracts: spawn-level visibility conditions take precedence over entry-level
 # ones and are checked for every player sight of a creature or gameobject; quest and
@@ -279,6 +287,11 @@ def check(source, before=restored):
         stage = marker - 66000
         assert not allowed(db, source_type, group, entry, source_id, stage - 1), (name, 'reachable before its expansion')
         assert allowed(db, source_type, group, entry, source_id, stage), (name, 'still hidden in its expansion')
+    dummy_spawns = [(guid, entry) for guid, entry, spawn_map in creatures if entry in DUMMIES and spawn_map in (0, 1, 530)]
+    assert len(dummy_spawns) == 75
+    for guid, entry in dummy_spawns:
+        assert [stage for stage in range(19) if allowed(db, 30, 0, entry, guid, stage)] == list(range(13, 19)), \
+            ('Wrath combat training dummy', entry, guid)
     # Vanilla stays: Thrall, the Vanilla Molten Core attunement and Refreshing Spring Water.
     # Classic battlegrounds open by level, so Arathi Basin's 1.7 quests stay too.
     for name, source_type, group, entry, source_id in (('Thrall', 30, 0, 4949, 0), ('Attunement to the Core', 19, 0, 7848, 0),
@@ -316,6 +329,7 @@ def section(marker, era, noun):
 
 
 mutations = (
+    ('Wrath combat training dummies remain in earlier eras', update.replace(dummy_update, '')),
     ('Inscription opens with TBC', update.replace(section(WRATH, 'Wrath', 'creature'), section(WRATH, 'Wrath', 'creature').replace(
         f', 8, 0, {WRATH},', f', 8, 0, {TBC},'))),
     ('TBC creatures stay visible', update.replace(section(TBC, 'TBC', 'creature'), '')),
@@ -354,3 +368,38 @@ for name, source, *before in mutations:
         print(f'Era world content mutation rejected: {name}')
     else:
         raise AssertionError(f'mutation survived: {name}')
+
+
+def check_dummy_scope(sql):
+    with replay(update_path.read_text()) as db:
+        # Existing entry and spawn conditions keep deciding visibility; this migration adds no alternative.
+        custom = [(30, 0, 31146, 0, 4, 16, 0, 1, 0, 0, 0, 0, 0, '', 'custom entry'),
+                  (30, 0, 32666, 48327, 5, 16, 0, 2, 0, 0, 0, 0, 0, '', 'custom spawn')]
+        db.executemany('INSERT INTO conditions VALUES (' + ','.join('?' for _ in columns) + ')', custom)
+        db.execute('INSERT INTO creature (guid, id, map) VALUES (999999, 31144, 0)')
+        db.execute('DELETE FROM creature WHERE guid = 48316')
+        script = sql.replace('INSERT IGNORE', 'INSERT OR IGNORE')
+        db.executescript(script)
+        first = sorted(db.execute('SELECT * FROM conditions'))
+        db.executescript(script)
+        assert sorted(db.execute('SELECT * FROM conditions')) == first, 'dummy update is not idempotent'
+        assert sorted(db.execute('SELECT * FROM conditions WHERE SourceTypeOrReferenceId=30 AND SourceGroup=0 '
+                                 'AND (SourceEntry=31146 OR (SourceEntry=32666 AND SourceId=48327))')) == sorted(custom), \
+            'dummy update changed custom visibility'
+        assert not db.execute('SELECT 1 FROM conditions WHERE SourceId IN (48316, 999999)').fetchone(), \
+            'dummy update reached a missing or module-added spawn'
+
+
+check_dummy_scope(dummy_update)
+for name, mutant in (
+    ('custom visibility replaced', dummy_update.replace('AND c.`SourceTypeOrReferenceId` IS NULL', '')),
+    ('module-added spawns gated', re.sub(r' AND s.`guid` IN \([^)]*\)', '', dummy_update)),
+):
+    assert mutant != dummy_update, name
+    try:
+        check_dummy_scope(mutant)
+    except AssertionError:
+        print(f'Era training dummy mutation rejected: {name}')
+    else:
+        raise AssertionError(f'mutation survived: {name}')
+print('Era training dummies: custom visibility, module spawns, missing rows and idempotence passed')

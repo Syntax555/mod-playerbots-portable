@@ -54,7 +54,7 @@ WRATH_MAPS = {571, 574, 575, 576, 578, 595, 599, 600, 601, 602, 603, 604, 607, 6
               594, 610, 612, 613, 614, 620, 621, 622, 623, 641, 642, 647, 662, 672, 673, 712, 713, 718}  # and transports
 # Gameobject types without collision, traps or encounter mechanics.
 GAMEOBJECT_TYPES = {2, 3, 4, 5, 7, 8, 9, 10, 19, 22, 23, 25, 32, 34}
-HELPER = re.compile(r'Trigger|Bunny|Credit|Marker|\[DND\]|\[PH\]|Invisible|Dummy')
+HELPER = re.compile(r'Trigger|Bunny|Credit|Marker|\[DND\]|\[PH\]|Invisible')
 # IP stage at which each Vanilla patch's content opens, by VMaNGOS patch (0 = 1.2 ... 10 = 1.12): with the raid
 # or event of the patch. 1.6 Blackwing Lair; 1.7 Zul'Gurub, 1.8 the Dragons of Nightmare and 1.10's second dungeon
 # set after Nefarian; 1.9 the Ahn'Qiraj gates; 1.11 and 1.12 Naxxramas and the Scourge.
@@ -84,6 +84,10 @@ BATTLEGROUND_FACTIONS = {509, 510, 729, 730, 889, 890}
 HOLIDAY_SORTS = {-22, -41, -284, -364, -366, -369, -370, -374, -375, -376, -1002, -1003, -1005}
 UPDATE = 'data/sql/world/updates/zz_2026_10_31_01_era_world_content.sql'
 OWN = "Comment NOT LIKE 'Era content: %'"
+
+
+def is_helper(script, name, extra):
+    return bool(extra & 128 or HELPER.search(name) or ('Dummy' in name and script != 'npc_training_dummy'))
 
 
 class Database:
@@ -488,7 +492,7 @@ def generate(q, args):
                 reason = 'script', 'an awareness script decides'
             elif (group, entry) in visibility_gated:
                 reason = 'condition', 'an existing visibility condition decides'
-            elif kind == 'creature' and (extra & 128 or HELPER.search(name)):
+            elif kind == 'creature' and is_helper(script, name, extra):
                 reason = 'helper', 'invisible helper'
             elif kind == 'creature' and npcflag & GRAVEYARD_FLAGS:
                 reason = 'graveyard', 'spirit healer or guide'
