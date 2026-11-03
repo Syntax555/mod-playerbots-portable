@@ -70,6 +70,7 @@ GAMEPLAY = (
     "TestIpWorldFixes",
     "TestIpCommandSafety",
     "TestDruidClassQuests",
+    "TestEraCreatureStats",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -98,6 +99,7 @@ MODULE_FIXTURES = {
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
+        "TestEraCreatureStats",
         "TestEraWorldContent",
         "TestBoreanTundra",
         "TestContinentRoutes",

@@ -10,7 +10,8 @@ Source projects and revisions:
   the 1.12 quest level table; player_xp_for_level as the reference the source
   fixtures compare Individual Progression's table with; with its Updates,
   creature, gameobject, quest and item entries, spawns and vendor lists for
-  the era world-content gates.
+  the era world-content gates; creature_template names, levels, unit classes
+  and health multipliers for historical outdoor creature repairs.
 - CMaNGOS tbc-db
   https://github.com/cmangos/tbc-db
   ebe51a83b0fde5397f0ecd82a36cb6c40f667d36
@@ -18,7 +19,9 @@ Source projects and revisions:
   npc_trainer and npc_trainer_template records; quest_template QuestLevel,
   RewMoneyMaxLevel and QuestFlags for the 2.4.3 quest experience table;
   player_xp_for_level as a fixture reference; with its Updates, the same
-  world records as classic-db for the era world-content gates.
+  world records as classic-db for the era world-content gates, and
+  creature_template names, Expansion, levels, unit classes and health
+  multipliers for historical outdoor creature repairs and base-stat tables.
 - CMaNGOS wotlk-db
   https://github.com/cmangos/wotlk-db
   78e8dc010748043b08b3b011794c645382aa107f

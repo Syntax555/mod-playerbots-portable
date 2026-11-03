@@ -251,6 +251,10 @@ fixtures pass. Use native core/module functions before adding replacements.
   owner's choices and must meet ordinary starting-chain and era requirements.
 - [ ] Verify era XP: quest values, battleground goals, rest/heirloom/holiday
   modifiers, era-cap money and Thrallmar/Honor Hold Favor without double bonuses.
+- [ ] Check historical creature levels and HP in game: Mekkatorque and the other
+  city leaders, Lor'themar, Velen and city guards. Confirm city training dummies
+  stay hidden before tier 13 and appear for Wrath characters in mixed-era groups.
+  Shared outdoor creature statistics retain their historical template era.
 - [ ] Check the [restored quests](changing-expansions.md#world-content-by-era-and-patch)
   in game: each bracket's Warsong Gulch and Arathi Basin turn-in with earned marks,
   gone at tier 8; Guard Didier and his writ from tier 6; Seer Nakha's A Strange Vision.

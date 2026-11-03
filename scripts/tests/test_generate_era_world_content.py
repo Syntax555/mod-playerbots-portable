@@ -6,7 +6,9 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -106,6 +108,49 @@ class AwarenessRules(unittest.TestCase):
         # Quest-status and plain scripts are the module's own decisions, not stage rules.
         self.assertIsNone(rules['gobject_ipp_closed'])
         self.assertIsNone(rules['boss_plain'])
+
+
+class CreatureHelpers(unittest.TestCase):
+    def test_combat_training_dummies_follow_their_era(self):
+        self.assertFalse(generator.is_helper('npc_training_dummy', 'Heroic Training Dummy', 262144))
+        self.assertFalse(generator.is_helper('npc_training_dummy', "Expert's Training Dummy", 262144))
+        self.assertFalse(generator.is_helper('npc_training_dummy', 'Advanced Training Dummy', 262144))
+
+    def test_spell_and_quest_helpers_keep_their_native_visibility(self):
+        self.assertTrue(generator.is_helper('', 'Invisible Dummy', 0))
+        self.assertTrue(generator.is_helper('npc_training_dummy', 'Heroic Training Dummy', 128))
+        self.assertTrue(generator.is_helper('npc_training_dummy', 'Invisible Training Dummy', 0))
+        self.assertTrue(generator.is_helper('quest_trigger', 'Training Dummy', 0))
+        self.assertTrue(generator.is_helper('', 'Quest Credit', 0))
+
+    def test_generator_gates_combat_dummies_and_preserves_helpers(self):
+        spawns = [(10, 31146, 0, 1, 'npc_training_dummy', 'Heroic Training Dummy', 0, 0, 262144, 0, 0),
+                  (11, 32666, 1, 1, 'npc_training_dummy', "Expert's Training Dummy", 0, 0, 262144, 0, 0),
+                  (12, 40000, 0, 1, '', 'Spell Dummy', 0, 0, 0, 0, 0),
+                  (13, 40001, 0, 1, 'npc_training_dummy', 'Invisible Training Dummy', 0, 0, 128, 0, 0)]
+
+        def query(sql):
+            if sql == 'SELECT Entry FROM wrath.creature_template':
+                return [(entry,) for _, entry, *_ in spawns]
+            if sql == 'SELECT guid, id FROM core.creature':
+                return [(guid, entry) for guid, entry, *_ in spawns]
+            if 'FROM world.creature s JOIN world.creature_template' in sql:
+                return spawns
+            return []
+
+        with tempfile.TemporaryDirectory() as directory:
+            ip = Path(directory)
+            (ip / 'src').mkdir()
+            (ip / 'src/IndividualProgression.h').write_text('BANG_A_GONG = 8743, INTO_THE_BREACH = 10119,')
+            args = SimpleNamespace(ip=ip, world='world', core_world='core', classic='classic', tbc='tbc',
+                                   wotlk='wrath', vmangos=None, chromiecraft=None)
+            with patch.object(generator, 'awareness_rules', return_value={}):
+                conditions, _ = generator.generate(query, args)
+                self.assertEqual(conditions, [(30, 0, 31146, 10, 66013), (30, 0, 32666, 11, 66013)])
+                with patch.object(generator, 'is_helper', side_effect=lambda script, name, extra:
+                                  bool(extra & 128 or generator.HELPER.search(name) or 'Dummy' in name)):
+                    mutant, _ = generator.generate(query, args)
+                self.assertNotEqual(mutant, conditions, 'name-only dummy helper mutation survived')
 
 
 class ChromieCraftOpenings(unittest.TestCase):
