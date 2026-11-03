@@ -71,6 +71,7 @@ GAMEPLAY = (
     "TestIpCommandSafety",
     "TestDruidClassQuests",
     "TestEraCreatureStats",
+    "TestNewRpgGrindPriority",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -96,6 +97,7 @@ MODULE_FIXTURES = {
         "TestShamanTotemQuests",
         "TestShamanWaterSpirit",
         "TestDruidClassQuests",
+        "TestNewRpgGrindPriority",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
