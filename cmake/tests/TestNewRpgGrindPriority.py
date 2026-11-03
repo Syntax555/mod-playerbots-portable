@@ -82,7 +82,7 @@ struct NewRpgGrindMultiplier : Multiplier
 int main()
 {
     Player bot;
-    PlayerbotAI ai{&bot};
+    PlayerbotAI ai{&bot, NewRpgInfo{}};
     NewRpgGrindMultiplier gate(&ai);
     Action ambient{"attack anything"};
     Action planned{"new rpg do quest"};
