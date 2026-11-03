@@ -29,6 +29,7 @@ excludes ordinary players, SelfBot characters and controlled altbots.
 | Area | Behavior and limits |
 | --- | --- |
 | Earned progression | Bots start with ordinary character-creation items and earn levels, gold, equipment, quests and era milestones. Factory grants, routine resets and leader-progress synchronization are disabled. |
+| Free-bot RPG goals | New RPG selects independent activities and travel destinations. Ambient `grind` pulls yield while a free bot travels, gathers or handles other RPG goals, but remain available while wandering or at a quest objective. Combat reactions and ordinary loot remain independent. |
 | Upkeep | Autonomous bots walk to usable vendors, repairers and trainers, and pay for lessons, repairs, supplies and general-purpose bags with their own gold. Unreachable NPCs are skipped; no supplies are generated. |
 | Trading | Bots sell owned surplus and spend their own gold through ordinary auctioneer and mailbox interactions. See [earned auctions](earned-auctions.md). |
 | Commands | Natural progression refuses `maintenance`, `autogear`, `summon`, `tame`, `mail` and `sendmail` and ignores bot cheats. The default profile also disables `addclass`; remaining commands follow the [Playerbots wiki](https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Commands). |
