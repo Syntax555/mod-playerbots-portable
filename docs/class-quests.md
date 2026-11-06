@@ -185,13 +185,15 @@ Complete live runs, underwater navigation, the optional level-50 equipment
 chain and TBC Swift Flight remain on the
 [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
-## Autonomous warrior, paladin and priest quests
+## Autonomous class quests for every class
 
-Solo, headless random warriors, paladins and priests using natural progression
-pursue the native quests that teach their class lessons. One shared table of 88
-quest steps covers the Vanilla races and the TBC blood elf and draenei chains.
-Bots finish one lesson at a time, starting at the nearest native giver they can
-use. A learned lesson or its rewarded final quest ends that chain.
+Solo, headless random bots of every class using natural progression pursue
+their native class quests. One shared table of 250 quest steps holds the
+warrior, paladin and priest lessons and, for all nine classes, the other class
+quests an ordinary solo character can finish on the open continents. The
+warlock, shaman, druid and hunter lesson actions above keep their own quests and
+run first. A bot finishes one lesson at a time, starting at the nearest native
+giver it can use; a learned lesson or its rewarded final quest ends that chain.
 
 | Lesson | Class | Chains |
 | --- | --- | --- |
@@ -202,32 +204,55 @@ use. A learned lesson or its rewarded final quest ends that chain.
 | Summon Warhorse with Apprentice Riding | Paladin, level 40 | The Tome of Nobility; The Thalassian Warhorse |
 | Racial priest spells | Priest, level 10 and 20 | The nine restored families listed under [priest training](#priest-training) |
 
+The other 157 class quests are the class letters and training breadcrumbs, the
+race-specific weapon, armor, robe and wand chains, and their follow-ups:
+
+| Class | Quests | Class | Quests | Class | Quests |
+| --- | --- | --- | --- | --- | --- |
+| Warrior | 29 | Rogue | 30 | Mage | 29 |
+| Paladin | 5 | Priest | 21 | Warlock | 9 |
+| Hunter | 25 | Shaman | 5 | Druid | 4 |
+
+Each has a native giver, needs only ordinary continent creatures, containers,
+quest objects or its own start item, and follows a reachable predecessor. A bot
+starts one only while it passes the ordinary quest level rules used by the RPG
+quest picker: no grey, repeatable, elite, group or dungeon quests and no quests
+more than three levels above the bot. Lessons are pursued regardless of level.
+
 The core still checks race, class, level, prerequisites, exclusive groups and
 personal era conditions, and grants every reward. Players see and complete the
 same quests. Individual Progression supplies the Tome of Nobility, Thalassian
 Warhorse and priest quest givers.
 
-Bots accept the Tome of Valor quest from their own book and use their own Symbol
+Bots accept item-started quests from their own items and use their own Symbol
 of Life, Shimmering Vessels and Ravager Cage Key on the native targets. Henze and
 Narm Faulk accept the turn-in once the bot has revived them with its Symbol.
-Bots use the Mausoleum Trigger, Gilded Brazier and Harbinger of the Second Trial
-to start their native events, and fight Ulag, the Death Ravager, Sangrias
-Stillblade and the champions through ordinary combat. For The Affray, a bot
-waits on the grate beside Twiggy Flathead until the challengers attack. It stays
-beside Bartleby for his fight and beside Daphne Stilwell during her escort,
-attacking the raiders who strike her.
+Bots use the Mausoleum Trigger, Gilded Brazier, Harbinger of the Second Trial and
+Ju-Ju Heaps, and fight Ulag, the Death Ravager, Sangrias Stillblade and the
+champions through ordinary combat. Mages fill their own flasks at the native
+spell focus. Priests cast their own Lesser Heal and Power Word: Fortitude on the
+wounded creatures of the robe quests, in the order the native script requires.
+For The Rethban Gauntlet, a bot reports the area trigger it has entered; for The
+Affray, it waits on the grate beside Twiggy Flathead until the challengers
+attack. It stays beside Bartleby for his fight and beside Daphne Stilwell during
+her escort, attacking the raiders who strike her.
 
-A failed quest, such as a lost Affray, trial or escort, is abandoned through the
-quest log and accepted again. The same applies to an event quest whose bot has
-waited at its site for five minutes without combat, and to a step whose own
-source item is gone from bags and bank. Other quest items, such as Linen Cloth
-and the Defias and Dark Iron scripts, come from ordinary kills and loot.
-Cross-continent steps, such as The Islander for Alliance warriors, need enabled
+A failed quest, such as a lost Affray, trial, escort or timed quest, is
+abandoned through the quest log and accepted again. The same applies to an
+event quest whose bot has waited at its site for five minutes without combat,
+and to a step whose own source item is gone from bags and bank. Other quest
+items, such as Linen Cloth and the Defias and Dark Iron scripts, come from
+ordinary kills and loot. Cross-continent steps, such as The Islander for
+Alliance warriors, need enabled
 [continent travel](configuration.md#continent-travel) and the bot's own usable
 routes.
 
-Rogue and mage class quests and the level-60 Charger chains are not automated;
-they remain available to players. Complete live runs remain on the
+Class quests that need a group, dungeon, raid, profession, pickpocketing or
+raid tokens remain player content. These include the Charger, Dreadsteed,
+Rhok'delar and Swift Flight Form chains, the Zul'Gurub, Ahn'Qiraj and Naxxramas
+class rewards, the elite Fire Hardened Mail, Test of Righteousness and Cyclonian
+quests, the crafted Brutal Armor and enchanted robes, the Horde rogue poison
+chain and the mage containment coffers. Complete live runs remain on the
 [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
 ## Client installation
@@ -253,7 +278,7 @@ and packaged license notices identify the exact source revisions and adaptations
 SQL updates run through the ordinary database updater.
 
 This integration restores the listed priest families and quest-taught lessons,
-and adds the scoped warlock, shaman, druid, warrior, paladin and priest automation
-described above. Other class quests retain the core and Individual Progression support. It does not provide three
+and adds the class quest automation described above. Player-only class quests retain the
+core and Individual Progression support. It does not provide three
 complete historical quest databases or certify every class quest and scripted
 objective.

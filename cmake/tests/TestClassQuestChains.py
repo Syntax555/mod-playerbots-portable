@@ -5,6 +5,7 @@ Named native SQL fields, scripts and handler contracts anchor the data those ada
 """
 
 import argparse
+from itertools import takewhile
 from pathlib import Path
 import re
 import subprocess
@@ -19,6 +20,7 @@ from FixtureSupport import (
     run_fixture,
     source_argument,
     sql_rows,
+    sql_values,
 )
 
 
@@ -32,26 +34,35 @@ rpg = module / 'Ai/World/Rpg/Action'
 source = (rpg / 'ClassQuestChains.cpp').read_text()
 header = (rpg / 'ClassQuestChains.h').read_text()
 shared = (rpg / 'ClassQuestAction.cpp').read_text()
-classes = {'WARRIOR': 1, 'PALADIN': 2, 'PRIEST': 5}
+classes = {'WARRIOR': 1, 'PALADIN': 2, 'HUNTER': 3, 'ROGUE': 4, 'PRIEST': 5, 'SHAMAN': 7, 'MAGE': 8, 'WARLOCK': 9,
+           'DRUID': 11}
+class_masks = {value: 1 << (value - 1) for value in classes.values()}
 
 # Native quest rows: each step belongs to its class, and every lesson's reward quest teaches that lesson.
-steps = [(classes[cls], 1719 if quest == 'TheAffray' else int(quest), int(spell), int(item), int(target))
-         for cls, quest, spell, item, target in re.findall(
-             r'\{CLASS_(\w+), (\w+), (\d+), (\d+), (-?\d+)\}', function(source, 'ClassQuestStep const ClassQuestSteps[]'))]
-assert len(steps) == 88 and len(steps) == len({row[1] for row in steps})
+steps = []
+for cls, quest, spell, use, item, entry, casts in re.findall(
+        r'\{CLASS_(\w+), (\w+), (\d+)(?:, Use::(\w+), (\d+), (\d+)(?:, \{([\d, ]+)\})?)?\}',
+        function(source, 'ClassQuestStep const ClassQuestSteps[]')):
+    steps.append((classes[cls], 1719 if quest == 'TheAffray' else int(quest), int(spell), use or 'None',
+                  int(item or 0), int(entry or 0), tuple(map(int, casts.split(', '))) if casts else ()))
+assert len(steps) == 250 and len(steps) == len({row[1] for row in steps})
 assert re.search(r'constexpr uint32 TheAffray = 1719;', source)
 by_quest = {row[1]: row for row in steps}
 lessons = {}
 for row in steps:
-    lessons.setdefault((row[0], row[2]), []).append(row[1])
+    if row[2]:
+        lessons.setdefault((row[0], row[2]), []).append(row[1])
 order = [(row[0], row[2]) for row in steps]
 assert all(order[i] == order[i + 1] or order[i + 1] not in order[:i + 1] for i in range(len(order) - 1)), \
     'steps of one lesson must stay together'
+for cls in classes.values():
+    own = [row[2] for row in steps if row[0] == cls]
+    assert own and own == sorted(own, key=lambda spell: not spell), 'lessons come before other class quests'
+assert {cls for cls, _ in lessons} == {1, 2, 5}
 quests = {int(row['ID']): row for row in sql_rows(core, 'quest_template', set(by_quest))}
 addon = {int(row['ID']): row for row in sql_rows(core, 'quest_template_addon', set(by_quest))}
 assert set(quests) == set(by_quest) == set(addon)
-class_masks = {1: 1, 2: 2, 5: 16}
-for cls, quest, spell, item, target in steps:
+for cls, quest, *_ in steps:
     assert int(addon[quest]['AllowableClasses']) == class_masks[cls], quest
 ip_root = core / 'modules/mod-individual-progression/data/sql/world'
 historical = (ip_root / 'updates/2026_10_11_00_historical_class_quests.sql').read_text()
@@ -72,7 +83,7 @@ for (cls, spell), members in lessons.items():
             assert teaches[cast] == spell, (quest, cast)
             rewarding.append(quest)
     assert rewarding, (cls, spell)
-assert set(restored_rewards) == {row[1] for row in steps if row[0] == 5}
+assert set(restored_rewards) == {quest for (cls, _), members in lessons.items() if cls == 5 for quest in members}
 # Individual Progression teaches each restored family through its dummy reward; Vanilla rank 1 is the displayed spell.
 families = re.findall(r'\{\{([\d, ]+)\}, \{\d+, \d+\}, \{\d+, \d+\}, (\d+), \{\{\{(\d+),',
                       (ip_root.parents[2] / 'src/HistoricalClassQuests.cpp').read_text())
@@ -82,6 +93,48 @@ for members, cast, first in families:
         if quest:
             taught_by[quest] = (int(first), int(cast))
 assert taught_by == restored_rewards
+
+# The other class quests are those an ordinary solo character can finish; the specialised class actions keep theirs.
+others = {row[1] for row in steps if not row[2]}
+for quest in others:
+    assert not int(addon[quest]['SpecialFlags']) & 1, quest
+    assert quests[quest]['QuestInfoID'] == '0' and int(quests[quest]['SuggestedGroupNum']) < 2, quest
+    assert int(quests[quest]['MinLevel']) <= 70, quest
+specialised = set()
+for path, pattern in (('Class/Warlock/WarlockDemonQuests.cpp', r'\{(\d+), \d+, \d+, \d+\}'),
+                      ('Class/Shaman/ShamanTotemQuests.cpp', r'\{(\d+), (?:Earth|Fire|Water|Air)Totem\}'),
+                      ('Class/Druid/DruidClassQuests.cpp', r'\{(\d+), (?:BearForm|AquaticForm|CurePoison)\}'),
+                      ('Class/Hunter/HunterTamingLessons.cpp', r'\{(\d+), \d+, \d+, \d+\}')):
+    found = set(map(int, re.findall(pattern, (module / 'Ai' / path).read_text())))
+    assert found, path
+    specialised |= found
+assert not specialised & set(by_quest)
+class_quests = {}
+with (core / 'data/sql/base/db_world/quest_template_addon.sql').open(encoding='utf-8') as rows:
+    columns = []
+    for line in rows:
+        if line.startswith('  `'):
+            columns.append(line.split('`')[1])
+        elif line.startswith('('):
+            row = dict(zip(columns, line.rstrip('\n,;')[1:-1].split(',')))
+            if int(row['AllowableClasses']) in class_masks.values():
+                class_quests[int(row['ID'])] = row
+for quest in others:
+    previous = abs(int(addon[quest]['PrevQuestID']))
+    assert not previous or previous in by_quest or previous in specialised or previous not in class_quests, quest
+# Follow-up class quests outside the tables are player content, each for a native reason.
+player_content = {
+    1653: 'elite Test of Righteousness', 1701: 'elite Fire Hardened Mail', 1791: 'leads only to the elite Cyclonian',
+    1825: 'leads only to the crafted Brutal Armor', 2607: 'leads only to the scripted Touch of Zanzil',
+    8251: 'leads only to Morphaz in the Sunken Temple', 9051: 'group Toxic Test', 9599: 'unused quest data',
+    9692: 'dungeon Path of the Adept'}
+chained = set(by_quest) | specialised
+followers = {quest for quest, row in class_quests.items() if abs(int(row['PrevQuestID'])) in chained}
+for row in sql_rows(core, 'quest_template', chained):
+    for follow in (int(row['RewardNextQuest']), int(class_quests[int(row['ID'])]['NextQuestID'])):
+        if follow in class_quests:
+            followers.add(follow)
+assert followers - set(by_quest) - specialised == set(player_content)
 
 # Players and bots receive every step from a native giver or the owned item that starts it.
 relations = {}
@@ -95,9 +148,11 @@ for table in ('creature_queststarter', 'creature_questender'):
         relations[table] |= {tuple(map(int, row)) for row in re.findall(r'\((\d+), (\d+)\)', statement)}
     for giver, quest in re.findall(rf'INSERT INTO `{table}` \(`id`, `quest`\) SELECT (\d+), (\d+)', historical):
         relations[table].add((int(giver), int(quest)))
-start_items = {int(row['entry']): int(row['startquest']) for row in sql_rows(core, 'item_template', {6776})}
+rewarded_items = {int(row[f'{field}{index}']) for row in quests.values()
+                  for field, count in (('RewardItem', 4), ('RewardChoiceItemID', 6)) for index in range(1, count + 1)}
+start_items = {int(row['entry']): int(row['startquest'])
+               for row in sql_rows(core, 'item_template', rewarded_items - {0}) if int(row['startquest'])}
 assert start_items == {6776: 1649}
-assert {int(quests[q]['RewardItem1']) for q in (1793, 1794)} == {6776}
 for quest in by_quest:
     started = any(q == quest for _, q in relations['creature_queststarter'] | relations['gameobject_queststarter'])
     assert started or quest in start_items.values(), quest
@@ -108,57 +163,146 @@ assert disabled and disabled <= set(restored_rewards)
 for quest in disabled:
     assert f"`entry` = {quest} AND `comment` = 'Deprecated quest'" in historical, quest
 
+
+def spawns(table, column):
+    found = {}
+    with (core / f'data/sql/base/db_world/{table}.sql').open(encoding='utf-8') as rows:
+        create = ''.join(takewhile(lambda line: ') ENGINE' not in line, rows))
+        names = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
+        assert names[0] == 'guid'
+        for line in rows:
+            if line.startswith('('):
+                values = line[1:].split(',')
+                found.setdefault(int(values[names.index(column)]), set()).add(int(values[names.index('map')]))
+    return found
+
+
+def rows_with(table, column, wanted):
+    """Rows of a large table whose named column is wanted, parsed only after a cheap text match."""
+    found = []
+    needles = {f',{value},' for value in wanted}
+    with (core / f'data/sql/base/db_world/{table}.sql').open(encoding='utf-8') as rows:
+        create = ''.join(takewhile(lambda line: ') ENGINE' not in line, rows))
+        names = [line.split('`')[1] for line in create.splitlines() if line.strip().startswith('`')]
+        for line in rows:
+            if line.startswith('(') and any(needle in line for needle in needles):
+                row = dict(zip(names, sql_values(line.rstrip('\n,;')[1:-1]), strict=True))
+                if int(row[column]) in wanted:
+                    found.append(row)
+    return found
+
+
+continents = {0, 1, 530}
+creature_maps = spawns('creature', 'id1')
+object_maps = spawns('gameobject', 'id')
+focus_items = {8919: 123, 9052: 163, 29542: 1410}  # Fill Jennea's Flask, Deino's Flask and Azure Phial focuses.
+needed = {}
+for cls, quest, spell, use, item, entry, casts in steps:
+    if spell:
+        continue
+    row = quests[quest]
+    for index in range(1, 5):
+        target = int(row[f'RequiredNpcOrGo{index}'])
+        if target < 0:
+            assert use == 'Object' and entry == -target, quest
+        elif target:
+            creature = sql_rows(core, 'creature_template', {target})[0]
+            assert int(creature['rank']) == 0 and creature_maps.get(target, set()) & continents, (quest, target)
+    for index in range(1, 7):
+        required = int(row[f'RequiredItemId{index}'])
+        if required and required != int(row['StartItem']) and use != 'Focus':
+            needed.setdefault(required, set()).add(quest)
+# Each other required item drops from an ordinary creature or a container on the open continents.
+creature_loot = rows_with('creature_loot_template', 'Item', set(needed))
+references = rows_with('reference_loot_template', 'Item', set(needed))
+creature_loot += [dict(row, Item=reference['Item']) for reference in references
+                  for row in rows_with('creature_loot_template', 'Reference', {int(reference['Entry'])})]
+loot_owners = {}
+for row in rows_with('creature_template', 'lootid', {int(row['Entry']) for row in creature_loot}):
+    if int(row['rank']) == 0 and creature_maps.get(int(row['entry']), set()) & continents:
+        loot_owners.setdefault(int(row['lootid']), []).append(int(row['entry']))
+sourced = {int(row['Item']) for row in creature_loot if int(row['Entry']) in loot_owners}
+object_loot = rows_with('gameobject_loot_template', 'Item', set(needed) - sourced)
+containers = {int(row['Data1']): int(row['entry']) for row in rows_with(
+    'gameobject_template', 'Data1', {int(row['Entry']) for row in object_loot}) if int(row['type']) in (3, 25)}
+sourced |= {int(row['Item']) for row in object_loot if object_maps.get(containers.get(int(row['Entry']), 0), set()) & continents}
+assert set(needed) <= sourced, {item: needed[item] for item in set(needed) - sourced}
+
 # Native event and item metadata used by the step interactions.
 event_quests = {quest for quest in by_quest if int(addon[quest]['SpecialFlags']) & 2}
-assert event_quests == {1640, 1651, 1719, 9678, 9686}
+assert event_quests == {1640, 1651, 1699, 1719, 9678, 9686}
 for quest in event_quests:
     # Abandoning a stalled event quest cannot discard collected quest items.
     assert all(quests[quest][f'RequiredItemId{index}'] == '0' for index in range(1, 7)), quest
     assert quests[quest]['StartItem'] == '0', quest
-creature_steps = {row[1]: row for row in steps if row[4] > 0}
-object_steps = {row[1]: row for row in steps if row[4] < 0}
-assert {quest: (item, target) for quest, (_, _, _, item, target) in creature_steps.items()} == {
-    1640: (0, 6090), 1651: (0, 6182), 1786: (6866, 6172), 1783: (6866, 6177), 9600: (6866, 17542),
-    9684: (24157, 17845), 9685: (24184, 17768)}
-assert {quest: (item, target) for quest, (_, _, _, item, target) in object_steps.items()} == {
-    1819: (0, -104593), 9582: (23925, -181849), 9678: (0, -181956), 9686: (0, -182052)}
-items = {int(row['entry']): row for row in sql_rows(core, 'item_template', {6866, 24157, 24184, 23925})}
+uses = {use: {row[1]: (row[4], row[5], row[6]) for row in steps if row[3] == use}
+        for use in ('Creature', 'Object', 'Stay', 'Focus', 'Cast', 'Area')}
+assert {row[3] for row in steps} == set(uses) | {'None'}
+assert uses['Creature'] == {1786: (6866, 6172, ()), 1783: (6866, 6177, ()), 9600: (6866, 17542, ()),
+                            9684: (24157, 17845, ()), 9685: (24184, 17768, ())}
+assert uses['Stay'] == {1640: (0, 6090, ()), 1651: (0, 6182, ())}
+assert uses['Object'] == {1819: (0, 104593, ()), 9582: (23925, 181849, ()), 9678: (0, 181956, ()),
+                          9686: (0, 182052, ()), 1884: (0, 102986, ())}
+garments = (2052, 1243)
+assert uses['Cast'] == {5621: (0, 12429, garments), 5624: (0, 12423, garments), 5625: (0, 12427, garments),
+                        5648: (0, 12430, garments), 5650: (0, 12428, garments), 9586: (0, 17551, (2050,)),
+                        9489: (0, 15938, (1243,))}
+assert uses['Focus'] == {1861: (7207, 0, ()), 1944: (7269, 0, ()), 9403: (23566, 0, ())}
+assert uses['Area'] == {1699: (0, 482, ())}
+items = {int(row['entry']): row for row in sql_rows(core, 'item_template', {6866, 24157, 24184, 23925, 7207, 7269, 23566})}
 conditions = sql_rows(core, 'conditions', {13})
 targets = {}
 for row in conditions:
     if int(row['ConditionTypeOrReference']) == 31 and int(row['ConditionValue1']) == 3:
         targets.setdefault(int(row['SourceEntry']), set()).add(int(row['ConditionValue2']))
-for quest, (_, _, _, item, target) in creature_steps.items():
-    if item:
-        assert target in targets[int(items[item]['spellid_1'])], quest
-        assert int(items[item]['spelltrigger_1']) == 0
+for quest, (item, target, _) in uses['Creature'].items():
+    assert target in targets[int(items[item]['spellid_1'])], quest
+    assert int(items[item]['spelltrigger_1']) == 0
 assert int(quests[1781]['StartItem']) == 6866 and int(quests[1779]['StartItem']) == 6866
 assert int(quests[9600]['StartItem']) == 6866 and int(quests[9685]['StartItem']) == 24184
 assert int(quests[9684]['StartItem']) == 24157 and int(quests[9582]['StartItem']) == 23925
 for quest in (1786, 1783):
-    target = creature_steps[quest][4]
+    target = uses['Creature'][quest][1]
     assert (target, quest) in relations['creature_questender'] and not int(quests[quest]['RequiredNpcOrGo1'])
 for quest in (9600, 9685):
-    assert int(addon[quest]['SpecialFlags']) & 32 and int(quests[quest]['RequiredNpcOrGo1']) == creature_steps[quest][4]
-objects = {int(row['entry']): row for row in sql_rows(core, 'gameobject_template', {104593, 181956, 182052, 181849})}
-for entry, quest in ((104593, 1819), (181956, 9678), (182052, 9686)):
+    assert int(addon[quest]['SpecialFlags']) & 32 and int(quests[quest]['RequiredNpcOrGo1']) == uses['Creature'][quest][1]
+objects = {int(row['entry']): row for row in sql_rows(core, 'gameobject_template', {104593, 181956, 182052, 181849, 102986})}
+for entry, quest in ((104593, 1819), (181956, 9678), (182052, 9686), (102986, 1884)):
     assert int(objects[entry]['type']) == 10 and int(objects[entry]['Data1']) == quest, entry
 assert int(objects[181849]['type']) == 0 and objects[181849]['ScriptName'] == 'go_ravager_cage'
 object_addons = {int(row['entry']): int(row['flags']) for row in sql_rows(core, 'gameobject_template_addon', set(objects))}
 assert all(not flags & 2 for flags in object_addons.values()), 'quest objects must be unlocked'
-spawned = set()
-with (core / 'data/sql/base/db_world/creature.sql').open(encoding='utf-8') as rows:
-    for line in rows:
-        if line.startswith('('):
-            spawned.add(int(line.split(',', 2)[1]))
-assert {row[4] for row in creature_steps.values()} <= spawned
-spawned_objects = set()
-with (core / 'data/sql/base/db_world/gameobject.sql').open(encoding='utf-8') as rows:
-    for line in rows:
-        if line.startswith('('):
-            spawned_objects.add(int(line.split(',', 2)[1]))
-assert {-row[4] for row in object_steps.values()} <= spawned_objects
-
+assert int(quests[1884]['RequiredNpcOrGo1']) == -102986 and int(quests[1884]['RequiredNpcOrGoCount1']) == 4
+assert {row[5] for row in steps if row[3] in ('Creature', 'Stay', 'Cast')} <= set(creature_maps)
+assert all(object_maps.get(row[5], set()) & continents for row in steps if row[3] == 'Object')
+# Each flask fills only at its native spell focus, which stands on the open continents.
+focus_objects = rows_with('gameobject_template', 'Data0', set(focus_items.values()))
+for quest, (item, _, _) in uses['Focus'].items():
+    spell = int(items[item]['spellid_1'])
+    assert int(quests[quest]['StartItem']) == item and spell in focus_items, quest
+    assert any(int(row['type']) == 8 and int(row['Data0']) == focus_items[spell] and
+               object_maps.get(int(row['entry']), set()) & continents for row in focus_objects), quest
+# The healing quests credit the native spell sequence on their wounded creature.
+special = (core / 'src/server/scripts/World/npcs_special.cpp').read_text()
+assert 'SPELL_LESSER_HEAL_R2    = 2052,' in special and 'SPELL_FORTITUDE_R1      = 1243,' in special
+garment_script = function(special, 'class npc_garments_of_quests')
+assert 'else if (!IsHealed && spell->Id == SPELL_LESSER_HEAL_R2)' in garment_script
+assert 'if (IsHealed && !CanRun && spell->Id == SPELL_FORTITUDE_R1)' in garment_script
+garment_targets = {int(row['entry']) for row in sql_rows(core, 'creature_template', {12423, 12427, 12428, 12429, 12430})
+                   if row['ScriptName'] == 'npc_garments_of_quests'}
+assert garment_targets == {12423, 12427, 12428, 12429, 12430}
+for quest, (_, target, casts) in uses['Cast'].items():
+    assert int(quests[quest]['RequiredNpcOrGo1']) == target, quest
+cast_credit = sql_rows(core, 'smart_scripts', {17551, 15938})
+for quest, entry in ((9586, 17551), (9489, 15938)):
+    assert any(int(row['entryorguid']) == entry and int(row['event_type']) == 8 and
+               int(row['event_param1']) == uses['Cast'][quest][2][0] and int(row['action_type']) == 33
+               for row in cast_credit), quest
+# The Rethban Gauntlet credits its native area trigger in Redridge.
+trigger = sql_rows(core, 'areatrigger', {482})[0]
+assert int(trigger['map']) in continents
+involved = (core / 'data/sql/base/db_world/areatrigger_involvedrelation.sql').read_text()
+assert re.search(r'^\(482,1699\)[,;]$', involved, re.MULTILINE)
 smart = {}
 for row in sql_rows(core, 'smart_scripts', {6090, 6172, 6177, 17542, 17768, 617200, 617700, 1754200, 1776800,
                                             104593, 10459300, 182052, 17807, 17716}):
@@ -240,8 +384,14 @@ for check in ('bot->IsFriendlyTo(target)', '!bot->IsWithinLOSInMap(target)', '!b
 assert 'bool Attack(Unit* target, bool with_pet = true);' in (module / 'Ai/Base/Actions/AttackAction.h').read_text()
 for forbidden in ('bot->AddQuest(', 'bot->RewardQuest(', 'CompleteQuest(', 'AreaExploredOrEventHappens(',
                   'learnSpell(', 'SummonCreature(', 'AddItem(', 'TeleportTo(', 'KilledMonsterCredit(',
-                  'CastSpell(', 'SetFaction(', 'RemoveUnitFlag('):
+                  'bot->CastSpell(', 'SetFaction(', 'RemoveUnitFlag(', 'TRIGGERED_'):
     assert forbidden not in source, forbidden
+# The bot casts only its own known spells, through the ordinary untriggered cast path.
+assert source.count('CastSpell(') == 1 and 'if (!spell || !bot->HasSpell(spell))' in source
+bot_cast = function((module / 'Bot/PlayerbotAI.cpp').read_text(), 'bool PlayerbotAI::CastSpell(uint32 spellId, Unit* target')
+assert 'new Spell(bot, spellInfo, TRIGGERED_NONE)' in bot_cast
+area_handler = function((game / 'Handlers/MiscHandler.cpp').read_text(), 'void WorldSession::HandleAreaTriggerOpcode(')
+assert 'IsInAreaTriggerRadius(atEntry' in area_handler and 'AreaExploredOrEventHappens(questId)' in area_handler
 
 contexts = {name: (module / f'Ai/Base/{name}.h').read_text() for name in ('ActionContext', 'TriggerContext', 'ValueContext')}
 assert 'creators["class quest chain"] = &ActionContext::class_quest_chain;' in contexts['ActionContext']
@@ -251,10 +401,28 @@ assert 'return new ClassQuestChainTrigger(botAI);' in contexts['TriggerContext']
 assert 'creators["class quest chain"] = &ValueContext::class_quest_chain;' in contexts['ValueContext']
 assert 'return new ClassQuestChainValue(botAI);' in contexts['ValueContext']
 assert 'CalculatedValue<uint32>(botAI, "class quest chain", 5)' in header
-for strategy in ('Warrior/Strategy/GenericWarriorNonCombatStrategy.cpp', 'Paladin/Strategy/GenericPaladinNonCombatStrategy.cpp',
-                 'Priest/Strategy/PriestNonCombatStrategy.cpp'):
+# Lesson classes rank their chains with the other lesson actions; the specialised classes' lesson actions run first.
+for strategy, priority in (('Warrior/Strategy/GenericWarriorNonCombatStrategy.cpp', 'ACTION_NORMAL + 2'),
+                           ('Paladin/Strategy/GenericPaladinNonCombatStrategy.cpp', 'ACTION_NORMAL + 2'),
+                           ('Priest/Strategy/PriestNonCombatStrategy.cpp', 'ACTION_NORMAL + 2'),
+                           ('Hunter/Strategy/GenericHunterNonCombatStrategy.cpp', 'ACTION_NORMAL'),
+                           ('Rogue/Strategy/GenericRogueNonCombatStrategy.cpp', 'ACTION_NORMAL'),
+                           ('Mage/Strategy/GenericMageNonCombatStrategy.cpp', 'ACTION_NORMAL'),
+                           ('Shaman/Strategy/ShamanNonCombatStrategy.cpp', 'ACTION_NORMAL'),
+                           ('Warlock/Strategy/GenericWarlockNonCombatStrategy.cpp', 'ACTION_NORMAL'),
+                           ('Druid/Strategy/GenericDruidNonCombatStrategy.cpp', 'ACTION_NORMAL')):
     text = (module / 'Ai/Class' / strategy).read_text()
-    assert 'new TriggerNode("class quest chain", {NextAction("class quest chain", ACTION_NORMAL + 2)})' in text, strategy
+    assert f'new TriggerNode("class quest chain", {{NextAction("class quest chain", {priority})}})' in text, strategy
+for strategy, lesson in (('Hunter/Strategy/GenericHunterNonCombatStrategy.cpp', 'hunter taming lesson'),
+                         ('Shaman/Strategy/ShamanNonCombatStrategy.cpp', 'shaman totem quest'),
+                         ('Warlock/Strategy/GenericWarlockNonCombatStrategy.cpp', 'warlock demon quest'),
+                         ('Druid/Strategy/GenericDruidNonCombatStrategy.cpp', 'druid class quest')):
+    assert f'NextAction("{lesson}", ACTION_NORMAL + 2)' in (module / 'Ai/Class' / strategy).read_text(), strategy
+helpers = (module / 'Ai/World/Rpg/NewRpgHelpers.cpp').read_text()
+worth, capable = function(helpers, 'bool IsQuestWorthDoing('), function(helpers, 'bool IsQuestCapableDoing(')
+assert 'quest->IsRepeatable()' in worth and 'CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF' in worth
+assert 'quest->GetType() != 0' in capable and 'quest->GetSuggestedPlayers() >= 2' in capable
+assert 'constexpr int32 QUEST_MAX_LEVELS_ABOVE_BOT = 3;' in (module / 'Ai/World/Rpg/QuestLevelRules.h').read_text()
 
 production = {
     'namespace': function(source, 'namespace\n'),
@@ -265,7 +433,13 @@ production = {
     'trigger': function(source, 'bool ClassQuestChainTrigger::IsActive()'),
     'useful': function(source, 'bool ClassQuestChainAction::isUseful()'),
     'execute': function(source, 'bool ClassQuestChainAction::Execute('),
+    'target': function(source, 'Creature* ClassQuestChainAction::QuestTarget('),
     'creature': function(source, 'bool ClassQuestChainAction::UseOnCreature('),
+    'focus': function(source, 'bool ClassQuestChainAction::UseAtFocus('),
+    'cast': function(source, 'bool ClassQuestChainAction::CastOn('),
+    'area': function(source, 'bool ClassQuestChainAction::ReachArea('),
+    'focusposition': function(source, 'WorldPosition ClassQuestChainAction::FocusPosition('),
+    'helpers': 'namespace NewRpgHelpers {\n' + worth + '\n' + capable + '\n}',
     'object': function(source, 'bool ClassQuestChainAction::UseObject('),
     'stay': function(source, 'bool ClassQuestChainAction::StayWith('),
     'wait': function(source, 'bool ClassQuestChainAction::Wait('),
@@ -273,7 +447,7 @@ production = {
     'abandon': function(source, 'bool ClassQuestChainAction::Abandon('),
     'spawn': function(source, 'WorldPosition ClassQuestChainAction::SpawnPosition('),
     'classes': '\n'.join(function(header, name) + ';' for name in (
-        'struct ClassQuestStep', 'class ClassQuestChainValue', 'class ClassQuestChainTrigger',
+        'enum class ClassQuestUse', 'struct ClassQuestStep', 'class ClassQuestChainValue', 'class ClassQuestChainTrigger',
         'class ClassQuestChainAction')),
 }
 native_quests = []
@@ -281,6 +455,7 @@ for quest, row in quests.items():
     display, cast = restored_rewards.get(quest, (int(row['RewardDisplaySpell']), int(row['RewardSpell'])))
     taught = teaches.get(cast, display if quest in restored_rewards else 0)
     fields = [str(quest), str(display), str(cast), str(taught), row['StartItem'], addon[quest]['SpecialFlags'],
+              row['QuestLevel'], row['QuestInfoID'], row['SuggestedGroupNum'],
               '{' + ','.join(row[f'RequiredNpcOrGo{index}'] for index in range(1, 5)) + '}',
               '{' + ','.join(row[f'RequiredNpcOrGoCount{index}'] for index in range(1, 5)) + '}',
               '{' + ','.join(row[f'RequiredItemId{index}'] for index in range(1, 7)) + '}',
@@ -303,8 +478,12 @@ prelude = r'''
 #include <utility>
 #include <vector>
 using uint8=uint8_t; using uint16=uint16_t; using uint32=uint32_t; using int32=int32_t;
-constexpr uint8 CLASS_WARRIOR=1, CLASS_PALADIN=2, CLASS_PRIEST=5, CLASS_MAGE=8;
-constexpr int UNIT_STATE_LOST_CONTROL=1, CURRENT_CHANNELED_SPELL=1, CURRENT_GENERIC_SPELL=2, CMSG_QUESTLOG_REMOVE_QUEST=3;
+constexpr uint8 CLASS_WARRIOR=1, CLASS_PALADIN=2, CLASS_HUNTER=3, CLASS_ROGUE=4, CLASS_PRIEST=5, CLASS_DEATH_KNIGHT=6,
+    CLASS_SHAMAN=7, CLASS_MAGE=8, CLASS_WARLOCK=9, CLASS_DRUID=11;
+constexpr int UNIT_STATE_LOST_CONTROL=1, CURRENT_CHANNELED_SPELL=1, CURRENT_GENERIC_SPELL=2, CMSG_QUESTLOG_REMOVE_QUEST=3,
+    CMSG_AREATRIGGER=4, CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF=5;
+constexpr uint32 GAMEOBJECT_TYPE_SPELL_FOCUS=8;
+constexpr int32 QUEST_MAX_LEVELS_ABOVE_BOT=3;
 constexpr uint32 QUEST_OBJECTIVES_COUNT=4, QUEST_ITEM_OBJECTIVES_COUNT=6, IN_MILLISECONDS=1000, MINUTE=60,
     MAX_QUEST_LOG_SIZE=25, UNIT_NPC_FLAG_QUESTGIVER=2, QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT=2;
 constexpr float INTERACTION_DISTANCE=5.0f;
@@ -324,6 +503,8 @@ struct WorldPacket {
     int opcode; std::vector<uint32> values;
     explicit WorldPacket(int opcode):opcode(opcode){}
     WorldPacket& operator<<(uint8 n) { values.push_back(n); return *this; }
+    WorldPacket& operator<<(uint32 n) { values.push_back(n); return *this; }
+    void rpos(uint32) {}
 };
 namespace WorldPackets::Quest {
 struct QuestLogRemoveQuest {
@@ -334,19 +515,20 @@ struct QuestLogRemoveQuest {
 }
 struct Player; struct Creature; struct GameObject; struct Spell { int kind=0; };
 struct Session {
-    Player* player=nullptr; bool headless=true,removeFails=false; int removals=0;
+    Player* player=nullptr; bool headless=true,removeFails=false; int removals=0,triggers=0;
     bool IsHeadless() const { return headless; }
     void HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemoveQuest&);
+    void HandleAreaTriggerOpcode(WorldPacket&);
 };
 struct Map { bool dungeon=false; bool IsDungeon() const { return dungeon; } };
-struct ItemTemplate { uint32 StartQuest=0; };
+struct ItemTemplate { uint32 StartQuest=0; struct Slot { int32 SpellId=0; } Spells[5]; };
 struct Item {
     uint32 entry=0,guid=0; ItemTemplate proto;
     ItemTemplate const* GetTemplate() const { return &proto; }
     ObjectGuid GetGUID() const { return {guid}; }
 };
 struct Quest {
-    uint32 id=0,display=0; int32 cast=0; uint32 taught=0,source=0,special=0;
+    uint32 id=0,display=0; int32 cast=0; uint32 taught=0,source=0,special=0; int32 level=0; uint32 type=0,players=0;
     std::array<int32,QUEST_OBJECTIVES_COUNT> RequiredNpcOrGo{};
     std::array<uint32,QUEST_OBJECTIVES_COUNT> RequiredNpcOrGoCount{};
     std::array<uint32,QUEST_ITEM_OBJECTIVES_COUNT> RequiredItemId{},RequiredItemCount{};
@@ -355,6 +537,11 @@ struct Quest {
     int32 GetRewSpellCast() const { return cast; }
     uint32 GetSrcItemId() const { return source; }
     bool HasSpecialFlag(uint32 flag) const { return (special&flag)!=0; }
+    bool IsRepeatable() const { return HasSpecialFlag(1); }
+    bool IsSeasonal() const { return false; }
+    uint32 GetType() const { return type; }
+    uint32 GetSuggestedPlayers() const { return players; }
+    int32 GetQuestLevel() const { return level; }
 };
 struct QuestStatusData {
     QuestStatus Status=QUEST_STATUS_NONE;
@@ -386,10 +573,14 @@ struct Creature:Unit {
     bool hasInvolvedQuest(uint32 q) const { return finishes.contains(q); }
     bool HasNpcFlag(uint32 flag) const { assert(flag==UNIT_NPC_FLAG_QUESTGIVER); return questgiver; }
 };
+struct GameObjectTemplate { uint32 type=0; struct { uint32 focusId=0; float dist=10; } spellFocus; };
 struct GameObject:WorldObject {
-    bool spawned=true;
+    bool spawned=true; GameObjectTemplate info;
     bool isSpawned() const { return spawned; }
+    uint32 GetGoType() const { return info.type; }
+    GameObjectTemplate const* GetGOInfo() const { return &info; }
 };
+struct AreaTrigger { uint32 entry=0,map=0; float x=0,y=0,z=0,radius=5; };
 struct Player:Unit {
     uint32 cls=CLASS_WARRIOR,phase=1; bool random=true,hasSession=true,group=false,teleport=false,battleground=false,
       arena=false,combat=false,mounted=false,flight=false,flying=false,transport=false,vehicle=false,lostControl=false,
@@ -397,7 +588,13 @@ struct Player:Unit {
     Map map; Session session; Spell channel{CURRENT_CHANNELED_SPELL},generic{CURRENT_GENERIC_SPELL}; int stops=0;
     std::set<uint32> known,available; std::map<uint32,QuestStatusData> quests; std::map<uint32,Item> inventory;
     std::map<uint32,uint32> bank;
+    uint8 level=20;
     Player() { session.player=this; guid=100; x=0; size=1.5f; }
+    uint8 GetLevel() const { return level; }
+    int32 GetQuestLevel(Quest const* quest) const { return quest&&quest->GetQuestLevel()>0?quest->GetQuestLevel():GetLevel(); }
+    bool IsInAreaTriggerRadius(AreaTrigger const* at) const {
+        return mapId==at->map&&std::hypot(x-at->x,y-at->y)<=at->radius;
+    }
     uint32 getClass() const { return cls; } Session* GetSession() { return hasSession?&session:nullptr; }
     bool GetGroup() const { return group; } bool IsBeingTeleported() const { return teleport; }
     Map* GetMap() { return &map; } bool InBattleground() const { return battleground; } bool InArena() const { return arena; }
@@ -433,10 +630,30 @@ struct Player:Unit {
     float GetExactDist(struct WorldPosition const&) const;
 };
 struct ObjectMgr {
-    std::map<uint32,Quest> quests;
+    std::map<uint32,Quest> quests; std::map<uint32,GameObjectTemplate> objects; std::map<uint32,AreaTrigger> triggers;
+    std::map<uint32,uint32> triggerQuests;
     Quest const* GetQuestTemplate(uint32 q) const { return quests.contains(q)?&quests.at(q):nullptr; }
+    auto const* GetGameObjectTemplates() const { return &objects; }
+    AreaTrigger const* GetAreaTrigger(uint32 id) const { return triggers.contains(id)?&triggers.at(id):nullptr; }
+    uint32 GetQuestForAreaTrigger(uint32 id) const { return triggerQuests.contains(id)?triggerQuests.at(id):0; }
 } objectMgr;
 auto* sObjectMgr=&objectMgr;
+struct World { uint32 lowDiff=4; uint32 getIntConfig(int config) const { assert(config==CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF); return lowDiff; } } world;
+auto* sWorld=&world;
+struct SpellInfo { uint32 RequiresSpellFocus=0; };
+struct SpellMgr {
+    std::map<uint32,SpellInfo> spells;
+    SpellInfo const* GetSpellInfo(uint32 id) const { return spells.contains(id)?&spells.at(id):nullptr; }
+} spellMgr;
+auto* sSpellMgr=&spellMgr;
+void Session::HandleAreaTriggerOpcode(WorldPacket& packet) {
+    ++triggers; assert(packet.opcode==CMSG_AREATRIGGER&&packet.values.size()==1);
+    // Native validation: the player stands inside the trigger and holds its quest.
+    AreaTrigger const* at=objectMgr.GetAreaTrigger(packet.values[0]);
+    uint32 const quest=objectMgr.GetQuestForAreaTrigger(packet.values[0]);
+    if(at&&player->IsInAreaTriggerRadius(at)&&quest&&player->GetQuestStatus(quest)==QUEST_STATUS_INCOMPLETE)
+        player->quests[quest].Status=QUEST_STATUS_COMPLETE;
+}
 void Session::HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemoveQuest& request) {
     ++removals; uint32 const id=player->GetQuestSlotQuestId(request.Slot); assert(id);
     if(removeFails) return;  // Native removal stops when the source item cannot be taken.
@@ -486,8 +703,9 @@ template<class T> T GetValue(Context* c,std::string const& name) {
 }
 #define AI_VALUE(type,name) GetValue<type>(context,name)
 struct PlayerbotAI {
-    Player* bot; Context context; bool master=false,useResult=true,attackResult=true,startsCast=false;
-    int waits=0,itemUses=0,objectUses=0,attacks=0; Spell* waitedFor=nullptr;
+    Player* bot; Context context; bool master=false,useResult=true,attackResult=true,startsCast=false,castResult=true;
+    int waits=0,itemUses=0,objectUses=0,attacks=0,casts=0; Spell* waitedFor=nullptr;
+    std::vector<std::pair<uint32,Unit*>> cast;
     Unit* usedOn=nullptr; Unit* attacked=nullptr; Item* usedItem=nullptr; ObjectGuid usedObject;
     std::map<uint32,Unit*> units; std::map<uint32,GameObject*> objects;
     Player* GetBot() const { return bot; } bool GetMaster() const { return master; }
@@ -495,6 +713,9 @@ struct PlayerbotAI {
     Unit* GetUnit(ObjectGuid g) const { return units.contains(g.value)?units.at(g.value):nullptr; }
     GameObject* GetGameObject(ObjectGuid g) const { return objects.contains(g.value)?objects.at(g.value):nullptr; }
     void WaitForSpellCast(Spell* spell) { assert(spell); ++waits; waitedFor=spell; }
+    bool CastSpell(uint32 spell,Unit* target) {
+        ++casts; cast.emplace_back(spell,target); bot->casting=startsCast; return castResult;
+    }
 };
 // Shared route costs are covered by the continent route fixtures; without travel they stay on the current map.
 struct ClassQuestRouteCosts {
@@ -579,19 +800,25 @@ protected:
 @@CLASSES@@
 @@GATE@@
 @@NEEDED@@
+@@HELPERS@@
 @@NAMESPACE@@
 @@CURRENT@@
 @@VALUE@@
 @@TRIGGER@@
 @@USEFUL@@
 @@EXECUTE@@
+@@TARGET@@
 @@CREATURE@@
 @@OBJECT@@
 @@STAY@@
+@@FOCUS@@
+@@CAST@@
+@@AREA@@
 @@WAIT@@
 @@RESTART@@
 @@ABANDON@@
 @@SPAWN@@
+@@FOCUSPOSITION@@
 '''
 
 tests = r'''
@@ -604,16 +831,28 @@ struct Scenario {
     ClassQuestChainAction action{&ai}; Creature target; GameObject object; Creature raider;
     ClassQuestStep const* step;
     explicit Scenario(uint32 quest=1786,QuestStatus status=QUEST_STATUS_INCOMPLETE) {
-        now=100000; sPlayerbotAIConfig={}; objectMgr={}; givers.clear(); creatureSpawns.clear(); objectSpawns.clear();
+        now=100000; sPlayerbotAIConfig={}; objectMgr={}; spellMgr={}; world={}; givers.clear(); creatureSpawns.clear();
+        objectSpawns.clear();
         spawnScans=0; calls={}; giverResult=false; rewardResult=false; moveResult=true; objectiveResult=true; acceptRefused=false;
         @@NATIVEQUESTS@@
         step=Step(quest); bot.cls=step->Class;
+        int32 const level=objectMgr.quests.at(quest).level; bot.level=uint8(level>0?level:20);
         if(status!=QUEST_STATUS_NONE) bot.quests[quest].Status=status;
         if(step->Item) bot.inventory[step->Item]={step->Item,50};
-        target.guid=2; target.entry=step->Target>0?uint32(step->Target):6172; target.spawn=20;
+        bool const creature=step->Use==ClassQuestUse::Creature||step->Use==ClassQuestUse::Stay||step->Use==ClassQuestUse::Cast;
+        target.guid=2; target.entry=creature?step->Entry:6172; target.spawn=20;
         target.questgiver=false; target.finishes.insert(quest);
         ai.units[2]=&target; ai.context.npcs={{2}};
-        object.guid=3; object.entry=step->Target<0?uint32(-step->Target):104593; ai.objects[3]=&object; ai.context.objects={{3}};
+        object.guid=3; object.entry=step->Use==ClassQuestUse::Object?step->Entry:104593; ai.objects[3]=&object; ai.context.objects={{3}};
+        if(step->Use==ClassQuestUse::Focus) {
+            // Synthetic focus metadata proves that the action reads the item's runtime spell focus.
+            object.info={GAMEOBJECT_TYPE_SPELL_FOCUS,{777,10}}; objectMgr.objects[object.entry]=object.info;
+            bot.inventory[step->Item].proto.Spells[0].SpellId=int32(step->Item+1); spellMgr.spells[step->Item+1]={777};
+        }
+        for(uint32 spell:step->Casts) if(spell) bot.known.insert(spell);
+        if(step->Use==ClassQuestUse::Area) {
+            objectMgr.triggers[step->Entry]={step->Entry,0,30,0,0,5}; objectMgr.triggerQuests[step->Entry]=quest;
+        }
         raider.guid=4; raider.entry=6180; raider.x=3; ai.units[4]=&raider;
         creatureSpawns.push_back({target.entry,0,1,40,0,0}); objectSpawns.push_back({object.entry,0,1,40,0,0});
         ai.context.quest=value.Calculate();
@@ -628,9 +867,13 @@ int main() {
     for(auto const& row:ClassQuestSteps) {
         Scenario s(row.Quest);
         assert(s.value.Calculate()==row.Quest&&s.trigger.IsActive()&&s.action.isUseful());
+        if(!row.Spell) continue;
         s.bot.known.insert(row.Spell); s.ai.context.quest=s.value.Calculate();
         assert(!s.ai.context.quest&&!s.trigger.IsActive()&&!s.action.isUseful()&&!s.action.Execute({}));
     }
+    // A class quest without a lesson is pursued until its own reward.
+    { Scenario s(1503); s.bot.known.insert(0); assert(s.value.Calculate()==1503);
+      s.bot.quests[1503].Status=QUEST_STATUS_REWARDED; assert(!s.value.Calculate()); }
     for(auto const& row:ClassQuestSteps) {
         Scenario s(row.Quest,QUEST_STATUS_NONE);
         assert(!s.value.Calculate());
@@ -641,10 +884,10 @@ int main() {
         giverResult=true; assert(s.action.Execute({})&&calls.gives==3);
         // Another class never inherits the chain.
         s.bot.cls=row.Class==CLASS_PRIEST?CLASS_WARRIOR:CLASS_PRIEST; assert(s.value.Calculate()!=row.Quest);
-        s.bot.cls=CLASS_MAGE; assert(!s.value.Calculate());
+        s.bot.cls=CLASS_DEATH_KNIGHT; assert(!s.value.Calculate());
     }
     // A rewarded lesson quest ends the lesson even when an era-specific spell record replaced the learned spell.
-    for(auto const& row:ClassQuestSteps) if(objectMgr.quests.at(row.Quest).taught) {
+    for(auto const& row:ClassQuestSteps) if(row.Spell&&objectMgr.quests.at(row.Quest).taught) {
         Scenario s(row.Quest,QUEST_STATUS_REWARDED);
         for(auto const& other:ClassQuestSteps) if(other.Class==row.Class&&other.Spell==row.Spell) s.Offer(other.Quest);
         s.bot.quests[row.Quest].Status=QUEST_STATUS_REWARDED; assert(objectMgr.quests.at(row.Quest).taught==row.Spell);
@@ -654,6 +897,19 @@ int main() {
     // A rewarded step without the lesson reward keeps its chain going.
     { Scenario s(1644,QUEST_STATUS_NONE); s.Offer(1644); s.bot.quests[1643].Status=QUEST_STATUS_REWARDED;
       assert(s.value.Calculate()==1644); s.bot.quests[1644].Status=QUEST_STATUS_REWARDED; assert(!s.value.Calculate()); }
+    // Other class quests follow the ordinary quest level rules; lessons are always worth earning.
+    { Scenario s(1503,QUEST_STATUS_NONE); s.Offer(1503); s.bot.level=uint8(objectMgr.quests.at(1503).level+5);
+      assert(!s.value.Calculate()); s.bot.level=uint8(objectMgr.quests.at(1503).level+4); assert(s.value.Calculate()==1503);
+      world.lowDiff=3; assert(!s.value.Calculate()); world.lowDiff=4;
+      s.bot.level=uint8(objectMgr.quests.at(1503).level-4); assert(!s.value.Calculate());
+      s.bot.level=uint8(objectMgr.quests.at(1503).level-3); assert(s.value.Calculate()==1503);
+      objectMgr.quests.at(1503).type=1; assert(!s.value.Calculate()); objectMgr.quests.at(1503).type=0;
+      objectMgr.quests.at(1503).players=2; assert(!s.value.Calculate()); objectMgr.quests.at(1503).players=0;
+      objectMgr.quests.at(1503).special=1; assert(!s.value.Calculate()); }
+    { Scenario s(9582,QUEST_STATUS_NONE); s.Offer(9582); s.bot.level=60; assert(s.value.Calculate()==9582); }
+    { Scenario s(1503,QUEST_STATUS_NONE); s.Offer(1503); s.bot.quests[10350].Status=QUEST_STATUS_REWARDED;
+      assert(objectMgr.quests.at(10350).cast&&!Step(10350)->Spell&&s.value.Calculate()==1503); }
+    { Scenario s(1503,QUEST_STATUS_INCOMPLETE); s.bot.level=60; assert(s.value.Calculate()==1503); }
     // The first unearned lesson is completed before a later one.
     { Scenario s(1505,QUEST_STATUS_NONE); s.Offer(1505); s.Offer(1718); givers[1718]={{0,5,0,0}};
       assert(s.value.Calculate()==1505); s.bot.known.insert(71); assert(s.value.Calculate()==1718); }
@@ -799,6 +1055,73 @@ int main() {
     { Scenario s(1640); objectMgr.quests.at(1640).special=0; s.target.x=2.5f;
       for(int i=0;i<40;++i) { assert(s.action.Execute({})&&s.bot.session.removals==0); now+=10*IN_MILLISECONDS; } }
 
+    // Flasks fill with the owned item at the runtime spell focus of its native fill spell.
+    for(uint32 quest:{1861u,1944u,9403u}) {
+        Scenario s(quest); Item* flask=s.bot.GetItemByEntry(s.step->Item);
+        assert(s.action.Execute({})&&s.ai.itemUses==1&&s.ai.usedItem==flask&&s.ai.usedOn==&s.bot&&s.bot.stops==1);
+        s.bot.useChannel=true; assert(s.action.Execute({})&&s.ai.waitedFor==&s.bot.channel);
+    }
+    { Scenario s(1861); s.object.x=15; assert(s.action.Execute({})&&s.ai.itemUses==0&&calls.target==WorldPosition(&s.object)); }
+    { Scenario s(1861); s.object.info.spellFocus.dist=20; s.object.x=15; assert(s.action.Execute({})&&s.ai.itemUses==1); }
+    for(auto field:{&WorldObject::inWorld,&WorldObject::sameMap,&WorldObject::samePhase,&WorldObject::visible}) {
+        Scenario s(1861); s.object.*field=false; objectSpawns[0].posX=60;
+        assert(s.action.Execute({})&&s.ai.itemUses==0&&calls.target==WorldPosition(0,60,0,0));
+    }
+    { Scenario s(1861); s.object.spawned=false; objectSpawns[0].posX=60; assert(s.action.Execute({})&&s.ai.itemUses==0); }
+    { Scenario s(1861); s.object.info.type=3; assert(s.action.Execute({})&&s.ai.itemUses==0&&calls.moves==1); }
+    { Scenario s(1861); s.object.info.spellFocus.focusId=778; assert(s.action.Execute({})&&s.ai.itemUses==0); }
+    { Scenario s(1861); s.ai.context.objects.clear(); objectMgr.objects.begin()->second.spellFocus.focusId=778;
+      assert(!s.action.Execute({})&&calls.moves==0); }
+    { Scenario s(1861); s.ai.context.objects.clear(); objectSpawns[0].phaseMask=2; assert(!s.action.Execute({})); }
+    { Scenario s(1861); s.ai.context.objects.clear(); objectSpawns[0].posX=4;
+      assert(!s.action.Execute({})&&spawnScans==1); assert(!s.action.Execute({})&&spawnScans==1);
+      now+=60*IN_MILLISECONDS; assert(!s.action.Execute({})&&spawnScans==2); }
+    { Scenario s(1861); spellMgr.spells.clear(); assert(!s.action.Execute({})&&s.ai.itemUses==0); }
+    { Scenario s(1861); spellMgr.spells.begin()->second.RequiresSpellFocus=0; assert(!s.action.Execute({})&&s.ai.itemUses==0); }
+    { Scenario s(1861); s.ai.useResult=false; assert(!s.action.Execute({})); }
+    { Scenario s(1861); s.bot.inventory.clear(); assert(s.action.Execute({})&&s.bot.session.removals==1); }
+    { Scenario s(1861); s.bot.inventory.clear(); s.bot.bank[7207]=1; assert(!s.action.Execute({})&&s.bot.session.removals==0); }
+
+    // The healing quests cast the bot's own spells on the wounded creature in the native order.
+    for(uint32 quest:{5621u,5624u,5625u,5648u,5650u}) {
+        Scenario s(quest);
+        assert(s.action.Execute({})&&s.ai.casts==1&&s.ai.cast[0]==std::make_pair(2052u,(Unit*)&s.target)&&s.bot.stops==1);
+        assert(s.action.Execute({})&&s.ai.casts==2&&s.ai.cast[1]==std::make_pair(1243u,(Unit*)&s.target));
+        assert(s.action.Execute({})&&s.ai.casts==2&&calls.target==WorldPosition(0,40,0,0));
+        now+=60*IN_MILLISECONDS; assert(s.action.Execute({})&&s.ai.cast[2].first==2052u);
+    }
+    { Scenario s(9489); Creature second; second.guid=5; second.entry=15938; second.spawn=21; second.x=3;
+      s.ai.units[5]=&second; s.ai.context.npcs={{2},{5}};
+      assert(s.action.Execute({})&&s.ai.cast[0]==std::make_pair(1243u,(Unit*)&s.target));
+      assert(s.action.Execute({})&&s.ai.cast[1]==std::make_pair(1243u,(Unit*)&second)); }
+    { Scenario s(9586); assert(s.action.Execute({})&&s.ai.cast[0].first==2050u); }
+    { Scenario s(5624); s.bot.known.erase(2052); assert(!s.action.Execute({})&&s.ai.casts==0); }
+    { Scenario s(5624); assert(s.action.Execute({})); s.bot.known.erase(1243); assert(!s.action.Execute({})&&s.ai.casts==1); }
+    { Scenario s(5624); s.ai.castResult=false; assert(!s.action.Execute({})); s.ai.castResult=true;
+      assert(s.action.Execute({})&&s.ai.cast[1].first==2052u); }
+    { Scenario s(5624); s.target.x=20; assert(s.action.Execute({})&&s.ai.casts==0&&calls.target==WorldPosition(&s.target)); }
+    { Scenario s(5624); s.target.los=false; assert(s.action.Execute({})&&s.ai.casts==0&&calls.moves==1); }
+    // An interrupted sequence starts again on whichever wounded creature remains.
+    { Scenario s(5624); assert(s.action.Execute({})); Creature other; other.guid=6; other.entry=12423; other.spawn=22;
+      s.ai.units[6]=&other; s.ai.context.npcs={{6}};
+      assert(s.action.Execute({})&&s.ai.cast[1]==std::make_pair(2052u,(Unit*)&other)); }
+    { Scenario s(5624); assert(s.action.Execute({})); s.target.spawn=23;
+      assert(s.action.Execute({})&&s.ai.cast[1].first==2052u); }
+    for(auto field:{&WorldObject::inWorld,&WorldObject::sameMap,&WorldObject::samePhase,&WorldObject::visible,&WorldObject::alive}) {
+        Scenario s(5624); s.target.*field=false; assert(s.action.Execute({})&&s.ai.casts==0&&calls.target==WorldPosition(0,40,0,0));
+    }
+    { Scenario s(5624); s.target.entry=12424; assert(s.action.Execute({})&&s.ai.casts==0); }
+    { Scenario s(5624); s.ai.context.npcs.clear(); creatureSpawns.clear(); assert(!s.action.Execute({})&&calls.moves==0); }
+
+    // The Rethban Gauntlet reports its native area trigger once the bot stands inside it.
+    { Scenario s(1699);
+      assert(s.action.Execute({})&&calls.target==WorldPosition(0,30,0,0)&&s.bot.session.triggers==0);
+      s.bot.x=28; assert(s.action.Execute({})&&s.bot.session.triggers==1&&s.bot.GetQuestStatus(1699)==QUEST_STATUS_COMPLETE); }
+    { Scenario s(1699); s.bot.x=30; s.bot.mapId=1; assert(s.action.Execute({})&&s.bot.session.triggers==0&&calls.moves==1); }
+    { Scenario s(1699); s.bot.x=30; objectMgr.triggerQuests.clear(); assert(!s.action.Execute({})&&s.bot.session.triggers==0); }
+    { Scenario s(1699); objectMgr.triggers.clear(); assert(!s.action.Execute({})&&calls.moves==0); }
+    { Scenario s(1699); s.bot.x=31; objectMgr.triggers.at(482).radius=0; assert(s.action.Execute({})&&s.bot.session.triggers==0); }
+
     auto rejected=[](auto change) {
         Scenario s; change(s);
         assert(!s.value.Calculate()&&!s.trigger.IsActive()&&!s.action.isUseful());
@@ -845,25 +1168,30 @@ mutations = [
      'AcceptQuest(quest, item->GetGUID()) && bot->GetQuestStatus(step->Quest) != QUEST_STATUS_NONE',
      'AcceptQuest(quest, item->GetGUID())'),
     ('failed quest abandoned', 'execute', 'if (status == QUEST_STATUS_FAILED)\n        return Abandon(step->Quest);', ''),
-    ('quest taker revived only on completion', 'execute', 'step->Item && step->Target > 0 && UseOnCreature(quest, *step)',
+    ('quest taker revived only on completion', 'execute', 'step->Use == Use::Creature && UseOnCreature(quest, *step)',
      'false'),
-    ('the Affray waits on the grate', 'execute', 'return Wait(quest, AffrayGrate);', 'return DoObjectives(quest);'),
+    ('the Affray waits on the grate', 'execute', 'step->Quest == TheAffray ? Wait(quest, AffrayGrate) : ', ''),
+    ('lessons always worth earning', 'current', '!step.Spell &&\n            (', '('),
+    ('other class quests worth doing', 'current', '!NewRpgHelpers::IsQuestWorthDoing(bot, quest) || ', ''),
+    ('other class quests within reach', 'current', ' || !NewRpgHelpers::IsQuestCapableDoing(bot, quest)', ''),
+    ('no lesson earns nothing', 'namespace', 'if (!spell)\n        return false;\n    if (bot->HasSpell(spell))',
+     'if (bot->HasSpell(spell))'),
     ('owned item required', 'creature', 'if (!item)\n        return !revive && Restart(quest, step.Item);',
      'if (!item)\n        return false;'),
-    ('target entry matched', 'creature', 'creature->GetEntry() != uint32(step.Target) ||', ''),
-    ('living target required', 'creature', '!creature->IsAlive() ||', ''),
-    ('removed target skipped', 'creature', 'creature->IsDuringRemoveFromWorld() ||', ''),
-    ('usable target required', 'creature', '|| !Usable(bot, creature))\n            continue;\n        // Henze',
+    ('target entry matched', 'target', 'creature->GetEntry() != step.Entry ||', ''),
+    ('living target required', 'target', '!creature->IsAlive() ||', ''),
+    ('removed target skipped', 'target', 'creature->IsDuringRemoveFromWorld() ||', ''),
+    ('usable target required', 'target', '|| !Usable(bot, creature))\n            continue;\n        // Henze',
      ')\n            continue;\n        // Henze'),
-    ('only dormant taker revived', 'creature', '|| creature->HasNpcFlag(UNIT_NPC_FLAG_QUESTGIVER)', ''),
-    ('only own quest taker revived', 'creature', '!creature->hasInvolvedQuest(quest->GetQuestId()) ||', ''),
-    ('used target rested', 'creature', 'GetMSTimeDiffToNow(used->second) < MINUTE * IN_MILLISECONDS', 'false'),
+    ('only dormant taker revived', 'target', '|| creature->HasNpcFlag(UNIT_NPC_FLAG_QUESTGIVER)', ''),
+    ('only own quest taker revived', 'target', '!creature->hasInvolvedQuest(quest->GetQuestId()) ||', ''),
+    ('used target rested', 'target', 'GetMSTimeDiffToNow(used->second) < MINUTE * IN_MILLISECONDS', 'false'),
     ('used target recorded', 'creature', '_usedTargets[target->GetSpawnId()] = getMSTime();', ''),
     ('target range required', 'creature', '!target->IsWithinDistInMap(bot, INTERACTION_DISTANCE) || ', ''),
     ('target line of sight required', 'creature', ' || !bot->IsWithinLOSInMap(target))', ')'),
     ('item use result checked', 'creature', 'if (!UseItemAction(botAI).UseItemOnUnit(item, target))\n        return false;',
      'UseItemAction(botAI).UseItemOnUnit(item, target);'),
-    ('channel waited', 'creature', 'Spell* cast = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);',
+    ('channel waited', 'namespace', 'Spell* cast = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);',
      'Spell* cast = nullptr;'),
     ('spawn phase required', 'spawn', 'if (!(spawn->phaseMask & bot->GetPhaseMask()))', 'if (false)'),
     ('spawn search cached', 'spawn', 'GetMSTimeDiffToNow(_spawnChecked) < MINUTE * IN_MILLISECONDS', 'false'),
@@ -873,7 +1201,7 @@ mutations = [
     ('living objective required', 'object', '!creature->IsAlive() || ', ''),
     ('objective usable required', 'object', '!Usable(bot, creature) || ', ''),
     ('used object not repeated', 'object', '_usedAt && GetMSTimeDiffToNow(_usedAt) < MINUTE * IN_MILLISECONDS', 'false'),
-    ('object entry matched', 'object', 'object->GetEntry() != uint32(-step.Target) || ', ''),
+    ('object entry matched', 'object', 'object->GetEntry() != step.Entry || ', ''),
     ('spawned object required', 'object', '!object->isSpawned() || ', ''),
     ('object usable required', 'object', ' || !Usable(bot, object))\n            continue;', ')\n            continue;'),
     ('object range required', 'object', '!object->IsWithinDistInMap(bot, INTERACTION_DISTANCE) || ', ''),
@@ -890,6 +1218,28 @@ mutations = [
     ('stall duration respected', 'wait', 'GetMSTimeDiffToNow(_waitSince) < StalledEventMs', 'false'),
     ('only own source item restored', 'restart', 'quest->GetSrcItemId() != itemId || ', ''),
     ('banked item kept', 'restart', ' || bot->HasItemCount(itemId, 1, true)', ''),
+    ('owned flask required', 'focus', 'if (!item)\n        return Restart(quest, step.Item);', 'if (!item)\n        return false;'),
+    ('flask fill spell required', 'focus', 'if (!spell || !spell->RequiresSpellFocus)\n        return false;', ''),
+    ('spawned focus required', 'focus', '!focus->isSpawned() || ', ''),
+    ('usable focus required', 'focus', '!Usable(bot, focus) || ', ''),
+    ('native focus type required', 'focus', 'focus->GetGoType() != GAMEOBJECT_TYPE_SPELL_FOCUS ||', ''),
+    ('runtime focus id required', 'focus', 'focus->GetGOInfo()->spellFocus.focusId != spell->RequiresSpellFocus', 'false'),
+    ('native focus range required', 'focus', 'IsWithinDistInMap(bot, focus->GetGOInfo()->spellFocus.dist)',
+     'IsWithinDistInMap(bot, 100.0f)'),
+    ('flask used on the bot', 'focus', 'UseItemOnUnit(item, bot)', 'UseItemOnUnit(item, nullptr)'),
+    ('focus spawn phase required', 'focusposition', 'if (!(spawn->phaseMask & bot->GetPhaseMask()))', 'if (false)'),
+    ('focus template id required', 'focusposition', 'entry.second.spellFocus.focusId == focusId', 'true'),
+    ('focus search cached', 'focusposition', 'GetMSTimeDiffToNow(_focusChecked) < MINUTE * IN_MILLISECONDS', 'false'),
+    ('own healing spell required', 'cast', '!spell || !bot->HasSpell(spell)', '!spell'),
+    ('sequence kept on its creature', 'cast', 'creature->GetSpawnId() == _castTarget && ', ''),
+    ('sequence restarted without its creature', 'cast', '_castIndex = 0;\n        target = QuestTarget', 'target = QuestTarget'),
+    ('cast result checked', 'cast', 'if (!botAI->CastSpell(spell, target))\n        return false;', 'botAI->CastSpell(spell, target);'),
+    ('healed creature rested', 'cast', '_usedTargets[_castTarget] = getMSTime();', ''),
+    ('healing range required', 'cast', 'if (!target->IsWithinDistInMap(bot, INTERACTION_DISTANCE) || ', 'if ('),
+    ('sequence advances', 'cast', '++_castIndex == step.Casts.size() || !step.Casts[_castIndex]', '++_castIndex'),
+    ('trigger of own quest required', 'area', ' || sObjectMgr->GetQuestForAreaTrigger(step.Entry) != quest->GetQuestId()', ''),
+    ('trigger reported only inside', 'area', 'bot->GetMapId() != trigger->map || !bot->IsInAreaTriggerRadius(trigger)', 'false'),
+    ('native trigger reported', 'area', 'bot->GetSession()->HandleAreaTriggerOpcode(packet);', ''),
     ('abandon result rechecked', 'abandon', 'return bot->GetQuestStatus(questId) == QUEST_STATUS_NONE;', 'return true;'),
 ]
 for label, predicate in (
