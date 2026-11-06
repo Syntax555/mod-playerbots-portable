@@ -35,3 +35,18 @@ func TestRelativeMySQLDirectoryWithSeparateWorkDirectory(t *testing.T) {
 		t.Fatalf("server resolves MySQL executable to %s; want %s", configured, want)
 	}
 }
+
+// A folder whose name merely starts with ".." is inside the realm and must stay
+// relative, so the installation keeps working when it is moved.
+func TestMySQLExecutableInDotPrefixedFolderStaysRelative(t *testing.T) {
+	workDir := t.TempDir()
+	writeFixture(t, filepath.Join(workDir, "configs", "authserver.conf.dist"), "MySQLExecutable = \"\"\n")
+	mysql := filepath.Join(workDir, "..mysql", "bin", "mysql.exe")
+	if err := ensureConfigFiles(workDir, workDir, mysql, defaultTestOptions()); err != nil {
+		t.Fatal(err)
+	}
+	value, _ := configValue(readFixture(t, filepath.Join(workDir, "configs", "authserver.conf")), "MySQLExecutable")
+	if value != `"..mysql/bin/mysql.exe"` {
+		t.Fatalf("MySQLExecutable = %s; want the relative path inside the realm", value)
+	}
+}
