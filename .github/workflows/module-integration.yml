@@ -1,0 +1,78 @@
+name: Module integration
+
+# Called by each native module fork: runs the module's fixtures against the
+# fork's commit together with the assembly's pinned core and other modules.
+# A fork change that needs new fixtures is checked against the assembly branch
+# that carries them by starting the fork's workflow manually with portable-ref.
+on:
+  workflow_call:
+    inputs:
+      module:
+        description: Module name in versions.lock.json and cmake/tests/run_fixtures.py
+        required: true
+        type: string
+      portable-ref:
+        description: Assembly branch, tag or commit whose fixtures check the module
+        type: string
+        default: main
+      timeout-minutes:
+        description: Job time limit
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Check earned-progression integration
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: portable
+    steps:
+      - name: Check out the module under test
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: module
+          persist-credentials: false
+
+      - name: Check out the portable assembly
+        uses: actions/checkout@v7
+        with:
+          repository: Syntax555/mod-playerbots-portable
+          ref: ${{ inputs.portable-ref }}
+          path: portable
+          persist-credentials: false
+
+      - name: Install native fixture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential cmake lua5.1 python3-venv
+          python3 -m venv "$RUNNER_TEMP/gameplay-python"
+          "$RUNNER_TEMP/gameplay-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          echo "$RUNNER_TEMP/gameplay-python/bin" >> "$GITHUB_PATH"
+          lua5.1 -e 'assert(_VERSION == "Lua 5.1")'
+
+      - name: Prepare the assembly’s pinned dependencies
+        run: cmake -P cmake/PrepareModules.cmake
+
+      - name: Use the current module with the pinned assembly
+        env:
+          MODULE: ${{ inputs.module }}
+        run: |
+          set -euo pipefail
+          [[ "$MODULE" =~ ^[A-Za-z0-9_-]+$ ]]
+          target=".module-cache/prepared-core/modules/$MODULE"
+          test -d "$target"
+          rm -rf "$target"
+          mkdir -p "$target"
+          git -C ../module archive HEAD | tar -x -C "$target"
+
+      - name: Test the module’s native integration
+        env:
+          MODULE: ${{ inputs.module }}
+        run: python3 cmake/tests/run_fixtures.py module --module "$MODULE"
