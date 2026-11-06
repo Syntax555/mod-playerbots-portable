@@ -163,7 +163,7 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startu
 
 	mysqlExeForConf := "mysql/bin/mysql.exe"
 	if mysqlExePath != "" {
-		if rel, err := filepath.Rel(workDir, mysqlExePath); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(workDir, mysqlExePath); err == nil && filepath.IsLocal(rel) {
 			mysqlExeForConf = filepath.ToSlash(rel)
 		} else {
 			mysqlExeForConf = filepath.ToSlash(mysqlExePath)
