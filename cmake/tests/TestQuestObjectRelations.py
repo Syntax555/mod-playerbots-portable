@@ -9,8 +9,8 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
-    in_parallel,
     prepared_core,
+    reject_part_mutants,
     run_fixture,
     source_argument,
     sql_rows,
@@ -306,13 +306,5 @@ with tempfile.TemporaryDirectory(prefix='portable-quest-objects-') as temporary:
     if result.returncode:
         raise SystemExit('Quest object relation fixture failed')
 
-    def rejected(numbered):
-        index, (label, key, old, new) = numbered
-        assert old in production[key], label
-        mutant = {**production, key: production[key].replace(old, new)}
-        return build(directory, mutant, f'mutant-{index}').returncode != 0
-
-    for (label, *_), rejected_mutant in zip(mutations, in_parallel(rejected, enumerate(mutations))):
-        if not rejected_mutant:
-            raise SystemExit('Quest object relation mutation survived: ' + label)
-        print('Quest object relation mutation rejected: ' + label)
+    reject_part_mutants(production, mutations, lambda parts, tag: build(directory, parts, tag),
+                        'Quest object relation')

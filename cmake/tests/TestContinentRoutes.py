@@ -21,8 +21,8 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
-    in_parallel,
     prepared_core,
+    reject_part_mutants,
     run_fixture,
 )
 
@@ -2032,18 +2032,12 @@ with tempfile.TemporaryDirectory(prefix='portable-continent-routes-') as tempora
     if result.returncode:
         raise SystemExit(f'Continent route fixture failed (exit {result.returncode})')
 
-    def rejected(numbered):
-        index, (label, key, old, new) = numbered
-        mutated = {**production, key: production[key].replace(old, new)}
-        if mutated[key] == production[key]:
-            raise SystemExit(f'{label} mutation was not applied')
-        directory = temporary / f'mutant-{index}'
+    def mutant(parts, tag):
+        # Each mutant writes its own policy header, so it builds in a private directory.
+        directory = temporary / tag
         directory.mkdir()
         for name in ('Fixture.h', 'IndividualProgression.h', 'tests.cpp'):
             (directory / name).write_text((temporary / name).read_text())
-        return build(directory, mutated, 'mutant').returncode != 0
+        return build(directory, parts, 'mutant')
 
-    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
-        if not result:
-            raise SystemExit(f'Continent route fixture did not reject: {label}')
-        print(f'Continent route mutation rejected: {label}')
+    reject_part_mutants(production, mutations, mutant, 'Continent route')

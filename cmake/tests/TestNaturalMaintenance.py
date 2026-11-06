@@ -18,9 +18,9 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
-    in_parallel,
     prepared_core,
     profession_skills,
+    reject_part_mutants,
     run_fixture,
     source_argument,
 )
@@ -1698,14 +1698,5 @@ with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temp
     if result.returncode:
         raise SystemExit(f'Natural maintenance fixture failed (exit {result.returncode})')
 
-    def rejected(numbered):
-        index, (label, key, old, new) = numbered
-        mutated = {**production, key: production[key].replace(old, new)}
-        if mutated[key] == production[key]:
-            raise SystemExit(f'{label} mutation was not applied')
-        return build(temporary, mutated, f'mutant-{index}').returncode != 0
-
-    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
-        if not result:
-            raise SystemExit(f'Natural maintenance fixture did not reject: {label}')
-        print(f'Natural maintenance mutation rejected: {label}')
+    reject_part_mutants(production, mutations, lambda parts, tag: build(temporary, parts, tag),
+                        'Natural maintenance')

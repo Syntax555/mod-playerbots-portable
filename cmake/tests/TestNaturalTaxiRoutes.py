@@ -15,8 +15,8 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
-    in_parallel,
     prepared_core,
+    reject_part_mutants,
     run_fixture,
 )
 
@@ -720,14 +720,5 @@ with tempfile.TemporaryDirectory(prefix='portable-natural-taxi-') as temporary:
     if result.returncode:
         raise SystemExit(f'Natural taxi fixture failed (exit {result.returncode})')
 
-    def rejected(numbered):
-        index, (label, key, old, new) = numbered
-        mutated = {**production, key: production[key].replace(old, new)}
-        if mutated[key] == production[key]:
-            raise SystemExit(f'{label} mutation was not applied')
-        return build(temporary, mutated, f'mutant-{index}').returncode != 0
-
-    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
-        if not result:
-            raise SystemExit(f'Natural taxi fixture did not reject: {label}')
-        print(f'Natural taxi mutation rejected: {label}')
+    reject_part_mutants(production, mutations, lambda parts, tag: build(temporary, parts, tag),
+                        'Natural taxi')

@@ -20,6 +20,7 @@ from FixtureSupport import (
     git_apply,
     make_wdbc,
     pinned_source,
+    reject_part_mutants,
     source_argument,
     sql_rows,
     sql_values,
@@ -55,6 +56,18 @@ class FixtureSupportTests(unittest.TestCase):
         data = bytes.fromhex('57444243 00000000 02000000 08000000 01000000 00')
         self.assertEqual(([], b'\0'), wdbc(data, 2))
         self.assertEqual(data, make_wdbc([], fields=2))
+
+    def test_part_mutants_must_fail_and_apply(self):
+        parts = {'gate': 'if (allowed)', 'body': 'run();'}
+        def build(mutant, _tag):
+            return subprocess.CompletedProcess([], 1 if 'false' in mutant['gate'] else 0)
+        with mock.patch('builtins.print') as printed:
+            reject_part_mutants(parts, [('gate kept', 'gate', 'allowed', 'false')], build, 'Demo')
+        printed.assert_called_once_with('Demo mutation rejected: gate kept', flush=True)
+        with self.assertRaisesRegex(SystemExit, 'Demo did not reject body kept'):
+            reject_part_mutants(parts, [('body kept', 'body', 'run();', '')], build, 'Demo')
+        with self.assertRaisesRegex(SystemExit, 'missing mutation was not applied'):
+            reject_part_mutants(parts, [('missing', 'body', 'stop();', '')], build, 'Demo')
 
     def test_source_options_keep_path_defaults_and_overrides(self):
         parser = argparse.ArgumentParser()

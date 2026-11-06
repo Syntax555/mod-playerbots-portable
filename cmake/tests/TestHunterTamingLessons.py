@@ -14,8 +14,8 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
-    in_parallel,
     prepared_core,
+    reject_part_mutants,
     run_fixture,
     source_argument,
     sql_rows,
@@ -456,14 +456,5 @@ with tempfile.TemporaryDirectory(prefix='portable-hunter-lessons-') as temporary
     if result.returncode:
         raise SystemExit('Hunter lesson fixture failed')
 
-    def rejected(numbered):
-        index, (label, key, old, new) = numbered
-        assert old in production[key], label
-        mutant = {**production, key: production[key].replace(old, new)}
-        result = build(directory, mutant, f'mutant-{index}')
-        return result.returncode != 0
-
-    for (label, *_), rejected_mutant in zip(mutations, in_parallel(rejected, enumerate(mutations))):
-        if not rejected_mutant:
-            raise SystemExit('Hunter lesson mutation survived: ' + label)
-        print('Hunter lesson mutation rejected: ' + label)
+    reject_part_mutants(production, mutations, lambda parts, tag: build(directory, parts, tag),
+                        'Hunter lesson')
