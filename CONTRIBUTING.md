@@ -46,6 +46,11 @@ original upstream projects.
 
 Make core and module changes as commits in their forks, then pin the tested
 commit in `versions.lock.json`; do not add source patches to this repository.
+Module forks run their fixtures through the shared
+[module integration workflow](.github/workflows/module-integration.yml). A fork
+change that needs new fixtures fails its push check until the fixtures reach
+`main`; start the fork's **Portable integration** manually with `portable-ref`
+set to the assembly branch that carries them.
 Keep changes focused and preserve upstream authorship and source licenses.
 Native fork CI runs selected server fixtures against the proposed fork commit.
 The complete native build and integration run here with the pinned core and all
