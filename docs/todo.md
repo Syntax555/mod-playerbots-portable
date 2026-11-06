@@ -177,6 +177,12 @@ fixtures pass. Use native core/module functions before adding replacements.
   9686. Verify the correct owned items, targets, ordinary interactions, rewards
   and each character's own era. Native quest availability alone does not prove
   autonomous completion. Retain player-controlled character ownership.
+- [ ] Live-verify the shared action's other class quests for all nine classes:
+  class letters, equipment and robe chains, the quest level rules for new
+  steps, ordinary loot from containers and keys, and the Rethban Gauntlet's
+  area trigger and timer. Keep group, dungeon, raid, crafting and pickpocket
+  class quests listed as player content in the
+  [class quest guide](class-quests.md#autonomous-class-quests-for-every-class).
 - [ ] **Warrior:** Live-verify the shared class quest action on all six
   Defensive Stance chains, including Path of Defense (1498), the Mausoleum
   Trigger and Ulag (1819), Bartleby's fight (1640) and the draenei ravager cage
@@ -184,7 +190,7 @@ fixtures pass. Use native core/module functions before adding replacements.
   Intercept. Check the grate start beside Twiggy Flathead, all challenger waves,
   survival, failure on death with abandon/reaccept, the timer, turn-in and later
   paid ranks in each earned era. See
-  [warrior, paladin and priest coverage](class-quests.md#autonomous-warrior-paladin-and-priest-quests).
+  [class quest coverage](class-quests.md#autonomous-class-quests-for-every-class).
 - [ ] **Paladin:** Live-verify the four Redemption chains: Linen Cloth from
   ordinary loot, the Symbol of Life on Henze and Narm Faulk before turn-in
   (1786/1783), the Young Furbolg Shaman (9600), the Gilded Brazier and Sangrias
@@ -199,14 +205,15 @@ fixtures pass. Use native core/module functions before adding replacements.
   Historical ability acquisition by taming additional beasts is not implemented;
   keep `VanillaHunterPets` disabled until that and existing-pet migration have
   been evaluated.
-- [ ] **Rogue:** Audit the racial lockpicking and poison quest chains, including
-  Klaven's Tower (2359), for the required keys, chests, skills, quest items and
-  native credit. Verify that learned poison abilities and owned consumables are
-  available to the existing combat actions in the character's earned era.
+- [ ] **Rogue:** Live-verify the 30 solo class quests of the shared action,
+  including Klaven's Tower (2359) with the looted Defias Tower Key and its
+  chest. The Horde poison chain (2460/2458/2478), pickpocketed quest items and
+  Ravenholdt (6681) remain player content; check them with players.
 - [ ] **Priest:** Verify each restored racial quest family end to end, including
   Desperate Prayer, Fear Ward and the race-specific rewards listed in the
   [class quest guide](class-quests.md#priest-training), for players and random
-  bots. Check teacher access, prerequisites, travel to the capital takers,
+  bots. Live-test the robe quests' Lesser Heal rank 2 and Fortitude sequence,
+  Help Tavara and Cleansing the Scar. Check teacher access, prerequisites, travel to the capital takers,
   ordinary turn-in, earned rank 1, paid later ranks and the TBC-era variants.
 - [ ] **Shaman:** Live-verify the 33-step Vanilla Horde totem and recovery
   action for Orc, Troll and Tauren: owned Sapta, invisible spirits, all three
@@ -226,10 +233,11 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Extend the shared quest-object relation format for item slots 5 and 6
   if a selected quest requires them. Objective bits 0–3 currently share the
   map with giver/taker flags; extending the loop alone would mix those roles.
-- [ ] **Mage:** Audit class quest chains and their era-specific prerequisites,
-  including Magecraft (8250), Fragmented Magic (9364) and Attunement to Dalaran
-  (12172/12173). Verify actual rewards and trainer requirements before treating
-  a quest as necessary for a spell; check ordinary travel and item use.
+- [ ] **Mage:** Live-verify the 29 solo class quests of the shared action,
+  including the Mirror Lake, Waters of Xavian and Purest Water flask fills at
+  their spell focus, the Ju-Ju Heaps and Magecraft (8250). The containment
+  coffers (1920/1960), Uldaman, Fragmented Magic (9364) and Attunement to
+  Dalaran (12172/12173) remain player content.
 - [ ] **Warlock:** Live-verify the 50-quest Imp, Voidwalker, Succubus,
   Felhunter and Felsteed action for all five warlock races. It accepts and rewards
   native quests, uses ordinary kills/chest loot and owned ritual items, and
