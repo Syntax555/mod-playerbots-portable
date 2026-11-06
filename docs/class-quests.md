@@ -76,12 +76,13 @@ can train its later ranks as usual. Players and bots follow the same rule, and
 ## Autonomous warlock demon quests
 
 Solo, headless random warlocks using natural progression can pursue the native
-Imp, Voidwalker, Succubus and Felhunter quest chains when the corresponding
-summoning spell is missing. The action recognizes 43 chain quests and lets the
-core decide race, level, prerequisites and quest availability. Characters under
-player control retain their own quest decisions. Individual
-Progression restores the original Imp questgiver relations; Summon Imp remains
-a quest reward rather than trainer teaching.
+Imp, Voidwalker, Succubus, Felhunter and Felsteed quest chains when the
+corresponding summoning spell is missing. The action recognizes 50 chain quests
+and lets the core decide race, level, prerequisites and quest availability.
+Characters under player control retain their own quest decisions. Individual
+Progression restores the original Imp questgiver relations and the level-40
+Felsteed quests; Summon Imp and Summon Felsteed remain quest rewards rather than
+trainer teaching.
 
 Bots accept and turn in quests through ordinary NPC interactions, travel to
 native objective spawns and use the existing combat and loot actions for kills
@@ -92,14 +93,15 @@ earns the objective credit. Quest rewards teach the summoning spell.
 With [continent travel](configuration.md#continent-travel) enabled, bots select
 quest destinations through their usable earned routes and continue journeys
 aboard ships, zeppelins and other transports. This includes the continent
-crossings in Alliance Heartswood and the Felhunter chains. With travel disabled
-or its catalog unavailable, quest routing stays on the current map.
+crossings in Alliance Heartswood and the Felhunter and Felsteed chains. With
+travel disabled or its catalog unavailable, quest routing stays on the current map.
 
-The blood elf Voidwalker quests The Stone (9529) and The Rune of Summoning
-(9619) are outside this action's scope. Class mounts, Infernal, Doomguard and
-historical demon grimoire purchases remain pending. End-to-end live verification
-for all four Vanilla warlock races is still required; see the
-[class audit](todo.md#dungeons-raids-and-outdoor-content).
+Blood elf warlocks turn in The Stone (9529) at the Voidstone in the Dead Scar,
+accept The Rune of Summoning (9619) from it and use their own Voidstone at the
+Rune of Summoning in Goldenmist Village. The native event summons the Voidwalker.
+The Dreadsteed, Infernal, Doomguard and historical demon grimoire purchases
+remain pending. End-to-end live verification for all five warlock races is still
+required; see the [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
 ## Autonomous shaman totem quests
 
@@ -183,6 +185,51 @@ Complete live runs, underwater navigation, the optional level-50 equipment
 chain and TBC Swift Flight remain on the
 [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
+## Autonomous warrior, paladin and priest quests
+
+Solo, headless random warriors, paladins and priests using natural progression
+pursue the native quests that teach their class lessons. One shared table of 88
+quest steps covers the Vanilla races and the TBC blood elf and draenei chains.
+Bots finish one lesson at a time, starting at the nearest native giver they can
+use. A learned lesson or its rewarded final quest ends that chain.
+
+| Lesson | Class | Chains |
+| --- | --- | --- |
+| Defensive Stance, Sunder Armor and Taunt | Warrior, level 10 | Uzzek (Barrens), Ulag the Cleaver (Tirisfal), Bartleby (Stormwind), Vejrek (Dun Morogh), Vorlus Vilehoof (Teldrassil), Strength of One (Azuremyst) |
+| Berserker Stance and Intercept | Warrior, level 30 | The Islander and The Affray |
+| Redemption | Paladin, level 12 | Human and dwarf Tome of Divinity, draenei Redemption, blood elf First Trial to Redeeming the Dead |
+| Sense Undead | Paladin, level 20 | The Tome of Valor with Daphne Stilwell; blood elf The Second Trial |
+| Summon Warhorse with Apprentice Riding | Paladin, level 40 | The Tome of Nobility; The Thalassian Warhorse |
+| Racial priest spells | Priest, level 10 and 20 | The nine restored families listed under [priest training](#priest-training) |
+
+The core still checks race, class, level, prerequisites, exclusive groups and
+personal era conditions, and grants every reward. Players see and complete the
+same quests. Individual Progression supplies the Tome of Nobility, Thalassian
+Warhorse and priest quest givers.
+
+Bots accept the Tome of Valor quest from their own book and use their own Symbol
+of Life, Shimmering Vessels and Ravager Cage Key on the native targets. Henze and
+Narm Faulk accept the turn-in once the bot has revived them with its Symbol.
+Bots use the Mausoleum Trigger, Gilded Brazier and Harbinger of the Second Trial
+to start their native events, and fight Ulag, the Death Ravager, Sangrias
+Stillblade and the champions through ordinary combat. For The Affray, a bot
+waits on the grate beside Twiggy Flathead until the challengers attack. It stays
+beside Bartleby for his fight and beside Daphne Stilwell during her escort,
+attacking the raiders who strike her.
+
+A failed quest, such as a lost Affray, trial or escort, is abandoned through the
+quest log and accepted again. The same applies to an event quest whose bot has
+waited at its site for five minutes without combat, and to a step whose own
+source item is gone from bags and bank. Other quest items, such as Linen Cloth
+and the Defias and Dark Iron scripts, come from ordinary kills and loot.
+Cross-continent steps, such as The Islander for Alliance warriors, need enabled
+[continent travel](configuration.md#continent-travel) and the bot's own usable
+routes.
+
+Rogue and mage class quests and the level-60 Charger chains are not automated;
+they remain available to players. Complete live runs remain on the
+[class audit](todo.md#dungeons-raids-and-outdoor-content).
+
 ## Client installation
 
 Install the release's matching EraTalents addon and `Data/patch-V.mpq` with WoW
@@ -206,7 +253,7 @@ and packaged license notices identify the exact source revisions and adaptations
 SQL updates run through the ordinary database updater.
 
 This integration restores the listed priest families and quest-taught lessons,
-and adds the scoped warlock, shaman and druid automation described above. Other class
-quests retain the core and Individual Progression support. It does not provide three
+and adds the scoped warlock, shaman, druid, warrior, paladin and priest automation
+described above. Other class quests retain the core and Individual Progression support. It does not provide three
 complete historical quest databases or certify every class quest and scripted
 objective.

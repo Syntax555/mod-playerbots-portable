@@ -171,19 +171,28 @@ fixtures pass. Use native core/module functions before adding replacements.
   quest scripts before enabling additional routes. Live-test the warlock
   Binding handling for 1471, 1474, 1504, 1513, 1689, 1739 and 1795; audit shaman
   Call of Earth 1518/1521/9451, Call of Fire 1527/9555 and Call of Water 96/9509; warrior
-  The Affray 1719; and paladin The Tome of Valor 1652 / Return to Silvermoon
-  9691. Verify the correct owned items, targets, ordinary interactions, rewards
+  The Affray 1719, Ulag 1819, Bartleby 1640 and Strength of One 9582; paladin
+  Tome of Divinity 1786/1783, Redemption 9600, First Trial 9678, Claiming the
+  Light 9684, Redeeming the Dead 9685, Tome of Valor 1651 and The Second Trial
+  9686. Verify the correct owned items, targets, ordinary interactions, rewards
   and each character's own era. Native quest availability alone does not prove
   autonomous completion. Retain player-controlled character ownership.
-- [ ] **Warrior:** Verify the racial defensive-stance quest routes, including
-  Path of Defense (1498), and The Islander / The Affray (1719) for Berserker
-  Stance and Intercept. Check ordinary quest-giver access, the arena event,
-  survival, quest credit, turn-in and later paid ranks in each earned era.
-- [ ] **Paladin:** Verify racial resurrection quest chains, including The Tome
-  of Divinity (1785/1788), Redemption (9600) and Redeeming the Dead (9685),
-  plus The Tome of Valor (1652) / Return to Silvermoon (9691) and their
-  prerequisites. Check the event, earned spell and later trainer availability;
-  audit class-mount quest chains separately.
+- [ ] **Warrior:** Live-verify the shared class quest action on all six
+  Defensive Stance chains, including Path of Defense (1498), the Mausoleum
+  Trigger and Ulag (1819), Bartleby's fight (1640) and the draenei ravager cage
+  (9582), and on The Islander / The Affray (1719) for Berserker Stance and
+  Intercept. Check the grate start beside Twiggy Flathead, all challenger waves,
+  survival, failure on death with abandon/reaccept, the timer, turn-in and later
+  paid ranks in each earned era. See
+  [warrior, paladin and priest coverage](class-quests.md#autonomous-warrior-paladin-and-priest-quests).
+- [ ] **Paladin:** Live-verify the four Redemption chains: Linen Cloth from
+  ordinary loot, the Symbol of Life on Henze and Narm Faulk before turn-in
+  (1786/1783), the Young Furbolg Shaman (9600), the Gilded Brazier and Sangrias
+  Stillblade (9678), both Shimmering Vessels (9684/9685) and recovery when an
+  item is consumed without credit. Check the item-started Tome of Valor (1649),
+  Daphne Stilwell's escort with attacks on her raiders (1651), the Second Trial's
+  harbinger and champions (9686), both warhorses (1661/9712) and later trainer
+  availability. Audit the level-60 Charger chains separately.
 - [ ] **Hunter:** Validate all six first-pet lesson chains and Training the
   Beast using the existing native-quest bot actions, including interrupted
   casts, owned rods, travel, pet preservation and subsequent feeding/revival.
@@ -196,9 +205,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   available to the existing combat actions in the character's earned era.
 - [ ] **Priest:** Verify each restored racial quest family end to end, including
   Desperate Prayer, Fear Ward and the race-specific rewards listed in the
-  [class quest guide](class-quests.md#priest-training). Check teacher access,
-  prerequisites, ordinary turn-in, earned rank 1 and paid later ranks; do not
-  infer autonomous completion from the restored quest data.
+  [class quest guide](class-quests.md#priest-training), for players and random
+  bots. Check teacher access, prerequisites, travel to the capital takers,
+  ordinary turn-in, earned rank 1, paid later ranks and the TBC-era variants.
 - [ ] **Shaman:** Live-verify the 33-step Vanilla Horde totem and recovery
   action for Orc, Troll and Tauren: owned Sapta, invisible spirits, all three
   waterskin focuses, normal brazier acceptance/turn-in and earned continent
@@ -221,16 +230,17 @@ fixtures pass. Use native core/module functions before adding replacements.
   including Magecraft (8250), Fragmented Magic (9364) and Attunement to Dalaran
   (12172/12173). Verify actual rewards and trainer requirements before treating
   a quest as necessary for a spell; check ordinary travel and item use.
-- [ ] **Warlock:** Live-verify the 43-quest Imp, Voidwalker, Succubus and
-  Felhunter action for all four Vanilla warlock races. It accepts and rewards
+- [ ] **Warlock:** Live-verify the 50-quest Imp, Voidwalker, Succubus,
+  Felhunter and Felsteed action for all five warlock races. It accepts and rewards
   native quests, uses ordinary kills/chest loot and owned ritual items, and
   leaves demon combat and credit to native scripts. Imp questgiver relations
   are restored by Individual Progression. Verify the earned continent routes
   for Alliance Heartswood and the Felhunter chains, including map transfers
   while aboard and disembarking. Check recovery after relogs, missing ritual
   items and native event resets before claiming autonomous end-to-end completion.
-  Add the blood elf Voidwalker quests 9529/9619, class mounts, Infernal and
-  Doomguard quests. Historical demon grimoire purchases remain unimplemented;
+  Check the blood elf Voidstone questgiver objects (9529/9619) and the Rune of
+  Summoning event. Add the Dreadsteed, Infernal and Doomguard quests. Historical
+  demon grimoire purchases remain unimplemented;
   keep `WarlockDemonTrainers` disabled until evaluated. See the
   [implemented scope](class-quests.md#autonomous-warlock-demon-quests).
 - [ ] **Druid:** Live-verify the 32 basic Bear, Aquatic and Cure Poison variants

@@ -40,12 +40,12 @@ items = (module / 'Ai/Base/Actions/UseItemAction.cpp').read_text()
 chains = [tuple(map(int, row)) for row in re.findall(
     r'\{(\d+), (\d+), (\d+), (\d+)\}', source)]
 assert len(chains) == len({row[0] for row in chains})
-assert len(chains) == 43
-assert {row[1] for row in chains} == {688, 697, 712, 691}
+assert len(chains) == 50
+assert {row[1] for row in chains} == {688, 697, 712, 691, 5784}
 quests = {int(row['ID']): row for row in sql_rows(core, 'quest_template', {r[0] for r in chains})}
 addon = {int(row['ID']): row for row in sql_rows(core, 'quest_template_addon', set(quests))}
 item_rows = {int(row['entry']): row for row in sql_rows(core, 'item_template', {r[2] for r in chains if r[2]})}
-reward_demons = {7763: 688, 11520: 697, 11519: 712, 1373: 691}
+reward_demons = {7763: 688, 11520: 697, 11519: 712, 1373: 691, 5785: 5784}
 by_quest = {row[0]: row for row in chains}
 for quest, demon, item, creature in chains:
     row = quests[quest]
@@ -71,11 +71,15 @@ for quest, demon, item, creature in chains:
 
 rituals = {(1471, 6284, 9221, 5676), (1504, 7464, 9222, 5676), (1689, 6928, 7728, 5676),
            (1474, 6286, 9223, 5677), (1513, 6626, 9224, 5677), (1739, 6913, 8674, 5677),
-           (1795, 6999, 8712, 6268)}
+           (1795, 6999, 8712, 6268), (9619, 23732, 30208, 5676)}
 assert {(quest, item, int(item_rows[item]['spellid_1']), creature)
         for quest, _, item, creature in chains if item} == rituals
-focus_templates = sql_rows(core, 'gameobject_template', {37097, 92015, 92388, 105576})
-assert {(int(row['Data0']), int(row['Data1'])) for row in focus_templates} == {(43, 10), (83, 10), (103, 10), (203, 10)}
+focus_templates = sql_rows(core, 'gameobject_template', {37097, 92015, 92388, 105576, 181670})
+assert {(int(row['Data0']), int(row['Data1'])) for row in focus_templates} == {
+    (43, 10), (83, 10), (103, 10), (203, 10), (1375, 10)}
+# The blood elf Voidstone's native event summons the quest's Voidwalker at its Rune of Summoning.
+assert any(int(row['command']) == 10 and int(row['datalong']) == 5676
+           for row in sql_rows(core, 'event_scripts', {10608}))
 assert all(int(row['type']) == 8 for row in focus_templates)
 ip_sql = core / 'modules/mod-individual-progression/data/sql/world/base'
 merged_relations = {}
@@ -94,9 +98,20 @@ for zone, (giver, quest) in restored_imps.items():
                    for insert in inserts), (zone, table, quest)
         merged_relations[table].add((giver, quest))
     assert by_quest[quest][1] == 688
+# Individual Progression restores the Felsteed quests and their givers.
+mounts = (ip_sql / 'mounts_and_riding.sql').read_text()
+felsteed = {3631, 4487, 4488, 4489, 4490}
+assert 'DELETE FROM `disables` WHERE `sourceType` = 1 AND `entry` IN (3631, 4487, 4488, 4489, 4490);' in mounts
+assert felsteed <= set(by_quest)
 for table in ('creature_queststarter', 'creature_questender'):
-    relations = merged_relations[table]
-    assert set(quests) <= {quest for _, quest in relations}, table
+    for statement in re.findall(rf'INSERT INTO `{table}` \(`id`, `quest`\) VALUES ([^;]+);', mounts):
+        merged_relations[table] |= {row for row in (tuple(map(int, pair)) for pair in re.findall(
+            r'\((\d+), (\d+)\)', statement)) if row[1] in felsteed}
+assert (181698, 9529) in merged_relations['gameobject_questender']
+assert (181698, 9619) in merged_relations['gameobject_queststarter']
+for kind in ('queststarter', 'questender'):
+    relations = merged_relations['creature_' + kind] | merged_relations['gameobject_' + kind]
+    assert set(quests) <= {quest for _, quest in relations}, kind
 assert (34, 140) in merged_relations['gameobject_queststarter']
 assert (33, 140) in merged_relations['gameobject_questender']
 go_quest = sql_rows(core, 'quest_template', {140})[0]
@@ -276,7 +291,8 @@ production['itemspells'] = '\n'.join(f'itemSpells[{item}] = {row["spellid_1"]};'
 production['relations'] = '\n'.join(
     'std::map<uint32,uint32> ' + name + '={' + ','.join(
         '{' + str(quest) + ',' + str(min(entry for entry, relation in merged_relations[table]
-                                      if relation == quest)) + '}' for quest in quests) + '};'
+                                      if relation == quest)) + '}' for quest in quests
+        if any(relation == quest for _, relation in merged_relations[table])) + '};'
     for name, table in (('nativeStarters', 'creature_queststarter'), ('nativeEnders', 'creature_questender')))
 
 prelude = r'''
@@ -651,6 +667,9 @@ struct UseItemAction {
 
 tests = r'''
 @@RELATIONS@@
+uint32 NativeGiver(std::map<uint32,uint32> const& relations,uint32 quest) {
+    return relations.contains(quest)?relations.at(quest):0;
+}
 struct Scenario {
     Player bot; PlayerbotAI ai{&bot}; WarlockDemonQuestValue value{&ai};
     WarlockDemonQuestTrigger trigger{&ai}; WarlockDemonQuestAction action{&ai};
@@ -663,11 +682,12 @@ struct Scenario {
         @@ITEMSPELLS@@
         data=&*std::find_if(std::begin(WarlockDemonQuests),std::end(WarlockDemonQuests),[id](auto const& row){return row.Quest==id;});
         bot.quests[id].Status=QUEST_STATUS_INCOMPLETE;
-        giver.guid=2; giver.entry=nativeStarters.at(id); giver.starts.insert(id);
-        if(giver.entry==nativeEnders.at(id)) giver.finishes.insert(id);
+        // Gameobject givers are exercised by GameObjectScenario; these rows keep a creature giver double.
+        giver.guid=2; giver.entry=NativeGiver(nativeStarters,id); giver.starts.insert(id);
+        if(giver.entry==NativeGiver(nativeEnders,id)) giver.finishes.insert(id);
         ai.units[2]=&giver; ai.context.npcs={{2}};
         locations.data[id][uint32(QuestRelationFlag::questGiver)][giver.entry]={{0,2}};
-        locations.data[id][uint32(QuestRelationFlag::questTaker)][nativeEnders.at(id)]={{0,2}};
+        locations.data[id][uint32(QuestRelationFlag::questTaker)][NativeGiver(nativeEnders,id)]={{0,2}};
         focus.guid=3; focus.info.spellFocus.focusId=777; ai.objects[3]=&focus; ai.context.objects={{3}};
         if(data->Item) {
             auto& item=bot.inventory[data->Item]; item.entry=data->Item;
@@ -681,7 +701,7 @@ struct Scenario {
     void Offered() { bot.quests.clear(); bot.available.insert(data->Quest); ai.context.quest=value.Calculate(); }
     void Rewardable() {
         bot.quests[data->Quest].Status=QUEST_STATUS_COMPLETE;
-        giver.entry=nativeEnders.at(data->Quest); giver.starts.clear(); giver.finishes.insert(data->Quest);
+        giver.entry=NativeGiver(nativeEnders,data->Quest); giver.starts.clear(); giver.finishes.insert(data->Quest);
     }
     void Objective(uint32 flags,int32 entry,WorldPosition pos) { locations.data[data->Quest][flags][entry]={pos}; }
     void Crossing() {
@@ -752,6 +772,7 @@ int main() {
         assert(!s.bot.GetQuestRewardStatus(1462));
     }
     for(auto const& row:WarlockDemonQuests) {
+        if(!nativeStarters.contains(row.Quest)||!nativeEnders.contains(row.Quest)) continue;
         Scenario s(row.Quest);
         assert(s.value.Calculate()==row.Quest&&s.trigger.IsActive()&&s.action.isUseful());
         s.bot.known.insert(row.Spell); s.ai.context.quest=s.value.Calculate();
