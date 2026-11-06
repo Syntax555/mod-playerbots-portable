@@ -37,7 +37,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "fa25c7fac6bd1225d2e1c6acbab0c86ceee7d133",
+      "revision": "bbcf7b7f4caf611281b2ab4a041b5e1984aa97c1",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "e6b77699904bcaa7e9f625978f3c6a19ff175bbe"
@@ -78,7 +78,8 @@
         "mod-playerbots-era-blessing-planner": "2364842b2a54e6319171c442712be8dc4efc7aea",
         "mod-playerbots-companion-ride-fixes": "7e73dfc22b29e8b477a8ee1725df178c3b079b59",
         "mod-playerbots-earned-class-quest-chains": "92025ad40eb7032369962290fa82591ee3ea90de",
-        "mod-playerbots-solo-class-quests": "fa25c7fac6bd1225d2e1c6acbab0c86ceee7d133"
+        "mod-playerbots-solo-class-quests": "fa25c7fac6bd1225d2e1c6acbab0c86ceee7d133",
+        "mod-playerbots-shared-warlock-quests": "bbcf7b7f4caf611281b2ab4a041b5e1984aa97c1"
       }
     },
     {
