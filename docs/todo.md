@@ -293,6 +293,12 @@ fixtures pass. Use native core/module functions before adding replacements.
   the original Alterac Valley layout, mines, quests and Playerbots tactics;
   mining its ore with ordinary skill requirements; Windsor's Great Masquerade
   phase, restored quest, escort and dungeon scripts; and the matching client pack.
+- [ ] Validate the current upstream imports in game: the Playerbots blessing
+  planner with historical Blessing of Sanctuary and Improved Might/Wisdom, its
+  count-based login rotation with `DisabledWithoutRealPlayer`, Individual
+  Progression's Onyxia and Naxxramas 40 entrances for levels 60, 70 and 80,
+  DragonUI's inspect window under the EraTalents inspect view, and Questie
+  protocol 21 pacing with hidden era questgivers.
 - [ ] Evaluate `IndividualProgression.VanillaHunterPets` and
   `IndividualProgression.WarlockDemonTrainers` before enabling them: existing
   pets lose untaught abilities, and bots still need historical pet-ability

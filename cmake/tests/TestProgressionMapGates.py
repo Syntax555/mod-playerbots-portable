@@ -154,7 +154,7 @@ struct ObjectMgr
 auto* sObjectMgr = &objectManager;
 struct IndividualProgression
 {
-    bool enabled = true, normal = true, attuned = false, requireNaxxStrath = true;
+    bool enabled = true, normal = true, attuned = false, requireNaxxStrath = true, AllowVanillaRaidAccess = false;
     bool IsStrictDefaultProgression() const { return true; }
     int progressionLimit = 0, tbcRacesProgressionLevel = 8, RequiredZulGurubProgression = 3, RequiredZulAmanProgression = 12;
     static inline uint8 accountStage = 0;
@@ -254,6 +254,15 @@ int main()
     // Wrath's normal version retains its separate entry requirements.
     veteran.raidDifficulty = 0;
     assert(Check(veteran, MAP_NAXXRAMAS).allowed);
+    // Below tier 18 Wrath's versions stay open at level 80; the 40-player ones need the option.
+    Player wrath; Stage(wrath, 13); wrath.level = 80; wrath.items.insert(ITEM_DRAKEFIRE_AMULET);
+    wrath.quests[NAXX40_ENTRANCE_FLAG] = QUEST_STATUS_REWARDED; progression.attuned = true;
+    assert(Check(wrath, MAP_ONYXIAS_LAIR).allowed && Check(wrath, MAP_NAXXRAMAS).allowed);
+    wrath.raidDifficulty = RAID_DIFFICULTY_10MAN_HEROIC;
+    assert(!Check(wrath, MAP_ONYXIAS_LAIR).allowed && !Check(wrath, MAP_NAXXRAMAS).allowed);
+    progression.AllowVanillaRaidAccess = true;
+    assert(Check(wrath, MAP_ONYXIAS_LAIR).allowed && Check(wrath, MAP_NAXXRAMAS).allowed);
+    progression.AllowVanillaRaidAccess = false; progression.attuned = false;
 
     // Remote source checks can reach Outland before its base map exists.
     Player bloodElf; bloodElf.race = RACE_BLOODELF; Stage(bloodElf, 7);
@@ -310,11 +319,16 @@ def build(gate_source, hook_source, bridge_source, starting_source=starting_zone
 mutations = (
     ('high-level Onyxia key', gates, '!player->HasItemCount(ITEM_DRAKEFIRE_AMULET))', 'false)',
      '!Check(veteran, MAP_ONYXIAS_LAIR).allowed'),
-    ('high-level Naxx attunement', gates, '!sIndividualProgression->isAttuned(player) ||', 'false ||',
-     '!Check(veteran, MAP_NAXXRAMAS).allowed'),
+    ('high-level Naxx attunement', gates, '                         !sIndividualProgression->isAttuned(player)))',
+     '                         false))', '!Check(veteran, MAP_NAXXRAMAS).allowed'),
     ('high-level Naxx entrance quest', gates,
-     '(sIndividualProgression->requireNaxxStrath && player->GetQuestStatus(NAXX40_ENTRANCE_FLAG) != QUEST_STATUS_REWARDED)',
-     'false', '!Check(veteran, MAP_NAXXRAMAS).allowed'),
+     'player->GetDifficulty(true) == RAID_DIFFICULTY_10MAN_HEROIC && sIndividualProgression->requireNaxxStrath &&',
+     'false &&', '!Check(veteran, MAP_NAXXRAMAS).allowed'),
+    ('level 80 vanilla raids without the option', gates, '(!sIndividualProgression->AllowVanillaRaidAccess &&',
+     '(false &&', '!Check(wrath, MAP_ONYXIAS_LAIR).allowed && !Check(wrath, MAP_NAXXRAMAS).allowed'),
+    ('Wrath raids closed below tier 18', gates,
+     'player->GetDifficulty(true) == RAID_DIFFICULTY_10MAN_HEROIC &&\n                    ((!',
+     '((!', 'Check(wrath, MAP_ONYXIAS_LAIR).allowed && Check(wrath, MAP_NAXXRAMAS).allowed'),
     ('ship return in checks', gates, 'if (!session)\n                return false;\n', '', 'check.teleports == 0'),
     ('refusal text in checks', gates, 'ChatHandler(session)', 'ChatHandler(player->GetSession())',
      'check.messages == 0'),

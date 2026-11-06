@@ -37,10 +37,10 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "a1ea90e1da39b934e9189d40967b496e3a45a4f1",
+      "revision": "2364842b2a54e6319171c442712be8dc4efc7aea",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
-        "revision": "08e5a03f99b648745b840707327f7c803ed51aa1"
+        "revision": "e6b77699904bcaa7e9f625978f3c6a19ff175bbe"
       },
       "forkChanges": {
         "mod-playerbots-natural-progression": "2a50914f4731316f7431ce11711c37970e1d9b7e",
@@ -74,16 +74,17 @@
         "mod-playerbots-earned-shaman-totems": "25b4820d604800ac03ac7807d0dcde47935db6a8",
         "mod-playerbots-earned-draenei-totems": "9efdb786e7731edb96df6c6222cf669ed51eb574",
         "mod-playerbots-companion-rides": "191aad2da6aaf0299c50cd0442d30f0be217f8f4",
-        "mod-playerbots-earned-druid-quests": "a1ea90e1da39b934e9189d40967b496e3a45a4f1"
+        "mod-playerbots-earned-druid-quests": "a1ea90e1da39b934e9189d40967b496e3a45a4f1",
+        "mod-playerbots-era-blessing-planner": "2364842b2a54e6319171c442712be8dc4efc7aea"
       }
     },
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "0a13eff58931e8ccb5937f49156ac31d9abff6fd",
+      "revision": "15105da07665f23527865fdd757621186f0b9df1",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
-        "revision": "e2c2ed0508986f9a138cf5694101e65d2809a366"
+        "revision": "42c9a32892740af55a40e076e6381cc879181396"
       },
       "forkChanges": {
         "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
@@ -115,16 +116,19 @@
         "mod-individual-progression-command-safety": "84e9513391e1556be36f400fc2cb4f82deb6d9ba",
         "mod-individual-progression-upstream-world-interactions": "84e9513391e1556be36f400fc2cb4f82deb6d9ba",
         "mod-individual-progression-era-creature-stats": "0a13eff58931e8ccb5937f49156ac31d9abff6fd",
-        "mod-individual-progression-era-training-dummies": "0a13eff58931e8ccb5937f49156ac31d9abff6fd"
+        "mod-individual-progression-era-training-dummies": "0a13eff58931e8ccb5937f49156ac31d9abff6fd",
+        "mod-individual-progression-strict-auto-attune": "86606846980791e932250e20d4ccd2c0ee4aafc0",
+        "mod-individual-progression-naxx40-level80-attunement": "addb23d7397d589a8c35cc749b488f2338b9c62d",
+        "mod-individual-progression-wrath-raids-level80": "15105da07665f23527865fdd757621186f0b9df1"
       }
     },
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "03c801c59a31c8bd4a6a839169dab79b421d8989",
+      "revision": "d643028e28404dc153ce255f3332fc5942a28ea0",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-        "revision": "6f81199b987dd7919b3d4896bf1b6d5b9e63a169"
+        "revision": "0dfe558d6370d8b8bd94bba2ad75374975f2a833"
       },
       "forkChanges": {
         "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
@@ -173,10 +177,10 @@
     {
       "name": "mod-era-events",
       "url": "https://github.com/Syntax555/wow-mod-era-events.git",
-      "revision": "bba38c12bc7f3f960b2e29ed5ba4cb976855ce11",
+      "revision": "101e21803a235ac4c80267bdb1c98be52a5d804b",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
-        "revision": "cf02786aceb531df76ff065d8be7a1973344cfb1"
+        "revision": "c6fe393ee271dd7c20f3556f5aa30942844f1643"
       },
       "forkChanges": {
         "mod-era-events-earned-progression": "52e6b5d2f284acd2290a35253dc0f0ceafcf10aa",
@@ -207,15 +211,16 @@
     {
       "name": "mod-questie-bridge",
       "url": "https://github.com/Syntax555/mod-questie-bridge.git",
-      "revision": "d3409f48748f0b3df90b61c8ff63fb9e3cb047ef",
+      "revision": "44029a15f434ec8cd14a7e4881a8772416b4530a",
       "upstream": {
         "url": "https://github.com/Aldori15/mod-questie-bridge.git",
-        "revision": "21bbefc4a01b462d24fdaeb3b9e4e5db872220a6"
+        "revision": "0ba33c1b5439514af7d9b93f3c86627bf1b1b57f"
       },
       "forkChanges": {
         "mod-questie-bridge-era-quests": "7193c3c4995f4242a23b679f576160633195221c",
         "mod-questie-bridge-protocol19-era-quests": "3a010d7084798cb38598f4dee807a29acd99a38b",
-        "mod-questie-bridge-protocol20-era-quests": "d3409f48748f0b3df90b61c8ff63fb9e3cb047ef"
+        "mod-questie-bridge-protocol20-era-quests": "d3409f48748f0b3df90b61c8ff63fb9e3cb047ef",
+        "mod-questie-bridge-protocol21-era-quests": "44029a15f434ec8cd14a7e4881a8772416b4530a"
       }
     },
     {
@@ -363,10 +368,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "2d49dd00dd28e21d5e66d1ab593e964eff271a9e",
+      "revision": "fca9bc8be554932e278f08680b8e0453103ed0a1",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "0198b0eb768aa47773d2e381b2ee27a13ec41006"
+        "revision": "3a57b6d1402e42351e3c55c269942050cd09efda"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -382,10 +387,10 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "7da7f4da09da411e285346e84f09a43337165136",
+      "revision": "060e9f5f697931376e13cdbd314b9eb549e11889",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "42140b2ba24fca8bae82fec1694006887a23af8c"
+        "revision": "0c29f2bae91760a619aedf2d7fc32cf89fc0db87"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",

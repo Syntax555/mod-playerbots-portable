@@ -99,10 +99,12 @@ for signature, boundary in (
     ('void IndividualProgression::SyncBotsProgressionToLeader(', '    if (!group)'),
     ('void IndividualProgression::UpdateGroupAttunement(', '    if (location.empty())'),
     ('void IndividualProgression::UpdateAccountReputation(', '    Group* group'),
+    ('void IndividualProgression::GrantAttunements(', '    uint8 stage = state;'),
 ):
     body = function(production, signature)
     unused = '    (void)group;\n' if 'SyncBots' in signature else (
-        '    (void)location;\n' if 'Attunement' in signature else '')
+        '    (void)location;\n' if 'GroupAttunement' in signature else (
+            '    (void)state;\n' if 'GrantAttunements' in signature else ''))
     guard_functions.append(body[:body.index(boundary)] + unused + '    ++unguardedCalls;\n}')
 command_guards = []
 for signature in ('    static bool HandleSetBotIndividualProgressionCommand(',
@@ -234,7 +236,7 @@ struct ChatHandler { Session* session=nullptr; int messages=0; Player* actor=nul
 
 declarations = r'''
 struct IndividualProgression {
-    bool enabled=true, strictEarnedProgression=true, disableDefaultProgression=false;
+    bool enabled=true, strictEarnedProgression=true, disableDefaultProgression=false, AutoAttune=true;
     bool questMoneyAtLevelCap=false, repeatableVanillaQuestsXp=false, questXpFix=false;
     std::unordered_map<uint32,uint32> questXpMap;
     int progressionLimit=0;
@@ -275,6 +277,7 @@ struct IndividualProgression {
     void SyncBotsProgressionToLeader(Group*);
     void UpdateGroupAttunement(Player*,std::string);
     void UpdateAccountReputation(uint32,uint32,Player*);
+    void GrantAttunements(Player*,ProgressionState);
     void UpdateProgressionAchievements(Player* player,uint16 id) { player->achievements.insert(id); }
 };
 std::map<uint32,uint8> IndividualProgression::accounts;
@@ -446,6 +449,8 @@ int main() {
     assert(Command::HandleAttuneIndividualProgressionCommand(&handler,"mc"));
     progression.UpdateGroupAttunement(&player,"mc");
     progression.UpdateAccountReputation(1,1,&player);
+    // Even a GM's progression bump grants no attunement items or quests.
+    progression.GrantAttunements(&player,PROGRESSION_TBC_TIER_2);
     assert(unguardedCalls==5);
     ChatHandler console;
     assert(!Command::HandleAttuneIndividualProgressionCommand(&console,"mc"));
@@ -519,6 +524,7 @@ mutations = (
     ('expansion start without account stage', 'GetAccountProgression(player->GetSession()->GetAccountId()) < std::max(start, unlock)',
      'GetAccountProgression(player->GetSession()->GetAccountId()) < (unlock & 0)'),
     ('reserved stage granted on start', 'stage = StrictEarnedProgressionPolicy::NextStage(stage))', 'stage = stage + 1)'),
+    ('attunement grants', 'if (!enabled || strictEarnedProgression || !AutoAttune', 'if (!enabled || !AutoAttune'),
     ('bot trainer unlock without account check', 'if (unlockedForBots && sIndividualProgression->isBotAccount(player))',
      'if (unlockedForBots)'),
 )

@@ -71,6 +71,7 @@ GAMEPLAY = (
     "TestIpCommandSafety",
     "TestDruidClassQuests",
     "TestEraCreatureStats",
+    "TestPaladinEraBlessings",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -96,6 +97,7 @@ MODULE_FIXTURES = {
         "TestShamanTotemQuests",
         "TestShamanWaterSpirit",
         "TestDruidClassQuests",
+        "TestPaladinEraBlessings",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
@@ -122,7 +124,9 @@ MODULE_FIXTURES = {
         "TestMultiBotNaturalProgression", "TestQuestProgressBridge", "TestIpProgressBridge", "TestCombatProfileBridge",
         "TestNativeBankTransfers", "TestCombatProfiles",
     ),
-    "mod-era-talents": ("TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook", "TestEraIgnite"),
+    "mod-era-talents": (
+        "TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook", "TestEraIgnite", "TestPaladinEraBlessings",
+    ),
     "mod-questie-bridge": ("TestQuestieEraQuests",),
 }
 

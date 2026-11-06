@@ -42,6 +42,10 @@ ai_source = (module / 'Bot/PlayerbotAI.cpp').read_text()
 security = (module / 'Mgr/Security/PlayerbotSecurity.h').read_text()
 scripts = (module / 'Script/Playerbots.cpp').read_text()
 rpg = (module / 'Ai/World/Rpg/Action/NewRpgBaseAction.cpp').read_text()
+rpg_helpers = (module / 'Ai/World/Rpg/NewRpgHelpers.cpp').read_text()
+# RPG quest-giver selection and quest-log cleanup both read the shared worth check.
+assert 'IsQuestWorthDoing(bot, quest) && IsQuestCapableDoing(bot, quest)' in rpg_helpers
+assert 'bool const worthDoing = NewRpgHelpers::IsQuestWorthDoing(bot, quest);' in rpg
 destroy = (module / 'Ai/Base/Actions/DestroyItemAction.cpp').read_text()
 visitors = (module / 'Mgr/Item/ItemVisitors.h').read_text()
 usage = (module / 'Ai/Base/Value/ItemUsageValue.h').read_text()
@@ -77,6 +81,7 @@ source = r'''
 #include <iostream>
 #include <list>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -99,6 +104,8 @@ public:
     explicit ObjectGuid(uint64 raw) : raw(raw) {}
     explicit operator bool() const { return raw != 0; }
     bool operator<(ObjectGuid const& other) const { return raw < other.raw; }
+    bool operator!=(ObjectGuid const& other) const { return raw != other.raw; }
+    void Clear() { raw = 0; }
 private:
     uint64 raw = 0;
 };
@@ -244,6 +251,16 @@ struct ChatHooks
 ''' + 'HOOKS\n' + r'''
 };
 
+uint32 msTime = 1000;
+uint32 getMSTime() { return msTime; }
+uint32 GetMSTimeDiffToNow(uint32 since) { return msTime - since; }
+#define LOG_DEBUG(...) ((void)0)
+struct NewRpgInfo
+{
+    ObjectGuid questGiver;
+    uint32 questGiverSince = 0, questGiverLastTry = 0;
+    std::set<ObjectGuid> ignoredQuestGivers;
+};
 class NewRpgBaseAction
 {
 public:
@@ -253,11 +270,14 @@ public:
     int interactions = 0, waits = 0, moves = 0;
 private:
     void OrganizeQuestLog() {}
-    ObjectGuid ChooseNpcOrGameObjectToInteract(bool questgiverOnly, float distance)
+    // The "new rpg quest giver" value: the nearest giver with a quest to accept or reward.
+    template <class T> T Value(char const* name)
     {
-        assert(questgiverOnly && distance > 0.0f);
+        assert(std::string(name) == "new rpg quest giver");
         return chosen;
     }
+    struct { NewRpgInfo rpgInfo; } ai, *botAI = &ai;
+    uint32 const questGiverGiveUpTime = 60000, questGiverRetryGap = 5000;
     void InteractWithNpcOrGameObjectForQuest(ObjectGuid) { ++interactions; }
     void ForceToWait(uint32) { ++waits; }
     bool MoveWorldObjectTo(ObjectGuid) { ++moves; return true; }
@@ -438,7 +458,8 @@ mutations = [
     ('logged-out sender dispatched', 'functions', 'if (!owner || !GetSecurity()', 'if (!GetSecurity()'),
     ('sender rights not rechecked', 'functions',
      'if (!owner || !GetSecurity()->CheckLevelFor(it->GetRequiredLevel(), true, owner))', 'if (!owner)'),
-    ('despawned quest giver read', 'functions', 'if (!object)\n            return false;\n', ''),
+    ('despawned quest giver read', 'functions',
+     'GetWorldObject(*bot, npcOrGo);\n    if (!object)\n        return false;\n', 'GetWorldObject(*bot, npcOrGo);\n'),
     ('freed item read after destroy', 'functions',
      'if (DestroyUntilBagSpace(DistinctItemIds(items)))\n            return true;', previous_destroy_loop),
 ]
@@ -483,7 +504,7 @@ ignored_parts = {
     'band': re.search(r'static constexpr int32 GREY_QUEST_LEVEL_BAND = \d+;',
                       (module / 'Ai/Base/Actions/QuestAction.h').read_text()).group(0),
     'accept': function(quest, 'bool QuestAction::CanAcceptQuest('),
-    'worth': function(rpg, 'bool NewRpgBaseAction::IsQuestWorthDoing('),
+    'worth': function(rpg_helpers, 'bool IsQuestWorthDoing(Player* bot, Quest const* quest)'),
 }
 ignored_source = r'''
 #include <cassert>
@@ -545,20 +566,14 @@ struct QuestAction
     BAND
     static bool CanAcceptQuest(Player*, Quest const*);
 };
-struct NewRpgBaseAction
-{
-    Player* bot;
-    bool IsQuestWorthDoing(Quest const*);
-};
 ACCEPT
 WORTH
 int main()
 {
     Player player;
     Quest first{1}, second{2};
-    NewRpgBaseAction rpg{&player};
     auto accepted = [&](Quest const& quest) { return QuestAction::CanAcceptQuest(&player, &quest); };
-    auto worth = [&](Quest const& quest) { return rpg.IsQuestWorthDoing(&quest); };
+    auto worth = [&](Quest const& quest) { return IsQuestWorthDoing(&player, &quest); };
     sPlayerbotAIConfig.Reload();
     assert(sPlayerbotAIConfig.IgnoredQuests.empty() && accepted(first) && worth(first));
     manager.current = "1,1";
