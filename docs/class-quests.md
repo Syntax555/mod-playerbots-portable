@@ -77,8 +77,10 @@ can train its later ranks as usual. Players and bots follow the same rule, and
 
 Solo, headless random warlocks using natural progression can pursue the native
 Imp, Voidwalker, Succubus, Felhunter and Felsteed quest chains when the
-corresponding summoning spell is missing. The action recognizes 50 chain quests
-and lets the core decide race, level, prerequisites and quest availability.
+corresponding summoning spell is missing. The shared
+[class quest table](#autonomous-class-quests-for-every-class) holds these 50
+chain quests as warlock lessons and lets the core decide race, level,
+prerequisites and quest availability.
 Characters under player control retain their own quest decisions. Individual
 Progression restores the original Imp questgiver relations and the level-40
 Felsteed quests; Summon Imp and Summon Felsteed remain quest rewards rather than
@@ -88,7 +90,10 @@ Bots accept and turn in quests through ordinary NPC interactions, travel to
 native objective spawns and use the existing combat and loot actions for kills
 and quest chests. Binding quests use the bot's owned ritual item near its native
 spell focus. Native scripts create the circle and demon, and ordinary combat
-earns the objective credit. Quest rewards teach the summoning spell.
+earns the objective credit. For The Summoning, the bot stays with Strahad Farsan
+while his escort creates the focus. A lost ritual item or a failed quest is
+recovered by abandoning the quest and accepting it again. Quest rewards teach
+the summoning spell.
 
 With [continent travel](configuration.md#continent-travel) enabled, bots select
 quest destinations through their usable earned routes and continue journeys
@@ -188,11 +193,11 @@ chain and TBC Swift Flight remain on the
 ## Autonomous class quests for every class
 
 Solo, headless random bots of every class using natural progression pursue
-their native class quests. One shared table of 250 quest steps holds the
-warrior, paladin and priest lessons and, for all nine classes, the other class
-quests an ordinary solo character can finish on the open continents. The
-warlock, shaman, druid and hunter lesson actions above keep their own quests and
-run first. A bot finishes one lesson at a time, starting at the nearest native
+their native class quests. One shared table of 300 quest steps holds the
+warrior, paladin, priest and warlock lessons and, for all nine classes, the other
+class quests an ordinary solo character can finish on the open continents. The
+shaman, druid and hunter lesson actions above keep their own quests and run
+first. A bot finishes one lesson at a time, starting at the nearest native
 giver it can use; a learned lesson or its rewarded final quest ends that chain.
 
 | Lesson | Class | Chains |
@@ -203,6 +208,7 @@ giver it can use; a learned lesson or its rewarded final quest ends that chain.
 | Sense Undead | Paladin, level 20 | The Tome of Valor with Daphne Stilwell; blood elf The Second Trial |
 | Summon Warhorse with Apprentice Riding | Paladin, level 40 | The Tome of Nobility; The Thalassian Warhorse |
 | Racial priest spells | Priest, level 10 and 20 | The nine restored families listed under [priest training](#priest-training) |
+| Imp, Voidwalker, Succubus, Felhunter and Felsteed | Warlock | The chains listed under [warlock demon quests](#autonomous-warlock-demon-quests) |
 
 The other 157 class quests are the class letters and training breadcrumbs, the
 race-specific weapon, armor, robe and wand chains, and their follow-ups:

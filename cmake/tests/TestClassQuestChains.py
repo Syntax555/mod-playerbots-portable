@@ -1,4 +1,4 @@
-"""Exercise earned warrior, paladin and priest class quest chains for random bots.
+"""Exercise earned warrior, paladin, priest and warlock class quest chains for random bots.
 
 The selector and action execute production code against native-shaped adapters.
 Named native SQL fields, scripts and handler contracts anchor the data those adapters return.
@@ -45,7 +45,7 @@ for cls, quest, spell, use, item, entry, casts in re.findall(
         function(source, 'ClassQuestStep const ClassQuestSteps[]')):
     steps.append((classes[cls], 1719 if quest == 'TheAffray' else int(quest), int(spell), use or 'None',
                   int(item or 0), int(entry or 0), tuple(map(int, casts.split(', '))) if casts else ()))
-assert len(steps) == 250 and len(steps) == len({row[1] for row in steps})
+assert len(steps) == 300 and len(steps) == len({row[1] for row in steps})
 assert re.search(r'constexpr uint32 TheAffray = 1719;', source)
 by_quest = {row[1]: row for row in steps}
 lessons = {}
@@ -58,7 +58,7 @@ assert all(order[i] == order[i + 1] or order[i + 1] not in order[:i + 1] for i i
 for cls in classes.values():
     own = [row[2] for row in steps if row[0] == cls]
     assert own and own == sorted(own, key=lambda spell: not spell), 'lessons come before other class quests'
-assert {cls for cls, _ in lessons} == {1, 2, 5}
+assert {cls for cls, _ in lessons} == {1, 2, 5, 9}
 quests = {int(row['ID']): row for row in sql_rows(core, 'quest_template', set(by_quest))}
 addon = {int(row['ID']): row for row in sql_rows(core, 'quest_template_addon', set(by_quest))}
 assert set(quests) == set(by_quest) == set(addon)
@@ -69,8 +69,9 @@ historical = (ip_root / 'updates/2026_10_11_00_historical_class_quests.sql').rea
 restored_rewards = {int(quest): (int(display), int(cast)) for display, cast, quest in re.findall(
     r'UPDATE `quest_template` SET `RewardDisplaySpell` = (\d+), `RewardSpell` = (\d+) WHERE `ID` = (\d+)', historical)}
 # Native teaching spells, from the pinned client Spell.dbc: Path of Defense, Path of the Berserker,
-# Redemption, Sense Undead and the two warhorse lessons teach the listed stance, spell or mount.
-teaches = {8121: 71, 8616: 2458, 7329: 7328, 5503: 5502, 13820: 13819, 34768: 34769}
+# Redemption, Sense Undead, the two warhorse lessons and the five warlock summons teach the listed spell or mount.
+teaches = {8121: 71, 8616: 2458, 7329: 7328, 5503: 5502, 13820: 13819, 34768: 34769,
+           7763: 688, 11520: 697, 11519: 712, 1373: 691, 5785: 5784}
 for (cls, spell), members in lessons.items():
     rewarding = []
     for quest in members:
@@ -101,8 +102,7 @@ for quest in others:
     assert quests[quest]['QuestInfoID'] == '0' and int(quests[quest]['SuggestedGroupNum']) < 2, quest
     assert int(quests[quest]['MinLevel']) <= 70, quest
 specialised = set()
-for path, pattern in (('Class/Warlock/WarlockDemonQuests.cpp', r'\{(\d+), \d+, \d+, \d+\}'),
-                      ('Class/Shaman/ShamanTotemQuests.cpp', r'\{(\d+), (?:Earth|Fire|Water|Air)Totem\}'),
+for path, pattern in (('Class/Shaman/ShamanTotemQuests.cpp', r'\{(\d+), (?:Earth|Fire|Water|Air)Totem\}'),
                       ('Class/Druid/DruidClassQuests.cpp', r'\{(\d+), (?:BearForm|AquaticForm|CurePoison)\}'),
                       ('Class/Hunter/HunterTamingLessons.cpp', r'\{(\d+), \d+, \d+, \d+\}')):
     found = set(map(int, re.findall(pattern, (module / 'Ai' / path).read_text())))
@@ -142,10 +142,10 @@ for table in ('creature_queststarter', 'creature_questender', 'gameobject_quests
     raw = (core / f'data/sql/base/db_world/{table}.sql').read_text()
     assert re.findall(r'^  `([^`]+)`', raw, re.MULTILINE) == ['id', 'quest']
     relations[table] = {tuple(map(int, row)) for row in re.findall(r'^\((\d+),(\d+)\)[,;]$', raw, re.MULTILINE)}
-mounts = (ip_root / 'base/mounts_and_riding.sql').read_text()
+restorations = '\n'.join(path.read_text() for path in sorted((ip_root / 'base').glob('*.sql')))
 for table in ('creature_queststarter', 'creature_questender'):
-    for statement in re.findall(rf'INSERT INTO `{table}` \(`id`, `quest`\) VALUES ([^;]+);', mounts):
-        relations[table] |= {tuple(map(int, row)) for row in re.findall(r'\((\d+), (\d+)\)', statement)}
+    for statement in re.findall(rf'INSERT INTO `{table}`\s*\(`id`,\s*`quest`\)\s*VALUES\s*([^;]+);', restorations):
+        relations[table] |= {tuple(map(int, row)) for row in re.findall(r'\((\d+),\s*(\d+)\)', statement)}
     for giver, quest in re.findall(rf'INSERT INTO `{table}` \(`id`, `quest`\) SELECT (\d+), (\d+)', historical):
         relations[table].add((int(giver), int(quest)))
 rewarded_items = {int(row[f'{field}{index}']) for row in quests.values()
@@ -158,7 +158,11 @@ for quest in by_quest:
     assert started or quest in start_items.values(), quest
     assert any(q == quest for _, q in relations['creature_questender'] | relations['gameobject_questender']), quest
 disables = (core / 'data/sql/base/db_world/disables.sql').read_text()
-disabled = {int(entry) for entry in re.findall(r'^\(1,(\d+),', disables, re.MULTILINE)} & set(by_quest)
+reenabled = {int(entry) for group in re.findall(
+    r'DELETE FROM `disables` WHERE `sourceType` = 1 AND `entry` IN \(([\d,\s]+)\)', restorations)
+    for entry in group.split(',')}
+assert {3631, 4487, 4488, 4489, 4490} <= reenabled
+disabled = {int(entry) for entry in re.findall(r'^\(1,(\d+),', disables, re.MULTILINE)} & set(by_quest) - reenabled
 assert disabled and disabled <= set(restored_rewards)
 for quest in disabled:
     assert f"`entry` = {quest} AND `comment` = 'Deprecated quest'" in historical, quest
@@ -247,7 +251,10 @@ garments = (2052, 1243)
 assert uses['Cast'] == {5621: (0, 12429, garments), 5624: (0, 12423, garments), 5625: (0, 12427, garments),
                         5648: (0, 12430, garments), 5650: (0, 12428, garments), 9586: (0, 17551, (2050,)),
                         9489: (0, 15938, (1243,))}
-assert uses['Focus'] == {1861: (7207, 0, ()), 1944: (7269, 0, ()), 9403: (23566, 0, ())}
+flasks = {quest: use for quest, use in uses['Focus'].items() if not use[1]}
+assert flasks == {1861: (7207, 0, ()), 1944: (7269, 0, ()), 9403: (23566, 0, ())}
+# The warlock fixture checks each summoning ritual against its native focus and demon.
+assert set(uses['Focus']) - set(flasks) == {1471, 1474, 1504, 1513, 1689, 1739, 1795, 9619}
 assert uses['Area'] == {1699: (0, 482, ())}
 items = {int(row['entry']): row for row in sql_rows(core, 'item_template', {6866, 24157, 24184, 23925, 7207, 7269, 23566})}
 conditions = sql_rows(core, 'conditions', {13})
@@ -277,7 +284,7 @@ assert {row[5] for row in steps if row[3] in ('Creature', 'Stay', 'Cast')} <= se
 assert all(object_maps.get(row[5], set()) & continents for row in steps if row[3] == 'Object')
 # Each flask fills only at its native spell focus, which stands on the open continents.
 focus_objects = rows_with('gameobject_template', 'Data0', set(focus_items.values()))
-for quest, (item, _, _) in uses['Focus'].items():
+for quest, (item, _, _) in flasks.items():
     spell = int(items[item]['spellid_1'])
     assert int(quests[quest]['StartItem']) == item and spell in focus_items, quest
     assert any(int(row['type']) == 8 and int(row['Data0']) == focus_items[spell] and
@@ -406,16 +413,15 @@ for strategy, priority in (('Warrior/Strategy/GenericWarriorNonCombatStrategy.cp
                            ('Paladin/Strategy/GenericPaladinNonCombatStrategy.cpp', 'ACTION_NORMAL + 2'),
                            ('Priest/Strategy/PriestNonCombatStrategy.cpp', 'ACTION_NORMAL + 2'),
                            ('Hunter/Strategy/GenericHunterNonCombatStrategy.cpp', 'ACTION_NORMAL'),
+                           ('Warlock/Strategy/GenericWarlockNonCombatStrategy.cpp', 'ACTION_NORMAL + 2'),
                            ('Rogue/Strategy/GenericRogueNonCombatStrategy.cpp', 'ACTION_NORMAL'),
                            ('Mage/Strategy/GenericMageNonCombatStrategy.cpp', 'ACTION_NORMAL'),
                            ('Shaman/Strategy/ShamanNonCombatStrategy.cpp', 'ACTION_NORMAL'),
-                           ('Warlock/Strategy/GenericWarlockNonCombatStrategy.cpp', 'ACTION_NORMAL'),
                            ('Druid/Strategy/GenericDruidNonCombatStrategy.cpp', 'ACTION_NORMAL')):
     text = (module / 'Ai/Class' / strategy).read_text()
     assert f'new TriggerNode("class quest chain", {{NextAction("class quest chain", {priority})}})' in text, strategy
 for strategy, lesson in (('Hunter/Strategy/GenericHunterNonCombatStrategy.cpp', 'hunter taming lesson'),
                          ('Shaman/Strategy/ShamanNonCombatStrategy.cpp', 'shaman totem quest'),
-                         ('Warlock/Strategy/GenericWarlockNonCombatStrategy.cpp', 'warlock demon quest'),
                          ('Druid/Strategy/GenericDruidNonCombatStrategy.cpp', 'druid class quest')):
     assert f'NextAction("{lesson}", ACTION_NORMAL + 2)' in (module / 'Ai/Class' / strategy).read_text(), strategy
 helpers = (module / 'Ai/World/Rpg/NewRpgHelpers.cpp').read_text()
@@ -476,6 +482,7 @@ prelude = r'''
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 using uint8=uint8_t; using uint16=uint16_t; using uint32=uint32_t; using int32=int32_t;
 constexpr uint8 CLASS_WARRIOR=1, CLASS_PALADIN=2, CLASS_HUNTER=3, CLASS_ROGUE=4, CLASS_PRIEST=5, CLASS_DEATH_KNIGHT=6,
@@ -566,12 +573,20 @@ struct Unit:WorldObject {
     virtual Creature* ToCreature() { return nullptr; }
     std::set<Unit*> const& getAttackers() const { return attackers; }
 };
+struct TempSummon;
 struct Creature:Unit {
-    bool removing=false,questgiver=true; std::set<uint32> finishes;
+    bool removing=false,questgiver=true; std::set<uint32> starts,finishes;
     Creature* ToCreature() override { return this; }
+    virtual TempSummon* ToTempSummon() { return nullptr; }
     bool IsDuringRemoveFromWorld() const { return removing; }
+    bool hasQuest(uint32 q) const { return starts.contains(q); }
     bool hasInvolvedQuest(uint32 q) const { return finishes.contains(q); }
     bool HasNpcFlag(uint32 flag) const { assert(flag==UNIT_NPC_FLAG_QUESTGIVER); return questgiver; }
+};
+struct TempSummon:Creature {
+    ObjectGuid summoner;
+    TempSummon* ToTempSummon() override { return this; }
+    ObjectGuid GetSummonerGUID() const { return summoner; }
 };
 struct GameObjectTemplate { uint32 type=0; struct { uint32 focusId=0; float dist=10; } spellFocus; };
 struct GameObject:WorldObject {
@@ -591,6 +606,7 @@ struct Player:Unit {
     uint8 level=20;
     Player() { session.player=this; guid=100; x=0; size=1.5f; }
     uint8 GetLevel() const { return level; }
+    uint32 GetReqKillOrCastCurrentCount(uint32 q,uint32) const { return quests.contains(q)?quests.at(q).CreatureOrGOCount[0]:0; }
     int32 GetQuestLevel(Quest const* quest) const { return quest&&quest->GetQuestLevel()>0?quest->GetQuestLevel():GetLevel(); }
     bool IsInAreaTriggerRadius(AreaTrigger const* at) const {
         return mapId==at->map&&std::hypot(x-at->x,y-at->y)<=at->radius;
@@ -702,8 +718,13 @@ template<class T> T GetValue(Context* c,std::string const& name) {
     else { assert(name=="class quest chain"); return c->quest; }
 }
 #define AI_VALUE(type,name) GetValue<type>(context,name)
+struct NewRpgInfo {
+    struct DoQuest { uint32 questId; Quest const* quest; };
+    std::variant<std::monostate,DoQuest> data;
+    void ChangeToDoQuest(uint32 id,Quest const* q) { data=DoQuest{id,q}; }
+};
 struct PlayerbotAI {
-    Player* bot; Context context; bool master=false,useResult=true,attackResult=true,startsCast=false,castResult=true;
+    Player* bot; Context context; NewRpgInfo rpgInfo; bool master=false,useResult=true,attackResult=true,startsCast=false,castResult=true;
     int waits=0,itemUses=0,objectUses=0,attacks=0,casts=0; Spell* waitedFor=nullptr;
     std::vector<std::pair<uint32,Unit*>> cast;
     Unit* usedOn=nullptr; Unit* attacked=nullptr; Item* usedItem=nullptr; ObjectGuid usedObject;
@@ -1227,6 +1248,7 @@ mutations = [
     ('native focus range required', 'focus', 'IsWithinDistInMap(bot, focus->GetGOInfo()->spellFocus.dist)',
      'IsWithinDistInMap(bot, 100.0f)'),
     ('flask used on the bot', 'focus', 'UseItemOnUnit(item, bot)', 'UseItemOnUnit(item, nullptr)'),
+    ('only rituals wait with their giver', 'focus', 'if (!step.Entry)\n        return false;', ''),
     ('focus spawn phase required', 'focusposition', 'if (!(spawn->phaseMask & bot->GetPhaseMask()))', 'if (false)'),
     ('focus template id required', 'focusposition', 'entry.second.spellFocus.focusId == focusId', 'true'),
     ('focus search cached', 'focusposition', 'GetMSTimeDiffToNow(_focusChecked) < MINUTE * IN_MILLISECONDS', 'false'),

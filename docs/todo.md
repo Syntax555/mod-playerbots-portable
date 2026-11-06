@@ -238,14 +238,15 @@ fixtures pass. Use native core/module functions before adding replacements.
   their spell focus, the Ju-Ju Heaps and Magecraft (8250). The containment
   coffers (1920/1960), Uldaman, Fragmented Magic (9364) and Attunement to
   Dalaran (12172/12173) remain player content.
-- [ ] **Warlock:** Live-verify the 50-quest Imp, Voidwalker, Succubus,
-  Felhunter and Felsteed action for all five warlock races. It accepts and rewards
-  native quests, uses ordinary kills/chest loot and owned ritual items, and
-  leaves demon combat and credit to native scripts. Imp questgiver relations
+- [ ] **Warlock:** Live-verify the 50 Imp, Voidwalker, Succubus, Felhunter and
+  Felsteed lessons of the shared action for all five warlock races. It accepts
+  and rewards native quests, uses ordinary kills/chest loot and owned ritual items,
+  and leaves demon combat and credit to native scripts. Imp questgiver relations
   are restored by Individual Progression. Verify the earned continent routes
   for Alliance Heartswood and the Felhunter chains, including map transfers
-  while aboard and disembarking. Check recovery after relogs, missing ritual
-  items and native event resets before claiming autonomous end-to-end completion.
+  while aboard and disembarking. Check recovery after relogs, Strahad Farsan's
+  escort, abandoning for a missing ritual item and native event resets before
+  claiming autonomous end-to-end completion.
   Check the blood elf Voidstone questgiver objects (9529/9619) and the Rune of
   Summoning event. Add the Dreadsteed, Infernal and Doomguard quests. Historical
   demon grimoire purchases remain unimplemented;
