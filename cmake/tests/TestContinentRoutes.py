@@ -253,6 +253,13 @@ def assert_ordinary(bodies):
     board = bodies['lift board']
     assert 'if (!ContinentTravel::OnTransport(lift, bot->GetPhaseMask(), link.from.x, link.from.y, link.from.z))' in board
     assert board.index('ContinentTravel::OnTransport(lift') < board.index('MoveStraightTo(from);')
+    assert 'if (!lift)\n            return true;' in board and board.index('if (!lift)') < board.index('FailLink(route);')
+    # A replan that drops the lift link under way rides on to the next stop before planning from the ground.
+    move = bodies['move']
+    ride_on = ('if (ContinentTravel::HoldsStill(transport, ContinentTravel::StepOffMs) &&\n'
+               '            ContinentTravel::FindLandingPoint(bot, transport, landing))\n'
+               '            MoveStraightTo(landing);\n        return true;\n    }')
+    assert ride_on in move and move.index(ride_on) < move.index('sContinentRoutes.UsableLinks(bot, route)')
     assert 'MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false, false);' in bodies['follow step']
     discover = bodies['discover']
     learn = 'bot->GetSession()->SendLearnNewTaxiNode(flightMaster);'
@@ -269,6 +276,9 @@ for label, name, old, new in [
     ('triggered teleport spell', 'use', 'botAI->CastSpell(link.object, bot)', 'botAI->CastSpell(link.object, bot, true)'),
     ('companion step teleports', 'follow step', 'bot->GetMotionMaster()->MovePoint(0, x, y, z,',
      'bot->TeleportTo(bot->GetMapId(), x, y, z, 0.0f); (void)(0,'),
+    ('tram link given up while its car is away', 'lift board', 'if (!lift)\n            return true;\n', ''),
+    ('walking off a moving car after a replan', 'move',
+     '            MoveStraightTo(landing);\n        return true;\n    }', '            MoveStraightTo(landing);\n    }'),
     ('lift boarded away from its stop', 'lift board',
      'if (!ContinentTravel::OnTransport(lift, bot->GetPhaseMask(), link.from.x, link.from.y, link.from.z))',
      'if (false)'),
@@ -308,13 +318,38 @@ assert '\nPlayerbots.DiscoverFlightMasters = 0\n' in conf_dist
 assert '(creatureTemplate->Entry != 3838 || sPlayerbotAIConfig.continentTravel)' in travel
 # Following decides boarding, riding, leaving and waiting through the tested companion step, on world maps only,
 # before the upstream ship handling, and does not wait for the formation distance to board or leave a car.
-follow_execute = function(follow, 'bool FollowAction::Execute(Event /*event*/)')
-assert 'if (sPlayerbotAIConfig.continentTravel && map && !map->Instanceable())' in follow_execute
-assert (follow_execute.index('ContinentTravel::CompanionRide(bot, transport, point)')
-        < follow_execute.index('if (transport && transport->IsStaticTransport())\n            transport = nullptr;'))
-assert 'bot->StopMovingOnCurrentPos();\n                    return true;' in follow_execute
-assert ('carrier != ride && ((carrier && carrier->IsStaticTransport()) || (ride && ride->IsStaticTransport()))'
-        in function(follow, 'bool FollowAction::isUseful()'))
+follow_bodies = {'execute': function(follow, 'bool FollowAction::Execute(Event /*event*/)'),
+                 'useful': function(follow, 'bool FollowAction::isUseful()')}
+
+
+def assert_follow(bodies):
+    execute = bodies['execute']
+    assert 'if (sPlayerbotAIConfig.continentTravel && map && !map->Instanceable())' in execute
+    assert (execute.index('ContinentTravel::CompanionRide(bot, transport, point)')
+            < execute.index('if (transport && transport->IsStaticTransport())\n            transport = nullptr;'))
+    # The core's follow movement paths after the master on foot and would walk the bot off its car.
+    hold = execute[execute.index('case ContinentTravel::Ride::Hold:'):execute.index('case ContinentTravel::Ride::Follow:')]
+    assert 'if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == FOLLOW_MOTION_TYPE)' in hold
+    assert 'bot->GetMotionMaster()->Clear(true);' in hold and 'bot->GetMotionMaster()->MoveIdle();' in hold
+    assert 'bot->StopMovingOnCurrentPos();\n                    return true;' in hold
+    assert ('if ((carrier && carrier->IsStaticTransport()) || (ride && ride->IsStaticTransport()))\n            return true;'
+            in bodies['useful'])
+
+
+assert_follow(follow_bodies)
+for label, name, old, new in [
+    ('follow movement kept while riding', 'execute', 'bot->GetMotionMaster()->Clear(true);', ''),
+    ('riding together left to the formation distance', 'useful',
+     'if ((carrier && carrier->IsStaticTransport())', 'if (carrier != ride && ((carrier && carrier->IsStaticTransport())'),
+]:
+    mutated = {**follow_bodies, name: follow_bodies[name].replace(old, new)}
+    assert mutated[name] != follow_bodies[name], label
+    try:
+        assert_follow(mutated)
+    except (AssertionError, ValueError):
+        print(f'Continent route static mutation rejected: {label}')
+    else:
+        raise SystemExit(f'Continent route static check did not reject: {label}')
 # The transport check takes a companion aboard the car its master stands on.
 assert ('if (Transport* carrier = master->GetTransport(); carrier && carrier->IsStaticTransport())\n'
         '                    lift = carrier->GetEntry();' in function(ai, 'void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)'))
@@ -1747,8 +1782,14 @@ int main()
         bot.x = 60.0f;
         assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Board);
 
+        // On the deck the bot waits for the transport check to take it aboard instead of stepping again.
+        bot.x = 2.0f;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
+
         // Riding with the master the bot keeps still; when the master steps off it follows at a stop.
-        bot.x = 2.0f, bot.transport = &car;
+        bot.x = 4.0f, bot.transport = &car;
+        assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
+        bot.x = 2.0f;
         assert(ContinentTravel::CompanionRide(&bot, &car, point) == Ride::Hold);
         assert(ContinentTravel::CompanionRide(&bot, nullptr, point) == Ride::Leave);
         assert(point == WorldPosition(0, 5.0f, 0.0f, 0.5f));
@@ -1869,8 +1910,9 @@ mutations = [
      '(HoldsStill(ride, StepOffMs) || true) && FindLandingPoint'),
     ('chasing a sailing ship', 'routes', 'ride == carrier || IsDocked(ship, nullptr) ? Ride::Follow',
      'ride == carrier || IsDocked(ship, nullptr) || true ? Ride::Follow'),
-    ('walking about on the master\'s car', 'routes', 'if (ride == carrier || !FindBoardingPoint',
-     'if (!FindBoardingPoint'),
+    ('walking about on the master\'s car', 'routes', 'if (ride == carrier ||\n        OnTransport(', 'if (OnTransport('),
+    ('stepping again from the deck', 'routes',
+     'OnTransport(carrier, bot->GetPhaseMask(), bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ()) ||', ''),
     ('a moving car counted still', 'routes', '(at - start).squaredLength() > 0.01f', '(at - start).squaredLength() < 0.0f'),
     ('a paused car still at either end', 'routes', 'progress == (car->GetGoState() == GO_STATE_READY ? 0 : pause)',
      '(progress == 0 || progress == pause)'),
