@@ -152,6 +152,24 @@ def reject_mutants(work, mutations, build, name):
         print(f'{name} mutation rejected: {label}')
 
 
+def reject_part_mutants(parts, mutations, build, name):
+    """Check that the fixture fails for every (label, part, old, new) mutation of its production parts.
+
+    build(mutated_parts, tag) returns the finished fixture run of one mutant, whose
+    exit code must be non-zero. Mutants run in parallel; results print in input order.
+    """
+    def rejected(numbered):
+        index, (label, part, old, new) = numbered
+        if old not in parts[part]:
+            raise SystemExit(f'{label} mutation was not applied')
+        return build({**parts, part: parts[part].replace(old, new)}, f'mutant-{index}').returncode != 0
+
+    for (label, *_), result in zip(mutations, in_parallel(rejected, enumerate(mutations))):
+        if not result:
+            raise SystemExit(f'{name} did not reject {label}')
+        print(f'{name} mutation rejected: {label}', flush=True)
+
+
 def pinned_source(name, path):
     """path at the locked core or module revision, read from its PrepareModules cache.
 

@@ -15,8 +15,8 @@ from FixtureSupport import (
     SANITIZER_FLAGS,
     cxx,
     function,
-    in_parallel,
     prepared_core,
+    reject_part_mutants,
     run_fixture,
 )
 
@@ -382,12 +382,4 @@ with tempfile.TemporaryDirectory(prefix='native-bank-transfers-') as temporary:
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
     print(baseline.stdout, end='', flush=True)
 
-    def rejected(numbered):
-        index, (label, key, old, new) = numbered
-        assert old in parts[key], label
-        result = build(work, {**parts, key: parts[key].replace(old, new)}, 'mutant-' + str(index))
-        assert result.returncode != 0, 'Bank mutation survived: ' + label
-        return label
-
-    for label in in_parallel(rejected, enumerate(mutations)):
-        print('Bank mutation rejected:', label)
+    reject_part_mutants(parts, mutations, lambda values, tag: build(work, values, tag), 'Bank')
