@@ -2,10 +2,11 @@
 
 Era gates refuse later quests with availability conditions on the character's progression
 markers and hide their givers with visibility conditions or awareness scripts. The bridge's
-production snapshot code runs against Player, Creature, map, quest and disable doubles: the
+production snapshot code runs against Player, Creature, grid, quest and disable doubles: the
 quests a character's conditions refuse are reported like disabled quests, all or nothing,
-and a hidden questgiver counts as offering no quest unless its quests are hidden anyway.
-Protocol 20 also carries template restrictions and GUID-scoped positive observations.
+and a hidden questgiver in visibility range counts as offering no quest unless its quests
+are hidden anyway. Visible givers come from the player's visible objects. Protocol 21 also
+carries template restrictions and GUID-scoped positive observations.
 The native bounded condition catalog supplies supported predicates without QUESTDISABLES.
 Mutations remove condition, visibility, authority and complete-snapshot checks.
 """
@@ -52,9 +53,14 @@ disabled = function(source, 'bool IsQuestDisabled(uint32 questId)')
 assert 'constexpr std::size_t MaxGiverObservations = 64;' in source
 assert 'constexpr uint32 QuestConditions = 65536;' in source
 assert 'constexpr uint32 QuestgiverTemplates = 32768;' in source
-candidates = function(source, '    QuestieBridge::MapQuestCreatures const& GetMapCreatures(')
-assert 'common.StarterEntries.contains(creature->GetEntry())' in candidates
-assert 'candidates.Starters.insert(spawnId);' in candidates
+sampling = source[source.index('            std::optional<std::vector<Creature*>> visibleCreatures;'):
+                  source.index('            // Polling also observes worldstate changes')]
+assert 'QuestieBridge::CollectObservableQuestCreatures<Creature>(player, entries)' in sampling
+assert 'auto const sharedRows = common.Rows.size();' in source
+nearby = ('Acore::AnyUnitInObjectRangeCheck inRange(player, player->GetVisibilityRange());\n'
+          '                    Acore::CreatureListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(player, nearby, inRange);\n'
+          '                    Cell::VisitObjects(player, searcher, player->GetVisibilityRange());')
+assert nearby in giver_block
 assert 'if (sConfigMgr->GetOption<bool>("QuestieBridge.QuestConditions", true))\n                caps |= QuestConditions;' in source
 assert 'QuestieBridge.QuestConditions = 1' in (core / 'modules/mod-questie-bridge/conf/QuestieBridge.conf.dist').read_text()
 
@@ -69,13 +75,23 @@ assert 'typedef std::list<Condition*> ConditionList;' in condition_header
 assert 'ConditionList GetConditionsForNotGroupedEntry(ConditionSourceType sourceType, uint32 entry);' in condition_header
 assert 'ConditionList GetConditionReferences(uint32 refId);' in condition_header
 assert re.search(r'CONDITION_SOURCE_TYPE_QUEST_AVAILABLE\s*= 19,', condition_header)
+# The grid search inserts living creatures in range and phase; the visible objects are the client's.
+notifiers = (core / 'src/server/game/Grids/Notifiers/GridNotifiers.h').read_text()
+assert 'if (u->IsAlive() && i_obj->IsWithinDistInMap(u, i_range))' in function(
+    notifiers, '    class AnyUnitInObjectRangeCheck')
+searchers = (core / 'src/server/game/Grids/Notifiers/GridNotifiersImpl.h').read_text()
+assert ('if (itr->GetSource()->InSamePhase(i_phaseMask))\n            if (i_check(itr->GetSource()))\n'
+        '                Insert(itr->GetSource());') in function(
+    searchers, 'void Acore::CreatureListSearcher<Check>::Visit(CreatureMapType& m)')
+assert 'GetObjectVisibilityContainer().GetVisibleWorldObjectsMap()' in function(
+    (core / 'src/server/game/Entities/Object/Object.h').read_text(), '    void DoForAllVisibleWorldObjects(Worker&& worker)')
 objects = (core / 'src/server/game/Entities/Object/Object.cpp').read_text()
 hidden = function(objects, 'bool HiddenFrom(WorldObject const* object, Player const* player)')
 assert '(creature->IsAIEnabled && !creature->AI()->CanBeSeen(player)) || !player->CanSeeObjectByVisibilityConditions(object)' in hidden
 questie = args.addon or repository / '.module-cache/prepared-source-addons/Questie-335'
 client = (questie / 'Modules/Network/QuestieServer.lua').read_text()
-assert 'local PREFIX, PROTOCOL_VERSION = "QSTSVR", "20"' in client
-assert 'constexpr std::uint32_t ProtocolVersion = 20;' in (bridge / 'QuestieBridgeProtocol.h').read_text()
+assert 'local PREFIX, PROTOCOL_VERSION = "QSTSVR", "21"' in client
+assert 'constexpr std::uint32_t ProtocolVersion = 21;' in (bridge / 'QuestieBridgeProtocol.h').read_text()
 assert '[17] = "QUESTGIVERTEMPLATES"' in client
 assert 'elseif kind == "D" and result.caps.QUESTDISABLES and #fields == 2 and id and id > 0 then' in client
 assert re.search(r'if not spawnId or spawnId == 0 or giverCount >= 64 or not fields\[4\]:match', client)
@@ -117,6 +133,8 @@ namespace QuestieBridge { constexpr std::size_t ReputationMaxRows = 4; }
 @CACHE@
 namespace Acore
 {
+struct AnyUnitInObjectRangeCheck;
+template <class Check> struct CreatureListSearcher;
 std::string StringFormat(char const* pattern, uint32 entry, uint32 spawn, int active, uint64 guid)
 {
     assert(std::string(pattern) == "G:{}:{}:{}:{:016X}");
@@ -164,6 +182,7 @@ struct ConditionMgr
 } conditionManager;
 ConditionMgr* sConditionMgr = &conditionManager;
 struct Player;
+struct Map;
 struct CreatureAI { bool visible = true; bool CanBeSeen(Player const*) const { return visible; } };
 struct Creature
 {
@@ -171,10 +190,14 @@ struct Creature
     uint64 spawn = 0;
     bool alive = true, questgiver = true, hostile = false, stealthed = false, IsAIEnabled = true;
     bool atClient = true, inSight = true;
+    float distance = 10;
+    Map* map = nullptr;
     uint64 guid = 1;
     struct Guid { uint64 raw; uint64 GetRawValue() const { return raw; } };
     Guid GetGUID() const { return {0xF130000000000000ULL | (uint64(entry) << 24) | guid}; }
     CreatureAI ai;
+    Creature* ToCreature() { return this; }
+    Map* GetMap() const { return map; }
     bool IsInWorld() const { return true; }
     bool IsAlive() const { return alive; }
     uint32 GetZoneId() const { return zone; }
@@ -209,20 +232,49 @@ struct Player
             && !hidden.contains(creature) && (!creature->IsAIEnabled || creature->ai.visible);
     }
     Map* GetMap() { return &map; }
+    float GetVisibilityRange() const { return 100; }
+    // The visible objects never hold what scripts or visibility conditions hide.
+    template <typename Worker> void DoForAllVisibleWorldObjects(Worker&& worker)
+    {
+        for (auto const& [spawn, creature] : map.store)
+            if (CanSeeObjectByVisibilityConditions(creature) && (!creature->IsAIEnabled || creature->ai.visible))
+                worker(creature);
+    }
     uint32 GetZoneId() const { return 1; }
     uint32 GetMapId() const { return 0; }
+};
+// Performance logging stays off; the condition catalogue is rediscovered for every snapshot.
+struct Timing {};
+struct Measure { explicit Measure(Timing*) { } };
+using Clock = QuestieBridge::StateClock;
+namespace Acore
+{
+struct AnyUnitInObjectRangeCheck
+{
+    Player* object;
+    float range;
+    AnyUnitInObjectRangeCheck(Player* searcher, float maxRange) : object(searcher), range(maxRange) { }
+    bool operator()(Creature* unit) const { return unit->IsAlive() && unit->distance <= range; }
+};
+template <class Check> struct CreatureListSearcher
+{
+    std::list<Creature*>& found;
+    Check& check;
+    CreatureListSearcher(Player*, std::list<Creature*>& container, Check& rangeCheck) : found(container), check(rangeCheck) { }
+};
+}
+struct Cell
+{
+    template <class Searcher> static void VisitObjects(Player* player, Searcher& searcher, float)
+    {
+        for (auto const& [spawn, creature] : player->map.store)
+            if (searcher.check(creature))
+                searcher.found.push_back(creature);
+    }
 };
 @HELPERS@
 @CAPABILITY@
 @DISABLED@
-QuestieBridge::MapQuestCreatures GetMapCreatures(Player* player, QuestieBridge::CommonState const& common)
-{
-    QuestieBridge::MapQuestCreatures candidates;
-    for (auto const& [spawnId, creature] : player->GetMap()->GetCreatureBySpawnIdStore())
-        if (creature && spawnId && common.StarterEntries.contains(creature->GetEntry()))
-            candidates.Starters.insert(spawnId);
-    return candidates;
-}
 std::vector<std::string> Snapshot(Player* player, std::string caps, std::size_t existing = 0,
     uint32 capabilities = QuestConditions | Questgivers | QuestgiverTemplates,
     std::set<uint32> restricted = {}, std::string* sentCaps = nullptr)
@@ -238,6 +290,19 @@ std::vector<std::string> Snapshot(Player* player, std::string caps, std::size_t 
             common.GiverTemplateRows->push_back("N:" + std::to_string(entry));
     }
     std::vector<std::string> rows(existing, "E:1:0:0:0");
+    std::size_t const sharedRows = common.Rows.size();
+    bool const _diagnostics = false;
+    struct { Timing Conditions; } _performance;
+    std::optional<std::map<uint32, bool>> _conditionCandidates;
+    Clock::time_point const now = Clock::now();
+    Clock::time_point _lastConditionDiscovery;
+    std::optional<std::vector<Creature*>> visibleCreatures;
+    auto getVisibleCreatures = [&]() -> std::vector<Creature*> const&
+    {
+        if (!visibleCreatures)
+            visibleCreatures = QuestieBridge::CollectObservableQuestCreatures<Creature>(player, common.StarterEntries);
+        return *visibleCreatures;
+    };
     std::string playerCaps = common.Caps;
     std::optional<QuestieBridge::QuestConditionIndex> conditions;
     bool conditionsBuilt = false;
@@ -273,6 +338,7 @@ int main()
     {
         creature->entry = entry;
         creature->spawn = spawn;
+        creature->map = &player.map;
         player.map.store.emplace(creature->spawn, creature);
     }
     player.hidden = {&mudsprocket};
@@ -290,6 +356,11 @@ int main()
     assert(Has(rows, "D:11123") && !Has(rows, "D:8859"));
     // The script still hides the colossus' giver; its open quest makes it an unavailable spawn.
     assert(Has(rows, "G:15192:9001:0:F130003B58000001"));
+    // Hidden givers past visibility range stay unknown, like visible ones.
+    colossus.distance = 150;
+    rows = Snapshot(&player, "EVENTS,QUESTDISABLES");
+    assert(!Has(rows, "G:15192:9001:0:F130003B58000001"));
+    colossus.distance = 10;
     player.stage = 8;
     rows = Snapshot(&player, "EVENTS,QUESTDISABLES");
     assert(!Has(rows, "D:11123") && Has(rows, "D:8859") && Has(rows, "G:23612:8505:0:F130005C3C000001"));
@@ -370,7 +441,7 @@ int main()
     assert(!Has(rows, "C:8859") && !HasCapability(sentCaps, "QUESTCONDITIONS"));
     rows = Snapshot(&player, "EVENTS,QUESTDISABLES", 0, QuestConditions, {}, &sentCaps);
     assert(Has(rows, "D:8859") && Has(rows, "D:90000") && Has(rows, "D:90512"));
-    std::cout << "Questie era quests: conditions, hidden givers, protocol 20 visibility and complete catalogs passed\n";
+    std::cout << "Questie era quests: conditions, hidden givers, protocol 21 visibility and complete catalogs passed\n";
 }
 '''.replace('@HELPERS@', helpers).replace('@CAPABILITY@', capability).replace('@DISABLED@', disabled).replace(
     '@LATE@', late).replace('@LOCKED@', locked_block).replace('@GIVERS@', giver_block).replace('@CACHE@', cache).replace('@BOUNDED@', bounded_block)
@@ -393,6 +464,8 @@ with tempfile.TemporaryDirectory(prefix='questie-era-quests-') as temporary:
          'if (!disabled(questId) && !satisfied(questId) && false)'),
         ('duplicate bounded condition scan', 'Fixture.cpp', bounded_guard, 'if (capabilities & QuestConditions)'),
         ('hidden givers ignored', 'Fixture.cpp', hidden_check, 'bool const hidden = false;'),
+        ('hidden givers beyond visibility range', 'Fixture.cpp',
+         'inRange(player, player->GetVisibilityRange());', 'inRange(player, 1000);'),
         ('client visibility ignored', 'Fixture.cpp', 'player->HaveAtClient(creature) &&', ''),
         ('distance check ignored', 'Fixture.cpp', 'player->CanSeeOrDetect(creature, false, true)',
          'player->CanSeeOrDetect(creature, false, false)'),

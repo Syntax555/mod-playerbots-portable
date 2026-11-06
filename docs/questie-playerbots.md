@@ -76,7 +76,7 @@ per character, and the included Questie Bridge reports that state to Questie:
   stays tracked.
 - Questgivers that are hidden from the character, by the era's visibility
   conditions or by Individual Progression's scripts, no longer show quest
-  markers in its current zone. Restrictions from the server's questgiver
+  markers in its current zone once they are within viewing distance. Restrictions from the server's questgiver
   templates also apply on continent and world maps.
 - Both follow a new tier within a few seconds; no `/reload` is needed.
 
@@ -98,15 +98,15 @@ know cannot appear. Quests Individual Progression restores, such as Vanilla's
 battleground turn-ins, keep only the game's own quest markers. Server template
 restrictions apply on zone, continent and world maps. Loaded questgivers in the
 current zone can override those restrictions only while present at the client's
-viewing distance and passing its visibility checks. Hidden era questgivers remain
-negative observations. At most 64 observations fit in one snapshot; incomplete
+viewing distance and passing its visibility checks. Hidden era questgivers within
+that distance remain negative observations. At most 64 observations fit in one snapshot; incomplete
 observations or template catalogs are withheld. Trainer and vendor markers are
 unaffected. If the closed quests would not fit into one snapshot, none are sent
 and Questie shows its usual quests.
 An unavailable giver does not hide a daily or weekly quest offered by another
 valid starter.
 
-Questie Bridge and Questie use matching protocol 20 builds. A version mismatch
+Questie Bridge and Questie use matching protocol 21 builds. A version mismatch
 restores Questie's static behavior; `/qserver` reports the expected version.
 
 ## Access and compatibility

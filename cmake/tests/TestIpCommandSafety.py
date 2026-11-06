@@ -75,7 +75,7 @@ struct PlayerIdentifier {
     @FROM_TARGET_OR_SELF@
 };
 struct IndividualProgression {
-    bool enabled=true,strictEarnedProgression=true;int forced=0,phased=0,attunements=0;
+    bool enabled=true,strictEarnedProgression=true,AllowVanillaRaidAccess=false;int forced=0,phased=0,attunements=0;
     uint8 GetPlayerProgressionFromQuests(Player* p){return p->stage;}
     void ForceUpdateProgressionState(Player* p,ProgressionState stage){++forced;p->stage=stage;}
     void checkIPPhasing(Player*,uint32){++phased;}

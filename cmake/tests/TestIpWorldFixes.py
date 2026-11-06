@@ -246,7 +246,7 @@ struct EventMap
 struct RoweAI
 {
     Creature* me;
-    EventMap _events;
+    EventMap _events{};
     ObjectGuid _playerGUID = 77;
     @MOVEMENT@
 };

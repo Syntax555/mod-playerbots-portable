@@ -52,8 +52,16 @@ Tier 11 is reserved; the default chain moves from 10 to 12.
 Boss credit requires eligible participation in the tapped encounter. Nearby
 eligible party members can receive their own credit. Group membership alone,
 a leader's tier or a broad raid achievement does not award it. Progress-copy
-and group-attunement shortcuts are disabled in strict mode. GM administration
-remains available; playing accounts should use ordinary player privileges.
+and group-attunement shortcuts are disabled in strict mode, and
+`IndividualProgression.AutoAttune` grants no attunement items or quests, even
+after a GM's `.ip set`. Other GM administration remains available; playing
+accounts should use ordinary player privileges.
+
+Level 71–79 characters cannot enter Onyxia's Lair. At level 80, Wrath's
+Onyxia's Lair and Naxxramas stay open; their restored 40-player versions need
+tier 18 or `IndividualProgression.AllowVanillaRaidAccess = 1`. Each character
+still needs its own Drakefire Amulet, or its Naxxramas attunement and
+Stratholme entrance.
 
 An already-rewarded transition quest becomes usable once the preceding chain is
 complete and the realm ceiling permits advancement. It is not rewarded twice.

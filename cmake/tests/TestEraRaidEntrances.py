@@ -1,4 +1,8 @@
-"""Exercise original raid entrance hooks with each member's own era and attunements."""
+"""Exercise original raid entrance hooks with each member's own era and attunements.
+
+Level 80 characters reach the 40-player raids only at progression 18, or with the
+optional vanilla raid access, and Naxxramas still needs the character's attunement.
+"""
 
 import argparse
 from pathlib import Path
@@ -38,7 +42,7 @@ struct Player;
 struct GroupReference {Player* player;GroupReference* following;Player* GetSource(){return player;}GroupReference* next(){return following;}};
 struct Group {
     int difficulty=0;std::vector<GroupReference> members;
-    void SetRaidDifficulty(int d){difficulty=d;}
+    void SetRaidDifficulty(int d){difficulty=d;}int GetDifficulty(bool raid){assert(raid);return difficulty;}
     GroupReference* GetFirstMember(){return members.empty()?nullptr:&members[0];}
     void Add(Player* p){members.push_back({p,nullptr});for(size_t i=0;i+1<members.size();++i)members[i].following=&members[i+1];}
 };
@@ -53,12 +57,13 @@ struct Player {
     bool HasItemCount(int item){assert(item==ITEM_DRAKEFIRE_AMULET);return amulet;}
     int GetQuestStatus(int quest){assert(quest==NAXX40_ENTRANCE_FLAG);return entrance?QUEST_STATUS_REWARDED:0;}
     bool IsGameMaster(){return gm;}void SetRaidDifficulty(int d){difficulty=d;}
+    int GetDifficulty(bool raid){assert(raid);return difficulty;}
     bool TeleportTo(int m,float,float,float,float){++teleports;map=m;return true;}
     int GetMapId(){return map;}float GetDistance(Player*){return 10;}
 };
 struct ChatHandler {explicit ChatHandler(Session*){}template<class... Args>void PSendSysMessage(char const*,Args&&...) {}};
 struct IndividualProgression {
-    bool requireNaxxStrath=true;
+    bool requireNaxxStrath=true, AllowVanillaRaidAccess=false;
     bool hasPassedProgression(Player* p,int stage){return p->stage>=stage;}
     bool isBotAccount(Player*){return false;} // strict mode disables account exemptions
     bool isAttuned(Player* p){return p->attuned;}
@@ -71,13 +76,17 @@ int main() {
     Onyxia onyxia;Naxx naxx;
     Player leader;leader.stage=18;leader.level=49;
     assert(!onyxia.OnTrigger(&leader,nullptr)&&leader.difficulty==0);
-    leader.level=75;leader.amulet=false;
+    leader.level=75;
     assert(!onyxia.OnTrigger(&leader,nullptr)&&leader.teleports==0);
-    leader.amulet=true;
-    assert(onyxia.OnTrigger(&leader,nullptr)&&leader.teleports==1&&leader.difficulty==2);
+    leader.level=80;leader.amulet=false;
+    assert(onyxia.OnTrigger(&leader,nullptr)&&leader.teleports==1);
+    Player wrath;wrath.level=80;wrath.stage=16;wrath.difficulty=RAID_DIFFICULTY_10MAN_HEROIC;
+    assert(!onyxia.OnTrigger(&wrath,nullptr)&&wrath.teleports==0);
+    wrath.difficulty=RAID_DIFFICULTY_10MAN_NORMAL;
+    assert(onyxia.OnTrigger(&wrath,nullptr)&&wrath.teleports==1);
     for(int stage:{7,13,18}) for(bool attuned:{false,true}) for(bool entrance:{false,true}) {
         Player owner,member;Group group;
-        owner.stage=18;owner.level=80;owner.group=&group;
+        owner.stage=7;owner.level=60;owner.group=&group;
         member.guid=2;member.stage=stage;member.attuned=attuned;member.entrance=entrance;
         group.Add(&owner);group.Add(&member);
         assert(naxx.OnGossipHello(&owner,nullptr));
@@ -89,13 +98,17 @@ int main() {
         assert(naxx.OnGossipHello(&owner,nullptr)==(attuned&&entrance));
         assert((owner.teleports==1)==(attuned&&entrance));
     }
+    Player wrathNaxx;wrathNaxx.level=80;wrathNaxx.stage=17;
+    assert(!naxx.OnGossipHello(&wrathNaxx,nullptr)&&wrathNaxx.teleports==0);
 }
 '''.replace('@ONYXIA@', onyxia).replace('@NAXX@', naxx)
 assert 'if (enabled && strictEarnedProgression)\n        return false;' in function(
     (source / 'IndividualProgression.cpp').read_text(), 'bool IndividualProgression::isBotAccount(const Player*')
 mutations = (
     ('Onyxia minimum level', 'player->GetLevel() < 50', 'false'),
-    ('Onyxia return amulet', 'player->HasItemCount(ITEM_DRAKEFIRE_AMULET))\n                {', 'true)\n                {'),
+    ('Onyxia 40-player slot below progression 18',
+     'if (player->GetDifficulty(true) != RAID_DIFFICULTY_10MAN_HEROIC)\n                        allowed = true;', 'allowed = true;'),
+    ('Naxx level 80 attunement', 'if (allowed && !player->IsGameMaster() && (', 'if (false && ('),
     ('member era copied from leader', 'hasPassedProgression(member, PROGRESSION_WOTLK_TIER_5)', 'hasPassedProgression(player, PROGRESSION_WOTLK_TIER_5)'),
     ('Naxx personal attunement', '!sIndividualProgression->isAttuned(member)', 'false'),
     ('Naxx personal entrance', 'sIndividualProgression->requireNaxxStrath && member->GetQuestStatus(NAXX40_ENTRANCE_FLAG) != QUEST_STATUS_REWARDED', 'false'),

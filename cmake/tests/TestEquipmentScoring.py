@@ -285,8 +285,8 @@ struct Player
 };
 struct PlayerbotAI
 {
-    static bool IsHeal(Player* player) { return player->heal; }
-    static bool IsCaster(Player* player) { return player->caster; }
+    static bool IsHeal(Player* player, bool = false) { return player->heal; }
+    static bool IsCaster(Player* player, bool = false) { return player->caster; }
     static bool IsTank(Player* player) { return player->tank; }
     static bool IsMelee(Player* player) { return !player->caster && !player->heal && player->cls != CLASS_HUNTER; }
 };

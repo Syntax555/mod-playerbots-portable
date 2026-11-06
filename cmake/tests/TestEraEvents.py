@@ -6,6 +6,7 @@ services. No realm, database or map spawns are needed to check who may participa
 
 import argparse
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -75,6 +76,10 @@ methods = '\n'.join(function(production, signature) for signature in (
     '            void Reschedule(',
     '            void RefreshAllPhases(',
     '            void RewardParticipants('))
+# Cores with home screens keep a viewer row per account; the portable core has none,
+# so production uses its fallback.
+viewer = re.search(r'#if __has_include\("HomeViewer.h"\)\n#include "HomeViewer.h"\n#else\n(.*?)\n#endif', production, re.DOTALL)
+assert viewer and not list((args.core / 'src').rglob('HomeViewer.h'))
 shared = '\n'.join(function(production, signature) for signature in (
     '        void LoadConfig(', '    uint8 GetPlayerTier(', '    bool IsRealPlayer(',
     '    bool IsEventParticipant(Player* player, EventType type)',
@@ -521,7 +526,8 @@ with tempfile.TemporaryDirectory(prefix='portable-era-events-') as temporary:
         (work / name).write_text('#pragma once\n')
     (work / 'EraEvents.h').write_text(header)
     (work / 'EraEventMobs.h').write_text((module / 'src/EraEventMobs.h').read_text())
-    source = stub.replace('NATIVE_IP', native).replace('SETTINGS', settings).replace('SESSION_HELPERS', helpers)
+    source = stub.replace('NATIVE_IP', native + '\n' + viewer.group(1)).replace('SETTINGS', settings)
+    source = source.replace('SESSION_HELPERS', helpers)
     source = source.replace('MANAGER_METHODS', methods).replace('SHARED_METHODS', shared)
     source = source.replace('EVENT_TIERS', '\n'.join(tiers)).replace('ZOMBIE_SHARED', zombie_shared)
     source = source.replace('ZOMBIE_CHECK', zombie_check).replace('GROAN_METHOD', groan).replace('MELEE', melee)

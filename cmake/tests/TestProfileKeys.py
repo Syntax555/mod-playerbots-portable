@@ -56,11 +56,12 @@ def shipped_keys(repository):
 
 
 def composed(text, literals):
-    # Whether text is a concatenation of one or more source literals.
+    # Whether text is a concatenation of one or more source literals. Single characters,
+    # such as protocol row kinds, are not key parts and would spell any key.
     reachable = [True] + [False] * len(text)
     for start in range(len(text)):
         if reachable[start]:
-            for end in range(start + 1, len(text) + 1):
+            for end in range(start + 2, len(text) + 1):
                 if not reachable[end] and text[start:end] in literals:
                     reachable[end] = True
     return reachable[-1]

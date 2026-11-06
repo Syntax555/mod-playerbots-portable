@@ -178,7 +178,8 @@ native_focus = function((core / 'src/server/game/Spells/Spell.cpp').read_text(),
 assert 'GameObjectFocusCheck go_check(m_caster, m_spellInfo->RequiresSpellFocus)' in native_focus
 assert 'SPELL_FAILED_REQUIRES_SPELL_FOCUS' in native_focus
 rpg = (module / 'Ai/World/Rpg/Action/NewRpgBaseAction.cpp').read_text()
-native_interact = function(rpg, 'bool NewRpgBaseAction::CanInteractWithQuestGiver(')
+native_interact = function((module / 'Ai/World/Rpg/NewRpgHelpers.cpp').read_text(),
+                           'bool CanInteractWithQuestGiver(Player* bot, Object* questGiver)')
 assert 'go->GetGoType() == GAMEOBJECT_TYPE_QUESTGIVER' in native_interact
 assert 'go->GetGOInfo()->IconName == "Point"' in native_interact
 assert 'go->IsWithinDistInMap(bot)' in function(rpg, 'bool NewRpgBaseAction::IsWithinInteractionDist(')

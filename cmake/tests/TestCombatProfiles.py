@@ -232,6 +232,7 @@ struct StatsWeightCalculator {
     std::unique_ptr<StatsCollector> collector_;
     uint8 cls, lvl;
     int tab;
+    bool healSpec_, casterSpec_;
     bool enable_overflow_penalty_, enable_item_set_bonus_;
     explicit StatsWeightCalculator(Player* player);
 };
