@@ -157,8 +157,9 @@ python3 cmake/tests/TestQuestieEraQuests.py
 ```
 
 These exercise production C++ and Lua logic with native-shaped doubles and
-mutation checks. The fork also checks the installer, backup, rollback and
-preserved client files before publishing. They do not start a realm or client.
+mutation checks. The shared installer tests check backup, rollback and
+preserved client files, and the fork's Latest workflow installs and verifies
+each packaged commit before publishing. They do not start a realm or client.
 Live objective pins and tooltips, turn-in and abandonment, reconnects,
 disconnect/group-departure cleanup and sustained load still need validation
 with the matching server and addon; see [open validation](todo.md#gameplay-validation).

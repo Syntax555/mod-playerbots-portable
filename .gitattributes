@@ -1,2 +1,4 @@
 # Unified diff context prefixes include a space on blank lines.
 *.patch text eol=lf -whitespace
+# Installer templates ship byte for byte; the .cmd keeps its CRLF line endings.
+scripts/addon-installer/* -text
