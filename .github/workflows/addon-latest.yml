@@ -1,0 +1,146 @@
+name: Addon Latest
+
+# Called by each client addon fork to publish its rolling Latest release: the
+# fork's commit is checked and packaged with this repository's scripts, either as
+# the addon ZIP or as an installer that downloads that exact commit from GitHub.
+# The previous asset stays downloadable until the new one is built and checked.
+on:
+  workflow_call:
+    inputs:
+      asset:
+        description: File name of the Latest release asset
+        required: true
+        type: string
+      addons:
+        description: Space-separated FOLDER:TOC:NAME addon folders of an addon ZIP
+        type: string
+        default: ""
+      extras:
+        description: Space-separated SOURCE:TARGET committed files added to an addon ZIP
+        type: string
+        default: ""
+      installer-name:
+        description: Installed folder and TOC name of an installer package
+        type: string
+        default: ""
+      installer-path:
+        description: Addon folder of an installer package in the repository
+        type: string
+        default: "."
+      installer-short:
+        description: Installer file name, Install-SHORT.ps1 and Install-SHORT.cmd
+        type: string
+        default: ""
+      installer-title:
+        description: Addon name the installer shows to players
+        type: string
+        default: ""
+      installer-contains:
+        description: Space-separated separate addons the installed one already contains
+        type: string
+        default: ""
+      tests:
+        description: Command run in the fork's checkout before publishing
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  latest:
+    name: Package and publish ${{ inputs.asset }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: addon
+    steps:
+      - name: Check out the addon fork
+        uses: actions/checkout@v7
+        with:
+          path: addon
+
+      - name: Check out the shared packaging scripts
+        uses: actions/checkout@v7
+        with:
+          repository: Syntax555/mod-playerbots-portable
+          ref: main
+          path: portable
+          persist-credentials: false
+
+      - name: Install Lua 5.1
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.1 > /dev/null
+
+      - name: Check Lua syntax and package
+        env:
+          ASSET: ${{ inputs.asset }}
+          ADDONS: ${{ inputs.addons }}
+          EXTRAS: ${{ inputs.extras }}
+          INSTALLER_NAME: ${{ inputs.installer-name }}
+          INSTALLER_PATH: ${{ inputs.installer-path }}
+          INSTALLER_SHORT: ${{ inputs.installer-short }}
+          INSTALLER_TITLE: ${{ inputs.installer-title }}
+          INSTALLER_CONTAINS: ${{ inputs.installer-contains }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INSTALLER_NAME" ]; then
+            arguments=(--name "$INSTALLER_NAME" --path "$INSTALLER_PATH" --short "$INSTALLER_SHORT"
+                       --title "$INSTALLER_TITLE")
+            read -ra contained <<< "$INSTALLER_CONTAINS"
+            for addon in "${contained[@]}"; do arguments+=(--contains "$addon"); done
+            python3 ../portable/scripts/package_addon_installer.py "${arguments[@]}" --luac luac5.1 --output "$ASSET"
+          else
+            arguments=()
+            read -ra folders <<< "$ADDONS"
+            for folder in "${folders[@]}"; do arguments+=(--addon "$folder"); done
+            read -ra files <<< "$EXTRAS"
+            for file in "${files[@]}"; do arguments+=(--extra "$file"); done
+            python3 ../portable/scripts/package_addon_latest.py "${arguments[@]}" --luac luac5.1 --output "$ASSET"
+          fi
+
+      - name: Install the packaged commit from GitHub
+        if: inputs.installer-name != ''
+        shell: pwsh
+        env:
+          ASSET: ${{ inputs.asset }}
+          INSTALLER_NAME: ${{ inputs.installer-name }}
+          INSTALLER_SHORT: ${{ inputs.installer-short }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = Join-Path $env:RUNNER_TEMP 'installer'
+          $addons = Join-Path $env:RUNNER_TEMP 'AddOns'
+          Expand-Archive -LiteralPath $env:ASSET -DestinationPath $package
+          [void](New-Item -ItemType Directory -Path $addons)
+          & (Join-Path $package "Install-$env:INSTALLER_SHORT.ps1") -AddOnsPath $addons
+          if ($LASTEXITCODE) { throw "The installer failed with exit code $LASTEXITCODE" }
+          python3 ../portable/scripts/package_addon_installer.py --verify-installed (Join-Path $addons $env:INSTALLER_NAME) --installer-package $package
+          if ($LASTEXITCODE) { throw "The installed addon failed verification" }
+
+      - name: Test the addon
+        if: inputs.tests != ''
+        env:
+          TESTS: ${{ inputs.tests }}
+        run: bash -euo pipefail -c "$TESTS"
+
+      - name: Publish the Latest release
+        env:
+          ASSET: ${{ inputs.asset }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "Rolling build of \`$GITHUB_REF_NAME\` at ${GITHUB_SHA::12}."
+            echo
+            cat .github/release-notes.md
+          } > "$notes"
+          if gh release view latest > /dev/null 2>&1; then
+            gh release upload latest "$ASSET" --clobber
+            git tag -f latest "$GITHUB_SHA"
+            git push --force origin refs/tags/latest
+            gh release edit latest --title Latest --notes-file "$notes" --latest
+          else
+            gh release create latest "$ASSET" --target "$GITHUB_SHA" --title Latest --notes-file "$notes" --latest
+          fi

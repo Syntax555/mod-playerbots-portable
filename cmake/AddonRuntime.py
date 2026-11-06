@@ -38,7 +38,6 @@ def runtime_paths(source: Path, toc: str) -> list[str]:
     Unlisted Lua, textures, fonts and any unknown resource type remain included:
     addons can load these dynamically and file extensions cannot establish usage.
     """
-    toc = safe_relative(toc)
     if source.is_symlink() or not source.is_dir():
         raise ValueError("Addon source must be a real directory")
     files = {}
@@ -52,6 +51,12 @@ def runtime_paths(source: Path, toc: str) -> list[str]:
                 raise ValueError(f"Case-colliding addon asset: {relative}")
             folded.add(relative.casefold())
             files[relative] = path
+    return select_runtime(files, toc)
+
+
+def select_runtime(files: dict[str, Path], toc: str) -> list[str]:
+    """The runtime assets among files, keyed by their path relative to the addon folder."""
+    toc = safe_relative(toc)
     if toc not in files:
         raise ValueError(f"Missing addon TOC: {toc}")
     protected = {toc}

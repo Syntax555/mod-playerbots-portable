@@ -57,7 +57,11 @@ Outputs:
   addon ZIP, for testing it with a local server build.
 
 Published addon packages and the Questie and Zygor installers come from the
-[addon forks](addons.md#addon-forks).
+[addon forks](addons.md#addon-forks). Each fork's Latest workflow calls the shared
+[addon workflow](../.github/workflows/addon-latest.yml), which packages the fork's
+commit with this repository's `scripts/package_addon_latest.py` or
+`scripts/package_addon_installer.py`; the addon ZIP selects files with the same
+runtime rules as `cmake/AddonRuntime.py`.
 
 The complete `EraTalents-client-dev.zip` also requires the merged client MPQ. It
 is built separately on Linux; see

@@ -63,7 +63,9 @@ build:
 | Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | `Zygor-IP-latest.zip` (installer) |
 
 Commit to the fork's configured default branch. Addon pushes check the addon
-and replace its asset in the fork's Latest release. For the core, modules and
+and replace its asset in the fork's Latest release through the shared
+[addon workflow](.github/workflows/addon-latest.yml) and packaging scripts in
+`scripts/`. For the core, modules and
 addons, the server manifest's `revision` is the exact fork commit to build.
 `upstream` records the original project and the original revision imported
 last; retain that provenance when pinning a local change. `forkChanges` records

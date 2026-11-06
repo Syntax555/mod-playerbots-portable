@@ -162,8 +162,8 @@ python3 cmake/tests/TestZygorProgression.py
 
 These exercise production bridge and addon logic with doubles, compare gates
 to the pinned server sources and reject mutations of the checks. The fork's
-Latest workflow checks Lua and the installer, including file verification,
-backup, rollback and preserved SavedVariables. These checks do not start a
+Latest workflow checks Lua, installs the packaged commit and verifies its files;
+the shared installer tests cover backup, rollback and preserved SavedVariables. These checks do not start a
 realm or client. Guide routes, inspect interaction, UI responsiveness and
 other addon combinations still need live validation; see
 [open validation](todo.md#gameplay-validation).

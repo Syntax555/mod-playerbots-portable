@@ -105,7 +105,8 @@ jobs:
         run: python3 cmake/tests/TestClientLocales.py
 
   # The launcher handles Windows file locks and processes, so its tests also
-  # run on Windows rather than only compiling for it.
+  # run on Windows rather than only compiling for it. Players run the shared
+  # addon installer with Windows PowerShell 5.1, which is tested here as well.
   windows:
     name: Check launcher on Windows
     needs: launcher
@@ -130,6 +131,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Launcher tests failed.' }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { throw 'Launcher vet failed.' }
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Test the addon installer with Windows PowerShell
+        env:
+          POWERSHELL_EXECUTABLE: powershell.exe
+        run: |
+          python -m unittest scripts/tests/test_package_addon_installer.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Addon installer tests failed.' }
 
   # Every shard must pass before a manual build compiles and Publish Latest
   # can select its artifacts.
