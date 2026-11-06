@@ -72,6 +72,7 @@ GAMEPLAY = (
     "TestDruidClassQuests",
     "TestEraCreatureStats",
     "TestPaladinEraBlessings",
+    "TestClassQuestChains",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -98,6 +99,7 @@ MODULE_FIXTURES = {
         "TestShamanWaterSpirit",
         "TestDruidClassQuests",
         "TestPaladinEraBlessings",
+        "TestClassQuestChains",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
@@ -111,6 +113,7 @@ MODULE_FIXTURES = {
         "TestHowlingFjord",
         "TestIpWorldFixes",
         "TestIpCommandSafety",
+        "TestClassQuestChains",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",
