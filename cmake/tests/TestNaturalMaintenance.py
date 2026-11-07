@@ -3,7 +3,8 @@
 NaturalMaintenanceValue chooses every autonomous gold spend and visit: vendor
 sales, repairs, trainer lessons, food, drink, ammunition, reagents, bags and
 the auction or mailbox visit clock. Reagents of profession recipes are no supply
-goal, since natural bots do not craft. The production value, action, trigger and
+goal, since natural bots do not craft. Once no NPC needs a visit, random bots
+with Enchanting disenchant the bag gear the ordinary action takes. The production value, action, trigger and
 auction-trip clock run here with fake core objects. Mutation checks confirm
 that the guards, budgets and priorities are required.
 """
@@ -53,6 +54,8 @@ trigger_header = (rpg / 'Trigger/NewRpgTriggers.h').read_text()
 trigger_source = (rpg / 'Trigger/NewRpgTrigger.cpp').read_text()
 info_header = (rpg / 'NewRpgInfo.h').read_text()
 travel_source = (module / 'Bot/EarnedAuctionTravel.cpp').read_text()
+shared_defines = (core / 'src/server/shared/SharedDefines.h').read_text()
+cast_source = (module / 'Ai/Base/Actions/CastCustomSpellAction.cpp').read_text()
 
 rpg_fields = re.findall(r'^    (?:bool|uint32|WorldPosition|ObjectGuid) (?:earnedAuction|naturalMaintenance)\w*(?:\{[^}]*\})?;$',
                         info_header, re.MULTILINE)
@@ -73,12 +76,38 @@ assert 'if (slot == NULL_SLOT)\n            return ITEM_USAGE_NONE;' in containe
 assert '(bag ? bag->GetBagSize() : 0) >= itemProto->ContainerSlots' in container
 assert '#define INVENTORY_SLOT_BAG_0    255' in player_header
 
+# The "inventory items" double returns the bag items of a usage that the bot can use, as
+# FindItemUsageVisitor, a FindUsableItemVisitor, collects them. The ordinary disenchant
+# action reads that list and keeps the rare items and progression supplies the value
+# leaves alone; TestPlayerbotUpstreamFixes runs that action.
+assert ('FindItemUsageVisitor visitor(bot, ItemUsage(stoi(usage)));\n            '
+        'IterateItems(&visitor, ITERATE_ITEMS_IN_BAGS);') in (module / 'Ai/Base/Actions/InventoryAction.cpp').read_text()
+assert 'class FindItemUsageVisitor : public FindUsableItemVisitor' in (module / 'Mgr/Item/ItemVisitors.h').read_text()
+assert 'if (bot->CanUseItem(item->GetTemplate()) == EQUIP_ERR_OK)\n        return FindItemVisitor::Visit(item);' in \
+    function((module / 'Mgr/Item/ItemVisitors.cpp').read_text(), 'bool FindUsableItemVisitor::Visit(Item* item)')
+disenchant_action = function(cast_source, 'bool DisEnchantRandomItemAction::Execute(')
+assert 'AI_VALUE2(std::vector<Item*>, "inventory items", "usage " + std::to_string(ITEM_USAGE_DISENCHANT));' in \
+    disenchant_action
+assert ('if ((botAI->HasGameClientMaster() || botAI->IsInRealGuild()) &&\n'
+        '            item->GetTemplate()->Quality > ITEM_QUALITY_UNCOMMON)\n            continue;') in disenchant_action
+assert ('if (EarnedAuction::ShouldReserveForAuction(botAI, item, ITEM_USAGE_DISENCHANT))\n'
+        '            continue;') in disenchant_action
+assert 'return botAI->HasSkill(SKILL_ENCHANTING) && !bot->IsInCombat() &&' in \
+    function(cast_source, 'bool DisEnchantRandomItemAction::isUseful()')
+assert 'creators["disenchant random item"] = &ActionContext::disenchant_random_item;' in \
+    (module / 'Ai/Base/ActionContext.h').read_text()
+unit_header = (core / 'src/server/game/Entities/Unit/Unit.h').read_text()
+assert all(signature in unit_header for signature in (
+    '    void StopMoving();', '[[nodiscard]] bool IsMounted() const { return HasUnitFlag(UNIT_FLAG_MOUNT); }',
+    '    void Dismount();'))
+
 
 production = {
     'native': '\n'.join(function(source, signature) + ';' for source, signature in (
         (player_header, 'enum InventorySlots'), (player_header, 'enum InventoryPackSlots'),
         (item_instance_header, 'enum InventorySlot'),
         (item_header, 'enum ItemClass'), (item_header, 'enum ItemSubclassContainer'),
+        (shared_defines, 'enum ItemQualities'),
         (usage_header, 'enum ItemUsage : uint32'))),
     'professions': profession_skills(core),
     'types': '\n'.join([
@@ -201,7 +230,8 @@ struct WorldObject
 struct ItemTemplate
 {
     struct ItemSpell { int32 SpellId = 0; uint32 SpellCategory = 0; };
-    uint32 ItemId = 0, Class = ITEM_CLASS_REAGENT, SubClass = 0, BuyPrice = 0, BuyCount = 1, ContainerSlots = 0;
+    uint32 ItemId = 0, Class = ITEM_CLASS_REAGENT, SubClass = 0, BuyPrice = 0, BuyCount = 1, ContainerSlots = 0,
+           Quality = ITEM_QUALITY_UNCOMMON;
     ItemSpell Spells[MAX_ITEM_PROTO_SPELLS]{};
 };
 struct VendorItem { uint32 item = 0, maxcount = 0, incrtime = 0, ExtendedCost = 0, stock = 0; };
@@ -244,7 +274,7 @@ struct SpellInfo
 };
 struct Player : WorldObject
 {
-    bool alive = true, combat = false, flight = false, randomBot = false;
+    bool alive = true, combat = false, flight = false, randomBot = false, moving = false, mounted = false;
     uint32 money = 10000, maxMana = 100;
     uint8 cls = CLASS_MAGE;
     float discount = 1.0f;
@@ -259,6 +289,9 @@ struct Player : WorldObject
     bool IsAlive() const { return alive; }
     bool IsInCombat() const { return combat; }
     bool IsInFlight() const { return flight; }
+    void StopMoving() { moving = false; }
+    bool IsMounted() const { return mounted; }
+    void Dismount() { mounted = false; }
     uint32 GetMaxPower(Powers) const { return maxMana; }
     uint8 getClass() const { return cls; }
     Item* GetItemByPos(uint8 bag, uint8 slot) const
@@ -395,6 +428,7 @@ struct Fixture
     std::vector<ObjectGuid> approaches;
     WorldPosition* market = nullptr;
     bool waiting = false, queueAccepts = true, travelReachable = true, actionResult = true;
+    std::set<Item const*> progressionSupplies;
     float farStep = 40.0f;
     int plans = 0, scans = 0, consumableChecks = 0;
     uint32 pendingBagSlots = 0;
@@ -432,6 +466,23 @@ public:
     ItemUsage Get() override { return ItemUpgrade(bot, qualifier); }
     void Set(ItemUsage) override {}
 };
+// "inventory items" of a usage: the rated bag items the bot can use, as the script
+// asserts FindItemUsageVisitor collects them.
+class UsageItemsValue : public Value<std::vector<Item*>>
+{
+public:
+    Player* bot = nullptr;
+    std::vector<Item*> rated;
+    std::vector<Item*> Get() override
+    {
+        std::vector<Item*> usable;
+        for (Item* item : rated)
+            if (bot->CanUseItem(item->GetTemplate()) == EQUIP_ERR_OK)
+                usable.push_back(item);
+        return usable;
+    }
+    void Set(std::vector<Item*>) override {}
+};
 class ScanValue : public Value<GuidVector>
 {
 public:
@@ -448,6 +499,7 @@ struct AiObjectContext
     std::map<std::string, int> reads;
     Player* owner = nullptr;
     ScanValue rpgTargets, mailboxes;
+    UsageItemsValue disenchantable;
     Value<NaturalMaintenanceTask>* maintenance = nullptr;
     template <class T>
     Value<T>* GetValue(std::string const& name, std::string const& qualifier = "")
@@ -470,6 +522,12 @@ struct AiObjectContext
             assert(name == "possible new rpg targets" || name == "natural mailboxes");
             return name == "natural mailboxes" ? &mailboxes : &rpgTargets;
         }
+        else if constexpr (std::is_same_v<T, std::vector<Item*>>)
+        {
+            assert(name == "inventory items" && qualifier == "usage " + std::to_string(ITEM_USAGE_DISENCHANT));
+            disenchantable.bot = owner;
+            return &disenchantable;
+        }
         else
         {
             static_assert(std::is_same_v<T, NaturalMaintenanceTask>);
@@ -488,8 +546,10 @@ struct PlayerbotAI
     Player* bot = nullptr;
     AiObjectContext* context = nullptr;
     NewRpgInfo rpgInfo;
-    bool gameClientMaster = false;
+    bool gameClientMaster = false, enchanting = false, realGuild = false;
     Player* GetBot() { return bot; }
+    bool HasSkill(SkillType skill) const { return skill == SKILL_ENCHANTING && enchanting; }
+    bool IsInRealGuild() const { return realGuild; }
     AiObjectContext* GetAiObjectContext() { return context; }
     bool HasGameClientMaster() const { return gameClientMaster; }
     Creature* GetCreature(ObjectGuid guid)
@@ -608,6 +668,12 @@ bool IsEnabled(PlayerbotAI* ai)
 }
 // The production record of a won bag still in the mailbox, learned by world-thread visits.
 uint32 PendingBagSlots(PlayerbotAI* ai) { return IsEnabled(ai) ? world.pendingBagSlots : 0; }
+// Quest objectives and spell reagents, which natural progression keeps from vendors and disenchanting.
+bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage)
+{
+    assert(ai && usage == ITEM_USAGE_DISENCHANT);
+    return world.progressionSupplies.count(item);
+}
 bool QueueVisit(PlayerbotAI* ai, ObjectGuid target, bool mailbox)
 {
     assert(IsEnabled(ai) && !target.IsEmpty());
@@ -822,6 +888,15 @@ struct Scenario
         else
             bot.pack[uint8(INVENTORY_SLOT_ITEM_START + bot.pack.size())] = &bag;
     }
+    ::Item& Disenchantable(uint32 quality)
+    {
+        ::Item& item = weapons.emplace_back();
+        item.proto.ItemId = 5000 + uint32(weapons.size());
+        item.proto.Class = ITEM_CLASS_WEAPON;
+        item.proto.Quality = quality;
+        context.disenchantable.rated.push_back(&item);
+        return item;
+    }
     void FillBackpack()
     {
         for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
@@ -985,6 +1060,80 @@ void TrainerTests()
     s.bot.x = trainer.x;
     assert(s.Is(s.Evaluate(), Type::TRAIN, trainer) && s.Tick(0));
     assert(world.actions.back() == std::make_pair(std::string("trainer"), std::string("learn")));
+}
+
+void DisenchantTests()
+{
+    Scenario s;
+    s.bot.randomBot = true;
+    s.ai.enchanting = true;
+    assert(s.Evaluate().type == Type::NONE);
+    ::Item& gear = s.Disenchantable(ITEM_QUALITY_UNCOMMON);
+    // With no NPC to visit, a random enchanter disenchants the bag gear rated for it.
+    assert(s.Evaluate().type == Type::DISENCHANT && s.Evaluate().target.IsEmpty() && s.trigger->IsActive());
+    // Characters players own and bots without Enchanting keep it.
+    s.bot.randomBot = false;
+    assert(s.Evaluate().type == Type::NONE && !s.trigger->IsActive());
+    s.bot.randomBot = true;
+    s.ai.enchanting = false;
+    assert(s.Evaluate().type == Type::NONE);
+    s.ai.enchanting = true;
+    // The ordinary action takes only gear the bot can use.
+    s.bot.unusable.insert(gear.proto.ItemId);
+    assert(s.Evaluate().type == Type::NONE);
+    s.bot.unusable.clear();
+    // Quest objectives and spell reagents are kept, as the ordinary action keeps them.
+    world.progressionSupplies.insert(&gear);
+    assert(s.Evaluate().type == Type::NONE);
+    world.progressionSupplies.clear();
+    // A bot in a real guild keeps rare gear, as the ordinary action does.
+    s.ai.realGuild = true;
+    assert(s.Evaluate().type == Type::DISENCHANT);
+    gear.proto.Quality = ITEM_QUALITY_RARE;
+    assert(s.Evaluate().type == Type::NONE);
+    s.ai.realGuild = false;
+    assert(s.Evaluate().type == Type::DISENCHANT);
+    gear.proto.Quality = ITEM_QUALITY_UNCOMMON;
+    // The shared guards apply; a guarded action runs nothing.
+    s.ai.gameClientMaster = true;
+    assert(s.Evaluate().type == Type::NONE);
+    s.value->Set({{}, Type::DISENCHANT});
+    assert(!s.action->Execute(Event()) && world.actions.empty());
+    s.ai.gameClientMaster = false;
+
+    // Sales, repairs and lessons come first.
+    Creature& smith = s.Npc(UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_REPAIR, 10.0f);
+    s.Flag("can sell", true);
+    assert(s.Is(s.Evaluate(), Type::SELL, smith));
+    s.Flag("can sell", false);
+    s.Flag("should repair", true);
+    s.Flag("can repair", true);
+    assert(s.Is(s.Evaluate(), Type::REPAIR, smith));
+    s.Flag("should repair", false);
+    Creature& trainer = s.Npc(UNIT_NPC_FLAG_TRAINER, 20.0f);
+    s.Lesson(trainer, 11, 100);
+    s.Budget(NeedMoneyFor::spells, 100);
+    assert(s.Is(s.Evaluate(), Type::TRAIN, trainer));
+    // A search that finds no NPC to visit falls back to disenchanting.
+    s.Budget(NeedMoneyFor::spells, 99);
+    assert(s.Evaluate().type == Type::DISENCHANT);
+    s.Budget(NeedMoneyFor::spells, 0);
+
+    // The bot stops and dismounts for the ordinary action without a walk, and the next item
+    // follows the cast at once.
+    s.Disenchantable(ITEM_QUALITY_UNCOMMON);
+    s.bot.moving = s.bot.mounted = true;
+    assert(s.Evaluate().type == Type::DISENCHANT && s.Tick(0));
+    assert(world.actions.size() == 1 &&
+           world.actions.back() == std::make_pair(std::string("disenchant random item"), std::string()));
+    assert(!s.bot.moving && !s.bot.mounted);
+    assert(world.approaches.empty() && s.value->Get().type == Type::DISENCHANT);
+    // A failed cast waits for the next search.
+    world.actionResult = false;
+    assert(!s.Tick(0) && world.actions.size() == 2);
+    assert(s.value->Get().type == Type::NONE && !s.trigger->IsActive());
+    now += 30 * IN_MILLISECONDS;
+    assert(s.trigger->IsActive() && s.value->Get().type == Type::DISENCHANT);
 }
 
 void SupplyTests()
@@ -1553,6 +1702,7 @@ int main()
     GuardTests();
     SellAndRepairTests();
     TrainerTests();
+    DisenchantTests();
     SupplyTests();
     RecipeTests();
     AuctionVisitTests();
@@ -1560,8 +1710,8 @@ int main()
     StarvationTests();
     CostTests();
     BagTests();
-    std::cout << "Natural maintenance: guards, priorities, budgets, bags, auction visits, failed targets and scan costs "
-                 "passed\n";
+    std::cout << "Natural maintenance: guards, priorities, budgets, bags, disenchanting, auction visits, failed targets "
+                 "and scan costs passed\n";
 }
 '''
 
@@ -1689,6 +1839,29 @@ mutations = [
     ('profession bag sent to the upgrade check', 'value', 'needsBag && IsGeneralBag(proto) && ', 'needsBag && '),
     ('smaller bag sent to the upgrade check', 'value', 'proto->ContainerSlots > replaceableBag',
      'proto->ContainerSlots + 1 > replaceableBag'),
+    ('disenchanting for a character a player owns', 'value',
+     'if (sRandomPlayerbotMgr.IsRandomBot(bot) && botAI->HasSkill(SKILL_ENCHANTING))',
+     'if (botAI->HasSkill(SKILL_ENCHANTING))'),
+    ('disenchanting without Enchanting', 'value', ' && botAI->HasSkill(SKILL_ENCHANTING))', ')'),
+    ('rare gear of a real guild disenchanted', 'value', '|| !botAI->IsInRealGuild())', '|| true)'),
+    ('progression supply disenchanted', 'value',
+     ' &&\n                    !EarnedAuction::ShouldReserveForAuction(botAI, item, ITEM_USAGE_DISENCHANT)', ''),
+    ('uncommon gear of a real guild kept', 'value', 'Quality <= ITEM_QUALITY_UNCOMMON', 'Quality < ITEM_QUALITY_UNCOMMON'),
+    ('disenchanting before NPC visits', 'value', '    bool const needsSupplies = needsFood',
+     ('    if (disenchant().type == NaturalMaintenanceType::DISENCHANT)\n        return disenchant();\n'
+      '    bool const needsSupplies = needsFood')),
+    ('no disenchanting without an NPC goal', 'value', '!needsBag)\n        return disenchant();',
+     '!needsBag)\n        return {};'),
+    ('no disenchanting after the NPC search', 'value', '    }\n\n    return disenchant();\n}', '    }\n\n    return {};\n}'),
+    ('next item waits after a cast', 'action', 'if (result)\n            value->Reset();',
+     'if (result)\n            value->Set({});'),
+    ('failed cast retried at once', 'action', 'else\n            value->Set({});\n        return result;',
+     'else\n            value->Reset();\n        return result;'),
+    ('disenchanting while moving', 'action', '        bot->StopMoving();\n        if (bot->IsMounted())',
+     '        if (bot->IsMounted())'),
+    ('disenchanting while mounted', 'action', 'if (bot->IsMounted())\n            bot->Dismount();\n        bool const result',
+     'bool const result'),
+    ('disenchant task never triggered', 'trigger', ' ||\n           task.type == NaturalMaintenanceType::DISENCHANT', ''),
 ]
 
 with tempfile.TemporaryDirectory(prefix='portable-natural-maintenance-') as temporary:

@@ -9,7 +9,7 @@ action, so a shield is never mistaken for a polearm. Factory refresh checks
 talent persistence and role gear without allowing natural-mode grants. Combat
 wake reactions preserve active casts and channels, including taming aggro.
 Disenchanting keeps a real master's or guild's rare items without ending the
-search. Mutation checks remove the guards or restore the previous item loops and
+search, and natural progression's quest and spell supplies. Mutation checks remove the guards or restore the previous item loops and
 confirm that the fixture rejects them.
 """
 
@@ -1243,8 +1243,16 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-combat-wake-') as te
         print(f'Combat wake mutation rejected: {label}')
 
 # Disenchanting keeps a real master's or guild's rare items and still handles
-# the uncommon ones after them.
+# the uncommon ones after them. Natural progression keeps the supplies it also
+# keeps from vendors: for an item rated for disenchanting, the auction reserve
+# is the progression check alone, which TestEarnedAuctions covers.
 cast_source = (module / 'Ai/Base/Actions/CastCustomSpellAction.cpp').read_text()
+auction_source = (module / 'Bot/EarnedAuction.cpp').read_text()
+assert 'return ShouldReserve(ai, item, usage, supplies);' in \
+    function(auction_source, 'bool ShouldReserveForAuction(PlayerbotAI* ai, Item* item, ItemUsage usage)')
+assert ('    if (NeededForProgression(ai, item, supplies))\n        return true;\n'
+        '    if (!IsEnabled(ai) || usage != ITEM_USAGE_AH ||') in \
+    function(auction_source, 'bool ShouldReserve(PlayerbotAI* ai, Item* item, ItemUsage usage, ProgressionSupplies& supplies)')
 shared_defines = (core / 'src/server/shared/SharedDefines.h').read_text()
 assert re.search(r'\n    ITEM_QUALITY_UNCOMMON +=  *2,', shared_defines)
 disenchant_parts = {
@@ -1258,6 +1266,7 @@ disenchant_source = r'''
 #include <cstdint>
 #include <iostream>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 using uint32 = std::uint32_t;
@@ -1293,6 +1302,15 @@ struct DisEnchantRandomItemAction : CastCustomSpellAction {
     using CastCustomSpellAction::CastCustomSpellAction;
     bool Execute(Event event);
 };
+std::set<Item const*> progressionSupplies;
+namespace EarnedAuction
+{
+bool ShouldReserveForAuction(PlayerbotAI*, Item* item, ItemUsage usage)
+{
+    assert(usage == ITEM_USAGE_DISENCHANT);
+    return progressionSupplies.count(item);
+}
+}  // namespace EarnedAuction
 // The production action reads the bot's own bag items rated for disenchanting.
 #define AI_VALUE2(type, name, qualifier) \
     (assert(std::string(name) == "inventory items" && \
@@ -1315,10 +1333,17 @@ int main() {
     DisEnchantRandomItemAction failed(&ai, &chat);
     assert(!failed.Execute(Event("disenchant random item", "")));
     assert((failed.casts == std::vector<std::string>{rareCast, uncommonCast}));
+    // A quest objective or spell reagent is kept, and the next item is disenchanted.
+    progressionSupplies = {&rare};
+    DisEnchantRandomItemAction supplied(&ai, &chat); supplied.results[uncommonCast] = supplied.results[rareCast] = true;
+    assert(supplied.Execute(Event("disenchant random item", "")));
+    assert(supplied.casts == std::vector<std::string>{uncommonCast});
+    progressionSupplies.clear();
     ai.master = true; ai.disenchantable = {&rare};
     DisEnchantRandomItemAction kept(&ai, &chat); kept.results[rareCast] = true;
     assert(!kept.Execute(Event("disenchant random item", "")) && kept.casts.empty());
-    std::cout << "Disenchanting: rare items kept for a real master or guild, later uncommon items still handled\n";
+    std::cout << "Disenchanting: rare items kept for a real master or guild, progression supplies kept, later uncommon "
+                 "items still handled\n";
 }
 '''
 
@@ -1345,6 +1370,8 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-disenchant-') as tem
         ('rare item ends the search', 'continue;', 'return false;'),
         ('rare item of a real master or guild disenchanted', 'item->GetTemplate()->Quality > ITEM_QUALITY_UNCOMMON',
          'false'),
+        ('progression supply disenchanted', 'if (EarnedAuction::ShouldReserveForAuction(botAI, item, ITEM_USAGE_DISENCHANT))',
+         'if (false)'),
     ):
         mutated = dict(disenchant_parts)
         mutated['execute'] = mutated['execute'].replace(old, new)

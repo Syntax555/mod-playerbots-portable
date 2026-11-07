@@ -83,8 +83,12 @@ deposits. Existing auctions, items, gold and mail retain their ordinary saved
 state.
 
 Bots can also vendor surplus when bags reach 80% usage or deposits are
-unaffordable or uneconomic. Natural upkeep does not disenchant; ordinary surplus
-protection also applies to vendor sales.
+unaffordable or uneconomic. Random bots with Enchanting disenchant bound gear
+they no longer need when no vendor, repairer or trainer visit is due, and trade
+the materials like other surplus. They sell outgrown bound gear they cannot
+disenchant, such as armor of another type; in a real guild they keep rare and
+better gear. Vendor sales and disenchanting keep what sellers keep, such as
+quest items and learned class-spell reagents.
 
 ## Travel and mail delivery
 

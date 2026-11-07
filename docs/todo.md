@@ -333,8 +333,12 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 ## Auction economy
 
-- [ ] Disenchanting in natural upkeep; bound outgrown equipment currently goes
-  to vendors when it has a sell price.
+- [ ] Verify natural disenchanting in game with random enchanters: bound gear
+  rated for disenchanting is cast on after vendor, repair and training visits,
+  the materials are looted and later listed, Enchanting skill rises, and quest
+  items, armor of another type, gear above the bot's level and a real guild's
+  rare items are never disenchanted. Cover full bags, mounted or moving bots and
+  failed casts.
 - [ ] Verify mixed bag upgrades in game: a smaller quiver, ammo pouch or
   profession bag must remain equipped while a normal bag upgrades. Cover all
   four slots, full bags, a new bag stored inside its intended replacement and
