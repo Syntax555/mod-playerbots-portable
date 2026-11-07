@@ -247,8 +247,8 @@ fixtures pass. Use native core/module functions before adding replacements.
   their spell focus, the Ju-Ju Heaps and Magecraft (8250). The containment
   coffers (1920/1960), Uldaman, Fragmented Magic (9364) and Attunement to
   Dalaran (12172/12173) remain player content.
-- [ ] **Warlock:** Live-verify the 50 Imp, Voidwalker, Succubus, Felhunter and
-  Felsteed lessons of the shared action for all five warlock races. It accepts
+- [ ] **Warlock:** Live-verify the 53 Imp, Voidwalker, Succubus, Felhunter,
+  Felsteed and Inferno lessons of the shared action for all five warlock races. It accepts
   and rewards native quests, uses ordinary kills/chest loot and owned ritual items,
   and leaves demon combat and credit to native scripts. Imp questgiver relations
   are restored by Individual Progression. Verify the earned continent routes
@@ -257,9 +257,12 @@ fixtures pass. Use native core/module functions before adding replacements.
   escort, abandoning for a missing ritual item and native event resets before
   claiming autonomous end-to-end completion.
   Check the blood elf Voidstone questgiver objects (9529/9619) and the Rune of
-  Summoning event. Add the solo Infernal chain (7601–7603): Impsy, the three
-  Flawless Fel Essences from Azshara, Jaedenar and the Blasted Lands, and the
-  owned Fel Fire at Kroshius' remains. The Dreadsteed and Doomguard chains need
+  Summoning event. Check the Infernal chain (7601–7603): Impsy, the three
+  Flawless Fel Essences from Azshara, Jaedenar and the Blasted Lands, the owned
+  Fel Fire at Kroshius' Remains, the waking event, Kroshius' core looted before
+  the used-up Fel Fire is replaced, full bags and the Inferno reward. Kroshius'
+  native waking script despawns every other creature within 10 yards; check the
+  bot's own demon and simultaneous rituals. The Dreadsteed and Doomguard chains need
   Scholomance, Dire Maul or a group and stay player content. Historical
   demon grimoire purchases remain unimplemented;
   keep `WarlockDemonTrainers` disabled until evaluated. See the

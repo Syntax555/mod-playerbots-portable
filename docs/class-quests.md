@@ -76,15 +76,16 @@ can train its later ranks as usual. Players and bots follow the same rule, and
 ## Autonomous warlock demon quests
 
 Solo, headless random warlocks using natural progression can pursue the native
-Imp, Voidwalker, Succubus, Felhunter and Felsteed quest chains when the
-corresponding summoning spell is missing. The shared
-[class quest table](#autonomous-class-quests-for-every-class) holds these 50
+Imp, Voidwalker, Succubus, Felhunter, Felsteed and Inferno quest chains when the
+corresponding spell is missing. The shared
+[class quest table](#autonomous-class-quests-for-every-class) holds these 53
 chain quests as warlock lessons and lets the core decide race, level,
 prerequisites and quest availability.
 Characters under player control retain their own quest decisions. Individual
 Progression restores the original Imp questgiver relations and the level-40
 Felsteed quests; Summon Imp and Summon Felsteed remain quest rewards rather than
-trainer teaching.
+trainer teaching. No trainer teaches Inferno; it is the reward of Kroshius'
+Infernal Core.
 
 Bots accept and turn in quests through ordinary NPC interactions, travel to
 native objective spawns and use the existing combat and loot actions for kills
@@ -104,8 +105,13 @@ travel disabled or its catalog unavailable, quest routing stays on the current m
 Blood elf warlocks turn in The Stone (9529) at the Voidstone in the Dead Scar,
 accept The Rune of Summoning (9619) from it and use their own Voidstone at the
 Rune of Summoning in Goldenmist Village. The native event summons the Voidwalker.
-The Infernal chain (7601–7603) and historical demon grimoire purchases remain
-pending. The Dreadsteed and Doomguard chains need Scholomance, Dire Maul or a
+From level 50, warlocks take What Niby Commands (7601) from Niby the Almighty
+in Felwood, collect the three Flawless Fel Essences from the Legashi satyrs of
+Azshara, the Jaedenar Legionnaires and the Felguard Sentries of the Blasted
+Lands, and use their own Fel Fire at Kroshius' Remains. The native event wakes
+Kroshius, and the bot loots the infernal core from his corpse through ordinary
+loot before the used-up Fel Fire is replaced by accepting the quest again.
+Historical demon grimoire purchases remain unimplemented. The Dreadsteed and Doomguard chains need Scholomance, Dire Maul or a
 group and remain player content. End-to-end live verification for all five warlock races is still
 required; see the [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
@@ -194,7 +200,7 @@ chain and TBC Swift Flight remain on the
 ## Autonomous class quests for every class
 
 Solo, headless random bots of every class using natural progression pursue
-their native class quests. One shared table of 300 quest steps holds the
+their native class quests. One shared table of 303 quest steps holds the
 warrior, paladin, priest and warlock lessons and, for all nine classes, the other
 class quests an ordinary solo character can finish on the open continents. The
 shaman, druid and hunter lesson actions above keep their own quests and run
@@ -209,7 +215,7 @@ giver it can use; a learned lesson or its rewarded final quest ends that chain.
 | Sense Undead | Paladin, level 20 | The Tome of Valor with Daphne Stilwell; blood elf The Second Trial |
 | Summon Warhorse with Apprentice Riding | Paladin, level 40 | The Tome of Nobility; The Thalassian Warhorse |
 | Racial priest spells | Priest, level 10 and 20 | The nine restored families listed under [priest training](#priest-training) |
-| Imp, Voidwalker, Succubus, Felhunter and Felsteed | Warlock | The chains listed under [warlock demon quests](#autonomous-warlock-demon-quests) |
+| Imp, Voidwalker, Succubus, Felhunter, Felsteed and Inferno | Warlock | The chains listed under [warlock demon quests](#autonomous-warlock-demon-quests) |
 
 The other 157 class quests are the class letters and training breadcrumbs, the
 race-specific weapon, armor, robe and wand chains, and their follow-ups:

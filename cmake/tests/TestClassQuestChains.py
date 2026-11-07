@@ -45,7 +45,7 @@ for cls, quest, spell, use, item, entry, casts in re.findall(
         function(source, 'ClassQuestStep const ClassQuestSteps[]')):
     steps.append((classes[cls], 1719 if quest == 'TheAffray' else int(quest), int(spell), use or 'None',
                   int(item or 0), int(entry or 0), tuple(map(int, casts.split(', '))) if casts else ()))
-assert len(steps) == 300 and len(steps) == len({row[1] for row in steps})
+assert len(steps) == 303 and len(steps) == len({row[1] for row in steps})
 assert re.search(r'constexpr uint32 TheAffray = 1719;', source)
 by_quest = {row[1]: row for row in steps}
 lessons = {}
@@ -69,9 +69,9 @@ historical = (ip_root / 'updates/2026_10_11_00_historical_class_quests.sql').rea
 restored_rewards = {int(quest): (int(display), int(cast)) for display, cast, quest in re.findall(
     r'UPDATE `quest_template` SET `RewardDisplaySpell` = (\d+), `RewardSpell` = (\d+) WHERE `ID` = (\d+)', historical)}
 # Native teaching spells, from the pinned client Spell.dbc: Path of Defense, Path of the Berserker,
-# Redemption, Sense Undead, the two warhorse lessons and the five warlock summons teach the listed spell or mount.
+# Redemption, Sense Undead, the two warhorse lessons, the five warlock summons and Inferno teach the listed spell or mount.
 teaches = {8121: 71, 8616: 2458, 7329: 7328, 5503: 5502, 13820: 13819, 34768: 34769,
-           7763: 688, 11520: 697, 11519: 712, 1373: 691, 5785: 5784}
+           7763: 688, 11520: 697, 11519: 712, 1373: 691, 5785: 5784, 1413: 1122}
 for (cls, spell), members in lessons.items():
     rewarding = []
     for quest in members:
@@ -254,7 +254,7 @@ assert uses['Cast'] == {5621: (0, 12429, garments), 5624: (0, 12423, garments), 
 flasks = {quest: use for quest, use in uses['Focus'].items() if not use[1]}
 assert flasks == {1861: (7207, 0, ()), 1944: (7269, 0, ()), 9403: (23566, 0, ())}
 # The warlock fixture checks each summoning ritual against its native focus and demon.
-assert set(uses['Focus']) - set(flasks) == {1471, 1474, 1504, 1513, 1689, 1739, 1795, 9619}
+assert set(uses['Focus']) - set(flasks) == {1471, 1474, 1504, 1513, 1689, 1739, 1795, 9619, 7603}
 assert uses['Area'] == {1699: (0, 482, ())}
 items = {int(row['entry']): row for row in sql_rows(core, 'item_template', {6866, 24157, 24184, 23925, 7207, 7269, 23566})}
 conditions = sql_rows(core, 'conditions', {13})
@@ -577,7 +577,7 @@ struct Unit:WorldObject {
 };
 struct TempSummon;
 struct Creature:Unit {
-    bool removing=false,questgiver=true; std::set<uint32> starts,finishes;
+    bool removing=false,questgiver=true,loot=false; std::set<uint32> starts,finishes;
     Creature* ToCreature() override { return this; }
     virtual TempSummon* ToTempSummon() { return nullptr; }
     bool IsDuringRemoveFromWorld() const { return removing; }
@@ -608,7 +608,9 @@ struct Player:Unit {
     uint8 level=20;
     Player() { session.player=this; guid=100; x=0; size=1.5f; }
     uint8 GetLevel() const { return level; }
-    uint32 GetReqKillOrCastCurrentCount(uint32 q,uint32) const { return quests.contains(q)?quests.at(q).CreatureOrGOCount[0]:0; }
+    uint32 GetReqKillOrCastCurrentCount(uint32 q,int32 entry) const;
+    // Native: a dead creature whose remaining loot includes an item for this solo recipient.
+    bool isAllowedToLoot(Creature const* c) const { return !c->alive&&c->loot; }
     int32 GetQuestLevel(Quest const* quest) const { return quest&&quest->GetQuestLevel()>0?quest->GetQuestLevel():GetLevel(); }
     bool IsInAreaTriggerRadius(AreaTrigger const* at) const {
         return mapId==at->map&&std::hypot(x-at->x,y-at->y)<=at->radius;
@@ -656,6 +658,13 @@ struct ObjectMgr {
     uint32 GetQuestForAreaTrigger(uint32 id) const { return triggerQuests.contains(id)?triggerQuests.at(id):0; }
 } objectMgr;
 auto* sObjectMgr=&objectMgr;
+// Native: the count of the objective naming the entry, else 0.
+uint32 Player::GetReqKillOrCastCurrentCount(uint32 q,int32 entry) const {
+    if(!quests.contains(q)) return 0;
+    for(uint32 i=0;i<QUEST_OBJECTIVES_COUNT;++i)
+        if(objectMgr.quests.at(q).RequiredNpcOrGo[i]==entry) return quests.at(q).CreatureOrGOCount[i];
+    return 0;
+}
 struct World { uint32 lowDiff=4; uint32 getIntConfig(int config) const { assert(config==CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF); return lowDiff; } } world;
 auto* sWorld=&world;
 struct SpellInfo { uint32 RequiresSpellFocus=0; };
@@ -706,7 +715,7 @@ float Player::GetExactDist(WorldPosition const& p) const { return std::sqrt((p.x
 @@RELATIONFLAGS@@
 struct ItemsValue { std::vector<Item*> items; std::vector<Item*> Get() { return items; } };
 struct Context {
-    GuidVector npcs,objects; uint32 quest=0; ItemsValue startItems;
+    GuidVector npcs,corpses,objects; uint32 quest=0; ItemsValue startItems;
     template<class T> ItemsValue* GetValue(std::string const& name,std::string const& qualifier) {
         static_assert(std::is_same_v<T,std::vector<Item*>>);
         assert(name=="inventory items"&&qualifier=="start quest"); return &startItems;
@@ -715,6 +724,7 @@ struct Context {
 template<class T> T GetValue(Context* c,std::string const& name) {
     if constexpr(std::is_same_v<T,GuidVector>) {
         if(name=="nearest npcs") return c->npcs;
+        if(name=="nearest corpses") return c->corpses;
         assert(name=="nearest game objects no los"); return c->objects;
     }
     else { assert(name=="class quest chain"); return c->quest; }

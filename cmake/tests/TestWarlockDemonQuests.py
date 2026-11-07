@@ -44,13 +44,15 @@ chains = [(int(quest), int(spell), int(item or 0), int(creature or 0)) for quest
     function(source, 'ClassQuestStep const ClassQuestSteps[]')) if int(spell)]
 assert len(re.findall(r'\{CLASS_WARLOCK, \d+, [1-9]', source)) == len(chains)
 assert len(chains) == len({row[0] for row in chains})
-assert len(chains) == 50
-assert {row[1] for row in chains} == {688, 697, 712, 691, 5784}
+assert len(chains) == 53
+assert {row[1] for row in chains} == {688, 697, 712, 691, 5784, 1122}
 quests = {int(row['ID']): row for row in sql_rows(core, 'quest_template', {r[0] for r in chains})}
 addon = {int(row['ID']): row for row in sql_rows(core, 'quest_template_addon', set(quests))}
 item_rows = {int(row['entry']): row for row in sql_rows(core, 'item_template', {r[2] for r in chains if r[2]})}
-reward_demons = {7763: 688, 11520: 697, 11519: 712, 1373: 691, 5785: 5784}
+# From the pinned client Spell.dbc, each reward spell teaches its demon; 1413 teaches Inferno.
+reward_demons = {7763: 688, 11520: 697, 11519: 712, 1373: 691, 5785: 5784, 1413: 1122}
 by_quest = {row[0]: row for row in chains}
+summon_loot = {7603: 18625}  # Kroshius' Infernal Core
 for quest, demon, item, creature in chains:
     row = quests[quest]
     assert int(addon[quest]['AllowableClasses']) == 256
@@ -68,6 +70,12 @@ for quest, demon, item, creature in chains:
     if item:
         assert int(row['StartItem']) == item and int(addon[quest]['ProvidedItemCount']) == 1
         assert int(item_rows[item]['spellid_1']) > 0 and int(item_rows[item]['spelltrigger_1']) == 0
+        if quest in summon_loot:
+            # The summon gives no kill credit; its corpse holds the objective and the used-up item is not required.
+            assert all(row[f'RequiredNpcOrGo{index}'] == '0' for index in range(1, 5)), quest
+            assert int(row['RequiredItemId1']) == summon_loot[quest] and int(row['RequiredItemCount1']) == 1
+            assert int(item_rows[item]['spellcharges_1']) == -1, quest
+            continue
         assert int(row['RequiredNpcOrGo1']) == creature and int(row['RequiredNpcOrGoCount1']) == 1
         assert int(row['RequiredItemId1']) == item and int(row['RequiredItemCount1']) == 1
     else:
@@ -75,12 +83,58 @@ for quest, demon, item, creature in chains:
 
 rituals = {(1471, 6284, 9221, 5676), (1504, 7464, 9222, 5676), (1689, 6928, 7728, 5676),
            (1474, 6286, 9223, 5677), (1513, 6626, 9224, 5677), (1739, 6913, 8674, 5677),
-           (1795, 6999, 8712, 6268), (9619, 23732, 30208, 5676)}
+           (1795, 6999, 8712, 6268), (9619, 23732, 30208, 5676), (7603, 18626, 23054, 14467)}
 assert {(quest, item, int(item_rows[item]['spellid_1']), creature)
         for quest, _, item, creature in chains if item} == rituals
-focus_templates = sql_rows(core, 'gameobject_template', {37097, 92015, 92388, 105576, 181670})
+focus_templates = sql_rows(core, 'gameobject_template', {37097, 92015, 92388, 105576, 181670, 179677})
 assert {(int(row['Data0']), int(row['Data1'])) for row in focus_templates} == {
-    (43, 10), (83, 10), (103, 10), (203, 10), (1375, 10)}
+    (43, 10), (83, 10), (103, 10), (203, 10), (1375, 10), (1243, 15)}
+# Spell.dbc: the Fel Fire's spell 23054 needs focus 1243, Kroshius' Remains in Felwood, and sends event 8328,
+# which summons Kroshius there for three minutes. His native script turns him on the bot that woke him.
+remains = next(row for row in focus_templates if int(row['entry']) == 179677)
+assert remains['name'] == "Kroshius' Remains" and int(remains['Data0']) == 1243
+remains_spawns = [line for line in (core / 'data/sql/base/db_world/gameobject.sql').read_text().splitlines()
+                  if line.startswith('(') and line.split(',')[1] == '179677']
+assert len(remains_spawns) == 1 and remains_spawns[0].split(',')[2] == '1', remains_spawns
+wake = sql_rows(core, 'event_scripts', {8328})
+assert len(wake) == 1 and int(wake[0]['command']) == 10 and int(wake[0]['datalong']) == 14467
+assert int(wake[0]['datalong2']) == 180000
+kroshius = sql_rows(core, 'creature_template', {14467})[0]
+assert int(kroshius['rank']) == 0 and kroshius['AIName'] == 'SmartAI'
+kroshius_script = sql_rows(core, 'smart_scripts', {14467, 1446700})
+assert any(int(row['entryorguid']) == 14467 and int(row['event_type']) == 54 and int(row['action_type']) == 80 and
+           int(row['action_param1']) == 1446700 for row in kroshius_script)
+assert any(int(row['action_type']) == 2 and int(row['action_param1']) == 16 for row in kroshius_script)
+assert any(int(row['action_type']) == 49 and int(row['target_type']) == 7 for row in kroshius_script)
+assert {(row['Item'], row['Chance'], row['QuestRequired']) for row in sql_rows(core, 'creature_loot_template', {14467})
+        if int(row['Item']) == 18625} == {('18625', '100', '1')}
+# Each Flawless Fel Essence drops from ordinary Legashi, Jaedenar and Dark Portal demons on the continents.
+essences = {int(sql_rows(core, 'quest_template', {7602})[0][f'RequiredItemId{index}']) for index in range(1, 4)}
+assert essences == {18622, 18623, 18624}
+essence_droppers = {6011: 18623, 6200: 18624, 6201: 18624, 6202: 18624, 9862: 18622}
+assert {(int(row['Entry']), int(row['Item'])) for row in sql_rows(core, 'creature_loot_template', set(essence_droppers))
+        if int(row['Item']) in essences and row['QuestRequired'] == '1'} == set(essence_droppers.items())
+essence_creatures = sql_rows(core, 'creature_template', set(essence_droppers))
+assert {int(row['entry']) for row in essence_creatures if row['rank'] == '0' and
+        int(row['lootid']) == int(row['entry'])} == set(essence_droppers)
+creature_rows = (core / 'data/sql/base/db_world/creature.sql').read_text()
+for entry in essence_droppers:
+    assert re.search(rf'^\(\d+,{entry},0,0,[01],', creature_rows, re.MULTILINE), entry
+assert set(essence_droppers.values()) == essences
+# A ritual whose objective drops from its summon leaves the corpse to the ordinary loot action.
+storage = (core / 'src/server/game/Entities/Player/PlayerStorage.cpp').read_text()
+native_loot = function(storage, 'bool Player::isAllowedToLoot(Creature const* creature)')
+assert 'if (!creature->isDead() ||' in native_loot and 'if (loot->isLooted())' in native_loot
+assert 'if (!loot->hasItemForAll() && !loot->hasItemFor(this))' in native_loot
+assert 'return this == creature->GetLootRecipient();' in native_loot
+corpses = (module / 'Ai/Base/Value/NearestCorpsesValue.cpp').read_text()
+assert 'AnyDeadUnitInObjectRangeCheck u_check(bot, range);' in corpses
+assert 'creators["nearest corpses"]' in (module / 'Ai/Base/ValueContext.h').read_text()
+loot_strategy = (module / 'Ai/Base/Strategy/LootNonCombatStrategy.cpp').read_text()
+assert 'new TriggerNode("loot available", { NextAction("loot", 6.0f) })' in loot_strategy
+kill_count = function((core / 'src/server/game/Entities/Player/PlayerQuest.cpp').read_text(),
+                      'uint16 Player::GetReqKillOrCastCurrentCount(')
+assert 'if (qInfo->RequiredNpcOrGo[j] == entry)' in kill_count and 'return 0;' in kill_count
 # The blood elf Voidstone's native event summons the quest's Voidwalker at its Rune of Summoning.
 assert any(int(row['command']) == 10 and int(row['datalong']) == 5676
            for row in sql_rows(core, 'event_scripts', {10608}))
@@ -419,7 +473,7 @@ struct WorldObject {
 };
 struct Unit:WorldObject { virtual Creature* ToCreature() { return nullptr; } };
 struct Creature:Unit {
-    bool removing=false,canInteract=true,questgiver=true; std::set<uint32> starts,finishes;
+    bool removing=false,canInteract=true,questgiver=true,loot=false; std::set<uint32> starts,finishes;
     Creature* ToCreature() override { return this; }
     virtual TempSummon* ToTempSummon() { return nullptr; }
     bool IsDuringRemoveFromWorld() const { return removing; }
@@ -481,7 +535,9 @@ struct Player:Unit {
     bool CanTakeQuest(Quest const* q,bool) const { return ownAccess&&available.contains(q->id)&&GetQuestStatus(q->id)==QUEST_STATUS_NONE; }
     bool CanAddQuest(Quest const*,bool) const { return canAdd; }
     bool CanRewardQuest(Quest const* q,bool) const { return canReward&&GetQuestStatus(q->id)==QUEST_STATUS_COMPLETE; }
-    uint32 GetReqKillOrCastCurrentCount(uint32 q,uint32) const { return quests.contains(q)?quests.at(q).CreatureOrGOCount[0]:0; }
+    uint32 GetReqKillOrCastCurrentCount(uint32 q,int32 entry) const;
+    // Native: a dead creature whose remaining loot includes an item for this solo recipient.
+    bool isAllowedToLoot(Creature const* c) const { return !c->alive&&c->loot; }
     bool IsInMap(WorldObject const* o) const { return o->sameMap; }
     bool InSamePhase(WorldObject const* o) const { return o->samePhase; }
     bool CanSeeOrDetect(WorldObject const* o) const { return o->visible; }
@@ -512,6 +568,13 @@ struct ObjectMgr {
     QuestRelationBounds GetGOQuestInvolvedRelationBounds(uint32 entry) const { return goEnders.equal_range(entry); }
 } objectMgr;
 auto* sObjectMgr=&objectMgr;
+// Native: the count of the objective naming the entry, else 0.
+uint32 Player::GetReqKillOrCastCurrentCount(uint32 q,int32 entry) const {
+    if(!quests.contains(q)) return 0;
+    for(uint32 i=0;i<QUEST_OBJECTIVES_COUNT;++i)
+        if(objectMgr.quests.at(q).RequiredNpcOrGo[i]==entry) return quests.at(q).CreatureOrGOCount[i];
+    return 0;
+}
 @@GONATIVERELATIONS@@
 bool GameObject::IsWithinDistInMap(Player const* p) const {
     // Synthetic no-display metadata exercises the native exact-distance fallback.
@@ -594,7 +657,7 @@ struct ContinentRouteState {
     void Start(WorldPosition const& target,bool master) { destination=target; forMaster=master; }
 };
 struct Context {
-    GuidVector npcs,objects; uint32 quest=0; Player* bot=nullptr;
+    GuidVector npcs,corpses,objects; uint32 quest=0; Player* bot=nullptr;
     // Native "inventory items" with qualifier "start quest": owned items whose template starts a quest.
     struct StartItems { Player* bot; std::vector<Item*> Get() {
         std::vector<Item*> found; for(auto& [entry,item]:bot->inventory) if(item.proto.StartQuest) found.push_back(&item);
@@ -607,6 +670,7 @@ struct Context {
 template<class T> T GetValue(Context* c,std::string const& name) {
     if constexpr(std::is_same_v<T,GuidVector>) {
         if(name=="nearest npcs") return c->npcs;
+        if(name=="nearest corpses") return c->corpses;
         if(name=="nearest game objects no los") return c->objects;
         return {};
     }
@@ -883,7 +947,18 @@ int main() {
         assert(s.bot.GetQuestStatus(row.Quest)==QUEST_STATUS_INCOMPLETE&&!s.bot.HasSpell(row.Spell)&&s.bot.GetPet());
         assert(std::get<NewRpgInfo::DoQuest>(s.ai.rpgInfo.data).questId==row.Quest);
         s.bot.quests[row.Quest].CreatureOrGOCount[0]=1;
-        assert(!s.action.Execute({})&&s.ai.casts==1);
+        if(objectMgr.quests.at(row.Quest).RequiredNpcOrGo[0]) { assert(!s.action.Execute({})&&s.ai.casts==1); continue; }
+        // No kill credit: the used-up item waits for the own corpse's loot, then the quest is taken again.
+        s.bot.inventory.erase(row.Item); s.demon.alive=false; s.demon.loot=true; s.ai.context.corpses={{4}};
+        assert(!s.action.Execute({})&&s.ai.casts==1&&s.bot.session.removals==0);
+        s.demon.loot=false;
+        assert(s.action.Execute({})&&s.bot.session.removals==1&&s.bot.GetQuestStatus(row.Quest)==QUEST_STATUS_NONE);
+    }
+    for(auto change:{+[](Scenario& s){s.demon.loot=false;},+[](Scenario& s){s.demon.entry=1;},
+                     +[](Scenario& s){s.demon.summoner={200};},+[](Scenario& s){s.demon.visible=false;},
+                     +[](Scenario& s){s.ai.context.corpses.clear();}}) {
+        Scenario s(7603); s.bot.inventory.clear(); s.demon.alive=false; s.demon.loot=true; s.ai.context.corpses={{4}};
+        change(s); assert(s.action.Execute({})&&s.bot.session.removals==1);
     }
     { Scenario s; s.bot.useChannel=true; assert(s.action.Execute({})&&s.ai.waitedFor==&s.bot.channel); }
     { Scenario s; s.ai.castResult=false; assert(!s.action.Execute({})&&s.ai.waits==0); }
@@ -1078,6 +1153,11 @@ mutations = [
     ('only own summon blocks ritual', 'ritual', 'creature->ToTempSummon()->GetSummonerGUID() == bot->GetGUID()', 'true'),
     ('only living summon blocks ritual', 'ritual', 'creature->IsAlive() &&', ''),
     ('only summoned entry blocks ritual', 'ritual', 'creature->GetEntry() == step.Entry && ', ''),
+    ('own summon corpse loot awaited', 'ritual', 'AI_VALUE(GuidVector, "nearest corpses")', 'GuidVector()'),
+    ('only lootable summon corpse awaited', 'ritual', 'bot->isAllowedToLoot(creature) &&', ''),
+    ('only own summon corpse awaited', 'ritual', 'creature->ToTempSummon() &&\n                creature->ToTempSummon()->GetSummonerGUID() == bot->GetGUID())\n                return false;',
+     'creature->ToTempSummon())\n                return false;'),
+    ('only visible summon corpse awaited', 'ritual', '&&\n                Usable(bot, creature) &&', '&&'),
     ('spawned focus required', 'ritual', '!focus->isSpawned() ||', ''),
     ('usable focus required', 'ritual', '!Usable(bot, focus) || ', ''),
     ('native focus type required', 'ritual', 'focus->GetGoType() != GAMEOBJECT_TYPE_SPELL_FOCUS ||', ''),
