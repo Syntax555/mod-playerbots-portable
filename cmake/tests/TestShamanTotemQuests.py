@@ -275,6 +275,8 @@ for quest, row in quests.items():
         fields.append('{' + ','.join(row[field + str(index + 1)] for index in range(count)) + '}')
     fields.append('{' + ','.join(row['RewardItem' + str(index)] for index in range(1, 5)) + '}')
     native_quests.append('Quest{' + ','.join(fields) + '}')
+production['relationflags'] = function((module / 'Ai/Base/Value/QuestValues.h').read_text(),
+                                        'enum class QuestRelationFlag') + ';'
 production['nativequests'] = ('for(Quest const& q : {' + ',\n'.join(native_quests)
                              + '}) objectMgr.quests.emplace(q.id,q);')
 production['items'] = '\n'.join(
@@ -527,7 +529,8 @@ struct SpellMgr {
     SpellInfo const* GetSpellInfo(uint32 id)const{return spells.contains(id)?&spells.at(id):nullptr;}
 }spellMgr;
 auto* sSpellMgr=&spellMgr;
-enum class QuestRelationFlag:uint32 {questGiver=16,questTaker=32};
+@@RELATIONFLAGS@@
+constexpr uint32 GIVER=uint32(QuestRelationFlag::questGiver),TAKER=uint32(QuestRelationFlag::questTaker);
 using questEntryGuidps=std::unordered_map<int32,std::vector<WorldPosition>>;
 using questRelationGuidps=std::unordered_map<uint32,questEntryGuidps>;
 std::map<uint32,questRelationGuidps> questLocations;
@@ -597,7 +600,7 @@ struct ClassQuestAction {
     virtual ~ClassQuestAction()=default;virtual bool isUseful(){return true;}virtual bool Execute(Event){return false;}
     bool MoveToQuestPosition(WorldPosition const& p){++botAI->moves;botAI->movedTo=p;return botAI->moveResult;}
     bool MoveToQuestLocation(Quest const* q,bool reward){
-        ClassQuestRouteCosts cost(botAI);auto const p=NearestClassQuestLocation(q->id,reward?32:16,cost);
+        ClassQuestRouteCosts cost(botAI);auto const p=NearestClassQuestLocation(q->id,reward?TAKER:GIVER,cost);
         return p!=WorldPosition()&&(p.map!=bot->mapId||bot->GetExactDist(p)>INTERACTION_DISTANCE)&&MoveToQuestPosition(p);
     }
     bool InteractWithQuestGiver(Quest const* q,bool reward);
@@ -705,7 +708,7 @@ struct Scenario {
         for(auto const& [entry,quest]:creature_questender)if(quest==id&&entry!=5895)AddNpc(entry,id,true);
         for(auto const& [entry,quest]:gameobject_queststarter)if(quest==id)AddGo(entry,id,false);
         for(auto const& [entry,quest]:gameobject_questender)if(quest==id)AddGo(entry,id,true);
-        questLocations[63][32][-113791]={{0,2}};
+        questLocations[63][TAKER][-113791]={{0,2}};
         ai.context.quest=value.Calculate();
     }
     void Give(uint32 item){bot.StoreOwnedItem(item,objectMgr.items[item]);}
@@ -714,14 +717,14 @@ struct Scenario {
         if(entry==5891)c->requiresAura=8202;
         if(reward)c->ends.insert(quest);else c->starts.insert(quest);
         auto* result=c.get();ai.units[c->guid]=result;ai.context.npcs.push_back(c->GetGUID());
-        questLocations[quest][reward?32:16][int32(entry)]={{bot.mapId,2}};
+        questLocations[quest][reward?TAKER:GIVER][int32(entry)]={{bot.mapId,2}};
         creatures.push_back(std::move(c));return result;
     }
     GameObject* AddGo(uint32 entry,uint32 quest,bool reward){
         auto g=std::make_unique<GameObject>();g->entry=entry;g->guid=uint32(ai.objects.size()+100);g->mapId=bot.mapId;g->info.type=2;
         if(reward)g->ends.insert(quest);else g->starts.insert(quest);
         auto* result=g.get();ai.objects[g->guid]=result;ai.context.objects.push_back(g->GetGUID());
-        questLocations[quest][reward?32:16][int32(entry)*-1]={{bot.mapId,2}};
+        questLocations[quest][reward?TAKER:GIVER][int32(entry)*-1]={{bot.mapId,2}};
         objects.push_back(std::move(g));return result;
     }
     void Focus(uint32 item,uint32 creature=0){
@@ -767,7 +770,7 @@ int main(){
       Scenario s(quest);s.bot.quests[terminal]=QUEST_STATUS_REWARDED;
       assert(TotemEarned(&s.bot,objectMgr.quests.at(quest).totem)&&!s.Current());}
     {Scenario s(1516);s.Offered();s.bot.available.insert(1519);s.AddNpc(5888,1519,false);
-      questLocations[1516][16].begin()->second={{1,40}};assert(s.Current()==1519);}
+      questLocations[1516][GIVER].begin()->second={{1,40}};assert(s.Current()==1519);}
     {Scenario s(1519);s.bot.available.insert(1516);s.AddNpc(5888,1516,false);assert(s.Current()==1519);}
     {Scenario s;s.Offered();s.bot.available.erase(1517);s.bot.available.insert(1463);s.AddNpc(5887,1463,false);
       assert(!s.Current());}

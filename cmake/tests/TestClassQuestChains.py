@@ -467,6 +467,8 @@ for quest, row in quests.items():
               '{' + ','.join(row[f'RequiredItemId{index}'] for index in range(1, 7)) + '}',
               '{' + ','.join(row[f'RequiredItemCount{index}'] for index in range(1, 7)) + '}']
     native_quests.append('Quest{' + ','.join(fields) + '}')
+production['relationflags'] = function((module / 'Ai/Base/Value/QuestValues.h').read_text(),
+                                        'enum class QuestRelationFlag') + ';'
 production['nativequests'] = 'for(Quest const& native : {' + ',\n'.join(native_quests) + '}) objectMgr.quests.emplace(native.id,native);'
 
 prelude = r'''
@@ -701,7 +703,7 @@ struct WorldPosition {
     }
 };
 float Player::GetExactDist(WorldPosition const& p) const { return std::sqrt((p.x-x)*(p.x-x)+(p.y-y)*(p.y-y)+(p.z-z)*(p.z-z)); }
-enum class QuestRelationFlag:uint32 { questGiver=16, questTaker=32 };
+@@RELATIONFLAGS@@
 struct ItemsValue { std::vector<Item*> items; std::vector<Item*> Get() { return items; } };
 struct Context {
     GuidVector npcs,objects; uint32 quest=0; ItemsValue startItems;

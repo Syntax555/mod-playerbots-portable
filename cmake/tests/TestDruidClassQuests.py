@@ -294,7 +294,8 @@ struct WorldPosition {
 float WorldObject::GetExactDist(WorldPosition const& pos)const{return WorldPosition(this).GetExactDist(pos);}
 using questRelationGuidps=std::map<uint32,std::map<int32,std::vector<WorldPosition>>>;
 std::map<uint32,questRelationGuidps> questLocations;
-enum class QuestRelationFlag {questGiver=16,questTaker=32};
+@@RELATIONFLAGS@@
+constexpr uint32 GIVER=uint32(QuestRelationFlag::questGiver),TAKER=uint32(QuestRelationFlag::questTaker);
 struct GossipMenuItem {uint32 OptionType=1,BoxMoney=0;bool IsCoded=false;};
 struct GossipMenuItemData {uint32 GossipActionMenuId=0;};
 using GossipMenuItemContainer=std::map<uint32,GossipMenuItem>;
@@ -445,7 +446,7 @@ struct ClassQuestAction {
     virtual bool isUseful(){return true;}virtual bool Execute(Event){return false;}
     bool MoveToQuestPosition(WorldPosition const& pos){++botAI->moves;botAI->movedTo=pos;return botAI->moveResult;}
     bool MoveToQuestLocation(Quest const* quest,bool reward){ClassQuestRouteCosts costs(botAI);
-        auto pos=NearestClassQuestLocation(quest->id,reward?32:16,costs);return pos!=WorldPosition()&&MoveToQuestPosition(pos);}
+        auto pos=NearestClassQuestLocation(quest->id,reward?TAKER:GIVER,costs);return pos!=WorldPosition()&&MoveToQuestPosition(pos);}
     bool InteractWithQuestGiver(Quest const*,bool);
     bool DoObjectives(Quest const* quest){++botAI->objectives;botAI->rpgInfo.ChangeToDoQuest(quest->id,quest);return false;}
 };
@@ -502,6 +503,8 @@ production = {
     'focuscheck': native_focus,
     'addloot': function((module / 'Ai/Base/Actions/AddLootAction.cpp').read_text(), 'bool AddLootAction::Execute('),
 }
+production['relationflags'] = function((module / 'Ai/Base/Value/QuestValues.h').read_text(),
+                                        'enum class QuestRelationFlag') + ';'
 for forbidden in ('bot->AddQuest(', 'bot->RewardQuest(', 'bot->CompleteQuest(', 'bot->AreaExploredOrEventHappens(',
                   'learnSpell(', 'SummonCreature(', 'AddItem(', 'TeleportTo(', 'SetMoney('):
     assert forbidden not in source, forbidden
@@ -805,7 +808,7 @@ struct Scenario {
         npc->mapId=bot.mapId;npc->x=bot.x+2;npc->y=bot.y;npc->z=bot.z;npc->spawnId=npc->guid;npc->npcFlags=3;
         if(reward)npc->ends.insert(id);else npc->starts.insert(id);
         ai.units[npc->guid]=npc;ai.context.npcs.push_back(npc->GetGUID());
-        questLocations[id][reward?32:16][int32(entry)].push_back(WorldPosition(npc));
+        questLocations[id][reward?TAKER:GIVER][int32(entry)].push_back(WorldPosition(npc));
         creatures.push_back(std::move(owned));return npc;
     }
     GameObject* AddObject(GameObjectData const& data){
@@ -864,8 +867,8 @@ int main(){
     }
     {Scenario s(5923);s.Offered();s.bot.available.clear();std::vector<uint32> offers;
         for(auto const& [id,q]:objectMgr.quests)if(q.goal==5487&&!q.previous&&(!q.races||(q.races&s.bot.race))){
-            s.bot.available.insert(id);questLocations[id][16][10]={{1,100+float(offers.size())}};offers.push_back(id);}
-        assert(offers.size()>1);auto near=offers.back();questLocations[near][16][10]={{1,1}};
+            s.bot.available.insert(id);questLocations[id][GIVER][10]={{1,100+float(offers.size())}};offers.push_back(id);}
+        assert(offers.size()>1);auto near=offers.back();questLocations[near][GIVER][10]={{1,1}};
         assert(CurrentDruidClassQuest(&s.ai)->Quest==near);s.bot.quests[offers.front()]=QUEST_STATUS_INCOMPLETE;
         assert(CurrentDruidClassQuest(&s.ai)->Quest==offers.front());
     }

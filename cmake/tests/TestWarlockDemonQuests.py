@@ -282,6 +282,8 @@ production = {
     'gonativerelations': '\n'.join(function(go_source, name) for name in (
         'bool GameObject::hasQuest(', 'bool GameObject::hasInvolvedQuest(')),
 }
+production['relationflags'] = function((module / 'Ai/Base/Value/QuestValues.h').read_text(),
+                                        'enum class QuestRelationFlag') + ';'
 production['policyinclude'] = '#include "' + str(module / 'Mgr/Travel/ContinentRoutePolicy.h') + '"'
 special_flags = {int(row['ID']): row['SpecialFlags']
                  for row in sql_rows(core, 'quest_template_addon', set(quests) | {140, 1462})}
@@ -565,7 +567,8 @@ struct WorldPosition {
 };
 float Player::GetExactDist(WorldPosition const& p) const { return std::sqrt((p.x-x)*(p.x-x)+p.y*p.y+(p.z-z)*(p.z-z)); }
 float Player::GetDistance(WorldPosition const& p) const { return std::max(0.0f,GetExactDist(p)-size); }
-enum class QuestRelationFlag:uint32 { objective1=1,objective2=2,objective3=4,objective4=8,questGiver=16,questTaker=32 };
+@@RELATIONFLAGS@@
+constexpr uint32 GIVER=uint32(QuestRelationFlag::questGiver),TAKER=uint32(QuestRelationFlag::questTaker);
 using entryQuestRelationMap=std::unordered_map<int32,std::unordered_map<uint32,uint32>>;
 using questEntryGuidps=std::unordered_map<int32,std::vector<WorldPosition>>;
 using questRelationGuidps=std::unordered_map<uint32,questEntryGuidps>;
@@ -822,8 +825,8 @@ int main() {
     { Scenario s; s.bot.cls=3;
       assert(CanRunClassQuest(&s.ai,3)&&!CanRunClassQuest(&s.ai,CLASS_WARLOCK)&&!s.value.Calculate()); }
     { GameObjectScenario s;
-      assert(locations.data[140][16].contains(-34)&&locations.data[140][32].contains(-33));
-      assert(!locations.data[140][16].contains(-33)&&!locations.data[140][32].contains(-34));
+      assert(locations.data[140][GIVER].contains(-34)&&locations.data[140][TAKER].contains(-33));
+      assert(!locations.data[140][GIVER].contains(-33)&&!locations.data[140][TAKER].contains(-34));
       assert(s.Accept()&&s.bot.GetQuestStatus(140)==QUEST_STATUS_INCOMPLETE&&s.bot.session.accepts==1);
       s.Rewardable(); assert(s.Reward()&&s.bot.GetQuestRewardStatus(140)&&s.bot.session.rewards==1); }
     { GameObjectScenario s; s.bot.session.accept=false;
@@ -848,8 +851,8 @@ int main() {
       assert(s.Accept()&&s.ai.routeMoves==1&&s.bot.session.accepts==0); }
     { GameObjectScenario s; s.ai.context.objects.clear();
       ClassQuestRouteCosts costs(&s.ai);
-      assert(NearestClassQuestLocation(140,16,costs)==WorldPosition(0,200));
-      assert(NearestClassQuestLocation(140,32,costs)==WorldPosition(0,300));
+      assert(NearestClassQuestLocation(140,GIVER,costs)==WorldPosition(0,200));
+      assert(NearestClassQuestLocation(140,TAKER,costs)==WorldPosition(0,300));
       assert(s.questAction.MoveToQuestLocation(s.quest,false)&&s.ai.farMoves==1);
       assert(s.questAction.MoveToQuestLocation(s.quest,true)&&s.ai.farMoves==2); }
     for(bool accepted:{false,true}) {
@@ -927,10 +930,10 @@ int main() {
     { Scenario s; s.Offered(); s.bot.ownAccess=false; assert(!s.value.Calculate()&&!s.action.Execute({})); }
     { Scenario s; s.Offered(); s.bot.canAdd=false; assert(!s.value.Calculate()&&!s.action.Execute({})); }
     { Scenario s; s.Offered(); s.bot.available.clear(); assert(!s.value.Calculate()&&!s.action.Execute({})); }
-    { Scenario s; s.Offered(); locations.data[s.data->Quest][16].clear();
-      s.Objective(16,s.giver.entry,{1,1}); assert(!s.value.Calculate()&&!s.action.Execute({})); }
-    { Scenario s; s.Offered(); s.Objective(16,s.giver.entry,{0,20});
-      s.bot.available.insert(1504); locations.data[1504][16][nativeStarters.at(1504)]={{0,10}};
+    { Scenario s; s.Offered(); locations.data[s.data->Quest][GIVER].clear();
+      s.Objective(GIVER,s.giver.entry,{1,1}); assert(!s.value.Calculate()&&!s.action.Execute({})); }
+    { Scenario s; s.Offered(); s.Objective(GIVER,s.giver.entry,{0,20});
+      s.bot.available.insert(1504); locations.data[1504][GIVER][nativeStarters.at(1504)]={{0,10}};
       assert(s.value.Calculate()==1504); }
     { Scenario s; s.Offered(); s.bot.session.accept=false;
       assert(!s.action.Execute({})&&s.bot.GetQuestStatus(s.data->Quest)==QUEST_STATUS_NONE&&s.bot.session.accepts==1); }
@@ -949,9 +952,9 @@ int main() {
     { Scenario s; s.Offered(); s.giver.starts.clear(); assert(!s.action.Execute({})&&s.bot.session.accepts==0); }
     { Scenario s; s.Offered(); s.giver.x=20; assert(s.action.Execute({})&&s.ai.moves==1&&s.bot.session.accepts==0); }
     { Scenario s; s.Offered(); s.giver.los=false; assert(s.action.Execute({})&&s.ai.moves==1&&s.bot.session.accepts==0); }
-    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{0,200});
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(GIVER,s.giver.entry,{0,200});
       assert(s.action.Execute({})&&s.ai.farMoves==1&&s.bot.session.accepts==0); }
-    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{0,200}); pathResult=false;
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(GIVER,s.giver.entry,{0,200}); pathResult=false;
       assert(!s.action.Execute({})&&s.ai.farMoves==0); }
     for(auto field:{&WorldObject::inWorld,&WorldObject::sameMap,&WorldObject::samePhase,&WorldObject::visible}) {
         Scenario s; s.focus.*field=false; assert(!s.action.Execute({})&&s.ai.castChecks==0);
@@ -1017,9 +1020,9 @@ int main() {
       assert(!s.action.Execute({})&&s.ai.routeMoves==0); }
     { Scenario s(1470); s.Objective(1,1501,{1,200}); s.Crossing(); pathResult=false;
       assert(!s.action.Execute({})&&s.ai.routeMoves==0); }
-    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{1,20}); s.Crossing();
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(GIVER,s.giver.entry,{1,20}); s.Crossing();
       assert(s.value.Calculate()==s.data->Quest&&s.action.Execute({})&&s.ai.routeMoves==1); }
-    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(16,s.giver.entry,{1,20}); s.Crossing();
+    { Scenario s; s.Offered(); s.ai.context.npcs.clear(); s.Objective(GIVER,s.giver.entry,{1,20}); s.Crossing();
       sPlayerbotAIConfig.continentTravel=false; assert(!s.value.Calculate()); }
     { Scenario s; s.ai.context.objects.clear(); s.ai.context.npcs.clear(); s.bot.mapId=1; s.Crossing();
       assert(s.action.Execute({})&&s.ai.routeMoves==1&&s.ai.continentRoute.destination.map==0); }
