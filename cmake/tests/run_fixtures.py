@@ -73,6 +73,8 @@ GAMEPLAY = (
     "TestEraCreatureStats",
     "TestPaladinEraBlessings",
     "TestClassQuestChains",
+    "TestJournalProgression",
+    "TestForeverJournal",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -114,6 +116,7 @@ MODULE_FIXTURES = {
         "TestIpWorldFixes",
         "TestIpCommandSafety",
         "TestClassQuestChains",
+        "TestJournalProgression",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",
@@ -131,6 +134,7 @@ MODULE_FIXTURES = {
         "TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook", "TestEraIgnite", "TestPaladinEraBlessings",
     ),
     "mod-questie-bridge": ("TestQuestieEraQuests",),
+    "mod-forever-journal": ("TestForeverJournal", "TestJournalProgression", "TestProfileKeys"),
 }
 
 

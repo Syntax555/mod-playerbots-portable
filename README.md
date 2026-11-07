@@ -36,7 +36,8 @@ historical rules, rather than a complete recreation of each earlier expansion.
   quest-triggered world buffs.
 - **Optional client interfaces:** DragonUI, Questie and Zygor reuse their native
   windows, quest display and guide/gear systems with the character's own data.
-  See [addon installation and compatibility](docs/addons.md).
+  The Journal shows instances, quests and the next progression steps for the
+  character's own stage. See [addon installation and compatibility](docs/addons.md).
 
 ## Quick start
 
@@ -165,10 +166,10 @@ audit. See [supported scope](docs/configuration.md#supported-scope).
 
 ## Included modules
 
-The bundle builds the maintained Playerbots core with **ten native modules**:
+The bundle builds the maintained Playerbots core with **eleven native modules**:
 Playerbots with integrated Raid Clear, Individual Progression, Era Talents,
 Dungeon Clear, MultiBot Bridge, Questie Bridge, Quest Loot Party, LFG
-Progression, Era Events and World Buff Bots. Runtime defaults and optional features differ from the
+Progression, Era Events, World Buff Bots and Journal. Runtime defaults and optional features differ from the
 original projects' templates.
 
 See the [module catalog and pinned sources](docs/module-versions.md#server-modules)
@@ -183,7 +184,7 @@ refused under the shipped earned-play policy.
 | --- | --- |
 | [Progression](docs/changing-expansions.md) | Milestones, expansion ceilings, experience and realm migration. |
 | [Historical talents and client setup](docs/era-talents.md) | Required files, manual talents, paid training and DragonUI. |
-| [Client addons](docs/addons.md) | Downloads, compatibility and diagnostics for the optional interfaces. |
+| [Client addons](docs/addons.md) | Downloads, compatibility, the Journal and diagnostics for the optional interfaces. |
 | [Combat profiles](docs/combat-profiles.md) | Class choices, SelfBots and equipment scoring. |
 | [Dungeons and raids](docs/bot-dungeons.md) | Autonomous eligibility, player-led clears and encounter limits. |
 | [Questie progress](docs/questie-playerbots.md) · [Zygor progression](docs/zygor-progression.md) | Bot quest display, guides and inspected-bot equipment recommendations. |

@@ -20,6 +20,7 @@ embedded profiles. Active server files live in `configs/`; module files live in
 | `configs/modules/mod-quest-loot-party.conf` | Shared quest-item loot |
 | `configs/modules/mod_world_buff_bots.conf` | Optional timed Vanilla buffs |
 | `configs/modules/mod_era_events.conf` | Outdoor era events |
+| `configs/modules/mod_forever_journal.conf` | Journal data for its client addon: instances, quests, directory, lore and collections |
 | `mysql/my.cnf` | Generated MySQL settings, unless an existing/custom option file is selected |
 
 Normal startup merges profile updates automatically. A setting follows a new
@@ -219,6 +220,7 @@ See [earned bot brackets and PvP](earned-bot-brackets.md) and
 | World Buff Bots | Disabled by default; optional timed Vanilla events with earned-era checks |
 | Era Events | Timed outdoor encounters at exact earned tiers 4, 6, 7 and 12; one real player required, no automatic victory payouts |
 | LFG Progression | Own earned-era and native access requirements for optional Dungeon Finder queues |
+| Journal | Read-only instance, quest, directory, lore and collection data for the Journal addon, locked by each character's own stage; Town Guide spell not taught |
 | Dungeon Clear | Autonomous parties for audited normal dungeons in each bot's earned era and player-led clears; filler creation, recovery, event and spectate shortcuts disabled |
 | Raid Clear | Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and Ahn'Qiraj mechanics; natural progression refuses cloak/device shortcuts, free spell teaching and artificial cancellation of its own crowd control |
 
@@ -249,6 +251,13 @@ character's exact earned tier. Bots participate without counting towards the
 one-real-player minimum. Strict progression blocks realm-wide phasing and
 automatic victory rewards; ordinary creature kill loot remains available.
 See [era world events](world-events.md) for schedules and settings.
+
+The Journal module answers the optional [Journal addon](addons.md#journal). It
+shows each character's own stage and grants nothing. `Journal.Directory.LearnSpell = 0`
+keeps the Town Guide spell untaught, because the required client patch has no
+entry for it; `/directory` and `.find` open the Directory. On first start the
+module works out missing creature and object zones from the map files and saves
+them in the world database (`Journal.Directory.SaveZoneData`).
 
 Quest Loot Party changes only eligible normal-quality quest-item distribution.
 Players and bots must still loot the corpse; drop rolls, ordinary equipment loot,

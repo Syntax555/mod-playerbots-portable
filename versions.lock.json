@@ -266,6 +266,18 @@
         "mod-era-talents-ignite-combat": "98127f1182569c434ca13a932b8d3a3faf3dcdbb",
         "mod-era-talents-quest-taught-lessons": "a09ebf111daf26d978f120772f5eaa8f666844aa"
       }
+    },
+    {
+      "name": "mod-forever-journal",
+      "url": "https://github.com/Syntax555/wow-mod-forever-journal.git",
+      "revision": "948611154ba28b2290accd73a555c1a7550f067a",
+      "upstream": {
+        "url": "https://github.com/buildthehomelab/wow-mod-forever-journal.git",
+        "revision": "36d0f1d4c12f96259bd30ec0681feac2fac73058"
+      },
+      "forkChanges": {
+        "forever-journal-group-by-and-model": "ed0e37c30f5b112e2256267d5ccf16864d69a6fc"
+      }
     }
   ],
   "clientAddons": [
@@ -433,6 +445,19 @@
         "zygor-achievement-quests-335": "70c8a53e22048d97e12f3b188e06062e3be529f5",
         "zygor-achievement-criteria-335": "8f053fd47fbd255c363f8f31c374938294b7e299"
       }
+    },
+    {
+      "name": "JournalProgression",
+      "url": "https://github.com/Syntax555/journalprogression.git",
+      "revision": "5cbdbc611fddc6e5ba3888009acc97530eed70b9",
+      "upstream": {
+        "url": "https://github.com/EvilTactician/JournalProgression.git",
+        "revision": "b2c7be090c05581e261e0e0c10e6bc0e70f375a5"
+      },
+      "path": "JournalProgression",
+      "interface": 30300,
+      "toc": "JournalProgression.toc",
+      "forkChanges": {}
     }
   ]
 }
