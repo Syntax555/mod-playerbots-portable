@@ -230,9 +230,6 @@ fixtures pass. Use native core/module functions before adding replacements.
   dungeon and raid quests before claiming all Shaman class quests complete.
   See [totem coverage](class-quests.md#autonomous-shaman-totem-quests) and the
   [nine-class source comparison](class-quest-comparison.md).
-- [ ] Extend the shared quest-object relation format for item slots 5 and 6
-  if a selected quest requires them. Objective bits 0–3 currently share the
-  map with giver/taker flags; extending the loop alone would mix those roles.
 - [ ] **Mage:** Live-verify the 29 solo class quests of the shared action,
   including the Mirror Lake, Waters of Xavian and Purest Water flask fills at
   their spell focus, the Ju-Ju Heaps and Magecraft (8250). The containment
