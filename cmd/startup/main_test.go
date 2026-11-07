@@ -2,8 +2,11 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1435,6 +1438,141 @@ func TestActivateClientDataRollback(t *testing.T) {
 	actual, err := os.ReadFile(oldPath)
 	if err != nil || string(actual) != "existing" {
 		t.Errorf("existing data was not restored: %q, %v", actual, err)
+	}
+}
+
+func TestDownloadFileWithProgressContinuesInterruptedDownload(t *testing.T) {
+	content := []byte(strings.Repeat("client data archive ", 4096))
+	var interrupt atomic.Bool
+	var ranges []string
+	var mutex sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mutex.Lock()
+		ranges = append(ranges, r.Header.Get("Range"))
+		mutex.Unlock()
+		if interrupt.Load() {
+			w.Header().Set("Content-Length", fmt.Sprint(len(content)))
+			_, _ = w.Write(content[:len(content)/3])
+			w.(http.Flusher).Flush()
+			connection, _, _ := w.(http.Hijacker).Hijack()
+			connection.Close()
+			return
+		}
+		http.ServeContent(w, r, "Data.zip", time.Time{}, bytes.NewReader(content))
+	}))
+	defer server.Close()
+	destination := filepath.Join(t.TempDir(), "Data.zip")
+
+	interrupt.Store(true)
+	if err := downloadFileWithProgress(context.Background(), server.URL, destination); err == nil {
+		t.Fatal("interrupted download reported success")
+	}
+	if partial, err := os.ReadFile(destination + ".download"); err != nil || !bytes.Equal(partial, content[:len(content)/3]) {
+		t.Fatalf("interrupted download was not kept: %d bytes, %v", len(partial), err)
+	}
+	interrupt.Store(false)
+	if err := downloadFileWithProgress(context.Background(), server.URL, destination); err != nil {
+		t.Fatal(err)
+	}
+	if downloaded, err := os.ReadFile(destination); err != nil || !bytes.Equal(downloaded, content) {
+		t.Fatalf("continued download differs: %d bytes, %v", len(downloaded), err)
+	}
+	if want := fmt.Sprintf("bytes=%d-", len(content)/3); len(ranges) != 2 || ranges[0] != "" || ranges[1] != want {
+		t.Errorf("requested ranges = %q, want [\"\" %q]", ranges, want)
+	}
+
+	// A partial file that is already complete is downloaded again, not stuck at HTTP 416.
+	if err := os.Rename(destination, destination+".download"); err != nil {
+		t.Fatal(err)
+	}
+	if err := downloadFileWithProgress(context.Background(), server.URL, destination); err != nil {
+		t.Fatal(err)
+	}
+	if downloaded, err := os.ReadFile(destination); err != nil || !bytes.Equal(downloaded, content) {
+		t.Fatalf("restarted download differs: %d bytes, %v", len(downloaded), err)
+	}
+
+	// A host that ignores the range sends the whole file, which replaces the partial one.
+	whole := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	defer whole.Close()
+	writeFixture(t, destination+".download", "stale")
+	if err := downloadFileWithProgress(context.Background(), whole.URL, destination); err != nil {
+		t.Fatal(err)
+	}
+	if downloaded, err := os.ReadFile(destination); err != nil || !bytes.Equal(downloaded, content) {
+		t.Fatalf("full response was appended to the partial file: %d bytes, %v", len(downloaded), err)
+	}
+}
+
+func TestEnsureClientDataKeepsArchiveUntilActivated(t *testing.T) {
+	zipPath := filepath.Join(t.TempDir(), "Data.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"dbc/test.dat": "dbc", "maps/test.dat": "maps", "vmaps/test.dat": "vmaps", "mmaps/test.dat": "mmaps",
+	})
+	archive, err := os.ReadFile(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+	workDir := t.TempDir()
+	archives := func() []string {
+		t.Helper()
+		found, err := filepath.Glob(filepath.Join(workDir, ".client-data-*"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return found
+	}
+
+	// A stopped extraction keeps the complete archive for the next start.
+	urlDigest := sha256.Sum256([]byte(server.URL))
+	saved := filepath.Join(workDir, fmt.Sprintf(".client-data-%x.zip", urlDigest[:6]))
+	if err := os.WriteFile(saved, archive, 0644); err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ensureClientData(canceled, workDir, t.TempDir(), server.URL, false); err == nil {
+		t.Fatal("canceled installation reported success")
+	}
+	if !fileExists(saved) {
+		t.Fatal("stopped extraction removed the downloaded archive")
+	}
+	if err := ensureClientData(context.Background(), workDir, t.TempDir(), server.URL, false); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 0 || !isClientDataPresent(filepath.Join(workDir, "data")) {
+		t.Fatalf("saved archive was not used: %d requests", requests.Load())
+	}
+	if left := archives(); len(left) != 0 {
+		t.Errorf("archive remains after activation: %v", left)
+	}
+
+	// A damaged archive is removed so the next start downloads it again.
+	otherWorkDir := t.TempDir()
+	damaged := filepath.Join(otherWorkDir, fmt.Sprintf(".client-data-%x.zip", urlDigest[:6]))
+	if err := os.WriteFile(damaged, archive[:len(archive)/2], 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureClientData(context.Background(), otherWorkDir, t.TempDir(), server.URL, false); err == nil {
+		t.Fatal("damaged archive was extracted")
+	}
+	if fileExists(damaged) {
+		t.Error("damaged archive was kept")
+	}
+	createTestZip(t, damaged, map[string]string{"dbc/test.dat": "dbc"})
+	if err := ensureClientData(context.Background(), otherWorkDir, t.TempDir(), server.URL, false); err == nil {
+		t.Fatal("archive without the required folders was activated")
+	}
+	if fileExists(damaged) {
+		t.Error("archive without the required folders was kept")
 	}
 }
 

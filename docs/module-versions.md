@@ -84,7 +84,11 @@ pins MySQL and OpenSSL archives by version and SHA-256.
 The packages omit server DBC, map, vmap and mmap files. First startup downloads
 `Data.zip` (about 1.2 GB) from
 [wowgaming/client-data v20.0](https://github.com/wowgaming/client-data/releases/tag/v20.0)
-and extracts it into `data/`. `--data-url` can select another archive; see
+and extracts it into `data/`. An interrupted download continues on the next
+start from the partial archive kept beside `data/` as
+`.client-data-*.zip.download`. The archive is removed once its data is active
+or when it cannot be extracted.
+`--data-url` can select another archive; see
 [launcher options](updating.md#launcher-options).
 
 ## Source preparation
