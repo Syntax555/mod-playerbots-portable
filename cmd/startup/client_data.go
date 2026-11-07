@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -26,12 +27,22 @@ func isClientDataPresent(dataDir string) bool {
 	return true
 }
 
+// downloadFileWithProgress keeps an interrupted download in destPath.download
+// and continues it on the next call. The caller verifies the completed file.
 func downloadFileWithProgress(ctx context.Context, url string, destPath string) error {
+	tmpPath := destPath + ".download"
+	var offset int64
+	if info, err := os.Stat(tmpPath); err == nil && info.Mode().IsRegular() {
+		offset = info.Size()
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create download request: %w", err)
 	}
 	req.Header.Set("User-Agent", "AzerothCore-Playerbots-Launcher/1.0")
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -49,43 +60,56 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	}
 	defer resp.Body.Close()
 
+	// A download stopped after its last byte has nothing left to request.
+	if offset > 0 && resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+		resp.Body.Close()
+		if err := os.Remove(tmpPath); err != nil {
+			return fmt.Errorf("failed to restart download %s: %w", tmpPath, err)
+		}
+		return downloadFileWithProgress(ctx, url, destPath)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("server returned HTTP %s", resp.Status)
 	}
+	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	total := resp.ContentLength
+	if resp.StatusCode == http.StatusPartialContent {
+		if !strings.HasPrefix(resp.Header.Get("Content-Range"), fmt.Sprintf("bytes %d-", offset)) {
+			return fmt.Errorf("server resumed the download at an unexpected position: %q", resp.Header.Get("Content-Range"))
+		}
+		flags = os.O_WRONLY | os.O_APPEND
+		if total >= 0 {
+			total += offset
+		}
+		fmt.Printf("Resuming the download after %.1f MB.\n", float64(offset)/(1024*1024))
+	} else {
+		offset = 0
+	}
 
-	tmpPath := destPath + ".download"
 	if err := os.MkdirAll(filepath.Dir(tmpPath), 0755); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)
 	}
-
-	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	out, err := os.OpenFile(tmpPath, flags, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file %s: %w", tmpPath, err)
 	}
-	finalized := false
-	defer func() {
-		if !finalized {
-			out.Close()
-			_ = os.Remove(tmpPath)
-		}
-	}()
 
-	progress := newDownloadProgress(resp.ContentLength)
+	progress := newDownloadProgress(total)
+	progress.done, progress.resumed = offset, offset
 	// The request context also cancels reading the response body.
 	_, err = io.Copy(io.MultiWriter(out, progress), resp.Body)
 	progress.finish()
+	closeErr := out.Close()
 	if err != nil {
-		return fmt.Errorf("failed to download to %s: %w", tmpPath, err)
+		return fmt.Errorf("failed to download to %s; the next start continues it: %w", tmpPath, err)
 	}
-	if err := out.Close(); err != nil {
-		return fmt.Errorf("failed to close downloaded file: %w", err)
+	if closeErr != nil {
+		return fmt.Errorf("failed to close downloaded file: %w", closeErr)
 	}
 
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		return fmt.Errorf("failed to finalize downloaded file: %w", err)
 	}
-	finalized = true
-
 	return nil
 }
 
@@ -97,6 +121,7 @@ type downloadProgress struct {
 	interval time.Duration
 	total    int64
 	done     int64
+	resumed  int64 // bytes from an earlier attempt, excluded from the speed
 	started  time.Time
 	printed  time.Time
 }
@@ -130,7 +155,7 @@ func (p *downloadProgress) print(now time.Time) {
 	const mb = 1024 * 1024
 	speed := 0.0
 	if elapsed := now.Sub(p.started).Seconds(); elapsed > 0 {
-		speed = float64(p.done) / mb / elapsed
+		speed = float64(p.done-p.resumed) / mb / elapsed
 	}
 	if p.total <= 0 {
 		printProgress(p.console, "%6.1f MB downloaded (%5.1f MB/s)", float64(p.done)/mb, speed)
@@ -313,23 +338,40 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 	}
 	defer os.RemoveAll(stageDir)
 	stageDataDir := filepath.Join(stageDir, "data")
-	zipPath := filepath.Join(stageDir, "Data.zip")
-	fmt.Printf("Downloading client data from %s...\n", dataURL)
-
-	if err := downloadFileWithProgress(ctx, dataURL, zipPath); err != nil {
-		return fmt.Errorf("failed to download client data: %w", err)
+	// The archive outlives the stage until its data is active: a later start
+	// continues an interrupted download or extracts again without one. Its name
+	// follows the URL, so a different archive is never appended to it.
+	urlDigest := sha256.Sum256([]byte(dataURL))
+	zipPath := filepath.Join(workDir, fmt.Sprintf(".client-data-%x.zip", urlDigest[:6]))
+	if fileExists(zipPath) {
+		fmt.Printf("Extracting client data downloaded earlier from %s...\n", dataURL)
+	} else {
+		fmt.Printf("Downloading client data from %s...\n", dataURL)
+		if err := downloadFileWithProgress(ctx, dataURL, zipPath); err != nil {
+			return fmt.Errorf("failed to download client data: %w", err)
+		}
 	}
 	if err := extractZip(ctx, zipPath, stageDataDir); err != nil {
+		if ctx.Err() == nil {
+			_ = os.Remove(zipPath)
+		}
 		return fmt.Errorf("failed to extract client data: %w", err)
 	}
 
 	if !isClientDataPresent(stageDataDir) {
+		_ = os.Remove(zipPath)
 		return errors.New("client data archive is missing populated required folders (dbc, maps, vmaps, mmaps)")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return activateClientData(stageDataDir, workDataDir)
+	if err := activateClientData(stageDataDir, workDataDir); err != nil {
+		return err
+	}
+	if err := os.Remove(zipPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not remove the downloaded archive %s: %v\n", zipPath, err)
+	}
+	return nil
 }
 
 // The previous directory is retained if it contains user data. Only a fully
