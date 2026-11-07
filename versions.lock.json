@@ -409,7 +409,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "7a7bb800eeb4ba872d317ecf03ed5311b5c017cd",
+      "revision": "8f053fd47fbd255c363f8f31c374938294b7e299",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
@@ -428,7 +428,10 @@
         "zygor-quel-danas-335": "1af2951284f18525f61e51ed27c9e425f78a4171",
         "zygor-featured-links": "a4466f185111befea1853da660a3b80d67c32985",
         "zygor-coordinate-zone-names": "9583005610c542f766f3ced302787e6391d172f0",
-        "zygor-era-tabs": "f95ca9c0e78191e388508889bfe608e84254841b"
+        "zygor-era-tabs": "f95ca9c0e78191e388508889bfe608e84254841b",
+        "zygor-quest-givers-335": "903cd36456d176d1280ba19ff20010c1035167d3",
+        "zygor-achievement-quests-335": "70c8a53e22048d97e12f3b188e06062e3be529f5",
+        "zygor-achievement-criteria-335": "8f053fd47fbd255c363f8f31c374938294b7e299"
       }
     }
   ]
