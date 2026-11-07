@@ -65,6 +65,15 @@ inspected-bot view always follows that bot's personal progression.
   Draenei and Blood Elves; other races' account unlock is not visible to the
   addon, so it uses tier 8. Manual loading can still show a locked guide with
   its warning.
+- **Era tabs:** the Guide Manager's Vanilla, TBC and Wrath tabs list one
+  era's guides in every category and select the matching Featured page. It
+  opens on the character's earned era. A guide belongs to the era its title
+  names, else to the era of most places it visits; guides without places,
+  such as disenchanting routes, appear in every tab. Unearned eras are dimmed
+  but can be browsed. Vanilla routes come from Zygor's Wrath Classic data:
+  quests added to old zones in TBC, such as the Dustwallow Marsh update, are
+  refused before tier 8 and leave those steps out, and the routes are paced
+  for Wrath experience rather than the 1.12 values Vanilla characters earn.
 - **Milestones:** *Individual Progression\Milestone Chain* follows the default
   chain and the realm ceiling. While progression filters apply, decisions
   including *Bang a Gong!*,
