@@ -50,6 +50,10 @@ fixtures pass. Use native core/module functions before adding replacements.
   duplicate Sunfury Magisters; Howling Fjord's Dead Man's Debt, Stairway to
   Mercy and Mimicking Nature's Call. MySQL replay and source fixtures do not
   establish running-realm behavior.
+- [ ] Before pinning a core that names a newer wowgaming/client-data release
+  (`TestWorldStartupData` fails), let the launcher replace an existing
+  installation's older `data/`. It currently checks only that the folders are
+  populated, so existing realms would keep maps and mmaps the new core rejects.
 
 ### Bots, talents and client interfaces
 
