@@ -127,15 +127,12 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Validate [Zygor](zygor-progression.md) login/reconnect, locked quests and
   givers, level-60/70 holds, guide browsing, tier-7/8/13 sources and suppressed
   native Talent Advisor while EraTalents owns the tree.
-- [ ] Check the Zygor era tabs in game for each era and faction, then review
-  the imported guides that still differ from the pinned world data. Horde Save
-  Brewfest names givers the world database does not spawn, and A Visit To The
-  Wonderworks differs from its quest relation. The Alliance blacksmithing
-  include routes Tormus Deepforge's quests through Cataclysm zones; about 160
-  include waypoints and the Well Read, The Scavenger, Mr. Pinchy's Magical
-  Crawdad Box and Fish Don't Leave Footprints guides still use Cataclysm zone
-  maps. Vanilla routes lack the experience the 1.12 curve needs where TBC-era
-  quests are refused, notably Alliance Dustwallow Marsh (41-45).
+- [ ] Check the Zygor era tabs and the corrected Brewfest, holiday, fishing
+  and exploration routes in game for each era and faction. Vanilla routes lack
+  the experience the 1.12 curve needs where TBC-era quests are refused,
+  notably Alliance Dustwallow Marsh (41-45). Includes that no guide loads
+  still hold Cataclysm and Pandaria steps; the fork's parse test keeps them
+  out of loaded guides.
 - [ ] Test Zygor's inspected-altbot Gear Finder with stock and DragonUI views:
   bot/owner class differences, empty/cold data, profile/equipment changes,
   faction/era/quest/vendor access, rapid target switches and closing during
