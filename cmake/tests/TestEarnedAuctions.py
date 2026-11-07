@@ -1592,9 +1592,12 @@ void ServiceTests()
         assert(s.Visit()); assert(s.bot.session.buys == 1 && s.bot.money == 9500);
     }
     {
-        // Natural upkeep has no disenchanting: a random bot sells outgrown bound gear.
+        // Natural upkeep disenchants bound gear a random bot can use and sells the outgrown
+        // rest, such as armor of another type.
         Scenario s; Item& gear = s.BagItem(100, 1, ITEM_USAGE_DISENCHANT); gear.bound = true;
         gear.proto.Quality = ITEM_QUALITY_UNCOMMON;
+        assert(!SellsToVendor(&s.bot.ai, &gear, ITEM_USAGE_DISENCHANT) && !HasVendorSurplus(&s.bot.ai));
+        s.bot.usable = false;
         assert(SellsToVendor(&s.bot.ai, &gear, ITEM_USAGE_DISENCHANT) && HasVendorSurplus(&s.bot.ai));
         s.bot.ai.master = true; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.ai.master = false;
         s.bot.random = false; assert(!HasVendorSurplus(&s.bot.ai)); s.bot.random = true;
@@ -1951,6 +1954,8 @@ mutations = [
      '!ai->HasGameClientMaster() && (proto->Quality', '(proto->Quality'),
     ('unbound gear vendored', 'service', ' && item->IsSoulBound() &&', ' &&'),
     ('gear the bot cannot wear vendored', 'service', 'proto->RequiredLevel <= ai->GetBot()->GetLevel() && ', ''),
+    ('usable gear vendored instead of disenchanted', 'service',
+     ' &&\n           ai->GetBot()->CanUseItem(proto) != EQUIP_ERR_OK;', ';'),
     ('stock reserved below the auction level', 'service', ' || !MeetsAuctionLevel(ai->GetBot()) || !CanList(ai, item))',
      ' || !CanList(ai, item))'),
     ('returned stacks counted apart', 'service', 'Unsold().Record(stock, returned, ListingSeconds(), ListingSeconds());',

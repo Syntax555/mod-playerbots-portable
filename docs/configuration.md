@@ -102,6 +102,7 @@ single core expansion toggle. See [progression and ceilings](changing-expansions
 | Random bots speak to the flight master of each zone they reach to discover its flight point | Enabled; normal interaction range and reaction apply |
 | Travel between continents and islands by ship, zeppelin, elevator, tram, portal and the bot's own teleports | Enabled; faction territory and each bot's earned era apply |
 | Automatic use of earned loot upgrades | Enabled |
+| Random bots with Enchanting disenchant bound gear they no longer need | Enabled; their own spell, after due vendor, repair and training visits |
 | Equipment upgrades / other useful group loot | Need / Greed, subject to native loot eligibility |
 | Teleport recovery and free summon support | Disabled |
 | Earned auction trading | Enabled; ordinary auctioneer/mailbox access |
