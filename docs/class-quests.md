@@ -104,8 +104,9 @@ travel disabled or its catalog unavailable, quest routing stays on the current m
 Blood elf warlocks turn in The Stone (9529) at the Voidstone in the Dead Scar,
 accept The Rune of Summoning (9619) from it and use their own Voidstone at the
 Rune of Summoning in Goldenmist Village. The native event summons the Voidwalker.
-The Dreadsteed, Infernal, Doomguard and historical demon grimoire purchases
-remain pending. End-to-end live verification for all five warlock races is still
+The Infernal chain (7601–7603) and historical demon grimoire purchases remain
+pending. The Dreadsteed and Doomguard chains need Scholomance, Dire Maul or a
+group and remain player content. End-to-end live verification for all five warlock races is still
 required; see the [class audit](todo.md#dungeons-raids-and-outdoor-content).
 
 ## Autonomous shaman totem quests
@@ -255,7 +256,7 @@ routes.
 
 Class quests that need a group, dungeon, raid, profession, pickpocketing or
 raid tokens remain player content. These include the Charger, Dreadsteed,
-Rhok'delar and Swift Flight Form chains, the Zul'Gurub, Ahn'Qiraj and Naxxramas
+Doomguard, Rhok'delar and Swift Flight Form chains, the Zul'Gurub, Ahn'Qiraj and Naxxramas
 class rewards, the elite Fire Hardened Mail, Test of Righteousness and Cyclonian
 quests, the crafted Brutal Armor and enchanted robes, the Horde rogue poison
 chain and the mage containment coffers. Complete live runs remain on the
