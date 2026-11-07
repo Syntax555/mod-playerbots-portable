@@ -127,6 +127,12 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Validate [Zygor](zygor-progression.md) login/reconnect, locked quests and
   givers, level-60/70 holds, guide browsing, tier-7/8/13 sources and suppressed
   native Talent Advisor while EraTalents owns the tree.
+- [ ] Check the Zygor era tabs in game for each era and faction, then review
+  the imported guides against the pinned world data: over 100 steps talk to
+  a different NPC than the quest's 3.3.5a giver or taker, ten achievement
+  guides use Cataclysm quest IDs, and Vanilla routes lack the experience the
+  1.12 curve needs where TBC-era quests are refused, notably Alliance Dustwallow
+  Marsh (41-45). Correct each against the server's quest relations before use.
 - [ ] Test Zygor's inspected-altbot Gear Finder with stock and DragonUI views:
   bot/owner class differences, empty/cold data, profile/equipment changes,
   faction/era/quest/vendor access, rapid target switches and closing during

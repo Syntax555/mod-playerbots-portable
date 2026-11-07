@@ -409,7 +409,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "bc449e83351dba1aa611c13d24774afd2eb0b158",
+      "revision": "7a7bb800eeb4ba872d317ecf03ed5311b5c017cd",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
@@ -424,7 +424,11 @@
         "zygor-inspected-altbot-gearfinder": "1633821cf1cf4221326cb2e42c905da676054faa",
         "zygor-gearfinder-equipment-launchers": "de9461efb1b4720dc36c2fc9daa6e21e485414c3",
         "zygor-paired-slot-upgrades": "70c7a44db664902126e901e8a6edb94849e7f9e0",
-        "zygor-class-lesson-guides": "409d8564c49a029cb4252b97a8558dbe07b914fb"
+        "zygor-class-lesson-guides": "409d8564c49a029cb4252b97a8558dbe07b914fb",
+        "zygor-quel-danas-335": "1af2951284f18525f61e51ed27c9e425f78a4171",
+        "zygor-featured-links": "a4466f185111befea1853da660a3b80d67c32985",
+        "zygor-coordinate-zone-names": "9583005610c542f766f3ced302787e6391d172f0",
+        "zygor-era-tabs": "f95ca9c0e78191e388508889bfe608e84254841b"
       }
     }
   ]

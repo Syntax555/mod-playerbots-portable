@@ -533,6 +533,8 @@ end
 check(IP:GuideRequirement(guide("a", "step\n\tgoto Hellfire Peninsula,50,50\n")).tier == 8, "Outland needs tier 8")
 check(IP:GuideRequirement(guide("b", ".talk Kael|goto Isle of Quel'Danas,48,30")).tier == 12, "Quel'Danas needs tier 12")
 check(IP:GuideRequirement(guide("c", "goto Borean Tundra,1,1\ngoto Dalaran/1 55,40")).tier == 13, "Northrend needs tier 13")
+check(IP:GuideRequirement(guide("c2", "goto Shadowmoon Valley 50.2,40.1\n")).tier == 8,
+	"a zone before space-separated coordinates needs its tier")
 check(IP:GuideRequirement(guide("d", "goto Orgrimmar/0 55.69,40\ngoto 53.1,44.2")).tier == 0, "Kalimdor needs no tier")
 check(IP:GuideRequirement(guide("e", "goto Ghostlands,40,40")).tier == 8, "an Undead needs tier 8 for the TBC race zones")
 player.race = "BloodElf"

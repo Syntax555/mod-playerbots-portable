@@ -192,6 +192,7 @@ def mutations():
         ('unknown tier unlocks', m, 'if not (self.state and self.state.ip) then return "unknown" end\n\tif not self:Gated()',
          'if not (self.state and self.state.ip) then return "ok" end\n\tif not self:Gated()'),
         ('effective tier ignored', m, 'self.state.effective >= tier then return "ok" end', 'true then return "ok" end'),
+        ('coordinates kept in zone names', m, 'text = string.gsub(text, "%s+[%d%.]+$", "")', ''),
         ('bot accounts gated', m, 'return s ~= nil and s.ip and s.account == "N" and not s.gm', 'return s ~= nil and s.ip'),
         ('auto mode without bridge gates', m, 'if status == "absent" then return self:Mode() == "on" end',
          'if status == "absent" then return true end'),
