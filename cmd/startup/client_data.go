@@ -15,7 +15,33 @@ import (
 	"time"
 )
 
-const defaultClientDataURL = "https://github.com/wowgaming/client-data/releases/download/v20.0/Data.zip"
+// clientDataRelease is the wowgaming/client-data release whose map, vmap and
+// mmap formats the pinned core reads; its installer names the same release.
+const clientDataRelease = "v20.0"
+
+const defaultClientDataURL = "https://github.com/wowgaming/client-data/releases/download/" + clientDataRelease + "/Data.zip"
+
+// Every launcher before the release marker installed v20.0. Keep this value
+// when clientDataRelease changes, so those installations are replaced.
+const unmarkedClientDataRelease = "v20.0"
+
+// clientDataReleaseFile is the marker AzerothCore's installer keeps in data/.
+const clientDataReleaseFile = "data-version"
+
+// installedClientDataRelease returns the release recorded in dataDir, or ""
+// when the marker cannot be read.
+func installedClientDataRelease(dataDir string) string {
+	content, err := os.ReadFile(filepath.Join(dataDir, clientDataReleaseFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return unmarkedClientDataRelease
+	}
+	for line := range strings.Lines(string(content)) {
+		if release, ok := strings.CutPrefix(strings.TrimSpace(line), "INSTALLED_VERSION="); ok {
+			return release
+		}
+	}
+	return ""
+}
 
 func isClientDataPresent(dataDir string) bool {
 	requiredDirs := []string{"dbc", "maps", "vmaps", "mmaps"}
@@ -313,18 +339,31 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 	workDataDir := filepath.Join(workDir, "data")
 	baseDataDir := filepath.Join(baseDir, "data")
 
-	// 1. Check if client data is already present in baseDir/data or workDir/data
-	if isClientDataPresent(baseDataDir) {
-		fmt.Printf("Client data verified at %s.\n", baseDataDir)
-		return nil
-	}
-	if isClientDataPresent(workDataDir) {
-		fmt.Printf("Client data verified at %s.\n", workDataDir)
-		return nil
+	// A populated baseDir/data is the one new configurations use; the launcher
+	// replaces only workDir/data, so an outdated baseDir copy stops the start.
+	// The worldserver rejects maps, vmaps and mmaps of another release.
+	outdated := ""
+	for _, dataDir := range []string{baseDataDir, workDataDir} {
+		if !isClientDataPresent(dataDir) {
+			continue
+		}
+		release := installedClientDataRelease(dataDir)
+		if release == clientDataRelease {
+			fmt.Printf("Client data %s verified at %s.\n", release, dataDir)
+			return nil
+		}
+		outdated = fmt.Sprintf("Client data at %s is release %q; this server needs %s.", dataDir, release, clientDataRelease)
+		if dataDir != workDataDir {
+			return fmt.Errorf("%s Replace it with that release, or remove it to download the release into %s", outdated, workDataDir)
+		}
 	}
 
 	fmt.Println("\n=== Client Data Verification ===")
-	fmt.Printf("Required client data (dbc, maps, vmaps, mmaps) not found in %s.\n", workDataDir)
+	if outdated != "" {
+		fmt.Println(outdated)
+	} else {
+		fmt.Printf("Required client data (dbc, maps, vmaps, mmaps) not found in %s.\n", workDataDir)
+	}
 	if dataURL == "" {
 		dataURL = defaultClientDataURL
 	}
@@ -361,6 +400,12 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 	if !isClientDataPresent(stageDataDir) {
 		_ = os.Remove(zipPath)
 		return errors.New("client data archive is missing populated required folders (dbc, maps, vmaps, mmaps)")
+	}
+	// --data-url names a mirror of the required release. The marker becomes
+	// active with the data in one rename.
+	marker := []byte("INSTALLED_VERSION=" + clientDataRelease + "\n")
+	if err := os.WriteFile(filepath.Join(stageDataDir, clientDataReleaseFile), marker, 0644); err != nil {
+		return fmt.Errorf("failed to record the client data release: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -399,7 +444,7 @@ func activateClientData(stageDataDir, workDataDir string) error {
 	}
 	if backupPath != "" && dirExists(backupPath) {
 		if entries, err := os.ReadDir(backupPath); err == nil && len(entries) > 0 {
-			fmt.Printf("Previous incomplete client data preserved at %s.\n", backupPath)
+			fmt.Printf("Previous client data preserved at %s.\n", backupPath)
 		}
 	}
 	return nil

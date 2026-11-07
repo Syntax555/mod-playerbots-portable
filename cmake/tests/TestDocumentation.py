@@ -146,11 +146,12 @@ def version_problems(provenance, lock, workflow, client_data):
         assert version, f'the release workflow no longer sets {pattern}'
         if not re.match(re.escape(version.group(1)) + r'(?![0-9])', runtime.get(name, '')):
             problems.append(f'bundled {name} {version.group(1)} differs from the listed {runtime.get(name)}')
-    release = re.search(r'defaultClientDataURL = "https://github[.]com/(wowgaming/client-data)'
-                        r'/releases/download/([^/]+)/Data[.]zip"', client_data)
-    assert release, 'the launcher no longer downloads Data.zip from a wowgaming/client-data release'
-    if f'github.com/{release.group(1)}/releases/tag/{release.group(2)})' not in provenance:
-        problems.append(f'the server data release {release.group(2)} is not linked')
+    release = re.search(r'^const clientDataRelease = "([^"]+)"$', client_data, re.MULTILINE)
+    assert release and ('defaultClientDataURL = "https://github.com/wowgaming/client-data/releases/download/" + '
+                        'clientDataRelease + "/Data.zip"') in client_data, \
+        'the launcher no longer downloads Data.zip from a wowgaming/client-data release'
+    if f'github.com/wowgaming/client-data/releases/tag/{release.group(1)})' not in provenance:
+        problems.append(f'the server data release {release.group(1)} is not linked')
     return problems
 
 
@@ -202,8 +203,8 @@ def self_check():
             'clientPatch': {'stormLib': {'revision': 'c' * 40}, 'localizations': {'deDE': {'revision': 'd' * 40}}},
             'historicalClassData': {'sources': [{'revision': 'e' * 40}]}}
     workflow = "MYSQL_VERSION: '8.0.1'\nOPENSSL_VERSION: '3.1.2'\nboost_version: 1.80.0\n"
-    client_data = ('const defaultClientDataURL = '
-                   '"https://github.com/wowgaming/client-data/releases/download/v9.0/Data.zip"')
+    client_data = ('const clientDataRelease = "v9.0"\n\nconst defaultClientDataURL = '
+                   '"https://github.com/wowgaming/client-data/releases/download/" + clientDataRelease + "/Data.zip"')
     provenance = ''.join(f'`{letter * 12}` ' for letter in 'abcdef') + (
         '\n| MySQL Community Server | 8.0.1 |\n| OpenSSL | 3.1.2, build |\n| Boost | 1.80.0 |\n'
         '[release](https://github.com/wowgaming/client-data/releases/tag/v9.0)\n')

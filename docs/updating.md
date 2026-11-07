@@ -217,7 +217,7 @@ Run `startup.exe --help` for the same list.
 | `--auth-port <port>` | Authserver port written to a newly created `authserver.conf` (default 3724). |
 | `--timeout <seconds>` | Time to wait for MySQL to become ready (default 30). |
 | `--download-data-only` | Download and extract the server data, then exit. |
-| `--data-url <url>` | Download the server data archive from another URL. |
+| `--data-url <url>` | Download the server data archive from another URL, such as a mirror of the release the server needs. |
 | `--skip-data-check` | Do not check for or download the server data. |
 | `--init-only` | Create missing configurations, initialize MySQL and run the database/user creation script, then exit. Core/module SQL imports and migrations require a normal server start. |
 | `--skip-sql` | Skip the bundled script that creates the AzerothCore databases and database user. |

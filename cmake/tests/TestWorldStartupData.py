@@ -203,15 +203,21 @@ for label, check, mutant in (
 def check_client_data(launcher):
     # A core with newer maps, vmaps or mmaps names the matching client-data release here.
     installer = (core / 'apps/installer/includes/functions.sh').read_text()
-    release = re.search(r'client-data/releases/download/([^/"]+)/Data[.]zip"', launcher)
+    release = re.search(r'^const clientDataRelease = "([^"]+)"$', launcher, re.MULTILINE)
     expected = re.search(r'^\s*local VERSION=(\S+)$', installer, re.MULTILINE)
     assert release and expected and release.group(1) == expected.group(1), (release, expected)
+    assert '/client-data/releases/download/" + clientDataRelease + "/Data.zip"' in launcher
+    # Existing data is replaced when the release in the installer's marker differs.
+    assert 'dataVersionFile="$path/data-version"' in installer
+    assert '&& echo "INSTALLED_VERSION=$VERSION" > "$dataVersionFile"' in installer
+    assert 'const clientDataReleaseFile = "data-version"' in launcher
+    assert '"INSTALLED_VERSION=" + clientDataRelease + "\\n"' in launcher
 
 
 launcher = (REPOSITORY / 'cmd/startup/client_data.go').read_text()
 check_client_data(launcher)
 print('Server data: the launcher downloads the client-data release of the pinned core')
-mutant = re.sub(r'(client-data/releases/download/)[^/"]+', r'\1v0.0', launcher)
+mutant = re.sub(r'(?m)^(const clientDataRelease = )"[^"]+"', r'\1"v0.0"', launcher)
 assert mutant != launcher
 try:
     check_client_data(mutant)

@@ -1290,6 +1290,7 @@ func TestEnsureClientData(t *testing.T) {
 		_ = os.MkdirAll(sub, 0755)
 		_ = os.WriteFile(filepath.Join(sub, "test.dat"), []byte("data"), 0644)
 	}
+	writeFixture(t, filepath.Join(baseDataDir, clientDataReleaseFile), "INSTALLED_VERSION="+clientDataRelease+"\n")
 	if err := ensureClientData(ctx, workDir, baseDir, "", false); err != nil {
 		t.Errorf("ensureClientData with existing baseDir client data failed: %v", err)
 	}
@@ -1419,6 +1420,77 @@ func TestEnsureClientDataBacksUpIncompleteDataset(t *testing.T) {
 	previous, err := os.ReadFile(filepath.Join(backups[0], "custom.dat"))
 	if err != nil || string(previous) != "keep existing file" {
 		t.Errorf("backup did not preserve user data: %q, %v", previous, err)
+	}
+}
+
+func TestEnsureClientDataReplacesAnotherRelease(t *testing.T) {
+	zipPath := filepath.Join(t.TempDir(), "Data.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"dbc/test.dat": "new", "maps/test.dat": "new", "vmaps/test.dat": "new", "mmaps/test.dat": "new",
+	})
+	archive, err := os.ReadFile(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+	populate := func(dataDir, marker string) {
+		t.Helper()
+		for _, folder := range []string{"dbc", "maps", "vmaps", "mmaps"} {
+			writeFixture(t, filepath.Join(dataDir, folder, "test.dat"), "old")
+		}
+		if marker != "" {
+			writeFixture(t, filepath.Join(dataDir, clientDataReleaseFile), marker)
+		}
+	}
+
+	// Launchers before the marker installed v20.0; a release bump must still replace it.
+	for marker, want := range map[string]string{
+		"":                                     "v20.0",
+		"INSTALLED_VERSION=v16\n":              "v16",
+		"# old\r\nINSTALLED_VERSION=v20.0\r\n": "v20.0",
+		"unreadable":                           "",
+	} {
+		dataDir := filepath.Join(t.TempDir(), "data")
+		populate(dataDir, marker)
+		if got := installedClientDataRelease(dataDir); got != want {
+			t.Errorf("release of marker %q = %q, want %q", marker, got, want)
+		}
+	}
+
+	workDir := t.TempDir()
+	dataDir := filepath.Join(workDir, "data")
+	populate(dataDir, "INSTALLED_VERSION=v16\n")
+	if err := ensureClientData(context.Background(), workDir, workDir, server.URL, false); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 1 || readFixture(t, filepath.Join(dataDir, "mmaps", "test.dat")) != "new" {
+		t.Fatalf("older release was not replaced: %d requests", requests.Load())
+	}
+	if got := readFixture(t, filepath.Join(dataDir, clientDataReleaseFile)); got != "INSTALLED_VERSION="+clientDataRelease+"\n" {
+		t.Errorf("release marker = %q, want %s", got, clientDataRelease)
+	}
+	backups, err := filepath.Glob(filepath.Join(workDir, "data.backup.*"))
+	if err != nil || len(backups) != 1 || installedClientDataRelease(backups[0]) != "v16" {
+		t.Fatalf("previous release was not kept: %v, %v", backups, err)
+	}
+	if err := ensureClientData(context.Background(), workDir, workDir, server.URL, false); err != nil || requests.Load() != 1 {
+		t.Errorf("current release was downloaded again: %d requests, %v", requests.Load(), err)
+	}
+
+	// The launcher cannot replace a separate base copy that new configurations use.
+	baseDir, otherWorkDir := t.TempDir(), t.TempDir()
+	populate(filepath.Join(baseDir, "data"), "INSTALLED_VERSION=v16\n")
+	err = ensureClientData(context.Background(), otherWorkDir, baseDir, server.URL, false)
+	if err == nil || !strings.Contains(err.Error(), `release "v16"`) || requests.Load() != 1 {
+		t.Errorf("outdated base data was accepted or bypassed: %d requests, %v", requests.Load(), err)
+	}
+	if installedClientDataRelease(filepath.Join(baseDir, "data")) != "v16" {
+		t.Error("outdated base data was changed")
 	}
 }
 
