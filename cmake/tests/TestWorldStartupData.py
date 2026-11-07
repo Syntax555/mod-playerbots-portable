@@ -1,10 +1,12 @@
-"""Replay startup-data repairs on scoped copies of the pinned world and module SQL."""
+"""Replay startup-data repairs on scoped copies of the pinned world and module SQL, and check
+that the launcher downloads the server data release the pinned core expects."""
 
 import argparse
 import re
 import sqlite3
 
 from FixtureSupport import (
+    REPOSITORY,
     function,
     prepared_core,
     source_argument,
@@ -196,3 +198,24 @@ for label, check, mutant in (
         print('Startup SQL mutation rejected: ' + label)
     else:
         raise AssertionError('Startup SQL fixture accepted ' + label)
+
+
+def check_client_data(launcher):
+    # A core with newer maps, vmaps or mmaps names the matching client-data release here.
+    installer = (core / 'apps/installer/includes/functions.sh').read_text()
+    release = re.search(r'client-data/releases/download/([^/"]+)/Data[.]zip"', launcher)
+    expected = re.search(r'^\s*local VERSION=(\S+)$', installer, re.MULTILINE)
+    assert release and expected and release.group(1) == expected.group(1), (release, expected)
+
+
+launcher = (REPOSITORY / 'cmd/startup/client_data.go').read_text()
+check_client_data(launcher)
+print('Server data: the launcher downloads the client-data release of the pinned core')
+mutant = re.sub(r'(client-data/releases/download/)[^/"]+', r'\1v0.0', launcher)
+assert mutant != launcher
+try:
+    check_client_data(mutant)
+except AssertionError:
+    print('Server data mutation rejected: another client-data release')
+else:
+    raise AssertionError('Server data fixture accepted another client-data release')
