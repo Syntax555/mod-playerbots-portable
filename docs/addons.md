@@ -57,7 +57,10 @@ transferred quantity, including when stacks merge.
 DragonUI's talent controls, spellbook and level-up notice follow the player's
 own earned era and trainer spells with the matching EraTalents package. Its
 spellbook supports Clique bindings for learned player spells when Clique is
-installed.
+installed. Its character panel shows the average item level and, with
+**GearScore** ticked under **Gear summary** in the panel's settings, the
+character's own GearScore; inspected equipment shows item levels. Wrath scoring
+does not establish historical Vanilla/TBC recommendations.
 
 Questie shows group bots' quest counters automatically. Its native upstream
 integration supplies progress, roster refresh, identity checks and bindings.
@@ -127,7 +130,6 @@ combination requires in-game testing; server progression remains authoritative.
 
 | Addon | Installation and limits |
 | --- | --- |
-| [GearScore2](https://github.com/cozawariat/gearscore2) | Install as `Interface/AddOns/GearScore2/GearScore2.toc`; settings: `/gs2`. Use one GearScore-family addon at a time. Wrath scoring does not establish historical Vanilla/TBC recommendations. |
 | [DungeonClear](https://github.com/jrad7/mod-dungeon-clear-addon) | Install as `Interface/AddOns/DungeonClear/DungeonClear.toc`; open with `/dc`. It controls server runs; formation, travel and earned access remain server rules. Spectate is disabled by default; `.dc on` can show refusals omitted by the UI. |
 
 Dependencies retain their own terms; a viewer license does not automatically
