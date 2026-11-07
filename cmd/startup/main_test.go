@@ -175,6 +175,57 @@ func TestFindMySQLBinariesMissing(t *testing.T) {
 	}
 }
 
+func TestInitializeMySQLRecoversUnfinishedInitialization(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as mysqld")
+	}
+	dir := t.TempDir()
+	server := writeFixture(t, filepath.Join(dir, "mysqld"),
+		"#!/bin/sh\nfor arg; do case \"$arg\" in --datadir=*) touch \"${arg#--datadir=}/ibdata1\";; esac; done\nexit \"$MYSQLD_EXIT\"\n")
+	if err := os.Chmod(server, 0755); err != nil {
+		t.Fatal(err)
+	}
+	binaries := &mysqlBinaries{mysqld: server}
+	dataDir := filepath.Join(dir, "data")
+	if err := os.Mkdir(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if !mysqlNeedsInitialization(dataDir) {
+		t.Fatal("an empty data directory is not initialized")
+	}
+
+	t.Setenv("MYSQLD_EXIT", "1")
+	if err := initializeMySQL(binaries, dataDir, ""); err == nil {
+		t.Fatal("failed initialization reported success")
+	}
+	if directoryHasEntries(dataDir) || fileExists(mysqlInitMarker(dataDir)) {
+		t.Fatal("failed initialization left files behind")
+	}
+
+	// A launcher closed during initialization leaves the marker beside its files.
+	writeFixture(t, filepath.Join(dataDir, "partial"), "x")
+	writeFixture(t, mysqlInitMarker(dataDir), "")
+	if !mysqlNeedsInitialization(dataDir) {
+		t.Fatal("an unfinished initialization counts as a usable data directory")
+	}
+	t.Setenv("MYSQLD_EXIT", "0")
+	if err := initializeMySQL(binaries, dataDir, ""); err != nil {
+		t.Fatal(err)
+	}
+	if mysqlNeedsInitialization(dataDir) || fileExists(filepath.Join(dataDir, "partial")) || !fileExists(filepath.Join(dataDir, "ibdata1")) {
+		t.Fatal("unfinished initialization was not redone")
+	}
+	aside, err := filepath.Glob(dataDir + ".incomplete.*")
+	if err != nil || len(aside) != 1 || !fileExists(filepath.Join(aside[0], "partial")) {
+		t.Fatalf("unfinished files were not kept aside: %v %v", aside, err)
+	}
+
+	// An initialized database without the marker is never initialized again.
+	if mysqlNeedsInitialization(dataDir) {
+		t.Fatal("an initialized data directory would be initialized again")
+	}
+}
+
 func TestDirExistsAndFileExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
