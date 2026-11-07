@@ -1619,20 +1619,34 @@ func TestDownloadFileWithProgressRedirectedOutput(t *testing.T) {
 func TestDownloadCancellationDuringBody(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	received := bytes.Repeat([]byte("partial "), 128)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1048576")
-		_, _ = w.Write(make([]byte, 1024))
+		_, _ = w.Write(received)
 		w.(http.Flusher).Flush()
-		cancel()
 		<-r.Context().Done()
 	}))
 	defer server.Close()
 	destination := filepath.Join(t.TempDir(), "Data.zip")
+	// Cancel once the body has arrived, as a console closed mid-download does;
+	// cancelling from the handler raced the client reading the response headers.
+	go func() {
+		for ctx.Err() == nil {
+			if info, err := os.Stat(destination + ".download"); err == nil && info.Size() == int64(len(received)) {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
 	if err := downloadFileWithProgress(ctx, server.URL, destination); !errors.Is(err, context.Canceled) {
 		t.Errorf("download did not preserve context cancellation: %v", err)
 	}
-	if fileExists(destination) || fileExists(destination+".download") {
-		t.Error("canceled download left a file")
+	if fileExists(destination) {
+		t.Error("canceled download was finalized")
+	}
+	if partial, err := os.ReadFile(destination + ".download"); err != nil || !bytes.Equal(partial, received) {
+		t.Errorf("canceled download did not keep its received bytes for the next start: %d bytes, %v", len(partial), err)
 	}
 }
 
