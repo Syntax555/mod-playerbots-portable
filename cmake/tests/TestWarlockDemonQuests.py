@@ -371,7 +371,11 @@ struct Session {
     void HandleQuestgiverChooseRewardOpcode(WorldPacket&);
     void HandleQuestLogRemoveQuest(WorldPackets::Quest::QuestLogRemoveQuest&);
 };
-struct Map { bool dungeon=false; bool IsDungeon() const { return dungeon; } };
+struct Map {
+    bool dungeon=false; std::map<uint32,GameObject*> const* objects=nullptr;
+    bool IsDungeon() const { return dungeon; }
+    GameObject* GetGameObject(ObjectGuid g) const { return objects&&objects->contains(g.value)?objects->at(g.value):nullptr; }
+};
 struct ItemTemplate { uint32 StartQuest=0; struct Slot { int32 SpellId=0; } Spells[5]; };
 struct Item {
     uint32 entry=0,count=1; ItemTemplate proto;
@@ -642,6 +646,13 @@ struct MovementAction {
     MovementAction(PlayerbotAI* ai,std::string):botAI(ai),bot(ai->bot),context(&ai->context){}
     virtual ~MovementAction()=default; virtual bool isUseful(){return true;} virtual bool Execute(Event){return false;}
 };
+// The shared new RPG quest giver check: interaction state on the bot's map, without distance.
+namespace NewRpgHelpers {
+bool CanInteractWithQuestGiver(Player*,Creature* c) { return c->alive&&c->canInteract; }
+bool CanInteractWithQuestGiver(Player* bot,GameObject* go) {
+    return bot->GetMap()->GetGameObject(go->GetGUID())==go&&go->GetGoType()==GAMEOBJECT_TYPE_QUESTGIVER&&go->info.IconName!="Point";
+}
+}
 struct NewRpgBaseAction:MovementAction {
     using MovementAction::MovementAction;
     bool MoveFarTo(WorldPosition) { if(!pathResult) return false; ++botAI->farMoves; return botAI->moveResult; }
@@ -654,10 +665,6 @@ struct NewRpgBaseAction:MovementAction {
         ++botAI->routeMoves; return botAI->moveResult;
     }
     bool MoveWorldObjectTo(ObjectGuid) { if(!pathResult) return false; ++botAI->moves; return botAI->moveResult; }
-    bool CanInteractWithQuestGiver(Creature* c) { return c->alive&&c->canInteract; }
-    bool CanInteractWithQuestGiver(GameObject* go) {
-        return botAI->GetGameObject(go->GetGUID())==go&&go->GetGoType()==GAMEOBJECT_TYPE_QUESTGIVER&&go->info.IconName!="Point";
-    }
     bool IsWithinInteractionDist(Creature* c) { return bot->GetDistance(c)<=INTERACTION_DISTANCE; }
     bool IsWithinInteractionDist(GameObject* go) { return go->IsWithinDistInMap(bot); }
     bool AcceptQuest(Quest const*,ObjectGuid);
@@ -756,6 +763,7 @@ struct Scenario {
     Creature giver; GameObject focus; TempSummon demon;
     ClassQuestStep const* data;
     explicit Scenario(uint32 id=1471) {
+        bot.map.objects=&ai.objects;
         now=100000; sPlayerbotAIConfig={}; objectMgr={}; spellMgr={}; locations={}; sContinentRoutes={};
         spawns.clear(); spawnScans=0; pathResult=true;
         @@NATIVEQUESTS@@
@@ -1037,7 +1045,7 @@ mutations = [
      'costs->Cost(pos) <= nearest && !selected'),
     ('accepted packet result rechecked', 'giver', '&& bot->GetQuestStatus(quest->GetQuestId()) != QUEST_STATUS_NONE', ''),
     ('reward packet result rechecked', 'giver', 'bot->GetQuestRewardStatus(quest->GetQuestId()) ||', 'true ||'),
-    ('native giver interaction required', 'giver', '!CanInteractWithQuestGiver(creature) ||', ''),
+    ('native giver interaction required', 'giver', '!NewRpgHelpers::CanInteractWithQuestGiver(bot, creature) ||', ''),
     ('giver phase required', 'giver', '!bot->InSamePhase(creature) ||', ''),
     ('giver visibility required', 'giver', '!bot->CanSeeOrDetect(creature) ||', ''),
     ('giver relation required', 'giver', '!(reward ? creature->hasInvolvedQuest(quest->GetQuestId()) : creature->hasQuest(quest->GetQuestId()))', 'false'),
@@ -1094,7 +1102,7 @@ mutations = [
     ('gameobject map required', 'giver', '!bot->IsInMap(go) ||', ''),
     ('gameobject phase required', 'giver', '!bot->InSamePhase(go) ||', ''),
     ('gameobject visible required', 'giver', '!bot->CanSeeOrDetect(go) ||', ''),
-    ('native gameobject interaction required', 'giver', '!CanInteractWithQuestGiver(go) ||', ''),
+    ('native gameobject interaction required', 'giver', '!NewRpgHelpers::CanInteractWithQuestGiver(bot, go) ||', ''),
     ('gameobject relation required', 'giver',
      '!(reward ? go->hasInvolvedQuest(quest->GetQuestId()) : go->hasQuest(quest->GetQuestId()))', 'false'),
     ('native gameobject interaction range required', 'giver', '!IsWithinInteractionDist(go) ||', ''),

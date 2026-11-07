@@ -204,7 +204,7 @@ jobs:
         run: |
           bash .github/scripts/install-native-dependencies.sh build-essential cmake p7zip-full python3-venv lua5.1
           python3 -m venv "$RUNNER_TEMP/era-client-python"
-          "$RUNNER_TEMP/era-client-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/era-client-python/bin/python" -m pip install 'PyYAML==6.0.3' 'pytest==8.3.5'
           echo "$RUNNER_TEMP/era-client-python/bin" >> "$GITHUB_PATH"
 
       - name: Prepare locked server and addon sources
@@ -229,6 +229,15 @@ jobs:
 
       - name: Build merged IP and historical talent client ZIP
         run: cmake "-DPACKAGE_VERSION=$PACKAGE_VERSION" -P cmake/PackageEraClient.cmake
+
+      # The generators copy real records of the pinned English client Spell.dbc.
+      - name: Test the historical talent data generators
+        env:
+          ERA_BASE_SPELL_DBC: ${{ github.workspace }}/.module-cache/client-locales/${{ env.LOCALE_REVISION }}/deDE/Spell.enUS.dbc
+        run: |
+          test -f "$ERA_BASE_SPELL_DBC"
+          cd .module-cache/prepared-core/modules/mod-era-talents
+          python3 -m pytest -q -p no:cacheprovider tools --ignore=tools/test_era_locales.py
 
       - name: Test historical spell groups against native stacking rules
         run: python3 cmake/tests/TestEraSpellGroups.py
