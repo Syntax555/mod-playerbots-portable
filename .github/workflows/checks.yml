@@ -143,6 +143,65 @@ jobs:
           python -m unittest scripts/tests/test_package_addon_installer.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Addon installer tests failed.' }
 
+  # Fixtures compile extracted code against doubles, so only a real build shows
+  # that every pinned module still compiles and links with the pinned core. A
+  # manual build skips it: it compiles the Windows server right after the checks.
+  linux_server:
+    name: Compile the server on Linux
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      BUILD_DIR: ${{ github.workspace }}/.linux-server-build
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 3G
+      # The core's precompiled headers are cacheable only with this sloppiness.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install the server's build dependencies
+        timeout-minutes: 8
+        run: >-
+          bash .github/scripts/install-native-dependencies.sh build-essential cmake ccache mold
+          libboost-all-dev libmysqlclient-dev libssl-dev libbz2-dev libreadline-dev libncurses-dev zlib1g-dev
+
+      - name: Prepare pinned sources
+        run: cmake -P cmake/PrepareModules.cmake
+
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: linux-server-${{ github.sha }}
+          restore-keys: linux-server-
+
+      # Release objects without debug information keep the build within the
+      # runner's disk. The core's defaults build every script and module statically.
+      - name: Compile and link worldserver and authserver
+        run: |
+          cmake -S .module-cache/prepared-core -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold
+          cmake --build "$BUILD_DIR" --target worldserver authserver -j"$(nproc)"
+
+      # Pull requests read main's cache; only pushes add one. A failed build
+      # still saves it, so the fix compiles only what changed.
+      - name: Save the compiler cache
+        if: always() && github.event_name == 'push' && steps.ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: linux-server-${{ github.sha }}
+
+      - name: Report the compiler cache
+        if: always()
+        run: ccache --show-stats
+
   # Every shard must pass before a manual build compiles and Publish Latest
   # can select its artifacts.
   gameplay:

@@ -134,8 +134,10 @@ custom build; the rolling download name alone does not identify its sources.
 The checks run on Linux and require Go, Python with PyYAML 6.0.3, GCC with
 AddressSanitizer and UndefinedBehaviorSanitizer support, PowerShell 7, Lua 5.1,
 Ruff 0.17.1 and actionlint 1.7.11. The gameplay fixtures execute selected native
-handlers with controlled adapters; a complete server build and live realm tests
-remain necessary for platform and encounter validation.
+handlers with controlled adapters; they compile extracted code, not the server.
+A Linux server build therefore also compiles and links the pinned core with every
+module. The Windows build and live realm tests remain necessary for platform and
+encounter validation.
 
 Before committing, select local checks from the changed files and their affected
 callers, configuration and integrations. Run the relevant fixtures directly,
@@ -162,9 +164,14 @@ native gameplay fixtures, generated MPQ mechanics and locales, addon integration
 package inventories, dependency notices and update recovery.
 
 Gameplay checks run in six parallel shards, each with a 30-minute job limit.
-Linux dependency setup uses Ubuntu's HTTPS mirrors, bounded network retries
-and an eight-minute step limit. Every check must pass before a manual server
-build starts; Windows server compilation has a separate six-hour limit.
+The Linux server build compiles `worldserver` and `authserver` from the prepared
+sources with GCC in Release mode, within a two-hour limit. Its compiler cache
+comes from earlier pushes to `main`, so a build compiles mainly what changed; the
+first build or a large pin update compiles everything and takes about an hour.
+Manual builds skip it, because they compile the Windows server next. Linux
+dependency setup uses Ubuntu's HTTPS mirrors, bounded network retries and an
+eight-minute step limit. Every check must pass before a manual server build
+starts; Windows server compilation has a separate six-hour limit.
 
 ## Client cache changes
 
@@ -217,8 +224,8 @@ fresh-realm and stopped-realm update validation remains tracked in the
 ## Automated builds
 
 The [checks workflow](../.github/workflows/checks.yml) validates the launcher,
-progression adaptations and packaging for pushes to `main` and pull requests;
-feature branches are checked through their pull requests. Commits that change
+progression adaptations and packaging and compiles the pinned server on Linux for
+pushes to `main` and pull requests; feature branches are checked through their pull requests. Commits that change
 only documentation or agent instructions skip the checks, and the documentation
 check runs with the next checks or build.
 
