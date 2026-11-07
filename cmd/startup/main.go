@@ -255,7 +255,7 @@ func run(args []string) int {
 	}
 
 	// 1. Initialize data directory if needed
-	if !directoryHasEntries(opts.dataDir) {
+	if mysqlNeedsInitialization(opts.dataDir) {
 		if err := initializeMySQL(binaries, opts.dataDir, cnfFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing MySQL: %v\n", err)
 			return 1

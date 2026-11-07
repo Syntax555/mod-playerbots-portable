@@ -118,14 +118,37 @@ func findMySQLBinaries(mysqlDir string) (*mysqlBinaries, error) {
 	}, nil
 }
 
+// mysqlInitMarker exists only while mysqld initializes dataDir. A stopped
+// initialization leaves files that mysqld cannot start from but that would
+// otherwise count as an initialized data directory.
+func mysqlInitMarker(dataDir string) string {
+	return filepath.Clean(dataDir) + ".initializing"
+}
+
+func mysqlNeedsInitialization(dataDir string) bool {
+	return !directoryHasEntries(dataDir) || fileExists(mysqlInitMarker(dataDir))
+}
+
 func initializeMySQL(binaries *mysqlBinaries, dataDir string, configFile string) error {
 	absDataDir, err := filepath.Abs(dataDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve absolute data dir: %w", err)
 	}
 
+	marker := mysqlInitMarker(absDataDir)
+	if fileExists(marker) && directoryHasEntries(absDataDir) {
+		// Move rather than delete: files copied in since then must survive.
+		incomplete := absDataDir + ".incomplete." + backupTimestamp()
+		if err := os.Rename(absDataDir, incomplete); err != nil {
+			return fmt.Errorf("failed to move the incomplete MySQL data directory aside: %w", err)
+		}
+		fmt.Printf("An earlier MySQL initialization did not finish; its files were moved to %s.\n", incomplete)
+	}
 	if err := os.MkdirAll(absDataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory %s: %w", absDataDir, err)
+	}
+	if err := os.WriteFile(marker, nil, 0644); err != nil {
+		return fmt.Errorf("failed to mark MySQL initialization: %w", err)
 	}
 
 	fmt.Printf("=== [1/4] Initializing MySQL data directory at %s ===\n", absDataDir)
@@ -142,7 +165,18 @@ func initializeMySQL(binaries *mysqlBinaries, dataDir string, configFile string)
 	configureConsoleProcess(cmd)
 
 	if err := cmd.Run(); err != nil {
+		// The directory was empty before this attempt, so it holds only its files.
+		entries, cleanupErr := os.ReadDir(absDataDir)
+		for _, entry := range entries {
+			cleanupErr = errors.Join(cleanupErr, os.RemoveAll(filepath.Join(absDataDir, entry.Name())))
+		}
+		if cleanupErr == nil {
+			_ = os.Remove(marker)
+		}
 		return fmt.Errorf("mysqld --initialize-insecure failed: %w", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		return fmt.Errorf("failed to complete MySQL initialization: %w", err)
 	}
 
 	fmt.Println("MySQL data directory initialized successfully.")

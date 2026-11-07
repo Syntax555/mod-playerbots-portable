@@ -73,6 +73,12 @@ Include `configs/` with its `.portable-profiles.json` and `realm-phase.txt`, the
 MySQL configuration and data, and the matching server release. Keep a backup
 outside the folder being updated.
 
+If the first MySQL initialization stops before it finishes, for example because
+the console window was closed, the next start moves its files to
+`mysql/data.incomplete.<time>` and initializes MySQL again. Unless files were
+copied into `mysql/data/` since then, that folder holds no characters and can be
+deleted.
+
 Configuration `.backup.*` files protect settings; they are not database backups.
 To revert after SQL migrations, restore the matching database, configuration and
 server backup together. Replacing only older executables does not reverse a
