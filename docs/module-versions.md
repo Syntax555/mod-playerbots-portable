@@ -12,7 +12,7 @@ can have different defaults from this distribution's managed profile.
 
 ## Pinned sources
 
-The core, ten native modules and four separate addon projects use maintained
+The core, eleven native modules and five separate addon projects use maintained
 Syntax555 forks on their configured default branches. The
 [contributor guide](https://github.com/Syntax555/mod-playerbots-portable/blob/main/CONTRIBUTING.md#changing-the-server)
 lists those branches. Builds use the immutable commits below, rather than
@@ -20,7 +20,7 @@ whatever a branch happens to contain later.
 
 ### Server modules
 
-All ten modules build with the matching core. Being included does not mean
+All eleven modules build with the matching core. Being included does not mean
 every optional feature is enabled: the Dungeon Finder and simulated world-buff
 turn-ins are disabled in the shipped profile.
 
@@ -36,12 +36,14 @@ turn-ins are disabled in the shipped profile.
 | Quest Loot Party | [Syntax555/mod-quest-loot-party](https://github.com/Syntax555/mod-quest-loot-party), fork of [pangolp/mod-quest-loot-party](https://github.com/pangolp/mod-quest-loot-party) at `c3955915c76d` | `a68e42092c3d` | Scoped party sharing of naturally dropped quest items |
 | LFG Progression | [Syntax555/wow-mod-lfg-progression](https://github.com/Syntax555/wow-mod-lfg-progression), fork of [buildthehomelab/wow-mod-lfg-progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) at `2615e82902cf` | `8354f98d7811` | Always included access guards for optional Dungeon Finder use |
 | Era Events | [Syntax555/wow-mod-era-events](https://github.com/Syntax555/wow-mod-era-events), fork of [buildthehomelab/wow-mod-era-events](https://github.com/buildthehomelab/wow-mod-era-events) at `c6fe393ee271` | `d1683dc204b3` | Outdoor encounters at exact earned tiers without cross-era phasing or passive rewards |
+| Journal | [Syntax555/wow-mod-forever-journal](https://github.com/Syntax555/wow-mod-forever-journal), fork of [buildthehomelab/wow-mod-forever-journal](https://github.com/buildthehomelab/wow-mod-forever-journal) at `36d0f1d4c12f` | `948611154ba2` | Read-only instance, quest, directory, lore and collection data for the Journal addon, locked by each character's stage |
 | World Buff Bots | [Syntax555/mod-world-buff-bots](https://github.com/Syntax555/mod-world-buff-bots), fork of [Rockhopper1776/mod-world-buff-bots](https://github.com/Rockhopper1776/mod-world-buff-bots) at `baae5656aa6a` | `255fe49cb3de` | Optional timed Vanilla events with earned-era checks; disabled by default |
 
 ### Client addons
 
 EraTalents comes from the module pin above and is included in the server's
-matching historical client pack. The following optional addons have separate
+matching historical client pack. The Journal addon comes from the Journal module
+pin and has its own fork release. The following optional addons have separate
 fork releases; see [downloads and installation](addons.md#addon-forks).
 
 | Component | Source repository and imported upstream | Locked revision | Role |
@@ -49,6 +51,7 @@ fork releases; see [downloads and installation](addons.md#addon-forks).
 | MultiBot Chatless | [Syntax555/MultiBot-Chatless](https://github.com/Syntax555/MultiBot-Chatless), fork of [Wishmaster117/MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) at `020210ba849c` | `ba766f6abf3d` | Client bot controls and combat-profile selection |
 | DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), fork of [NeticSoul/DragonUI](https://github.com/NeticSoul/DragonUI) at `3a57b6d1402e` | `2299ec238bd0` | Shared talent renderer for historical player and bot trees, plus spellbook catalogue integration |
 | Questie-335 | [Syntax555/Questie, branch `335`](https://github.com/Syntax555/Questie/tree/335), fork of [Aldori15/Questie](https://github.com/Aldori15/Questie/tree/335) at `0c29f2bae917` | `6105db1eb37d` | Bot quest progress integration; the fork's installer downloads its files from GitHub |
+| Journal: Progression | [Syntax555/journalprogression](https://github.com/Syntax555/journalprogression), fork of [EvilTactician/JournalProgression](https://github.com/EvilTactician/JournalProgression) at `b2c7be090c05` | `5cbdbc611fdd` | Journal tab of each character's Individual Progression stage and the steps to the next |
 | Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), fork of [ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) at `d2aae8d0f1f3` | `8f053fd47fbd` | Prepared Individual Progression integration of the `ZygorGuidesViewerRM/` addon folder |
 
 ### Supporting data and tools
@@ -106,7 +109,8 @@ checks; the Finder itself remains optional.
 
 Prepared client sources live in `.module-cache/prepared-addons/` and
 `.module-cache/prepared-source-addons/`. DragonUI exports its `DragonUI/`
-subdirectory and Zygor its `ZygorGuidesViewerRM/` subdirectory. Addon checks
+subdirectory, Zygor its `ZygorGuidesViewerRM/` subdirectory and Journal:
+Progression its `JournalProgression/` subdirectory. Addon checks
 verify the client Interface and TOC paths against those exports.
 
 The historical client pack merges generated spell/skill data and German text
@@ -120,7 +124,8 @@ The server's `EraTalents-client-latest.zip` contains both the addon and its
 matching MPQ. The EraTalents fork also publishes an addon-only ZIP for testing;
 it does not replace the required client pack.
 
-MultiBot, DragonUI, Questie and Zygor publish their own rolling Latest releases.
+MultiBot, DragonUI, Questie, Zygor, the Journal module and Journal: Progression
+publish their own rolling Latest releases.
 Those releases track their fork branches independently; the server manifest
 records the revisions checked in the combined build. Package revision files or
 installer metadata identify the installed addon source.

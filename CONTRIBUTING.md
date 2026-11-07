@@ -23,7 +23,7 @@ pass, for people and coding agents alike. Progression changes keep normal XP,
 inventory, gold and per-character eligibility. The [build guide](docs/building.md)
 covers the Windows build and the local checks.
 
-The core and all ten native server modules are built from maintained forks.
+The core and all eleven native server modules are built from maintained forks.
 Work on each fork's configured default branch, listed below. Read its
 `AGENTS.md` and README before editing; its guidance links back to the server's
 product rules and relevant integration guides.
@@ -43,6 +43,7 @@ original upstream projects.
 | MultiBot Bridge | [Syntax555/mod-multibot-bridge](https://github.com/Syntax555/mod-multibot-bridge) | `main` |
 | Questie Bridge | [Syntax555/mod-questie-bridge](https://github.com/Syntax555/mod-questie-bridge) | `main` |
 | Era Talents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents) | `main` |
+| Journal | [Syntax555/wow-mod-forever-journal](https://github.com/Syntax555/wow-mod-forever-journal) | `main` |
 
 Make core and module changes as commits in their forks, then pin the tested
 commit in `versions.lock.json`; do not add source patches to this repository.
@@ -66,6 +67,8 @@ build:
 | DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), `main` | `DragonUI-latest.zip` |
 | Questie-335 | [Syntax555/Questie](https://github.com/Syntax555/Questie), `335` | `Questie-335-latest.zip` (installer) |
 | Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | `Zygor-IP-latest.zip` (installer) |
+| Journal | [Syntax555/wow-mod-forever-journal](https://github.com/Syntax555/wow-mod-forever-journal), `main` | `Journal-latest.zip` (addon of the module fork) |
+| Journal: Progression | [Syntax555/journalprogression](https://github.com/Syntax555/journalprogression), `main` | `JournalProgression-latest.zip` |
 
 Commit to the fork's configured default branch. Addon pushes check the addon
 and replace its asset in the fork's Latest release through the shared

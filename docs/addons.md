@@ -18,6 +18,8 @@ own [forks](#addon-forks).
 | [DragonUI](https://github.com/Syntax555/DragonUI/releases/latest/download/DragonUI-latest.zip) | Install both `DragonUI/` and `DragonUI_Options/` in `Interface/AddOns/`. Open settings with `/dui`. |
 | [Questie-335 installer](https://github.com/Syntax555/Questie/releases/latest/download/Questie-335-latest.zip) | Extract outside WoW, close WoW, run `Install-Questie.cmd`; see [installation](questie-playerbots.md#installation). |
 | [Zygor IP installer](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK/releases/latest/download/Zygor-IP-latest.zip) | Extract outside WoW, close WoW, run `Install-Zygor.cmd`; see [installation](zygor-progression.md#installation). |
+| [Journal](https://github.com/Syntax555/wow-mod-forever-journal/releases/latest/download/Journal-latest.zip) | Install its `Journal/` folder in `Interface/AddOns/`. Open it with Shift-J or `/journal`; see [Journal](#journal). |
+| [Journal: Progression](https://github.com/Syntax555/journalprogression/releases/latest/download/JournalProgression-latest.zip) | Needs the Journal. Install its `JournalProgression/` folder in `Interface/AddOns/`; open it with `/progression`. |
 
 Each addon folder must directly contain its matching `.toc` file. Back up
 existing folders outside `Interface/AddOns/` before replacement; preserve
@@ -72,6 +74,29 @@ characters; disable the whole `ZygorGuidesViewerRM` addon and reload when
 isolating talent or protected-action conflicts. See
 [Zygor Individual Progression](zygor-progression.md).
 
+## Journal
+
+The Journal shows dungeons and raids with bosses, abilities and loot, the
+realm's quests by zone, a directory of trainers and services, zone lore and
+mounts, pets and toys, all from the server's own data. Instances, quest
+headings, lore and collections of later stages carry a lock with the stage that
+opens them, following the character's own Individual Progression stage; the
+directory leaves out Outland, the Isle of Quel'Danas and Northrend until then.
+A game master sees everything. The Journal only displays what the server
+reports and cannot grant items, travel, stages or access. Bots do not collect
+lore. Open the Directory with `/directory` or `.find`; the Town Guide spell is
+not taught on this server.
+
+The **Progression** tab of Journal: Progression lists the character's stage
+and, in order, what moves it on: levels, attunement quest chains with their
+givers, keys to carry in the bags, required reputation and the raid's bosses
+down to the milestone kill. It follows the server's stage rules and managed
+Individual Progression settings. Its gear check compares the average item level
+with a suggested value; with DragonUI it uses DragonUI's item level and shows
+DragonUI's GearScore beside it. The tab's optional micro menu button needs a
+DragonUI extension this server's DragonUI does not include; `/progression` and
+the Journal's tab work without it.
+
 ## Addon forks
 
 Each fork publishes a rolling Latest asset after its checks pass. The server's
@@ -85,6 +110,8 @@ cover installation, supported behavior, updates, provenance and licenses.
 | DragonUI | [Syntax555/DragonUI](https://github.com/Syntax555/DragonUI), `main` | `DragonUI-latest.zip` |
 | Questie-335 | [Syntax555/Questie](https://github.com/Syntax555/Questie), `335` | `Questie-335-latest.zip` (installer) |
 | Zygor Guides Viewer Remaster | [Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK), `main` | `Zygor-IP-latest.zip` (installer) |
+| Journal | [Syntax555/wow-mod-forever-journal](https://github.com/Syntax555/wow-mod-forever-journal), `main` | `Journal-latest.zip` |
+| Journal: Progression | [Syntax555/journalprogression](https://github.com/Syntax555/journalprogression), `main` | `JournalProgression-latest.zip` |
 | EraTalents | [Syntax555/azerothcore-mod-era-talents](https://github.com/Syntax555/azerothcore-mod-era-talents), `main` | `EraTalents-addon-latest.zip` (addon only) |
 
 The EraTalents addon-only ZIP is for trying addon changes. Players need the

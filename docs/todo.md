@@ -140,6 +140,12 @@ fixtures pass. Use native core/module functions before adding replacements.
   bot/owner class differences, empty/cold data, profile/equipment changes,
   faction/era/quest/vendor access, rapid target switches and closing during
   replies. Measure frame time and traffic; fixtures do not render the UI.
+- [ ] Validate the [Journal](addons.md#journal) and its Progression tab in game
+  for each era and faction: stage locks on instances, quest headings, directory,
+  lore and collections; every tier's steps, map flags and milestone after a
+  stage change; reference-loot counts under MySQL 8; humanoid boss models; the
+  gear check with and without DragonUI; and the first start's zone calculation
+  time and memory with the full world database.
 - [ ] Measure sustained world/map tick time, memory and addon traffic with the
   2,500-bot target and several active groups. Verify delayed login and logout
   after the last real session, ordinary vendor/auction trips, paid training,

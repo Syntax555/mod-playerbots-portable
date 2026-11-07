@@ -9,8 +9,8 @@ Local changes to upstream code retain the applicable source notices.
 
 [versions.lock.json](versions.lock.json) records the source repository and exact
 revision of each core, module, addon and client build dependency. The core, all
-native server modules and the MultiBot, DragonUI, Questie and Zygor addons are
-pinned as commits of their public forks, which contain the local changes;
+native server modules and the MultiBot, DragonUI, Questie, Zygor and Journal:
+Progression addons are pinned as commits of their public forks, which contain the local changes;
 `upstream` names each original project and the original revision imported last.
 Use the manifest from the same repository commit as the downloaded build when
 retrieving or rebuilding its source. Forks preserve original authorship, Git
@@ -46,9 +46,11 @@ applicable.
 | [LFG Progression](https://github.com/buildthehomelab/wow-mod-lfg-progression) | AGPL version 3 upstream license text. | `licenses/mod-lfg-progression/LICENSE`, `licenses/AGPL-3.0.txt` |
 | [MultiBot Bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | No explicit license declaration at the locked revision; provenance notice retained. | `licenses/mod-multibot-bridge/NOTICE.txt` |
 | [Questie Bridge](https://github.com/Aldori15/mod-questie-bridge) | GPL-2.0-or-later declaration in the upstream README and source notices. | `licenses/mod-questie-bridge/NOTICE.txt`, `licenses/GPL-2.0.txt` |
+| [Journal](https://github.com/buildthehomelab/wow-mod-forever-journal) | MIT upstream license text. | Server: `licenses/mod-forever-journal/LICENSE`. Addon: `Journal/LICENSE.txt` in the addon ZIP of [its fork](https://github.com/Syntax555/wow-mod-forever-journal). |
 | [Era Talents](https://github.com/lathcf/azerothcore-mod-era-talents) | MIT upstream license; portable integration files also carry GPL-2.0-or-later notices. | Server: `licenses/mod-era-talents/LICENSE`, `licenses/GPL-2.0.txt`. Combined client pack: `Interface/AddOns/EraTalents/LICENSE`, `licenses/mod-era-talents.txt`. |
 | [MultiBot Chatless](https://github.com/Wishmaster117/MultiBot-Chatless) | GPL version 3 upstream license text. | `MultiBot/LICENSE` in the addon ZIP of [its fork](https://github.com/Syntax555/MultiBot-Chatless). |
 | [DragonUI](https://github.com/NeticSoul/DragonUI) | MIT upstream license; bundled code, libraries, fonts and textures keep the licenses its notices list. | `DragonUI/LICENSE.txt`, `DragonUI/LICENSES/`, `DragonUI/THIRD_PARTY_NOTICES.md` and `DragonUI_Options/LICENSE.txt` in the addon ZIP of [its fork](https://github.com/Syntax555/DragonUI). |
+| [Journal: Progression](https://github.com/EvilTactician/JournalProgression) | MIT upstream license text. | `JournalProgression/LICENSE.txt` in the addon ZIP of [its fork](https://github.com/Syntax555/journalprogression). |
 | [Questie-335](https://github.com/Aldori15/Questie/tree/335) | No general root license declaration at the locked revision. Libraries under `Libs/` keep their own licenses and `Icons/LICENSE.md` covers some icons; the licensing of other icons and historical contributions is unclear. | The installer of [its fork](https://github.com/Syntax555/Questie) downloads the fork's source archive directly from GitHub; the complete addon is not redistributed in the installer ZIP because its maintainer cannot grant that permission for all contributors ([Aldori15/Questie#171](https://github.com/Aldori15/Questie/issues/171)). |
 | [Zygor Guides Viewer Remaster](https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK) | The viewer code carries the upstream `GPL` designation without a stated version. Guides, data, images and bundled libraries keep their own terms. The fork's integration adds to the viewer code it modifies. | The installer of [its fork](https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK) downloads the fork's source archive directly from GitHub; the addon is not redistributed in the installer ZIP. |
 | [StormLib](https://github.com/ladislav-zezula/StormLib) | MIT; used to build and verify the client patch. | `licenses/StormLib.txt` in the combined client pack |
