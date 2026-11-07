@@ -245,7 +245,10 @@ fixtures pass. Use native core/module functions before adding replacements.
   escort, abandoning for a missing ritual item and native event resets before
   claiming autonomous end-to-end completion.
   Check the blood elf Voidstone questgiver objects (9529/9619) and the Rune of
-  Summoning event. Add the Dreadsteed, Infernal and Doomguard quests. Historical
+  Summoning event. Add the solo Infernal chain (7601–7603): Impsy, the three
+  Flawless Fel Essences from Azshara, Jaedenar and the Blasted Lands, and the
+  owned Fel Fire at Kroshius' remains. The Dreadsteed and Doomguard chains need
+  Scholomance, Dire Maul or a group and stay player content. Historical
   demon grimoire purchases remain unimplemented;
   keep `WarlockDemonTrainers` disabled until evaluated. See the
   [implemented scope](class-quests.md#autonomous-warlock-demon-quests).
