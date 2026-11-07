@@ -430,9 +430,12 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
                                      + result.stdout + result.stderr)
         print('Incremental Gear Finder fork change fails all three regressions when reverted and passes when reapplied',
               flush=True)
-        # Guide corrections, newest first: the criteria commit edits files the quest commit also edits.
+        # Guide corrections, newest first: later commits edit files that earlier ones also edit.
         guides = ('ZygorGuidesViewerRM/Guides',)
-        guide_changes = (('zygor-achievement-criteria-335', 'guides/test_achievements_335.lua'),
+        guide_changes = (('zygor-cataclysm-content-335', 'guides/test_parse_all_guides.lua'),
+                         ('zygor-parse-all-guides', 'guides/test_parse_all_guides.lua'),
+                         ('zygor-brewfest-coren-335', 'guides/test_achievements_335.lua'),
+                         ('zygor-achievement-criteria-335', 'guides/test_achievements_335.lua'),
                          ('zygor-achievement-quests-335', 'guides/test_hemet_leech.lua'))
         guide_patches = [(fork_change('ZygorGuidesViewerRM', change, paths=guides), name)
                          for change, name in guide_changes]
@@ -448,7 +451,7 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
             result = run_fixture([lua, str(Path(directory) / 'tools' / name), str(candidate)], name, cwd=directory)
             if result.returncode:
                 raise AssertionError(f'Reapplying the guide correction failed {name}:\n' + result.stdout + result.stderr)
-        print('Achievement guide corrections fail their regressions when reverted and pass when reapplied', flush=True)
+        print('Guide corrections fail their regressions when reverted and pass when reapplied', flush=True)
 
 
 def main():

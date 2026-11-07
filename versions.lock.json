@@ -421,7 +421,7 @@
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "8f053fd47fbd255c363f8f31c374938294b7e299",
+      "revision": "6dab234311ed78c786960d005abcdb0697cde546",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
         "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
@@ -443,7 +443,10 @@
         "zygor-era-tabs": "f95ca9c0e78191e388508889bfe608e84254841b",
         "zygor-quest-givers-335": "903cd36456d176d1280ba19ff20010c1035167d3",
         "zygor-achievement-quests-335": "70c8a53e22048d97e12f3b188e06062e3be529f5",
-        "zygor-achievement-criteria-335": "8f053fd47fbd255c363f8f31c374938294b7e299"
+        "zygor-achievement-criteria-335": "8f053fd47fbd255c363f8f31c374938294b7e299",
+        "zygor-brewfest-coren-335": "a5ef2962e4e98a2a827396b335337936abe10aaa",
+        "zygor-parse-all-guides": "2d2113a577766ca099b14edd64cb3215d947599e",
+        "zygor-cataclysm-content-335": "6dab234311ed78c786960d005abcdb0697cde546"
       }
     },
     {
