@@ -37,7 +37,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "b8ff79ddfd446656ae3093e11ad238c51dcd2068",
+      "revision": "cc4d79f9d66f9439e9bdac2c36ccc6dd8a06f0fd",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "e6b77699904bcaa7e9f625978f3c6a19ff175bbe"
@@ -80,7 +80,8 @@
         "mod-playerbots-earned-class-quest-chains": "92025ad40eb7032369962290fa82591ee3ea90de",
         "mod-playerbots-solo-class-quests": "fa25c7fac6bd1225d2e1c6acbab0c86ceee7d133",
         "mod-playerbots-shared-warlock-quests": "bbcf7b7f4caf611281b2ab4a041b5e1984aa97c1",
-        "mod-playerbots-quest-item-objective-slots": "b8ff79ddfd446656ae3093e11ad238c51dcd2068"
+        "mod-playerbots-quest-item-objective-slots": "b8ff79ddfd446656ae3093e11ad238c51dcd2068",
+        "mod-playerbots-disenchant-kept-rare-items": "cc4d79f9d66f9439e9bdac2c36ccc6dd8a06f0fd"
       }
     },
     {

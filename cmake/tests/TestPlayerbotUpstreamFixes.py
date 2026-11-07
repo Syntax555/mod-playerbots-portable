@@ -7,9 +7,10 @@ AddressSanitizer. Ignored quest configuration reloads use the native parser and
 quest selection gates. Weapon stones run through the real stone choice and imbue
 action, so a shield is never mistaken for a polearm. Factory refresh checks
 talent persistence and role gear without allowing natural-mode grants. Combat
-wake reactions preserve active casts and channels, including taming aggro. Mutation
-checks remove the guards or restore the previous item loop and confirm that the
-fixture rejects them.
+wake reactions preserve active casts and channels, including taming aggro.
+Disenchanting keeps a real master's or guild's rare items without ending the
+search. Mutation checks remove the guards or restore the previous item loops and
+confirm that the fixture rejects them.
 """
 
 import argparse
@@ -1240,3 +1241,115 @@ with tempfile.TemporaryDirectory(prefix='portable-playerbot-combat-wake-') as te
         if result.returncode == 0 or 'Assertion' not in result.stderr:
             raise SystemExit(f'Combat wake fixture did not reject: {label}')
         print(f'Combat wake mutation rejected: {label}')
+
+# Disenchanting keeps a real master's or guild's rare items and still handles
+# the uncommon ones after them.
+cast_source = (module / 'Ai/Base/Actions/CastCustomSpellAction.cpp').read_text()
+shared_defines = (core / 'src/server/shared/SharedDefines.h').read_text()
+assert re.search(r'\n    ITEM_QUALITY_UNCOMMON +=  *2,', shared_defines)
+disenchant_parts = {
+    'usage': declaration(usage, 'enum ItemUsage : uint32'),
+    'execute': function(cast_source, 'bool DisEnchantRandomItemAction::Execute('),
+}
+assert '"13262 " + chat->FormatQItem(item->GetEntry())' in disenchant_parts['execute']
+disenchant_source = r'''
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
+using uint32 = std::uint32_t;
+constexpr uint32 ITEM_QUALITY_UNCOMMON = 2;
+USAGE
+struct ItemTemplate { uint32 Quality; };
+struct Item {
+    uint32 entry;
+    ItemTemplate proto;
+    uint32 GetEntry() const { return entry; }
+    ItemTemplate const* GetTemplate() const { return &proto; }
+};
+struct Event {
+    std::string param;
+    Event(std::string const&, std::string param) : param(std::move(param)) {}
+};
+struct ChatHelper { std::string FormatQItem(uint32 entry) const { return "|Hitem:" + std::to_string(entry) + "|h"; } };
+struct PlayerbotAI {
+    bool master = false, guild = false;
+    std::vector<Item*> disenchantable;
+    bool HasGameClientMaster() const { return master; }
+    bool IsInRealGuild() const { return guild; }
+};
+struct CastCustomSpellAction {
+    PlayerbotAI* botAI;
+    ChatHelper* chat;
+    std::vector<std::string> casts;
+    std::map<std::string, bool> results;
+    CastCustomSpellAction(PlayerbotAI* ai, ChatHelper* helper) : botAI(ai), chat(helper) {}
+    bool Execute(Event event) { casts.push_back(event.param); return results[event.param]; }
+};
+struct DisEnchantRandomItemAction : CastCustomSpellAction {
+    using CastCustomSpellAction::CastCustomSpellAction;
+    bool Execute(Event event);
+};
+// The production action reads the bot's own bag items rated for disenchanting.
+#define AI_VALUE2(type, name, qualifier) \
+    (assert(std::string(name) == "inventory items" && \
+            std::string(qualifier) == "usage " + std::to_string(ITEM_USAGE_DISENCHANT)), botAI->disenchantable)
+EXECUTE
+int main() {
+    ChatHelper chat; PlayerbotAI ai;
+    Item uncommon{100, {ITEM_QUALITY_UNCOMMON}}, rare{200, {ITEM_QUALITY_UNCOMMON + 1}};
+    std::string const uncommonCast = "13262 " + chat.FormatQItem(100), rareCast = "13262 " + chat.FormatQItem(200);
+    // The action tries the usage list from its end.
+    ai.disenchantable = {&uncommon, &rare};
+    for (int owner = 0; owner < 3; ++owner) {
+        DisEnchantRandomItemAction action(&ai, &chat);
+        ai.master = owner == 1; ai.guild = owner == 2;
+        action.results[uncommonCast] = action.results[rareCast] = true;
+        assert(action.Execute(Event("disenchant random item", "")));
+        assert(action.casts == std::vector<std::string>{owner ? uncommonCast : rareCast});
+    }
+    ai.master = ai.guild = false;
+    DisEnchantRandomItemAction failed(&ai, &chat);
+    assert(!failed.Execute(Event("disenchant random item", "")));
+    assert((failed.casts == std::vector<std::string>{rareCast, uncommonCast}));
+    ai.master = true; ai.disenchantable = {&rare};
+    DisEnchantRandomItemAction kept(&ai, &chat); kept.results[rareCast] = true;
+    assert(!kept.Execute(Event("disenchant random item", "")) && kept.casts.empty());
+    std::cout << "Disenchanting: rare items kept for a real master or guild, later uncommon items still handled\n";
+}
+'''
+
+
+def build_disenchant(directory, parts):
+    text = disenchant_source
+    for key, body in parts.items():
+        text = text.replace(key.upper() + '\n', body + '\n')
+    source_path = directory / 'disenchant.cpp'
+    source_path.write_text(text)
+    executable = directory / 'disenchant'
+    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', *SANITIZER_FLAGS,
+                    str(source_path), '-o', str(executable)], check=True)
+    return subprocess.run([str(executable)], capture_output=True, text=True, check=False, timeout=TIMEOUT)
+
+
+with tempfile.TemporaryDirectory(prefix='portable-playerbot-disenchant-') as temporary:
+    temporary = Path(temporary)
+    result = build_disenchant(temporary, disenchant_parts)
+    print(result.stdout + result.stderr, end='')
+    if result.returncode:
+        raise SystemExit(f'Disenchant fixture failed (exit {result.returncode})')
+    for label, old, new in (
+        ('rare item ends the search', 'continue;', 'return false;'),
+        ('rare item of a real master or guild disenchanted', 'item->GetTemplate()->Quality > ITEM_QUALITY_UNCOMMON',
+         'false'),
+    ):
+        mutated = dict(disenchant_parts)
+        mutated['execute'] = mutated['execute'].replace(old, new)
+        assert mutated['execute'] != disenchant_parts['execute'], f'{label} mutation was not applied'
+        result = build_disenchant(temporary, mutated)
+        if result.returncode == 0 or 'Assertion' not in result.stderr:
+            raise SystemExit(f'Disenchant fixture did not reject: {label}')
+        print(f'Disenchant mutation rejected: {label}')
