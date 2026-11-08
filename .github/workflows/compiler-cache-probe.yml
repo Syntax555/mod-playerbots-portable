@@ -1,0 +1,88 @@
+name: Compiler cache probe
+
+# Measures whether ccache serves MSVC compiles that MSBuild starts inside a
+# CMake superbuild, with and without precompiled headers. Not for main.
+on:
+  push:
+    branches: [ci/compiler-cache]
+    paths: ['.github/workflows/compiler-cache-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CCACHE_VERSION: '4.14.2'
+      CCACHE_ZIP_SHA256: '6993ce645e53192cec592ee23186200b574ac4c59097ecde8d9cfd681b47ae84'
+      CCACHE_DIR: ${{ github.workspace }}\..\ccache-store
+    steps:
+      - name: Install ccache as cl.exe
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'ccache.zip'
+          curl.exe --fail -sSL --retry 3 "https://github.com/ccache/ccache/releases/download/v$env:CCACHE_VERSION/ccache-$env:CCACHE_VERSION-windows-x86_64.zip" -o $zip
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($actual -ne $env:CCACHE_ZIP_SHA256) { throw "ccache has SHA-256 $actual" }
+          Expand-Archive $zip $env:RUNNER_TEMP
+          $tool = Join-Path $env:RUNNER_TEMP 'ccache-bin'
+          New-Item -ItemType Directory $tool | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" "$tool\ccache.exe"
+          Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" "$tool\cl.exe"
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $cl = & $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\cl.exe' | Select-Object -First 1
+          "Real compiler: $cl"
+          "CCACHE_COMPILER=$cl" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "CCACHE_BIN=$tool" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          & "$tool\ccache.exe" --version | Select-Object -First 1
+
+      - name: Write superbuild sample
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory sample/inner | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.16)
+          project(outer NONE)
+          include(ExternalProject)
+          ExternalProject_Add(inner SOURCE_DIR "${CMAKE_SOURCE_DIR}/inner"
+            BINARY_DIR "${CMAKE_BINARY_DIR}/inner-build" BUILD_ALWAYS 1 INSTALL_COMMAND "")
+          '@ | Set-Content sample/CMakeLists.txt
+          @'
+          cmake_minimum_required(VERSION 3.16)
+          project(inner CXX)
+          foreach(i RANGE 1 6)
+            file(WRITE "${CMAKE_BINARY_DIR}/gen${i}.cpp"
+              "#include <map>\n#include <string>\n#include <vector>\nint f${i}(){std::map<std::string,std::vector<int>> m; m[\"a\"].push_back(${i}); return int(m.size());}\n")
+          endforeach()
+          add_library(plain STATIC ${CMAKE_BINARY_DIR}/gen1.cpp ${CMAKE_BINARY_DIR}/gen2.cpp ${CMAKE_BINARY_DIR}/gen3.cpp)
+          add_library(pch STATIC ${CMAKE_BINARY_DIR}/gen4.cpp ${CMAKE_BINARY_DIR}/gen5.cpp ${CMAKE_BINARY_DIR}/gen6.cpp)
+          target_precompile_headers(pch PRIVATE <map> <string> <vector>)
+          target_compile_options(plain PRIVATE /MP)
+          target_compile_options(pch PRIVATE /MP)
+          '@ | Set-Content sample/inner/CMakeLists.txt
+
+      - name: Build twice in the same directory
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+          CL_MPCount: '2'
+          UseMultiToolTask: 'true'
+          EnforceProcessCountAcrossBuilds: 'true'
+          CLToolExe: 'cl.exe'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $env:CLToolPath = $env:CCACHE_BIN
+          & "$env:CCACHE_BIN\ccache.exe" --zero-stats | Out-Null
+          foreach ($pass in 1, 2) {
+              if (Test-Path build) { Remove-Item build -Recurse -Force }
+              cmake -S sample -B build -G 'Visual Studio 17 2022' -A x64 -DCMAKE_BUILD_TYPE=Release
+              cmake --build build --config Release -- /v:n | Select-String -Pattern 'cl.exe|ccache|warning|error' | Select-Object -First 20
+              "=== statistics after pass $pass"
+              & "$env:CCACHE_BIN\ccache.exe" --show-stats --verbose
+          }
