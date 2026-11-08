@@ -41,6 +41,8 @@ jobs:
       MYSQL_ZIP_SHA256: '28e9eda019d88eff4478d811ea2110b83f02a3966be157fe91cc55def3ab0d4d'
       OPENSSL_VERSION: '3.5.9'
       OPENSSL_ZIP_SHA256: '76da391395be029b44794857b9ff380255e02a0960a98314cd3f6a6816d82696'
+      CCACHE_VERSION: '4.14.2'
+      CCACHE_ZIP_SHA256: '6993ce645e53192cec592ee23186200b574ac4c59097ecde8d9cfd681b47ae84'
     defaults:
       run:
         shell: pwsh
@@ -111,6 +113,38 @@ jobs:
               Expand-Archive $opensslZip 'C:\tools\openssl\current' -Force
           }
           'OPENSSL_ROOT_DIR=C:\tools\openssl\current\x64' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      # MSBuild starts ccache as cl.exe; it runs the default VC tools' compiler,
+      # whose headers the v143 toolset uses.
+      - name: Install the compiler cache
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'ccache.zip'
+          curl.exe --fail -sSL --retry 3 "https://github.com/ccache/ccache/releases/download/v$env:CCACHE_VERSION/ccache-$env:CCACHE_VERSION-windows-x86_64.zip" -o $zip
+          if ($LASTEXITCODE -ne 0) { throw 'ccache download failed.' }
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+          if ($actual -ne $env:CCACHE_ZIP_SHA256) { throw "ccache download has SHA-256 $actual; expected $env:CCACHE_ZIP_SHA256." }
+          Expand-Archive $zip $env:RUNNER_TEMP -Force
+          $tool = Join-Path $env:RUNNER_TEMP 'ccache-bin'
+          New-Item -ItemType Directory -Force $tool | Out-Null
+          foreach ($name in 'ccache.exe', 'cl.exe') {
+              Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" (Join-Path $tool $name)
+          }
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          $cl = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\cl.exe"
+          if (-not (Test-Path $cl -PathType Leaf)) { throw "The default VC compiler was not found: $cl" }
+          "CCACHE_COMPILER=$cl" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "CCACHE_BIN=$tool" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}\ccache
+          key: windows-server-${{ github.sha }}
+          restore-keys: windows-server-
 
       - name: Configure pinned server and all modules
         run: |
@@ -251,9 +285,20 @@ jobs:
           }
 
       - name: Compile and assemble complete distribution
+        env:
+          # One cl.exe call per source lets ccache serve each object; the core's
+          # own precompiled headers stay, which ccache accepts with this sloppiness.
+          UseMultiToolTask: 'true'
+          EnforceProcessCountAcrossBuilds: 'true'
+          CLToolExe: 'cl.exe'
+          CCACHE_DIR: ${{ runner.temp }}\ccache
+          CCACHE_MAXSIZE: '4G'
+          CCACHE_SLOPPINESS: 'pch_defines,time_macros'
         run: |
           . ./scripts/WriteActionsError.ps1
           $PSNativeCommandUseErrorActionPreference = $false
+          $env:CLToolPath = $env:CCACHE_BIN
+          & "$env:CCACHE_BIN\ccache.exe" --zero-stats | Out-Null
           Write-Output '::add-matcher::.github/problem-matchers/msvc.json'
           cmake --build build --config Release --parallel 2 2>&1 | Tee-Object -Variable buildLog
           $buildExitCode = $LASTEXITCODE
@@ -291,6 +336,21 @@ jobs:
               }
               exit $buildExitCode
           }
+
+      # A failed build still saves the cache, so its fix compiles only what changed.
+      - name: Save the compiler cache
+        if: always() && steps.ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}\ccache
+          key: windows-server-${{ github.sha }}
+
+      - name: Report the compiler cache
+        if: always()
+        continue-on-error: true
+        env:
+          CCACHE_DIR: ${{ runner.temp }}\ccache
+        run: '& "$env:CCACHE_BIN\ccache.exe" --show-stats --verbose'
 
       - name: Report compile memory use
         # Peak commit above the limit measured before the page file was added
