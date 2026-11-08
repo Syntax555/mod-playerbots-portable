@@ -36,7 +36,11 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" "$tool\ccache.exe"
           Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" "$tool\cl.exe"
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-          $cl = & $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\cl.exe' | Select-Object -First 1
+          # MSBuild's v143 toolset uses the default VC tools version; its headers reject other compilers.
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          $cl = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\cl.exe"
+          if (-not (Test-Path $cl)) { throw "Default compiler not found: $cl" }
           "Real compiler: $cl"
           "CCACHE_COMPILER=$cl" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "CCACHE_BIN=$tool" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
@@ -74,15 +78,22 @@ jobs:
           UseMultiToolTask: 'true'
           EnforceProcessCountAcrossBuilds: 'true'
           CLToolExe: 'cl.exe'
+          UseStructuredOutput: 'false'
+          # Idle MSBuild nodes would keep the build tree open between passes.
+          MSBUILDDISABLENODEREUSE: '1'
         run: |
           $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
+          $PSNativeCommandUseErrorActionPreference = $false
           $env:CLToolPath = $env:CCACHE_BIN
+          $env:CCACHE_LOGFILE = Join-Path $env:RUNNER_TEMP 'ccache.log'
           & "$env:CCACHE_BIN\ccache.exe" --zero-stats | Out-Null
           foreach ($pass in 1, 2) {
               if (Test-Path build) { Remove-Item build -Recurse -Force }
-              cmake -S sample -B build -G 'Visual Studio 17 2022' -A x64 -DCMAKE_BUILD_TYPE=Release
-              cmake --build build --config Release -- /v:n | Select-String -Pattern 'cl.exe|ccache|warning|error' | Select-Object -First 20
-              "=== statistics after pass $pass"
+              cmake -S sample -B build -G 'Visual Studio 17 2022' -A x64 -DCMAKE_BUILD_TYPE=Release | Out-Null
+              $log = cmake --build build --config Release 2>&1
+              "=== pass $pass exit code $LASTEXITCODE"
+              $log | Select-String -Pattern 'error|warning' | Select-Object -First 10
               & "$env:CCACHE_BIN\ccache.exe" --show-stats --verbose
           }
+          "=== ccache decisions"
+          Get-Content $env:CCACHE_LOGFILE | Select-String -Pattern 'Command line:|Unsupported|Result:|Multiple|precompiled|Failed' | Select-Object -First 60
