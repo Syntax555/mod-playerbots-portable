@@ -137,9 +137,10 @@ struct AuraEffect {
     SpellInfo info; int32 amount;
     SpellInfo const* GetSpellInfo() const { return &info; }
     int32 GetAmount() const { return amount; }
+    int32 GetMiscValue() const { return 0; }
 };
 struct SpellMgr {
-    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*, uint32, int32, std::map<SpellGroup, int32>&) const {
+    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*, uint32, int32, int32, std::map<SpellGroup, int32>&) const {
         return false;
     }
 } spellMgr;

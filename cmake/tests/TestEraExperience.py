@@ -546,12 +546,13 @@ struct AuraEffect {
     SpellInfo info; int32 amount=0;
     uint32 GetId() const { return info.Id; }
     int32 GetAmount() const { return amount; }
+    int32 GetMiscValue() const { return 0; }
     SpellInfo const* GetSpellInfo() const { return &info; }
 };
 using AuraEffectList=std::list<AuraEffect*>;
 // Unit::GetTotalAuraMultiplier only stacks grouped spells; no experience aura is in a group.
 struct SpellMgr {
-    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*,uint32,int32,std::map<SpellGroup,int32>&) const { return false; }
+    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*,uint32,int32,int32,std::map<SpellGroup,int32>&) const { return false; }
 };
 inline SpellMgr spellMgr;
 inline SpellMgr* sSpellMgr=&spellMgr;

@@ -22,6 +22,7 @@ from FixtureSupport import (
     cxx,
     function,
     prepared_core,
+    reject_mutants,
     source_argument,
 )
 
@@ -138,7 +139,7 @@ stub = r'''
 using uint8 = std::uint8_t; using uint32 = std::uint32_t; using int32 = std::int32_t;
 using int8 = std::int8_t;
 using SpellGroup = uint32; using AuraType = uint32;
-constexpr uint32 SPELL_GROUP_DB_RANGE_MIN = 1000, SPELL_GROUP_CORE_RANGE_MAX = 3;
+constexpr uint32 SPELL_GROUP_NONE = 0, SPELL_GROUP_DB_RANGE_MIN = 1000, SPELL_GROUP_CORE_RANGE_MAX = 3;
 constexpr uint32 SPELL_AURA_MOD_MELEE_HASTE = 138, SPELL_AURA_MOD_MELEE_RANGED_HASTE = 192;
 constexpr uint32 SPELL_AURA_MOD_RANGED_HASTE = 140;
 constexpr uint8 MAX_SPELL_EFFECTS = 3;
@@ -163,6 +164,7 @@ template<class... T> void IgnoreLog(T...) {}
 uint32 getMSTime() { return 0; } uint32 GetMSTimeDiffToNow(uint32) { return 0; }
 struct SpellEffectInfo {
     uint32 Effect = 0, ApplyAuraName = 0;
+    int32 MiscValue = 0;
     bool IsAura() const; bool IsAura(AuraType) const;
     bool IsAreaAuraEffect() const; bool IsUnitOwnedAuraEffect() const;
 };
@@ -203,6 +205,7 @@ public:
     SpellSpellGroupMap mSpellSpellGroup;
     SpellGroupStackMap mSpellGroupStack;
     std::unordered_map<SpellGroup, std::unordered_set<uint32>> mSpellSameEffectStack;
+    std::unordered_map<SpellGroup, std::set<std::pair<uint32, int32>>> mSpellSameEffectSharedMisc;
     SpellInfo const* GetSpellInfo(uint32 id) const { auto it = store.find(id); return it == store.end() ? nullptr : &it->second; }
     SpellInfo const* AssertSpellInfo(uint32 id) const { auto* info = GetSpellInfo(id); assert(info); return info; }
     uint32 GetFirstSpellInChain(uint32 id) const { return store.at(id).root; }
@@ -211,7 +214,7 @@ public:
     SpellGroupSpellMapBounds GetSpellGroupSpellMapBounds(SpellGroup) const;
     void GetSetOfSpellsInSpellGroup(SpellGroup, std::set<uint32>&) const;
     void GetSetOfSpellsInSpellGroup(SpellGroup, std::set<uint32>&, std::set<SpellGroup>&) const;
-    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*, uint32, int32, std::map<SpellGroup, int32>&) const;
+    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*, uint32, int32, int32, std::map<SpellGroup, int32>&) const;
     SpellGroupStackRule CheckSpellGroupStackRules(SpellInfo const*, SpellInfo const*) const;
     void LoadSpellGroups(); void LoadSpellGroupStackRules();
 };
@@ -230,7 +233,7 @@ for spell in sorted(ids):
     row = spells[spell]
     root, rank = roots.get(spell, (spell, 0))
     records.append(f'store[{spell}] = SpellInfo{{{spell}, {root}, {rank}, 0, {{{{'
-                   + ', '.join('{' + f'{row[idx[f"Effect_{i}"]]}, {row[idx[f"EffectAura_{i}"]]}' + '}'
+                   + ', '.join('{' + f'{row[idx[f"Effect_{i}"]]}, {row[idx[f"EffectAura_{i}"]]}, {row[idx[f"EffectMiscValue_{i}"]]}' + '}'
                                for i in (1, 2, 3)) + '}}};')
 for root, spell, rank in ranks:
     if spell in ids:
@@ -313,8 +316,8 @@ INIT_RECORDS
                 // Unit aggregates the aura actually supplied by this spell.
                 // Asking an unrelated spell for another spell's aura produces
                 // impossible effects for the rows intentionally removed here.
-                bool oldGrouped = original.AddSameEffectStackRuleSpellGroups(&info, effect.ApplyAuraName, amount, oldAmounts);
-                bool newGrouped = repaired.AddSameEffectStackRuleSpellGroups(&info, effect.ApplyAuraName, amount, newAmounts);
+                bool oldGrouped = original.AddSameEffectStackRuleSpellGroups(&info, effect.ApplyAuraName, effect.MiscValue, amount, oldAmounts);
+                bool newGrouped = repaired.AddSameEffectStackRuleSpellGroups(&info, effect.ApplyAuraName, effect.MiscValue, amount, newAmounts);
                 if (oldGrouped != newGrouped || oldAmounts != newAmounts) {
                     assert(correctedHitRule && original.IsSpellMemberOfSpellGroup(id, 1060));
                     assert(effect.ApplyAuraName == 29 || effect.ApplyAuraName == 54);
@@ -362,13 +365,23 @@ INIT_RECORDS
     for (auto const& [firstAmount, strongestAmount] : std::vector<std::pair<int32, int32>>{
              {-3, -5}, {3, 5}, {0, -5}, {0, 5}, {-3, -3}}) {
         std::map<SpellGroup, int32> hitAmounts;
-        assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(3043), 54, firstAmount, hitAmounts));
-        assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(5570), 54, firstAmount, hitAmounts));
-        assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(948281), 54, strongestAmount, hitAmounts));
+        assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(3043), 54, 0, firstAmount, hitAmounts));
+        assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(5570), 54, 0, firstAmount, hitAmounts));
+        assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(948281), 54, 0, strongestAmount, hitAmounts));
         assert(hitAmounts.size() == 1 && hitAmounts.at(1060) == strongestAmount);
-        assert(!repaired.AddSameEffectStackRuleSpellGroups(&store.at(932300), 29, -20, hitAmounts));
+        assert(!repaired.AddSameEffectStackRuleSpellGroups(&store.at(932300), 29, 0, -20, hitAmounts));
         assert(hitAmounts.size() == 1 && hitAmounts.at(1060) == strongestAmount);
     }
+    // Fel Intelligence carries intellect and spirit in both groups. Each stat
+    // must choose its own group before competing with the single-stat buffs.
+    assert(store.at(54424).Effects[0].MiscValue == 3 && store.at(54424).Effects[1].MiscValue == 4);
+    std::map<SpellGroup, int32> statAmounts;
+    assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(54424), 29, 3, 20, statAmounts));
+    assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(54424), 29, 4, 30, statAmounts));
+    assert((statAmounts == std::map<SpellGroup, int32>{{1124, 20}, {1125, 30}}));
+    assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(1459), 29, 3, 40, statAmounts));
+    assert(repaired.AddSameEffectStackRuleSpellGroups(&store.at(14752), 29, 4, 15, statAmounts));
+    assert((statAmounts == std::map<SpellGroup, int32>{{1124, 40}, {1125, 30}}));
     std::cout << "Era spell groups: " << expected.size() << " native diagnostics corrected; " << store.size() << " spell/rank records, "
               << pairs - restoredInfusionExclusions.size() << " effective exclusion pairs preserved; "
               << restoredInfusionExclusions.size() << " intended Infusion exclusions restored; "
@@ -377,12 +390,21 @@ INIT_RECORDS
 '''
 checks = checks.replace('INIT_RECORDS', '\n'.join(records)).replace('RULES', cpp_rows(rules))
 checks = checks.replace('BEFORE', cpp_rows(before)).replace('AFTER', cpp_rows(after))
+
+
+def build(directory, executable):
+    return [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fmax-errors=5', *SANITIZER_FLAGS,
+            '-no-pie', str(directory / 'spell-groups.cpp'), '-o', str(executable)]
+
+
 with tempfile.TemporaryDirectory(prefix='portable-era-spell-groups-') as temporary:
     path = Path(temporary)
-    source = path / 'spell-groups.cpp'
-    binary = path / 'spell-groups'
-    source.write_text(stub + methods + checks)
-    subprocess.run([cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fmax-errors=5', *SANITIZER_FLAGS,
-                    '-no-pie', str(source), '-o', str(binary)], check=True)
+    binary = path / 'fixture'
+    (path / 'spell-groups.cpp').write_text(stub + methods + checks)
+    subprocess.run(build(path, binary), check=True)
     subprocess.run([str(binary)], check=True, timeout=TIMEOUT)
+    reject_mutants(path, [
+        ('stat-specific shared group', 'spell-groups.cpp',
+         'shared->second.count({ auraType, miscValue })', 'shared->second.count({ auraType, miscValue * 0 })'),
+    ], build, 'Era spell groups')
 print('Era spell groups: 13-row migration is targeted and idempotent; spell/rank data and stock rules unchanged')

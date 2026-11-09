@@ -110,6 +110,8 @@ fixtures pass. Use native core/module functions before adding replacements.
   talent key, buttons and `/talents`; seven-row Vanilla/nine-row TBC trees,
   ranks/connections/tooltips, spec and glyph tabs, hunter pet trees and target
   switching. Bot and player button state must follow their own visible window.
+  Check the dressing-room skin with the stock frame and addons that replace or
+  resize it, including login and live module toggles.
 - [ ] Test the native trainer catalogue and bot spellbook across all eras:
   learned/unlearned entries, cost/level, class/talent sections, cast/macro/skip,
   search, paging and single/two-page layouts. Toggle DragonUI's spellbook live
@@ -333,6 +335,9 @@ fixtures pass. Use native core/module functions before adding replacements.
   Progression's Onyxia and Naxxramas 40 entrances for levels 60, 70 and 80,
   DragonUI's inspect window under the EraTalents inspect view, and Questie
   protocol 21 pacing with hidden era questgivers.
+- [ ] Validate Dungeon Clear's final-loot wait with open rolls, nearby boss
+  corpses and unlootable drops, including the 60-second timeout and ordinary
+  party loot rights.
 - [ ] Evaluate `IndividualProgression.VanillaHunterPets` and
   `IndividualProgression.WarlockDemonTrainers` before enabling them: existing
   pets lose untaught abilities, and bots still need historical pet-ability

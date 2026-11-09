@@ -204,7 +204,7 @@ struct SpellMgr
     std::map<uint32, SpellInfo> spells;
     SpellInfo const* GetSpellInfo(uint32 id) const { auto found = spells.find(id); return found == spells.end() ? nullptr : &found->second; }
     // Talent auras carry no same-effect stack rule group.
-    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*, uint32, int32, std::map<SpellGroup, int32>&) const { return false; }
+    bool AddSameEffectStackRuleSpellGroups(SpellInfo const*, uint32, int32, int32, std::map<SpellGroup, int32>&) const { return false; }
 } spellMgr;
 SpellMgr* sSpellMgr = &spellMgr;
 

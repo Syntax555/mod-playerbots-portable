@@ -3,10 +3,10 @@
   "core": {
     "name": "azerothcore-wotlk",
     "url": "https://github.com/Syntax555/azerothcore-wotlk.git",
-    "revision": "61b1a6bba1c3a3fdaa30477ad18c746607870e4c",
+    "revision": "c4ec0cd4bec9cbd50585e22db4b6f49997d4baa4",
     "upstream": {
       "url": "https://github.com/Grimfeather/azerothcore-wotlk.git",
-      "revision": "0d754d1921261dfd939f91060ebc022eae280f71"
+      "revision": "afd7036bab385e96a2c540272680cc0ec2f7dd4d"
     },
     "forkChanges": {
       "azerothcore-era-shatter": "1076b54f2319ec434c22cce2e0b901f694c275ed",
@@ -30,7 +30,8 @@
       "azerothcore-aura-state-snapshot": "28b5cbe6c0c8591d893dabaf648f6ccb794a4ca7",
       "azerothcore-unconnected-aura-updates": "8931c036ef6f6dea9f62a5c41415fcb559325b93",
       "azerothcore-mutual-visibility": "07065587bdb8ce2b4f45fbae0c1cb43fc3854520",
-      "azerothcore-attack-swing-state": "61b1a6bba1c3a3fdaa30477ad18c746607870e4c"
+      "azerothcore-attack-swing-state": "61b1a6bba1c3a3fdaa30477ad18c746607870e4c",
+      "azerothcore-shared-stat-spell-groups": "21117875871cee52357cbd29ffaf43dbea4a9845"
     }
   },
   "modules": [
@@ -134,10 +135,10 @@
     {
       "name": "mod-dungeon-clear",
       "url": "https://github.com/Syntax555/mod-dungeon-clear.git",
-      "revision": "54eac22ff627ee93b5755132e8f2598649dc6579",
+      "revision": "183a99c626ffe5b680d93a8f7695851292d09a61",
       "upstream": {
         "url": "https://github.com/jrad7/mod-dungeon-clear.git",
-        "revision": "0dfe558d6370d8b8bd94bba2ad75374975f2a833"
+        "revision": "484c802b2f4534a935b7d20cbb29e27d72d388e2"
       },
       "forkChanges": {
         "mod-dungeon-clear-earned-parties": "9badf0690bd9b9b18c0835a753b8eea61917aa37",
@@ -145,7 +146,8 @@
         "mod-dungeon-clear-earned-shortcut-guards": "10b305cad830574c21b4928a7250e952d76fa503",
         "mod-dungeon-clear-earned-death-recovery": "340e5eb1416a1ea9ca3e4275e67dd4e88c679422",
         "mod-dungeon-clear-earned-forced-pulls": "e0e38cf1938e4f2526f64575ddf12dd5b70ddb74",
-        "mod-dungeon-clear-molten-core-order": "03c801c59a31c8bd4a6a839169dab79b421d8989"
+        "mod-dungeon-clear-molten-core-order": "03c801c59a31c8bd4a6a839169dab79b421d8989",
+        "mod-dungeon-clear-final-loot": "183a99c626ffe5b680d93a8f7695851292d09a61"
       }
     },
     {
@@ -389,10 +391,10 @@
     {
       "name": "DragonUI",
       "url": "https://github.com/Syntax555/DragonUI.git",
-      "revision": "2299ec238bd0f16cf74d4d96de577393b50b43e3",
+      "revision": "da3ed8a6b047506ec1ebd69866790fe73983bdb6",
       "upstream": {
         "url": "https://github.com/NeticSoul/DragonUI.git",
-        "revision": "3a57b6d1402e42351e3c55c269942050cd09efda"
+        "revision": "407dd0069f2b853388483e9e7e169198abf4c6d0"
       },
       "path": "DragonUI",
       "interface": 30300,
@@ -402,7 +404,8 @@
         "dragonui-control-ownership": "00e15e78ad005b53c342b226eddf859e9a33a6c3",
         "dragonui-level-up-features": "b1d2b5f45481eb9d66f89dca1cf20c9e99c2f220",
         "dragonui-shared-book-builders": "3a77797cf036fdbe11bd6a938dba45fb78043522",
-        "dragonui-shared-book-controls": "522f20ce390a062b4baa8ce1c4550d3d018d7c55"
+        "dragonui-shared-book-controls": "522f20ce390a062b4baa8ce1c4550d3d018d7c55",
+        "dragonui-dressing-room-compatibility": "407dd0069f2b853388483e9e7e169198abf4c6d0"
       }
     },
     {

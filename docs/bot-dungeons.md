@@ -133,6 +133,11 @@ A required unsupported event stalls for ordinary player interaction; an optional
 one may be skipped. `.dc skip` advances the objective list without opening
 locked objects or awarding native encounter credit.
 
+After the final objective, Dungeon Clear waits for open loot rolls and nearby
+unlooted boss drops at or above the group's loot threshold before ending the
+run. Free-for-all loot does not delay completion. The wait is limited to 60
+seconds; ordinary loot eligibility and distribution still apply.
+
 ## Raids
 
 Raid Clear supplies Onyxia's Lair, Molten Core, Blackwing Lair, Zul'Gurub and

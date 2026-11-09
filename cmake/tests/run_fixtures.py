@@ -75,6 +75,8 @@ GAMEPLAY = (
     "TestClassQuestChains",
     "TestJournalProgression",
     "TestForeverJournal",
+    "TestDungeonFinalLoot",
+    "TestDragonUIDressingRoom",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -119,7 +121,7 @@ MODULE_FIXTURES = {
         "TestJournalProgression",
     ),
     "mod-dungeon-clear": (
-        "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonLabGates",
+        "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonFinalLoot", "TestDungeonLabGates",
         "TestMoltenCoreRoster",
     ),
     "mod-quest-loot-party": ("TestProfileKeys",),
