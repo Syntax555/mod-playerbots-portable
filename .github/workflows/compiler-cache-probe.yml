@@ -1,0 +1,120 @@
+name: Compiler cache probe
+
+# Measures whether ccache serves MSVC compiles that MSBuild starts inside a
+# CMake superbuild, with and without precompiled headers.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CCACHE_VERSION: '4.14.2'
+      CCACHE_ZIP_SHA256: '6993ce645e53192cec592ee23186200b574ac4c59097ecde8d9cfd681b47ae84'
+      CCACHE_DIR: ${{ github.workspace }}\..\ccache-store
+    steps:
+      - name: Install ccache as cl.exe
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'ccache.zip'
+          curl.exe --fail -sSL --retry 3 "https://github.com/ccache/ccache/releases/download/v$env:CCACHE_VERSION/ccache-$env:CCACHE_VERSION-windows-x86_64.zip" -o $zip
+          if ($LASTEXITCODE -ne 0) { throw 'ccache download failed.' }
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($actual -ne $env:CCACHE_ZIP_SHA256) { throw "ccache has SHA-256 $actual" }
+          Expand-Archive $zip $env:RUNNER_TEMP
+          $tool = Join-Path $env:RUNNER_TEMP 'ccache-bin'
+          New-Item -ItemType Directory $tool | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" "$tool\ccache.exe"
+          Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" "$tool\cl.exe"
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          # MSBuild's v143 toolset uses the default VC tools version; its headers reject other compilers.
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          $cl = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\cl.exe"
+          if (-not (Test-Path $cl)) { throw "Default compiler not found: $cl" }
+          "Real compiler: $cl"
+          "CCACHE_COMPILER=$cl" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "CCACHE_BIN=$tool" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          & "$tool\ccache.exe" --version | Select-Object -First 1
+
+      - name: Write superbuild sample
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory sample/inner | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.16)
+          project(outer NONE)
+          include(ExternalProject)
+          ExternalProject_Add(inner SOURCE_DIR "${CMAKE_SOURCE_DIR}/inner"
+            BINARY_DIR "${CMAKE_BINARY_DIR}/inner-build" BUILD_ALWAYS 1 INSTALL_COMMAND "")
+          '@ | Set-Content sample/CMakeLists.txt
+          '#define PROBE_VALUE 1' | Set-Content sample/inner/value.h
+          @'
+          cmake_minimum_required(VERSION 3.16)
+          project(inner CXX)
+          include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
+          foreach(i RANGE 1 6)
+            file(WRITE "${CMAKE_BINARY_DIR}/gen${i}.cpp"
+              "#include \"value.h\"\n#include <map>\n#include <string>\n#include <vector>\nint f${i}(){std::map<std::string,std::vector<int>> m; m[\"a\"].push_back(${i}); return int(m.size()) * PROBE_VALUE;}\n")
+          endforeach()
+          add_library(plain STATIC ${CMAKE_BINARY_DIR}/gen1.cpp ${CMAKE_BINARY_DIR}/gen2.cpp ${CMAKE_BINARY_DIR}/gen3.cpp)
+          add_library(pch STATIC ${CMAKE_BINARY_DIR}/gen4.cpp ${CMAKE_BINARY_DIR}/gen5.cpp ${CMAKE_BINARY_DIR}/gen6.cpp)
+          target_precompile_headers(pch PRIVATE value.h <map> <string> <vector>)
+          target_compile_options(plain PRIVATE /MP)
+          target_compile_options(pch PRIVATE /MP)
+          file(WRITE "${CMAKE_BINARY_DIR}/main.cpp"
+            "#include <cstdio>\nint f1(); int f4();\nint main(){std::printf(\"%d\\n\", f1()+f4());}\n")
+          add_executable(check "${CMAKE_BINARY_DIR}/main.cpp")
+          target_link_libraries(check PRIVATE plain pch)
+          '@ | Set-Content sample/inner/CMakeLists.txt
+
+      - name: Check cold, warm and changed-header builds
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+          CL_MPCount: '2'
+          UseMultiToolTask: 'true'
+          EnforceProcessCountAcrossBuilds: 'true'
+          CLToolExe: 'cl.exe'
+          UseStructuredOutput: 'false'
+          # Idle MSBuild nodes would keep the build tree open between passes.
+          MSBUILDDISABLENODEREUSE: '1'
+          # ccache needs both to reuse results compiled with a precompiled header.
+          CCACHE_SLOPPINESS: 'pch_defines,time_macros'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $env:CLToolPath = $env:CCACHE_BIN
+          $env:CCACHE_LOGFILE = Join-Path $env:RUNNER_TEMP 'ccache.log'
+          foreach ($pass in 1, 2, 3) {
+              if ($pass -eq 3) { '#define PROBE_VALUE 2' | Set-Content sample/inner/value.h }
+              if (Test-Path build) { Remove-Item build -Recurse -Force }
+              & "$env:CCACHE_BIN\ccache.exe" --zero-stats | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw 'Could not reset ccache statistics.' }
+              cmake -S sample -B build -G 'Visual Studio 17 2022' -A x64 -DCMAKE_BUILD_TYPE=Release
+              if ($LASTEXITCODE -ne 0) { throw "Configure failed on pass $pass." }
+              $log = cmake --build build --config Release 2>&1
+              $buildExitCode = $LASTEXITCODE
+              "=== pass $pass exit code $buildExitCode"
+              if ($buildExitCode -ne 0) { $log; throw "Build failed on pass $pass." }
+              $log | Select-String -Pattern 'error|warning' | Select-Object -First 10
+              $expected = if ($pass -eq 3) { '4' } else { '2' }
+              $actual = & ./build/inner-build/Release/check.exe
+              if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) { throw "Stale result on pass ${pass}: expected $expected, got $actual." }
+              & "$env:CCACHE_BIN\ccache.exe" --show-stats --verbose
+              $statsJson = & "$env:CCACHE_BIN\ccache.exe" --print-stats --format=json
+              if ($LASTEXITCODE -ne 0) { throw 'Could not read ccache statistics.' }
+              $stats = $statsJson | ConvertFrom-Json
+              if ($pass -eq 2 -and ($stats.direct_cache_hit + $stats.preprocessed_cache_hit -eq 0 -or $stats.cache_miss -ne 0 -or $stats.could_not_use_precompiled_header -ne 0)) {
+                  throw 'The warm build must reuse its cached compiles without cache misses.'
+              }
+              if ($pass -eq 3 -and $stats.cache_miss -eq 0) { throw 'Changing the header must invalidate cached compiles.' }
+          }
+          "=== ccache decisions"
+          Get-Content $env:CCACHE_LOGFILE | Select-String -Pattern 'unsupported|Result: (direct_cache_hit|cache_miss|could_not|unsupported)|precompiled|sloppiness|Failed' | Select-Object -First 80

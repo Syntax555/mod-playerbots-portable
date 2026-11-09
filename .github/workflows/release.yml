@@ -41,6 +41,10 @@ jobs:
       MYSQL_ZIP_SHA256: '28e9eda019d88eff4478d811ea2110b83f02a3966be157fe91cc55def3ab0d4d'
       OPENSSL_VERSION: '3.5.9'
       OPENSSL_ZIP_SHA256: '76da391395be029b44794857b9ff380255e02a0960a98314cd3f6a6816d82696'
+      CCACHE_VERSION: '4.14.2'
+      CCACHE_ZIP_SHA256: '6993ce645e53192cec592ee23186200b574ac4c59097ecde8d9cfd681b47ae84'
+      CCACHE_DIR: ${{ github.workspace }}\..\ccache-store
+      CCACHE_MAXSIZE: '4G'
     defaults:
       run:
         shell: pwsh
@@ -111,6 +115,41 @@ jobs:
               Expand-Archive $opensslZip 'C:\tools\openssl\current' -Force
           }
           'OPENSSL_ROOT_DIR=C:\tools\openssl\current\x64' | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      # MSBuild starts ccache as cl.exe; it runs the default VC tools' compiler,
+      # whose headers the v143 toolset uses.
+      - name: Install the compiler cache
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'ccache.zip'
+          curl.exe --fail -sSL --retry 3 "https://github.com/ccache/ccache/releases/download/v$env:CCACHE_VERSION/ccache-$env:CCACHE_VERSION-windows-x86_64.zip" -o $zip
+          if ($LASTEXITCODE -ne 0) { throw 'ccache download failed.' }
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+          if ($actual -ne $env:CCACHE_ZIP_SHA256) { throw "ccache download has SHA-256 $actual; expected $env:CCACHE_ZIP_SHA256." }
+          Expand-Archive $zip $env:RUNNER_TEMP -Force
+          $tool = Join-Path $env:RUNNER_TEMP 'ccache-bin'
+          New-Item -ItemType Directory -Force $tool | Out-Null
+          foreach ($name in 'ccache.exe', 'cl.exe') {
+              Copy-Item "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64\ccache.exe" (Join-Path $tool $name)
+          }
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          $cl = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\cl.exe"
+          if (-not (Test-Path $cl -PathType Leaf)) { throw "The default VC compiler was not found: $cl" }
+          "CCACHE_COMPILER=$cl" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "CCACHE_BIN=$tool" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: windows-server-${{ env.CCACHE_VERSION }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            windows-server-${{ env.CCACHE_VERSION }}-${{ github.sha }}-
+            windows-server-${{ env.CCACHE_VERSION }}-
+            windows-server-
 
       - name: Configure pinned server and all modules
         run: |
@@ -251,9 +290,20 @@ jobs:
           }
 
       - name: Compile and assemble complete distribution
+        id: compile
+        env:
+          # One cl.exe call per source lets ccache serve each object; the core's
+          # own precompiled headers stay, which ccache accepts with this sloppiness.
+          UseMultiToolTask: 'true'
+          EnforceProcessCountAcrossBuilds: 'true'
+          CLToolExe: 'cl.exe'
+          CCACHE_SLOPPINESS: 'pch_defines,time_macros'
         run: |
           . ./scripts/WriteActionsError.ps1
           $PSNativeCommandUseErrorActionPreference = $false
+          $env:CLToolPath = $env:CCACHE_BIN
+          & "$env:CCACHE_BIN\ccache.exe" --zero-stats | Out-Null
+          $timer = [Diagnostics.Stopwatch]::StartNew()
           Write-Output '::add-matcher::.github/problem-matchers/msvc.json'
           cmake --build build --config Release --parallel 2 2>&1 | Tee-Object -Variable buildLog
           $buildExitCode = $LASTEXITCODE
@@ -265,17 +315,15 @@ jobs:
               # Idle MSBuild nodes of the failed attempt would keep their memory.
               Get-Process -Name MSBuild, cl, VCTIP, mspdbsrv -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
               $env:CMAKE_BUILD_PARALLEL_LEVEL = '1'
-              # The modules project compiles alone, so only fewer compiler workers
-              # relieve it; the CL task ignores /MP when it checks current objects.
-              if (@($memoryFailures | Where-Object { "$_" -match '\bmodules[.]vcxproj\b' }).Count -gt 0) {
-                  $env:CL_MPCount = '1'
-              }
+              # Multi-tool tasks share this compiler limit across all projects.
+              $env:CL_MPCount = '1'
               Write-Output "Compiler memory exhaustion: retrying with one parallel project and CL_MPCount=$env:CL_MPCount."
               cmake --build build --config Release --parallel 1 2>&1 | Tee-Object -Variable buildLog
               $buildExitCode = $LASTEXITCODE
           }
           Write-Output '::remove-matcher owner=portable-msvc-errors::'
           Write-Output '::remove-matcher owner=portable-linker-errors::'
+          "seconds=$([int]$timer.Elapsed.TotalSeconds)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           if ($buildExitCode -ne 0) {
               # Other projects can keep building after the first compiler error.
               # Prefer the original diagnostics over the final ExternalProject wrapper.
@@ -291,6 +339,27 @@ jobs:
               }
               exit $buildExitCode
           }
+
+      # Each attempt can extend a partial cache left by a failed build.
+      - name: Save the compiler cache
+        if: always() && (steps.compile.outcome == 'success' || steps.compile.outcome == 'failure') && steps.ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
+
+      - name: Report the compiler cache
+        if: always() && (steps.compile.outcome == 'success' || steps.compile.outcome == 'failure')
+        continue-on-error: true
+        run: |
+          $stats = & "$env:CCACHE_BIN\ccache.exe" --show-stats --verbose
+          if ($LASTEXITCODE -ne 0) { throw 'ccache statistics failed.' }
+          $stats
+          '### Windows compiler cache' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          'Compilation and assembly: ${{ steps.compile.outputs.seconds }} seconds.' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```text' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $stats | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       - name: Report compile memory use
         # Peak commit above the limit measured before the page file was added

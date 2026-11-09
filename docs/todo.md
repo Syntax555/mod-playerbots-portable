@@ -369,4 +369,7 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Complete Windows server and matching client-package verification for
   runtime changes before publishing, alongside the full GitHub checks. Test
   existing-realm migrations on a stopped copy; source fixtures are insufficient.
-- [ ] Measure a compiler cache for the Windows build.
+- [ ] Verify the Windows compiler cache on `main`: confirm the first regular
+  build saves its cache and a fresh runner restores it for a subsequent build.
+  Compare the compile time, hit rate and verified packages with the
+  [completed cache measurement](https://github.com/Syntax555/mod-playerbots-portable/blob/main/docs/building.md#build-resources).

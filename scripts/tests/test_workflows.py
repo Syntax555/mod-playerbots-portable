@@ -99,6 +99,67 @@ class WorkflowTests(unittest.TestCase):
     def test_current_workflows(self):
         self.check_workflows(CHECKS.read_text(), RELEASE.read_text(), PUBLISH.read_text())
 
+    def check_compiler_cache(self, release):
+        build = block(release, 'build', 2)
+        env = block(build, 'env', 4)
+        self.assertRegex(env, r'(?m)^      CCACHE_DIR: .+$')
+        self.assertEqual(build.count('CCACHE_DIR:'), 1)
+        self.assertIn("CCACHE_MAXSIZE: '4G'", env)
+        cache_steps = {re.search(r'^      - name: (.+)', step)[1]: step for step in steps(build)}
+        restore = cache_steps['Restore the compiler cache']
+        save = cache_steps['Save the compiler cache']
+        compile_step = cache_steps['Compile and assemble complete distribution']
+        report = cache_steps['Report the compiler cache']
+        # Immutable entries need a new key on both a new run and a retry.
+        prefix = 'windows-server-${{ env.CCACHE_VERSION }}-'
+        self.assertIn('key: ' + prefix + '${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}', restore)
+        self.assertIn('restore-keys: |\n            ' + prefix + '${{ github.sha }}-\n            ' + prefix, restore)
+        self.assertIn('key: ${{ steps.ccache.outputs.cache-primary-key }}', save)
+        for step in (restore, save):
+            self.assertIn('path: ${{ env.CCACHE_DIR }}', step)
+        for step in (save, report):
+            self.assertIn("if: always() && (steps.compile.outcome == 'success' || steps.compile.outcome == 'failure')", step)
+        self.assertIn("steps.ccache.outputs.cache-hit != 'true'", save)
+        self.assertIn('id: compile', compile_step)
+        for setting in ("UseMultiToolTask: 'true'", "EnforceProcessCountAcrossBuilds: 'true'"):
+            self.assertIn(setting, compile_step)
+        # Every memory failure reduces global compiler concurrency, regardless of project.
+        self.assertRegex(compile_step, r"(?m)^              \$env:CL_MPCount = '1'$")
+        self.assertNotIn(r'\bmodules[.]vcxproj\b', compile_step)
+        self.assertIn('seconds=$([int]$timer.Elapsed.TotalSeconds)', compile_step)
+        self.assertIn('$env:GITHUB_OUTPUT', compile_step)
+        self.assertIn('--show-stats --verbose', report)
+        self.assertIn('${{ steps.compile.outputs.seconds }} seconds.', report)
+        self.assertIn('$stats | Out-File $env:GITHUB_STEP_SUMMARY', report)
+
+    def test_windows_compiler_cache(self):
+        self.check_compiler_cache(RELEASE.read_text())
+
+    def test_compiler_cache_regressions_are_rejected(self):
+        release = RELEASE.read_text()
+        mutations = (
+            ('immutable commit key',
+             'windows-server-${{ env.CCACHE_VERSION }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
+             'windows-server-${{ github.sha }}'),
+            ('retry cannot extend the cache', '-${{ github.run_attempt }}', ''),
+            ('cache restores only the current commit',
+             '            windows-server-${{ env.CCACHE_VERSION }}-\n', ''),
+            ('save uses an unrelated key', 'key: ${{ steps.ccache.outputs.cache-primary-key }}', 'key: unrelated'),
+            ('failed build loses its cache',
+             "if: always() && (steps.compile.outcome == 'success' || steps.compile.outcome == 'failure')",
+             'if: success()'),
+            ('save uses a different directory', 'path: ${{ env.CCACHE_DIR }}', 'path: another-cache'),
+            ('memory retry keeps two compiler workers', "$env:CL_MPCount = '1'", "$env:CL_MPCount = '2'"),
+            ('memory retry only reduces modules',
+             "$env:CL_MPCount = '1'", "if ($buildLog -match '\\bmodules[.]vcxproj\\b') { $env:CL_MPCount = '1' }"),
+            ('statistics omitted from summary', '$stats | Out-File $env:GITHUB_STEP_SUMMARY', '$stats | Out-Null'),
+        )
+        for label, before, after in mutations:
+            with self.subTest(label=label):
+                self.assertIn(before, release)
+                with self.assertRaises(AssertionError):
+                    self.check_compiler_cache(release.replace(before, after, 1))
+
     def test_operational_regressions_are_rejected(self):
         checks, release, publish = CHECKS.read_text(), RELEASE.read_text(), PUBLISH.read_text()
         mutations = (

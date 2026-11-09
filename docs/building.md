@@ -81,14 +81,44 @@ preservation.
 
 ## Build resources
 
-The commands above and the release workflow set `CL_MPCount=2`, so MSBuild
-limits each project's compiler workers to two. `CMAKE_BUILD_PARALLEL_LEVEL`
-also limits the nested server build to two parallel projects, reducing peak
-memory use.
+The commands above set `CL_MPCount=2`, so MSBuild limits each project's
+compiler workers to two. `CMAKE_BUILD_PARALLEL_LEVEL` also limits the nested
+server build to two parallel projects, reducing peak memory use.
 
 On a machine with more memory, adjust `CL_MPCount` and
 `CMAKE_BUILD_PARALLEL_LEVEL` before building. Increasing both limits can
 multiply the number of active compiler processes.
+
+The release workflow uses ccache with MSBuild's multi-tool tasks. Its
+`EnforceProcessCountAcrossBuilds=true` makes `CL_MPCount=2` a shared limit of
+two compiler processes across projects and nested builds. Compiler memory
+failures retry with one compiler process and one parallel project.
+
+The Windows compiler cache is restored before each manual build and saved
+after successful or failed compiles. Each attempt saves a separate cache, so
+rerunning a failed build can extend its partial results. ccache checks compiler,
+source, header and option changes before reusing objects; precompiled headers
+use `pch_defines,time_macros` sloppiness. The job summary reports compile and
+assembly time and cache statistics. Cache download/upload, linking and ZIP
+packaging still take time even when all compiles are cached.
+
+GitHub Actions caches are scoped to branches. The first `main` build cannot
+restore a cache saved only on a test branch; it populates `main`'s cache for
+later builds. The manual **Compiler cache probe** workflow checks cold and warm
+compiles, including precompiled headers, and verifies header invalidation.
+
+A comparison on two fresh `windows-2022` runners building identical sources
+measured the following results:
+
+| Measurement | [Cold cache](https://github.com/Syntax555/mod-playerbots-portable/actions/runs/42445383816/attempts/1) | [Restored cache](https://github.com/Syntax555/mod-playerbots-portable/actions/runs/42445383816/attempts/2) |
+| --- | --- | --- |
+| Compile and assemble | 3 h 57 min | 7 min 9 s |
+| Complete Windows job | 4 h 6 min 4 s | 16 min 38 s |
+
+The restored build reused all 2,176 cacheable compiler calls, with no misses;
+both builds passed executable smoke tests and server ZIP verification. These
+times describe that unchanged-source comparison. Changed sources, dependencies
+or runner images can require fresh compilation.
 
 Windows compiles only within RAM plus page files. If the build stops with
 `fatal error C1060: compiler is out of heap space`, enlarge the page file or
