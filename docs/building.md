@@ -81,14 +81,26 @@ preservation.
 
 ## Build resources
 
-The commands above and the release workflow set `CL_MPCount=2`, so MSBuild
-limits each project's compiler workers to two. `CMAKE_BUILD_PARALLEL_LEVEL`
-also limits the nested server build to two parallel projects, reducing peak
-memory use.
+The commands above set `CL_MPCount=2`, so MSBuild limits each project's
+compiler workers to two. `CMAKE_BUILD_PARALLEL_LEVEL` also limits the nested
+server build to two parallel projects, reducing peak memory use.
 
 On a machine with more memory, adjust `CL_MPCount` and
 `CMAKE_BUILD_PARALLEL_LEVEL` before building. Increasing both limits can
 multiply the number of active compiler processes.
+
+The release workflow uses ccache with MSBuild's multi-tool tasks. Its
+`EnforceProcessCountAcrossBuilds=true` makes `CL_MPCount=2` a shared limit of
+two compiler processes across projects and nested builds. Compiler memory
+failures retry with one compiler process and one parallel project.
+
+The Windows compiler cache is restored before each manual build and saved
+after successful or failed compiles. Each attempt saves a separate cache, so
+rerunning a failed build can extend its partial results. ccache checks compiler,
+source, header and option changes before reusing objects; precompiled headers
+use `pch_defines,time_macros` sloppiness. The job summary reports compile and
+assembly time and cache statistics. Cache download/upload, linking and ZIP
+packaging still take time even when all compiles are cached.
 
 Windows compiles only within RAM plus page files. If the build stops with
 `fatal error C1060: compiler is out of heap space`, enlarge the page file or

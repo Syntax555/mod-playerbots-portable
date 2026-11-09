@@ -364,4 +364,7 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Complete Windows server and matching client-package verification for
   runtime changes before publishing, alongside the full GitHub checks. Test
   existing-realm migrations on a stopped copy; source fixtures are insufficient.
-- [ ] Measure a compiler cache for the Windows build.
+- [ ] Measure the Windows compiler cache across fresh runners: compare cold
+  and restored-cache compile times and hit rates before adopting
+  `ci/compiler-cache` on `main`. The cold build and ZIP verification passed;
+  the probe checks warm hits and header/PCH invalidation.
