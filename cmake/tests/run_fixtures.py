@@ -77,6 +77,7 @@ GAMEPLAY = (
     "TestForeverJournal",
     "TestDungeonFinalLoot",
     "TestDragonUIDressingRoom",
+    "TestHunterCombatActions",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -104,6 +105,7 @@ MODULE_FIXTURES = {
         "TestDruidClassQuests",
         "TestPaladinEraBlessings",
         "TestClassQuestChains",
+        "TestHunterCombatActions",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
