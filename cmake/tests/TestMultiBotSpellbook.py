@@ -94,6 +94,69 @@ end
 ''', body))
 
 
+def click_fixture(frame_source):
+    # Raw WoW Buttons receive LeftButtonUp by default. RegisterForClicks opts
+    # into other mouse buttons: https://warcraft.wiki.gg/wiki/API_Button_RegisterForClicks
+    return "\n".join((r'''
+MultiBot = {spells = {}, spellbook = {name = "Mey"}}
+MultiBot.IF = function(condition, yes, no) if condition then return yes end return no end
+MultiBot.L = function(key) return key end
+MultiBot.SafeTexturePath = function(path) return path end
+local function noop() end
+local function widget()
+    local w = {scripts = {}, clicks = {LeftButtonUp = true}}
+    for _, method in ipairs({"SetPoint", "SetWidth", "SetHeight", "SetAllPoints", "SetBackdrop",
+                             "SetBackdropColor", "SetBackdropBorderColor", "SetFrameStrata", "SetFrameLevel",
+                             "EnableMouse", "SetText", "SetTexture", "SetDrawLayer", "Hide", "Show", "Disable"}) do
+        w[method] = noop
+    end
+    w.GetFrameStrata = function() return "DIALOG" end
+    w.GetFrameLevel = function() return 1 end
+    w.SetScript = function(self, event, callback) self.scripts[event] = callback end
+    w.RegisterForClicks = function(self, ...)
+        self.clicks = {}
+        for _, click in ipairs({...}) do self.clicks[click] = true end
+    end
+    w.CreateTexture, w.CreateFontString = widget, widget
+    w.mouseClick = function(self, button, edge)
+        if self.clicks[button .. edge] and self.scripts.OnClick then
+            self.scripts.OnClick(self, button, edge == "Down")
+        end
+    end
+    return w
+end
+CreateFrame = function(kind, name, parent, template)
+    assert(kind == "Button" or kind == "CheckButton" or kind == "Frame")
+    assert(not template or template == "UIPanelButtonTemplate" or template == "UICheckButtonTemplate")
+    return widget()
+end
+local casts, macros = {}, {}
+MultiBot.CastSpellbookSpell = function(bot, spell) casts[#casts + 1] = {bot, spell} end
+MultiBot.SpellToMacro = function(bot, spell, icon) macros[#macros + 1] = {bot, spell, icon} end
+''',
+        "local createContent = assert(loadstring(" + json.dumps(frame_source + "\nreturn createSpellbookContent") + "))()",
+        r'''
+local _, overlay = createContent({content = widget()})
+for index = 1, 18 do
+    local button = overlay.buttons[string.format("S%02d", index)]
+    button.spell, button.texture = 585, "Spell_Holy_HolySmite"
+    button:mouseClick("LeftButton", "Down")
+    button:mouseClick("RightButton", "Down")
+    button:mouseClick("MiddleButton", "Up")
+    assert(#casts == index - 1 and #macros == index - 1, "unregistered clicks fired")
+    button:mouseClick("LeftButton", "Up")
+    assert(#casts == index and casts[index][1] == "Mey" and casts[index][2] == 585,
+           "left click must cast the selected bot's spell")
+    button:mouseClick("RightButton", "Up")
+    assert(#macros == index and macros[index][1] == "Mey" and macros[index][2] == 585
+           and macros[index][3] == "Spell_Holy_HolySmite", "right click must create the selected bot's macro")
+end
+MultiBot.spellbook.name = "Other"
+overlay.buttons.S01:mouseClick("RightButton", "Up")
+assert(#macros == 19 and macros[19][1] == "Other", "macro retained a previous bot")
+'''))
+
+
 class MultiBotSpellbookTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -112,6 +175,19 @@ class MultiBotSpellbookTests(unittest.TestCase):
     def test_bridge_streams_spell_id_and_ignore_flag(self):
         self.assertEqual(bridge_item_fields(),
                          ["bot->GetName()", "requestToken", "entry.spellId", "(ignored ? 1 : 0)"])
+
+    def test_spell_slots_receive_left_and_right_mouse_clicks(self):
+        def run(source):
+            return subprocess.run([LUA, "-"], input=click_fixture(source), text=True,
+                                  capture_output=True, timeout=20, check=False)
+
+        result = run(self.frame)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        registration = '\tbutton:RegisterForClicks("LeftButtonUp", "RightButtonUp")\n'
+        self.assertEqual(self.frame.count(registration), 1)
+        rejected = run(self.frame.replace(registration, ""))
+        self.assertNotEqual(rejected.returncode, 0, "missing right-click registration was not rejected")
+        self.assertIn("right click must create the selected bot's macro", rejected.stderr)
 
     def test_bridge_items_fill_the_spellbook_with_the_skip_list_state(self):
         body = '''
