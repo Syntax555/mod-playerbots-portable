@@ -401,6 +401,10 @@ func ensureClientData(ctx context.Context, workDir, baseDir, dataURL string, ski
 		_ = os.Remove(zipPath)
 		return errors.New("client data archive is missing populated required folders (dbc, maps, vmaps, mmaps)")
 	}
+	if release := installedClientDataRelease(stageDataDir); fileExists(filepath.Join(stageDataDir, clientDataReleaseFile)) && release != clientDataRelease {
+		_ = os.Remove(zipPath)
+		return fmt.Errorf("client data archive declares release %q; this server needs %s", release, clientDataRelease)
+	}
 	// --data-url names a mirror of the required release. The marker becomes
 	// active with the data in one rename.
 	marker := []byte("INSTALLED_VERSION=" + clientDataRelease + "\n")
