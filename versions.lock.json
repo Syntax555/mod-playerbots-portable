@@ -188,14 +188,15 @@
     {
       "name": "mod-era-events",
       "url": "https://github.com/Syntax555/wow-mod-era-events.git",
-      "revision": "d1683dc204b3e1c6309ef8cfe8633163824a7102",
+      "revision": "7cf6866cef2592a1dd7149484c718dfc88be501c",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-era-events.git",
         "revision": "c6fe393ee271dd7c20f3556f5aa30942844f1643"
       },
       "forkChanges": {
         "mod-era-events-earned-progression": "52e6b5d2f284acd2290a35253dc0f0ceafcf10aa",
-        "mod-era-events-startup-data": "75dffdcc834dd8307fc0f4800ddde532b32cef03"
+        "mod-era-events-startup-data": "75dffdcc834dd8307fc0f4800ddde532b32cef03",
+        "mod-era-events-scheduled-population": "7cf6866cef2592a1dd7149484c718dfc88be501c"
       }
     },
     {

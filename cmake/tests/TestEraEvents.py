@@ -445,6 +445,31 @@ void ReloadAndScheduledStart() {
     Mark(player,7);manager.UpdatePlayerPhases(&player,player.zone,player.area);
     assert(!player.HasAura(EVENT_PHASE_SPELLS[EVENT_SCOURGE_INVASION]));
 }
+void ScheduledStartRechecksPopulation() {
+    for(uint32 departure=0;departure<6;++departure) {
+        Reset();Player player,bot;Mark(player,6);Mark(bot,6);bot.session.headless=true;
+        ObjectAccessor::players={{1,&player},{2,&bot}};config.minRealPlayers=1;
+        auto& slot=manager._slots[EVENT_SCOURGE_INVASION];slot.timer=0;
+        manager.UpdateSlot(slot,1);assert(slot.state==State::Warning);
+        switch(departure) {
+            case 0:ObjectAccessor::players.erase(1);break;
+            case 1:player.inWorld=false;break;
+            case 2:Mark(player,7);break;
+            case 3:player.gm=true;break;
+            case 4:player.session.headless=true;break;
+            case 5:config.minRealPlayers=2;break;
+        }
+        manager.UpdateSlot(slot,uint32(slot.timer));
+        assert(slot.state==State::Idle&&slot.timer==int64(config.retry)*MINUTE_MS);
+        assert(Event(EVENT_SCOURGE_INVASION).starts==0&&!bot.HasAura(EVENT_PHASE_SPELLS[EVENT_SCOURGE_INVASION]));
+        // Returning players receive the ordinary warning before the next attempt.
+        ObjectAccessor::players[1]=&player;player.inWorld=true;player.gm=false;player.session.headless=false;
+        Mark(player,6);config.minRealPlayers=1;
+        manager.UpdateSlot(slot,uint32(slot.timer));assert(slot.state==State::Warning);
+        manager.UpdateSlot(slot,uint32(slot.timer));
+        assert(slot.state==State::Running&&Event(EVENT_SCOURGE_INVASION).starts==1);
+    }
+}
 void ZombieParticipantsAndEffects() {
     for(uint32 state=0;state<9;++state) {
         Reset();Player target;Mark(target,12);
@@ -507,6 +532,7 @@ void ZombieTimerAndLifecycle() {
 int main() {
     AddEraEventZombieScripts();
     EarnedStagesAndPhases();MembershipGatesAndCleanup();HumanPopulationAndBots();StrictSettingsAndRewards();ReloadAndScheduledStart();
+    ScheduledStartRechecksPopulation();
     ZombieParticipantsAndEffects();ZombieTimerAndLifecycle();
     for(auto* script:registeredPlayers) delete script;
     std::cout<<"Era Events: native stages, strict phases/rewards, population, reload and zombie infection/lifecycle passed\n";
@@ -550,6 +576,8 @@ with tempfile.TemporaryDirectory(prefix='portable-era-events-') as temporary:
         ('realm-wide-clamp', 'fixture.cpp', 's.realmWide = 0;', ''),
         ('reload-stop', 'fixture.cpp', 'if (!IsAvailable(event))\n                {\n                    if (slot.state != State::Idle)', 'if (false)\n                {\n                    if (slot.state != State::Idle)'),
         ('start-recheck', 'fixture.cpp', 'if (!IsAvailable(event))\n                    return false;', 'if (false)\n                    return false;'),
+        ('scheduled-population-recheck', 'fixture.cpp',
+         'GetCohort(event.GetTier(), true).size() < config.minRealPlayers || !Begin(slot)', '!Begin(slot)'),
         ('infection-target', 'fixture.cpp', '!IsEventParticipant(player, EVENT_ZOMBIE_INFESTATION) || player->IsGameMaster()', 'player->IsGameMaster()'),
         ('groan-caster', 'fixture.cpp', '!IsEventParticipant(caster->ToPlayer(), EVENT_ZOMBIE_INFESTATION)', 'false'),
         ('melee-target', 'fixture.cpp', 'if (!IsEventParticipant(victim->ToPlayer(), EVENT_ZOMBIE_INFESTATION))', 'if (false)'),
