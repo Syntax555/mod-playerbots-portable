@@ -99,14 +99,21 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	}
 	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
 	total := resp.ContentLength
+	expected := resp.ContentLength
 	if resp.StatusCode == http.StatusPartialContent {
-		if !strings.HasPrefix(resp.Header.Get("Content-Range"), fmt.Sprintf("bytes %d-", offset)) {
-			return fmt.Errorf("server resumed the download at an unexpected position: %q", resp.Header.Get("Content-Range"))
+		var first, last, size int64
+		contentRange := resp.Header.Get("Content-Range")
+		if _, err := fmt.Sscanf(contentRange, "bytes %d-%d/%d", &first, &last, &size); err != nil ||
+			offset == 0 || first != offset || last < first || last >= size ||
+			contentRange != fmt.Sprintf("bytes %d-%d/%d", first, last, size) {
+			return fmt.Errorf("server resumed the download with an invalid byte range: %q", contentRange)
+		}
+		expected = last - first + 1
+		if resp.ContentLength >= 0 && resp.ContentLength != expected {
+			return errors.New("resumed download length differs from its byte range")
 		}
 		flags = os.O_WRONLY | os.O_APPEND
-		if total >= 0 {
-			total += offset
-		}
+		total = size
 		fmt.Printf("Resuming the download after %.1f MB.\n", float64(offset)/(1024*1024))
 	} else {
 		offset = 0
@@ -123,14 +130,21 @@ func downloadFileWithProgress(ctx context.Context, url string, destPath string) 
 	progress := newDownloadProgress(total)
 	progress.done, progress.resumed = offset, offset
 	// The request context also cancels reading the response body.
-	_, err = io.Copy(io.MultiWriter(out, progress), resp.Body)
+	received, err := io.Copy(io.MultiWriter(out, progress), resp.Body)
 	progress.finish()
+	if expected >= 0 && received > expected {
+		// A mismatched chunk must not poison the prefix used for the next range.
+		err = errors.Join(err, errors.New("download exceeded its byte range"), os.Truncate(tmpPath, offset))
+	}
 	closeErr := out.Close()
 	if err != nil {
 		return fmt.Errorf("failed to download to %s; the next start continues it: %w", tmpPath, err)
 	}
 	if closeErr != nil {
 		return fmt.Errorf("failed to close downloaded file: %w", closeErr)
+	}
+	if total >= 0 && progress.done != total {
+		return fmt.Errorf("download is incomplete (%d of %d bytes); the next start continues it", progress.done, total)
 	}
 
 	if err := os.Rename(tmpPath, destPath); err != nil {
