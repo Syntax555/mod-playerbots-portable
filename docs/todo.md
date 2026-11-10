@@ -290,6 +290,9 @@ fixtures pass. Use native core/module functions before adding replacements.
 - [ ] Check historical creature levels and HP in game: Mekkatorque and the other
   city leaders, Lor'themar, Velen and city guards. Confirm city training dummies
   stay hidden before tier 13 and appear for Wrath characters in mixed-era groups.
+  Confirm Umbrua, Javad, Babagaya Shadowcleft and Matero Zeshuwal stay hidden
+  before tier 8 and appear for TBC characters, while Vanilla trainers still offer
+  their class quests.
   Shared outdoor creature statistics retain their historical template era.
 - [ ] Check the [restored quests](changing-expansions.md#world-content-by-era-and-patch)
   in game: each bracket's Warsong Gulch and Arathi Basin turn-in with earned marks,

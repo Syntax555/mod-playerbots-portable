@@ -170,7 +170,7 @@ pinned CMaNGOS Classic, TBC and Wrath databases (an entry missing from Classic
 arrived with TBC, one missing from TBC too with Wrath), VMaNGOS's patch records for
 Vanilla and ChromieCraft's progression brackets for TBC and Wrath phases. It leaves
 alone spirit healers; spawns of other modules; invisible helpers; objects with
-collision or traps; creatures and objects that earlier quests use or that drop their
+collision or traps; creatures and objects that earlier quests need or that drop their
 quest items; and entries the earlier database knows under another number. Holiday
 content follows the event calendar.
 
@@ -196,6 +196,10 @@ receive their historical values where the era bases do not already set them.
 These shared values do not switch when an individual character earns another
 era. Wrath's city training dummies appear from tier 13, including the lower-level
 variants; invisible quest and spell helpers retain their native behavior.
+TBC's class trainers Umbrua in Stormwind, Javad in Ironforge and Babagaya
+Shadowcleft and demon trainer Matero Zeshuwal in Ratchet appear from tier 8.
+Their shared Vanilla class quests remain with the original Vanilla trainers
+before TBC.
 
 ## Battleground access and rules
 

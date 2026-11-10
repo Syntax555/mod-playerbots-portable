@@ -153,6 +153,77 @@ class CreatureHelpers(unittest.TestCase):
                 self.assertNotEqual(mutant, conditions, 'name-only dummy helper mutation survived')
 
 
+class ClassTrainerStarters(unittest.TestCase):
+    def generate(self, entry=20407, guid=79860, original=3344, quest=8410, *, alternative=True,
+                 ender=False, objective=False, npcflag=51, original_phase=1, original_era=0,
+                 module=False, custom=False, classes=64, mutant=False):
+        spawns = [(guid, entry, 0, 1, '', 'Later class trainer', 0, 0, 0, npcflag, 0)]
+        if alternative:
+            spawns.append((1, original, 1, original_phase, '', 'Original class trainer', 0, 0, 0, 51, 0))
+        starters = [(entry, quest)] + ([(original, quest)] if alternative else [])
+
+        def query(sql):
+            rows = []
+            if sql == 'SELECT Entry FROM wrath.creature_template':
+                rows = [(e,) for _, e, *_ in spawns]
+            elif sql == 'SELECT Entry FROM tbc.creature_template':
+                rows = [(entry,)] + ([(original,)] if original_era == 1 else [])
+            elif sql == 'SELECT Entry FROM classic.creature_template' and original_era == 0:
+                rows = [(original,)]
+            elif sql == 'SELECT entry FROM classic.quest_template':
+                rows = [(quest,)]
+            elif sql == 'SELECT guid, id FROM core.creature':
+                rows = [(g, e) for g, e, *_ in spawns if not module or e != entry]
+            elif 'FROM world.creature s JOIN world.creature_template' in sql:
+                rows = spawns
+            elif sql == 'SELECT id, quest FROM world.creature_queststarter':
+                rows = starters
+            elif sql == 'SELECT id, quest FROM world.creature_questender' and ender:
+                rows = [(entry, quest)]
+            elif sql.startswith('SELECT ID, RequiredNpcOrGo1') and objective:
+                rows = [(quest, entry, 0, 0, 0)]
+            elif sql.startswith('SELECT q.ID, q.LogTitle'):
+                rows = [(quest, 'Historical class quest', -61, 0, classes)]
+            elif sql.startswith('SELECT SourceGroup, SourceEntry') and custom:
+                rows = [(0, entry)]
+            # Database.__call__ returns tab-separated strings, including numeric fields.
+            return [tuple(map(str, row)) for row in rows]
+
+        with tempfile.TemporaryDirectory() as directory:
+            ip = Path(directory)
+            (ip / 'src').mkdir()
+            (ip / 'src/IndividualProgression.h').write_text('BANG_A_GONG = 8743, INTO_THE_BREACH = 10119,')
+            args = SimpleNamespace(ip=ip, world='world', core_world='core', classic='classic', tbc='tbc',
+                                   wotlk='wrath', vmangos=None, chromiecraft=None)
+            with patch.object(generator, 'awareness_rules', return_value={}):
+                generate = generator.generate
+                if mutant:
+                    source = Path(generator.__file__).read_text()
+                    self.assertIn('quest not in class_quests', source)
+                    namespace = {**vars(generator), '__name__': 'trainer_mutant'}
+                    exec(compile(source.replace('quest not in class_quests', 'True'), generator.__file__, 'exec'),  # noqa: S102
+                         namespace)
+                    namespace['awareness_rules'] = generator.awareness_rules
+                    generate = namespace['generate']
+                return generate(query, args)[0]
+
+    def test_later_trainers_do_not_inherit_the_original_breadcrumbs_era(self):
+        for entry, guid, original, quest, classes, npcflag in (
+                (20407, 79860, 3344, 8410, 64, 51), (23127, 1815, 3344, 8410, 64, 51),
+                (23534, 20943, 3326, 8419, 256, 51), (23535, 20945, 5815, 7562, 256, 130)):
+            with self.subTest(entry=entry):
+                expected = [(30, 0, entry, guid, 66008)]
+                self.assertEqual(self.generate(entry, guid, original, quest, classes=classes, npcflag=npcflag), expected)
+                self.assertNotEqual(self.generate(entry, guid, original, quest, classes=classes, npcflag=npcflag, mutant=True),
+                                    expected, 'blanket earlier-quest exemption mutation survived')
+
+    def test_required_quest_roles_and_existing_visibility_keep_deciding(self):
+        for options in ({'alternative': False}, {'ender': True}, {'objective': True}, {'classes': 0},
+                        {'original_phase': 2}, {'original_era': 1}, {'module': True}, {'custom': True}):
+            with self.subTest(options=options):
+                self.assertEqual(self.generate(**options), [])
+
+
 class ChromieCraftOpenings(unittest.TestCase):
     def test_quests_and_spawns_open_with_the_bracket_that_restores_them(self):
         with tempfile.TemporaryDirectory() as directory:

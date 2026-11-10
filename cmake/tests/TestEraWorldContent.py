@@ -12,6 +12,8 @@ hidden creature from perceiving the character. Vanilla quests returned to their 
 with TBC where they left: Vanilla's battleground reputation turn-ins take the marks Individual
 Progression's battlegrounds award before TBC, one per level bracket. Patch 1.11's Guard Didier
 and TBC's Seer Nakha return to their posts; Kal and Gennia Runetotem keep one Heeding the Call.
+TBC's added class trainers stay hidden before tier 8 even when they offer a Vanilla
+quest; the original trainers still offer those quests in Vanilla.
 Mutations weaken or drop single gates and restorations.
 """
 
@@ -40,11 +42,13 @@ update_path, restored_path, restored_era_path = (updates / 'zz_2026_10_31_01_era
                                                  updates / '2026_10_31_03_restored_era_quests.sql')
 dummy_path = updates / 'zz_2026_11_03_02_era_training_dummies.sql'
 dummy_update = dummy_path.read_text()
-update = update_path.read_text() + dummy_update
+trainer_path = updates / 'zz_2026_11_10_01_era_class_trainers.sql'
+trainer_update = trainer_path.read_text()
+update = update_path.read_text() + dummy_update + trainer_update
 # Quests returned to their givers, replayed before the era gates as the native updater orders them by name.
 restored = restored_path.read_text() + restored_era_path.read_text()
 assert restored_path.name < restored_era_path.name < update_path.name
-assert update_path.name < dummy_path.name
+assert update_path.name < dummy_path.name < trainer_path.name
 RESTORED = {2881: 7884, 8411: 6176, 8579: 15503, 8830: 15731, 8831: 15731}
 # Vanilla's battleground reputation turn-ins: giver and ender, and the ceiling of the quest's level bracket.
 BATTLEGROUND = {7788: (14733, 29), 7871: (14733, 39), 7872: (14733, 49), 7873: (14733, 59), 8291: (14733, 69),
@@ -56,6 +60,9 @@ ENDERS = {**RESTORED, **{quest: giver for quest, (giver, _) in BATTLEGROUND.item
 # Guard Didier at Light's Hope Chapel and Seer Nakha in Garadar, in Individual Progression's free GUID block.
 SPAWNS = {677001: (16226, 0, 2305.3, -5286.12), 677002: (23265, 530, -1333.53, 7221.96)}
 TBC, WRATH = 66008, 66013
+TBC_TRAINERS = {79860: (20407, 0), 1815: (23127, 0), 20943: (23534, 1), 20945: (23535, 1)}
+# Haromm, Demisette Cloyce and Spackle Thornberry retain the shared class quests.
+VANILLA_TRAINERS = {34147: (986, 8410), 26838: (461, 8419), 90468: (5520, 7562)}
 DUMMIES = {31144, 31146, 32542, 32543, 32545, 32546, 32666, 32667}
 dummy_templates = sql_rows(core, 'creature_template', DUMMIES)
 assert all(r['ScriptName'] == 'npc_training_dummy' and not int(r['flags_extra']) & 128 for r in dummy_templates)
@@ -106,7 +113,7 @@ assert all(int(marker) in ERAS[era] for _, marker, negative, era, _ in INSERTS i
 assert all(source == '19' and int(marker) in range(66002, 66019) and marker != '66011'
            for source, marker, negative, _, _ in INSERTS if negative == '1'), 'quests close with a milestone'
 assert update.count("DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` IN (19, 23, 30) AND `Comment` LIKE 'Era content: %';") == 1
-numbers = {int(value) for value in re.findall(r'\b\d+\b', update)}
+numbers = {int(value) for value in re.findall(r'\b\d+\b', update)} | VANILLA_TRAINERS.keys()
 world = core / 'data/sql/base/db_world'
 
 
@@ -137,6 +144,12 @@ assert {(int(r['id']), int(r['quest'])) for r in rows('creature_queststarter', {
 # 5925 and 5928 stay with their later givers instead of repeating the breadcrumb.
 assert {(3602, 5923), (3064, 5926)} <= {(int(r['id']), int(r['quest'])) for r in rows('creature_queststarter', {3602, 3064})}
 assert int(next(iter(rows('quest_template', {9165})))['StartItem']) == int(next(iter(rows('quest_template', {9165})))['RequiredItemId1'])
+# These are duplicate quest starts, not objectives or the only remaining questgivers.
+trainer_starts = {(int(r['id']), int(r['quest'])) for r in rows(
+    'creature_queststarter', {entry for entry, _ in TBC_TRAINERS.values()} | {986, 461, 5520})}
+assert {(20407, 8410), (23127, 8410), (23534, 8419), (23535, 7562), (986, 8410), (461, 8419), (5520, 7562)} <= trainer_starts
+assert {int(r['ID']): int(r['AllowableClasses']) for r in rows('quest_template_addon', {8410, 8419, 7562})} == {
+    8410: 64, 8419: 256, 7562: 256}
 
 
 # Scoped copies of the pinned base world: the spawns, quests and vendor lists the update names.
@@ -292,6 +305,14 @@ def check(source, before=restored):
     for guid, entry in dummy_spawns:
         assert [stage for stage in range(19) if allowed(db, 30, 0, entry, guid, stage)] == list(range(13, 19)), \
             ('Wrath combat training dummy', entry, guid)
+    assert {guid: (entry, spawn_map) for guid, entry, spawn_map in creatures if guid in TBC_TRAINERS} == TBC_TRAINERS
+    for guid, (entry, _) in TBC_TRAINERS.items():
+        assert [stage for stage in range(19) if allowed(db, 30, 0, entry, guid, stage)] == list(range(8, 19)), \
+            ('TBC class trainer', entry, guid)
+    for guid, (entry, quest) in VANILLA_TRAINERS.items():
+        assert (guid, entry, 0) in creatures, ('original trainer spawn missing', entry)
+        assert all(allowed(db, 30, 0, entry, guid, stage) for stage in range(8)), ('Vanilla trainer hidden', entry)
+        assert allowed(db, 19, 0, quest, 0, 7), ('shared class quest unavailable in Vanilla', quest)
     # Vanilla stays: Thrall, the Vanilla Molten Core attunement and Refreshing Spring Water.
     # Classic battlegrounds open by level, so Arathi Basin's 1.7 quests stay too.
     for name, source_type, group, entry, source_id in (('Thrall', 30, 0, 4949, 0), ('Attunement to the Core', 19, 0, 7848, 0),
@@ -330,6 +351,8 @@ def section(marker, era, noun):
 
 mutations = (
     ('Wrath combat training dummies remain in earlier eras', update.replace(dummy_update, '')),
+    ('TBC class trainers remain in Vanilla', update.replace(trainer_update, '')),
+    ('TBC class trainers wait for Wrath', update.replace(trainer_update, trainer_update.replace(', 8, 0, 66008,', ', 8, 0, 66013,'))),
     ('Inscription opens with TBC', update.replace(section(WRATH, 'Wrath', 'creature'), section(WRATH, 'Wrath', 'creature').replace(
         f', 8, 0, {WRATH},', f', 8, 0, {TBC},'))),
     ('TBC creatures stay visible', update.replace(section(TBC, 'TBC', 'creature'), '')),
@@ -344,6 +367,8 @@ mutations = (
     ('gate drops its marker', update.replace(f"0, 8, 0, {TBC}, 0, 0, 0, 0, 0, '', 'Era content: TBC gameobject'",
                                              f"0, 8, 0, {TBC}, 0, 0, 1, 0, 0, '', 'Era content: TBC gameobject'")),
 )
+mutations += tuple((f'TBC class trainer {entry} stays visible', update.replace(
+    f'(s.`id` = {entry} AND s.`guid` = {guid})', '(0)')) for guid, (entry, _) in TBC_TRAINERS.items())
 closing = update[update.index('quests closing at tier 8'):]
 closing = closing[closing.index('INSERT IGNORE'):closing.index(';') + 1]
 didier = restored[restored.index("INSERT INTO `conditions`", restored.index("'Restored Vanilla creature: patch 1.11'")):]
@@ -403,3 +428,43 @@ for name, mutant in (
     else:
         raise AssertionError(f'mutation survived: {name}')
 print('Era training dummies: custom visibility, module spawns, missing rows and idempotence passed')
+
+
+def check_trainer_scope(sql):
+    with replay(update_path.read_text() + dummy_update) as db:
+        custom = [(30, 0, 20407, 0, 4, 16, 0, 1, 0, 0, 0, 0, 0, '', 'custom entry'),
+                  (30, 0, 23127, 1815, 5, 16, 0, 2, 0, 0, 0, 0, 0, '', 'custom spawn')]
+        db.executemany('INSERT INTO conditions VALUES (' + ','.join('?' for _ in columns) + ')', custom)
+        db.execute('INSERT INTO creature (guid, id, map) VALUES (999999, 23534, 1)')
+        db.execute('DELETE FROM creature WHERE guid = 20943')
+        script = sql.replace('INSERT IGNORE', 'INSERT OR IGNORE')
+        db.executescript(script)
+        first = sorted(db.execute('SELECT * FROM conditions'))
+        db.executescript(script)
+        assert sorted(db.execute('SELECT * FROM conditions')) == first, 'trainer update is not idempotent'
+        assert sorted(db.execute('SELECT * FROM conditions WHERE SourceTypeOrReferenceId=30 AND SourceGroup=0 '
+                                 'AND SourceEntry IN (20407,23127)')) == sorted(custom), \
+            'trainer update changed custom visibility'
+        assert not db.execute('SELECT 1 FROM conditions WHERE SourceId IN (20943,999999)').fetchone(), \
+            'trainer update reached a missing or module-added spawn'
+        db.execute('INSERT INTO creature (guid, id, map) VALUES (20943,23127,1)')
+        db.executescript(script)
+        assert not db.execute('SELECT 1 FROM conditions WHERE SourceId=20943').fetchone(), \
+            'trainer update reached a module-changed spawn'
+
+
+check_trainer_scope(trainer_update)
+for name, mutant in (
+    ('custom visibility replaced', trainer_update.replace('AND c.`SourceTypeOrReferenceId` IS NULL', '')),
+    ('module-added spawns gated', re.sub(r' AND s.`guid` = \d+', '', trainer_update)),
+    ('module-changed spawns gated', trainer_update.replace(
+        '(s.`id` = 23534 AND s.`guid` = 20943)', '(s.`id` IN (23534,23127) AND s.`guid` = 20943)')),
+):
+    assert mutant != trainer_update, name
+    try:
+        check_trainer_scope(mutant)
+    except AssertionError:
+        print(f'Era class trainer mutation rejected: {name}')
+    else:
+        raise AssertionError(f'mutation survived: {name}')
+print('Era class trainers: custom visibility, module spawns, missing rows and idempotence passed')

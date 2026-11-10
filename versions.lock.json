@@ -92,7 +92,7 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "24598c3a7561ef817831271bebe2cfa92e1976f1",
+      "revision": "c710cf647d84afc76e170bccbc01f441bee26322",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
         "revision": "42c9a32892740af55a40e076e6381cc879181396"
@@ -130,7 +130,8 @@
         "mod-individual-progression-era-training-dummies": "0a13eff58931e8ccb5937f49156ac31d9abff6fd",
         "mod-individual-progression-strict-auto-attune": "86606846980791e932250e20d4ccd2c0ee4aafc0",
         "mod-individual-progression-naxx40-level80-attunement": "addb23d7397d589a8c35cc749b488f2338b9c62d",
-        "mod-individual-progression-wrath-raids-level80": "15105da07665f23527865fdd757621186f0b9df1"
+        "mod-individual-progression-wrath-raids-level80": "15105da07665f23527865fdd757621186f0b9df1",
+        "mod-individual-progression-era-class-trainers": "c710cf647d84afc76e170bccbc01f441bee26322"
       }
     },
     {

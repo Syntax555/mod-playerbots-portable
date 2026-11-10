@@ -21,7 +21,7 @@ conditions on the rewarded milestone marker. A quest only awareness-scripted giv
 and closes with their fixed stage rule, so a shared quest, and Questie's map through the
 Questie bridge, follow the giver. Spawns are left alone when a module added or
 changed them, an awareness script decides, they are invisible helpers or spirit healers,
-they keep collision or traps, earlier quests use them or their quest-item drops,
+they keep collision or traps, earlier quests need them or their quest-item drops,
 or the earlier database places the same name there; quests and items the earlier database
 knows by the same name are left alone too, and Vanilla patches leave Classic battlegrounds,
 holidays and Individual Progression's own placements alone. Write the output into the
@@ -379,10 +379,13 @@ def generate(q, args):
             reachable[quest] |= seen_before[kind].get(entry, 0)
             givers[quest].add((kind, entry))
     opens, candidates, titles, audiences = {}, {}, {}, {}
+    class_quests = set()
     for quest, title, sort, races, classes in q(
             f"""SELECT q.ID, q.LogTitle, q.QuestSortID, q.AllowableRaces, COALESCE(a.AllowableClasses, 0)
                 FROM {world}.quest_template q LEFT JOIN {world}.quest_template_addon a ON a.ID = q.ID"""):
         quest, sort, races, classes = int(quest), int(sort), int(races), int(classes)
+        if classes:
+            class_quests.add(quest)
         titles[quest] = title
         era, need = quest_era.get(quest), quest_need(quest)
         mask = reachable[quest]
@@ -485,6 +488,13 @@ def generate(q, args):
         if era is not None and need and where and mask & ((1 << need) - 1):
             earlier = sorted(quest for quest in starts[(kind, entry)] | ends[(kind, entry)] | objective[(kind, entry)]
                              if quest not in disabled and quest in opens and opens[quest] < need)
+            # Later class and demon trainers repeat breadcrumbs that the original givers still offer.
+            if kind == 'creature' and era in REQUIRED:
+                earlier = [quest for quest in earlier if quest not in class_quests
+                           or quest in ends[(kind, entry)] | objective[(kind, entry)]
+                           or not any(other_kind == 'creature' and creature_era.get(other, era) < era
+                                      and seen_before['creature'].get(other, 0) & ((1 << need) - 1)
+                                      for other_kind, other in givers[quest])]
             reason = None
             if (guid, entry) not in core_spawns[kind]:
                 reason = 'module', 'a module added or changed the spawn'
@@ -572,7 +582,7 @@ HEADER = '''-- World content of later expansions and patches stays out of reach 
 -- items reachable before their tier get availability conditions on every existing
 -- alternative. Left alone: spawns of modules and awareness scripts, invisible helpers,
 -- spirit healers, objects with collision or mechanics, creatures and objects that
--- earlier quests use or that drop their quest items, entries the earlier database
+-- earlier quests need or that drop their quest items, entries the earlier database
 -- places at the same spot under another number, quests or items the earlier database
 -- knows by the same name, and for Vanilla patches Classic battlegrounds, holidays and
 -- Individual Progression's own placements.
