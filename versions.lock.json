@@ -38,7 +38,7 @@
     {
       "name": "mod-playerbots",
       "url": "https://github.com/Syntax555/wow-mod-playerbots.git",
-      "revision": "4706ddbf359a610cc99a0f1fea3dfc2c0e4c1b31",
+      "revision": "b82777322e8d14471f93216eb271bf1e8833e31d",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-playerbots.git",
         "revision": "e6b77699904bcaa7e9f625978f3c6a19ff175bbe"
@@ -86,7 +86,8 @@
         "mod-playerbots-natural-disenchanting": "4c4263a9e5332e0bb55c7114d6497c2bd1cfdad0",
         "mod-playerbots-disenchant-progression-supplies": "593ff3136e9e7774ab331b6a6737a08d07e0df53",
         "mod-playerbots-inferno-chain": "125c8ad654f1ff0b23c7650d3d7dc4c6ca5941d3",
-        "mod-playerbots-arcane-shot-eligibility": "4706ddbf359a610cc99a0f1fea3dfc2c0e4c1b31"
+        "mod-playerbots-arcane-shot-eligibility": "4706ddbf359a610cc99a0f1fea3dfc2c0e4c1b31",
+        "mod-playerbots-shadow-crash-target": "b82777322e8d14471f93216eb271bf1e8833e31d"
       }
     },
     {

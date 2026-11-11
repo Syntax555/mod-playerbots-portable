@@ -22,6 +22,8 @@ fixtures pass. Use native core/module functions before adding replacements.
   autonomous recruitment. Both remain accessible to player-led groups.
 - [ ] Expand TBC/Wrath coverage only with ordinary event, escort, vehicle and
   locked-object handling; verify complete runs before advertising completion.
+  Check Ahn'kahet's Forgotten One pulls with ranged bots while a Shadow Crash
+  target dies, despawns or leaves the instance.
 - [ ] Evaluate heroic parties separately for earned entry, keys, equipment and
   heroic mechanics. See [dungeon scope](bot-dungeons.md).
 

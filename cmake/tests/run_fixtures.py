@@ -81,6 +81,7 @@ GAMEPLAY = (
     "TestJournalLoot",
     "TestMultiBotBankViews",
     "TestAlteracValleyQuests",
+    "TestAhnkahetShadowCrash",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -109,6 +110,7 @@ MODULE_FIXTURES = {
         "TestPaladinEraBlessings",
         "TestClassQuestChains",
         "TestHunterCombatActions",
+        "TestAhnkahetShadowCrash",
     ),
     "mod-individual-progression": (
         "TestStrictEarnedProgression", "TestEraExperience", "TestWorldStartupData", "TestWorldUpdateOrder",
