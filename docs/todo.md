@@ -330,6 +330,8 @@ fixtures pass. Use native core/module functions before adding replacements.
 
 - [ ] Validate Grimfeather's Individual Progression and core changes in game:
   the original Alterac Valley layout, mines, quests and Playerbots tactics;
+  its turn-ins, with each wing commander launching for their own Call of Air
+  quest, the cavalry's hides and stables and all four supply estimates;
   mining its ore with ordinary skill requirements; Windsor's Great Masquerade
   phase, restored quest, escort and dungeon scripts; and the matching client pack.
 - [ ] Validate the current upstream imports in game: the Playerbots blessing

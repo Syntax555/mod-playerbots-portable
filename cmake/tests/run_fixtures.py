@@ -80,6 +80,7 @@ GAMEPLAY = (
     "TestHunterCombatActions",
     "TestJournalLoot",
     "TestMultiBotBankViews",
+    "TestAlteracValleyQuests",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -123,6 +124,7 @@ MODULE_FIXTURES = {
         "TestIpCommandSafety",
         "TestClassQuestChains",
         "TestJournalProgression",
+        "TestAlteracValleyQuests",
     ),
     "mod-dungeon-clear": (
         "TestEarnedDungeonParties", "TestEarnedDungeonEvents", "TestDungeonDeathRecovery", "TestDungeonFinalLoot", "TestDungeonLabGates",
