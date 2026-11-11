@@ -108,6 +108,8 @@ fixtures pass. Use native core/module functions before adding replacements.
   purchase on bridge failure, one earned talent rank per click and read-only
   behavior after losing group/control/range. Include SelfBot state confirmations,
   group orders and event-driven inventory refresh across map changes.
+  Check delayed skills, reputation and emblem replies after closing the
+  character window or selecting another bot while requests fail.
 - [ ] Check [DragonUI/EraTalents](era-talents.md#dragonui) on the live client:
   talent key, buttons and `/talents`; seven-row Vanilla/nine-row TBC trees,
   ranks/connections/tooltips, spec and glyph tabs, hunter pet trees and target
@@ -142,6 +144,7 @@ fixtures pass. Use native core/module functions before adding replacements.
   lore and collections; every tier's steps, map flags and milestone after a
   stage change; reference-loot counts under MySQL 8; humanoid boss models; the
   goal tracker's kill count for heroic and 25-player bosses; the
+  completed-step filter before and after a raid lockout reset; the
   gear check with and without DragonUI; and the first start's zone calculation
   time and memory with the full world database.
 - [ ] Measure sustained world/map tick time, memory and addon traffic with the

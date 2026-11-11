@@ -294,7 +294,7 @@
     {
       "name": "MultiBot",
       "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
-      "revision": "50256d2035a1ad046c79478832df02d8a9e56b5b",
+      "revision": "900796d4cadab4fe575112cc4a0f61ce0af28d50",
       "upstream": {
         "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
         "revision": "020210ba849c972903128c8db37e150d076cf2a0"
@@ -316,7 +316,8 @@
         "multibot-class-profile-state": "7383260afe2fe5826cd00becc5e5fecf6d16138b",
         "multibot-spellbook-clicks": "c33ac7bfef1df67b70a6347ab95d0eda8ea935fb",
         "multibot-bank-view-replies": "7f777be8324d9ed01a3fbdd175ac216480fe76fb",
-        "multibot-legacy-config-once": "50256d2035a1ad046c79478832df02d8a9e56b5b"
+        "multibot-legacy-config-once": "50256d2035a1ad046c79478832df02d8a9e56b5b",
+        "multibot-character-view-replies": "900796d4cadab4fe575112cc4a0f61ce0af28d50"
       }
     }
   ],
@@ -466,7 +467,7 @@
     {
       "name": "JournalProgression",
       "url": "https://github.com/Syntax555/journalprogression.git",
-      "revision": "5cbdbc611fddc6e5ba3888009acc97530eed70b9",
+      "revision": "304696a5ed0f6869e31ab699a87dd0f2bc487b61",
       "upstream": {
         "url": "https://github.com/EvilTactician/JournalProgression.git",
         "revision": "b2c7be090c05581e261e0e0c10e6bc0e70f375a5"
@@ -474,7 +475,9 @@
       "path": "JournalProgression",
       "interface": 30300,
       "toc": "JournalProgression.toc",
-      "forkChanges": {}
+      "forkChanges": {
+        "journal-progression-hide-completed-bosses": "304696a5ed0f6869e31ab699a87dd0f2bc487b61"
+      }
     }
   ]
 }

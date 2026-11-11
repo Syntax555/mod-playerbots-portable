@@ -83,6 +83,8 @@ GAMEPLAY = (
     "TestAlteracValleyQuests",
     "TestAhnkahetShadowCrash",
     "TestJournalSourceRows",
+    "TestJournalProgressionUI",
+    "TestMultiBotCharacterViews",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
