@@ -82,6 +82,7 @@ GAMEPLAY = (
     "TestMultiBotBankViews",
     "TestAlteracValleyQuests",
     "TestAhnkahetShadowCrash",
+    "TestJournalSourceRows",
 )
 
 # Fork CI prepares its current source with the portable dependencies before
@@ -144,7 +145,9 @@ MODULE_FIXTURES = {
         "TestEraTalents", "TestEraGeneratedArtifacts", "TestEraTrainerBook", "TestEraIgnite", "TestPaladinEraBlessings",
     ),
     "mod-questie-bridge": ("TestQuestieEraQuests",),
-    "mod-forever-journal": ("TestForeverJournal", "TestJournalProgression", "TestJournalLoot", "TestProfileKeys"),
+    "mod-forever-journal": (
+        "TestForeverJournal", "TestJournalProgression", "TestJournalLoot", "TestJournalSourceRows", "TestProfileKeys",
+    ),
 }
 
 

@@ -141,6 +141,7 @@ fixtures pass. Use native core/module functions before adding replacements.
   for each era and faction: stage locks on instances, quest headings, directory,
   lore and collections; every tier's steps, map flags and milestone after a
   stage change; reference-loot counts under MySQL 8; humanoid boss models; the
+  goal tracker's kill count for heroic and 25-player bosses; the
   gear check with and without DragonUI; and the first start's zone calculation
   time and memory with the full world database.
 - [ ] Measure sustained world/map tick time, memory and addon traffic with the

@@ -278,14 +278,15 @@
     {
       "name": "mod-forever-journal",
       "url": "https://github.com/Syntax555/wow-mod-forever-journal.git",
-      "revision": "2744e5a038966d1c3c6e3a5dc3f0ff58055a6c20",
+      "revision": "49f8fe19a5ca5986668898ef0172953053b21615",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-forever-journal.git",
         "revision": "36d0f1d4c12f96259bd30ec0681feac2fac73058"
       },
       "forkChanges": {
         "forever-journal-group-by-and-model": "ed0e37c30f5b112e2256267d5ccf16864d69a6fc",
-        "forever-journal-reference-roll-cap": "2744e5a038966d1c3c6e3a5dc3f0ff58055a6c20"
+        "forever-journal-reference-roll-cap": "2744e5a038966d1c3c6e3a5dc3f0ff58055a6c20",
+        "forever-journal-drop-base-creature": "49f8fe19a5ca5986668898ef0172953053b21615"
       }
     }
   ],
