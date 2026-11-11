@@ -276,13 +276,14 @@
     {
       "name": "mod-forever-journal",
       "url": "https://github.com/Syntax555/wow-mod-forever-journal.git",
-      "revision": "948611154ba28b2290accd73a555c1a7550f067a",
+      "revision": "2744e5a038966d1c3c6e3a5dc3f0ff58055a6c20",
       "upstream": {
         "url": "https://github.com/buildthehomelab/wow-mod-forever-journal.git",
         "revision": "36d0f1d4c12f96259bd30ec0681feac2fac73058"
       },
       "forkChanges": {
-        "forever-journal-group-by-and-model": "ed0e37c30f5b112e2256267d5ccf16864d69a6fc"
+        "forever-journal-group-by-and-model": "ed0e37c30f5b112e2256267d5ccf16864d69a6fc",
+        "forever-journal-reference-roll-cap": "2744e5a038966d1c3c6e3a5dc3f0ff58055a6c20"
       }
     }
   ],
@@ -290,7 +291,7 @@
     {
       "name": "MultiBot",
       "url": "https://github.com/Syntax555/MultiBot-Chatless.git",
-      "revision": "c33ac7bfef1df67b70a6347ab95d0eda8ea935fb",
+      "revision": "50256d2035a1ad046c79478832df02d8a9e56b5b",
       "upstream": {
         "url": "https://github.com/Wishmaster117/MultiBot-Chatless.git",
         "revision": "020210ba849c972903128c8db37e150d076cf2a0"
@@ -310,7 +311,9 @@
         "multibot-control-ownership": "6a43fd688c3a2657028be707ea75f3e2fac7636c",
         "multibot-rogue-strategy-state": "5af530724160e1761cb805b573cbfd0400f06502",
         "multibot-class-profile-state": "7383260afe2fe5826cd00becc5e5fecf6d16138b",
-        "multibot-spellbook-clicks": "c33ac7bfef1df67b70a6347ab95d0eda8ea935fb"
+        "multibot-spellbook-clicks": "c33ac7bfef1df67b70a6347ab95d0eda8ea935fb",
+        "multibot-bank-view-replies": "7f777be8324d9ed01a3fbdd175ac216480fe76fb",
+        "multibot-legacy-config-once": "50256d2035a1ad046c79478832df02d8a9e56b5b"
       }
     }
   ],

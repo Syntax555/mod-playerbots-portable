@@ -16,7 +16,65 @@ SOURCE = None
 LUA = None
 FILE = "UI/MultiBotOptions.lua"
 FILES = (FILE, "Libs/AceGUI-3.0/AceGUI-3.0.lua",
-         "Libs/AceGUI-3.0/widgets/AceGUIContainer-TabGroup.lua")
+         "Libs/AceGUI-3.0/widgets/AceGUIContainer-TabGroup.lua",
+         "Libs/LibStub/LibStub.lua", "Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
+         "Libs/AceDB-3.0/AceDB-3.0.lua", "Core/MultiBotStore.lua", "Core/MultiBotConfig.lua")
+
+CONFIG_FIXTURE = r'''
+strmatch = string.match
+CreateFrame = function()
+  return {scripts = {}, RegisterEvent = function() end,
+          SetScript = function(self, event, callback) self.scripts[event] = callback end}
+end
+GetRealmName = function() return "Realm" end
+UnitName = function() return "Owner" end
+UnitClass = function() return "Mage", "MAGE" end
+UnitRace = function() return "Human", "Human" end
+UnitFactionGroup = function() return "Alliance" end
+local function load(path) dofile(ADDON_SOURCE .. "/" .. path) end
+load("Libs/LibStub/LibStub.lua")
+load("Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua")
+load("Libs/AceDB-3.0/AceDB-3.0.lua")
+local function initialize()
+  MultiBot = {}
+  load("Core/MultiBotStore.lua")
+  dofile(CONFIG_SOURCE)
+  MultiBot.Config_Ensure()
+end
+local function copy(value)
+  if type(value) ~= "table" then return value end
+  local result = {}
+  for key, item in pairs(value) do result[key] = copy(item) end
+  return result
+end
+local function relog()
+  local frame = LibStub("AceDB-3.0").frame
+  frame.scripts.OnEvent(frame, "PLAYER_LOGOUT")
+  MultiBotDB = copy(MultiBotDB)
+  initialize()
+end
+MultiBotDB = {timers = {stats = 30}, throttle = {rate = 7, burst = 12}, custom = "keep"}
+initialize()
+assert(MultiBot.GetTimer("stats") == 30 and MultiBot.GetThrottleRate() == 7
+       and MultiBot.GetThrottleBurst() == 12, "legacy settings were not imported")
+MultiBot.SetTimer("stats", 90)
+MultiBot.SetThrottleRate(11)
+MultiBot.SetThrottleBurst(20)
+relog()
+assert(MultiBot.GetTimer("stats") == 90, "saved timer reset on relog")
+assert(MultiBot.GetThrottleRate() == 11 and MultiBot.GetThrottleBurst() == 20,
+       "saved throttle reset on relog")
+-- AceDB removes default-valued keys on logout; the existing empty profile still wins.
+MultiBot.SetTimer("stats", 45)
+MultiBot.SetThrottleRate(5)
+MultiBot.SetThrottleBurst(8)
+relog()
+assert(MultiBot.GetTimer("stats") == 45 and MultiBot.GetThrottleRate() == 5
+       and MultiBot.GetThrottleBurst() == 8, "saved defaults were replaced by legacy settings")
+assert(MultiBotDB.timers.stats == 30 and MultiBotDB.throttle.rate == 7
+       and MultiBotDB.throttle.burst == 12 and MultiBotDB.custom == "keep",
+       "legacy or unrelated saved data was changed")
+'''
 
 # Execute the complete upstream options file. Frames model the Wrath methods
 # used by that file; AceGUI models ownership, releases and its guarded Fire.
@@ -217,6 +275,29 @@ class MultiBotOptionsTests(unittest.TestCase):
         if not pristine:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
+
+    def test_legacy_config_import_preserves_profile_edits_after_relog(self):
+        config = self.directory / "Core/MultiBotConfig.lua"
+        original = config.read_text()
+
+        def run(path):
+            script = "local ADDON_SOURCE = " + json.dumps(str(self.directory))
+            script += "\nlocal CONFIG_SOURCE = " + json.dumps(str(path)) + "\n" + CONFIG_FIXTURE
+            return subprocess.run([LUA, "-"], input=script, text=True,
+                                  capture_output=True, timeout=20, check=False)
+
+        result = run(config)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        guard = 'if importLegacy and type(legacyValue) == "number" and legacyValue > 0 then'
+        self.assertEqual(original.count(guard), 2)
+        for label, store in (("timer", "timers"), ("throttle", "throttle")):
+            old = guard + "\n      " + store + "[key] = legacyValue"
+            self.assertIn(old, original)
+            mutant = self.directory / (label + "-config.lua")
+            mutant.write_text(original.replace(old, old.replace("importLegacy and ", "")))
+            rejected = run(mutant)
+            self.assertNotEqual(rejected.returncode, 0, label + " migration guard mutation survived")
+            self.assertIn("saved " + label + " reset on relog", rejected.stderr)
 
     def test_constructor_failure_no_longer_leaves_a_permanently_empty_panel(self):
         body = '''
