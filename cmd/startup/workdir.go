@@ -175,7 +175,7 @@ func ensureConfigFiles(baseDir, workDir string, mysqlExePath string, opts startu
 	dataDirForConf := "data"
 	baseDataDir := filepath.Join(baseDir, "data")
 	workDataDir := filepath.Join(workDir, "data")
-	if baseDataDir != workDataDir && directoryHasEntries(baseDataDir) {
+	if baseDataDir != workDataDir && isClientDataPresent(baseDataDir) {
 		dataDirForConf = filepath.ToSlash(baseDataDir)
 	}
 

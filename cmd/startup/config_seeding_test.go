@@ -1,11 +1,57 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestEnsureConfigFilesUsesCompleteClientData(t *testing.T) {
+	for _, test := range []struct {
+		name, baseFile string
+		complete       bool
+	}{
+		{name: "absent"},
+		{name: "partial", baseFile: "dbc/test.dat"},
+		{name: "marker only", baseFile: clientDataReleaseFile},
+		{name: "complete", complete: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base, work := t.TempDir(), t.TempDir()
+			writeFixture(t, filepath.Join(base, "configs/worldserver.conf.dist"), "DataDir = \".\"\n")
+			for _, required := range []string{"dbc", "maps", "vmaps", "mmaps"} {
+				writeFixture(t, filepath.Join(work, "data", required, "test.dat"), "data")
+				if test.complete {
+					writeFixture(t, filepath.Join(base, "data", required, "test.dat"), "data")
+				}
+			}
+			if test.baseFile != "" {
+				writeFixture(t, filepath.Join(base, "data", test.baseFile), "INSTALLED_VERSION="+clientDataRelease+"\n")
+			}
+			if err := ensureConfigFiles(base, work, "", defaultTestOptions()); err != nil {
+				t.Fatal(err)
+			}
+			if err := ensureClientData(context.Background(), work, base, "", false); err != nil {
+				t.Fatal(err)
+			}
+			content := readFixture(t, filepath.Join(work, "configs/worldserver.conf"))
+			value, _ := configValue(content, "DataDir")
+			path := filepath.FromSlash(strings.Trim(value, `"`))
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(work, path)
+			}
+			expected := filepath.Join(work, "data")
+			if test.complete {
+				expected = filepath.Join(base, "data")
+			}
+			if path != expected || !isClientDataPresent(path) {
+				t.Fatalf("worldserver data path = %q; want complete data at %q", path, expected)
+			}
+		})
+	}
+}
 
 func TestEnsureConfigFilesSeedsActiveDefaults(t *testing.T) {
 	for name, ending := range map[string]string{"LF": "\n", "CRLF": "\r\n"} {
