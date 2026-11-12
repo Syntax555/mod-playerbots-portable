@@ -185,11 +185,18 @@ func openOwnedMySQLChain(root *mysqlNativeProcess, pid uint32, parents map[uint3
 		}
 		p, err := openMySQLProcess(candidate, terminate)
 		if err != nil {
-			// A process can exit after the snapshot, making OpenProcess fail
-			// with access denied. Keep errors for candidates still running.
+			// Access denial can race exit or a stale ancestor link. Only keep
+			// errors while the fresh snapshot still supports the whole chain.
 			currentParents, snapshotErr := mysqlProcessParents()
-			if _, present := currentParents[candidate]; snapshotErr == nil && !present {
-				return nil, nil
+			if snapshotErr == nil {
+				for _, ancestor := range chain {
+					if known[ancestor] != nil {
+						continue
+					}
+					if parent, present := currentParents[ancestor]; !present || parent != parents[ancestor] {
+						return nil, nil
+					}
+				}
 			}
 			return nil, errors.Join(err, snapshotErr)
 		}

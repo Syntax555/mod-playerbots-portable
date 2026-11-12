@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -329,6 +330,43 @@ func TestMySQLFreshSnapshotRejectsStaleForeignProcessLinks(t *testing.T) {
 	}
 	if alive, _ := isProcessAlive(foreignChildren[0].Pid); !alive {
 		t.Fatal("ownership lookup affected the unrelated listening child")
+	}
+}
+
+func TestMySQLStaleForeignChainRejectsInaccessibleListener(t *testing.T) {
+	if runProcessTestInPrivateConsole(t) {
+		return
+	}
+	disableDebugPrivilege(t)
+	owned, _, ownedChildren := startMySQLProcessTree(t, 1, "")
+	defer owned.Wait()
+	defer killMySQLProcessTree(owned.Process)
+	foreign, _, foreignChildren := startMySQLProcessTree(t, 1, "")
+	defer foreign.Wait()
+	defer killMySQLProcessTree(foreign.Process)
+	denyProcessQueries(t, foreignChildren[0].Pid)
+	denyProcessQueries(t, ownedChildren[0].Pid)
+	parents, err := mysqlProcessParents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The inaccessible leaf's link is current, but its monitor's link is stale.
+	parents[uint32(foreign.Process.Pid)] = uint32(owned.Process.Pid)
+	root := trackedMySQLProcess(owned.Process).root
+	for _, terminate := range []bool{false, true} {
+		held, err := openOwnedMySQLChain(root, uint32(foreignChildren[0].Pid), parents,
+			map[uint32]*mysqlNativeProcess{root.pid: root}, terminate)
+		if len(held) != 0 || err != nil {
+			t.Fatalf("stale foreign chain caused discovery failure: held=%d, %v", len(held), err)
+		}
+		held, err = openOwnedMySQLChain(root, uint32(ownedChildren[0].Pid), parents,
+			map[uint32]*mysqlNativeProcess{root.pid: root}, terminate)
+		if len(held) != 0 || !errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+			t.Fatalf("real owned-chain query failure was hidden: held=%d, %v", len(held), err)
+		}
+	}
+	if alive, _ := isProcessAlive(foreignChildren[0].Pid); !alive {
+		t.Fatal("stale-chain discovery affected the foreign listener")
 	}
 }
 
