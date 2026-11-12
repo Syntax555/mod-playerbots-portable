@@ -366,6 +366,17 @@ def upstream_suite(lua, addon, tools_root, working_tools=False):
         work = Path(directory) / 'reverted'
         candidate = work / 'ZygorGuidesViewerRM'
         shutil.copytree(addon, candidate)
+        action_targets = fork_change('ZygorGuidesViewerRM', 'zygor-action-target-names',
+                                     paths=('ZygorGuidesViewerRM/ZygorGuidesViewer.lua',))
+        action_test = Path(directory) / 'tools/ui/test_action_target_names.lua'
+        git_apply(work, action_targets, '--reverse')
+        result = run_fixture([lua, str(action_test), str(candidate)], 'quoted action targets', cwd=directory)
+        assert result.returncode != 0 and 'literal quotes in NPC names must be preserved' in result.stderr, \
+            'Reverting quoted action targets did not fail its regression:\n' + result.stdout + result.stderr
+        git_apply(work, action_targets)
+        result = run_fixture([lua, str(action_test), str(candidate)], 'quoted action targets', cwd=directory)
+        assert result.returncode == 0, result.stdout + result.stderr
+        print('Quoted action targets fail when reverted and pass when reapplied', flush=True)
         target_files = ('IndividualProgression.lua', 'Item-GearFinder.lua', 'Item-ItemScore.lua',
                         'Item-Upgrades.lua', 'ZygorQuestLootDB.lua', 'Code-WOTLK/Item-GearFinder.lua',
                         'Code-WOTLK/Item-ItemScore.lua')

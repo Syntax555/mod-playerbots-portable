@@ -93,10 +93,10 @@
     {
       "name": "mod-individual-progression",
       "url": "https://github.com/Syntax555/mod-individual-progression.git",
-      "revision": "c60426526b6a90734a3c8878c3abb9a2829dfdd9",
+      "revision": "cda04fe707c3a0f6767836211427bc81fb13fe55",
       "upstream": {
         "url": "https://github.com/Grimfeather/mod-individual-progression.git",
-        "revision": "42c9a32892740af55a40e076e6381cc879181396"
+        "revision": "1a08a9e5acd0d48b4d40ca4185c4b5e31505ace9"
       },
       "forkChanges": {
         "mod-individual-progression-empty-account-filters": "36b1e81281d302c7ee4782cd052f2027124d5948",
@@ -227,16 +227,17 @@
     {
       "name": "mod-questie-bridge",
       "url": "https://github.com/Syntax555/mod-questie-bridge.git",
-      "revision": "9c9f287b0f34011f91efc448d1a6985486addc98",
+      "revision": "09adc26f2f8f52db8b2f6382ca1752a9d9632180",
       "upstream": {
         "url": "https://github.com/Aldori15/mod-questie-bridge.git",
-        "revision": "0ba33c1b5439514af7d9b93f3c86627bf1b1b57f"
+        "revision": "42906452b0f62b817396d934c6f0922e71f61827"
       },
       "forkChanges": {
         "mod-questie-bridge-era-quests": "7193c3c4995f4242a23b679f576160633195221c",
         "mod-questie-bridge-protocol19-era-quests": "3a010d7084798cb38598f4dee807a29acd99a38b",
         "mod-questie-bridge-protocol20-era-quests": "d3409f48748f0b3df90b61c8ff63fb9e3cb047ef",
-        "mod-questie-bridge-protocol21-era-quests": "44029a15f434ec8cd14a7e4881a8772416b4530a"
+        "mod-questie-bridge-protocol21-era-quests": "44029a15f434ec8cd14a7e4881a8772416b4530a",
+        "mod-questie-bridge-protocol22-era-quests": "09adc26f2f8f52db8b2f6382ca1752a9d9632180"
       }
     },
     {
@@ -422,24 +423,25 @@
     {
       "name": "Questie-335",
       "url": "https://github.com/Syntax555/Questie.git",
-      "revision": "6105db1eb37d362062b077c7d052dad6b78b6f1c",
+      "revision": "72a0a39e6573b11b74dec14bd7711eac19d0e7d6",
       "upstream": {
         "url": "https://github.com/Aldori15/Questie.git",
-        "revision": "0c29f2bae91760a619aedf2d7fc32cf89fc0db87"
+        "revision": "bc867a6546afc71ba9cdb474a632bbf761cb53b9"
       },
       "interface": 30300,
       "toc": "Questie-335.toc",
       "forkChanges": {
-        "questie-protocol20-conditions": "84cbd9e96cb0269a36695c580cdbaff9abaf0604"
+        "questie-protocol20-conditions": "84cbd9e96cb0269a36695c580cdbaff9abaf0604",
+        "questie-personal-disable-catalogs": "72a0a39e6573b11b74dec14bd7711eac19d0e7d6"
       }
     },
     {
       "name": "ZygorGuidesViewerRM",
       "url": "https://github.com/Syntax555/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-      "revision": "6dab234311ed78c786960d005abcdb0697cde546",
+      "revision": "713d0f701ad1c9bc85051bc65be048c525dd2b34",
       "upstream": {
         "url": "https://github.com/ErebusAres/ZygorGuidesRemaster-3.3.5a_WOTLK.git",
-        "revision": "d2aae8d0f1f3782d964e4179907b215aab484787"
+        "revision": "b8c7d70542695fd4fd7cc6a07be3095617ada7f2"
       },
       "path": "ZygorGuidesViewerRM",
       "interface": 30300,
@@ -461,7 +463,8 @@
         "zygor-achievement-criteria-335": "8f053fd47fbd255c363f8f31c374938294b7e299",
         "zygor-brewfest-coren-335": "a5ef2962e4e98a2a827396b335337936abe10aaa",
         "zygor-parse-all-guides": "2d2113a577766ca099b14edd64cb3215d947599e",
-        "zygor-cataclysm-content-335": "6dab234311ed78c786960d005abcdb0697cde546"
+        "zygor-cataclysm-content-335": "6dab234311ed78c786960d005abcdb0697cde546",
+        "zygor-action-target-names": "b8c7d70542695fd4fd7cc6a07be3095617ada7f2"
       }
     },
     {

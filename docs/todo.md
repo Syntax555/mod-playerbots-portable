@@ -345,7 +345,7 @@ fixtures pass. Use native core/module functions before adding replacements.
   count-based login rotation with `DisabledWithoutRealPlayer`, Individual
   Progression's Onyxia and Naxxramas 40 entrances for levels 60, 70 and 80,
   DragonUI's inspect window under the EraTalents inspect view, and Questie
-  protocol 21 pacing with hidden era questgivers.
+  protocol 22 pacing with hidden era questgivers.
 - [ ] Validate Dungeon Clear's final-loot wait with open rolls, nearby boss
   corpses and unlootable drops, including the 60-second timeout and ordinary
   party loot rights.

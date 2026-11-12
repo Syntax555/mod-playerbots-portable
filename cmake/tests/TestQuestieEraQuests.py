@@ -5,15 +5,17 @@ markers and hide their givers with visibility conditions or awareness scripts. T
 production snapshot code runs against Player, Creature, grid, quest and disable doubles: the
 quests a character's conditions refuse are reported like disabled quests, all or nothing,
 and a hidden questgiver in visibility range counts as offering no quest unless its quests
-are hidden anyway. Visible givers come from the player's visible objects. Protocol 21 also
+are hidden anyway. Visible givers come from the player's visible objects. Protocol 22 also
 carries template restrictions and GUID-scoped positive observations.
 The native bounded condition catalog supplies supported predicates without QUESTDISABLES.
 Mutations remove condition, visibility, authority and complete-snapshot checks.
 """
 
 import argparse
+import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -29,10 +31,13 @@ from FixtureSupport import (
 
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--lua', default=shutil.which('lua5.1'), help='Lua 5.1 executable')
 source_argument(parser, default=prepared_core(), help='prepared core directory')
 source_argument(parser, 'bridge', help='Questie bridge source directory override')
 source_argument(parser, 'addon', help='Questie addon directory override')
 args = parser.parse_args()
+if not args.lua:
+    parser.error('Lua 5.1 is required')
 core = args.source
 repository = Path(__file__).resolve().parents[2]
 bridge = args.bridge or core / 'modules/mod-questie-bridge/src'
@@ -57,6 +62,8 @@ sampling = source[source.index('            std::optional<std::vector<Creature*>
                   source.index('            // Polling also observes worldstate changes')]
 assert 'QuestieBridge::CollectObservableQuestCreatures<Creature>(player, entries)' in sampling
 assert 'auto const sharedRows = common.Rows.size();' in source
+live_rows = 'std::vector<std::string> rows = common.LiveRows;'
+assert live_rows in source
 nearby = ('Acore::AnyUnitInObjectRangeCheck inRange(player, player->GetVisibilityRange());\n'
           '                    Acore::CreatureListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(player, nearby, inRange);\n'
           '                    Cell::VisitObjects(player, searcher, player->GetVisibilityRange());')
@@ -90,8 +97,8 @@ hidden = function(objects, 'bool HiddenFrom(WorldObject const* object, Player co
 assert '(creature->IsAIEnabled && !creature->AI()->CanBeSeen(player)) || !player->CanSeeObjectByVisibilityConditions(object)' in hidden
 questie = args.addon or repository / '.module-cache/prepared-source-addons/Questie-335'
 client = (questie / 'Modules/Network/QuestieServer.lua').read_text()
-assert 'local PREFIX, PROTOCOL_VERSION = "QSTSVR", "21"' in client
-assert 'constexpr std::uint32_t ProtocolVersion = 21;' in (bridge / 'QuestieBridgeProtocol.h').read_text()
+assert 'local PREFIX, PROTOCOL_VERSION = "QSTSVR", "22"' in client
+assert 'constexpr std::uint32_t ProtocolVersion = 22;' in (bridge / 'QuestieBridgeProtocol.h').read_text()
 assert '[17] = "QUESTGIVERTEMPLATES"' in client
 assert 'elseif kind == "D" and result.caps.QUESTDISABLES and #fields == 2 and id and id > 0 then' in client
 assert re.search(r'if not spawnId or spawnId == 0 or giverCount >= 64 or not fields\[4\]:match', client)
@@ -107,6 +114,7 @@ assert ('if C_QuestLog.IsOnQuest(questId) ~= true and QuestieServer:IsQuestDisab
         in (questie / 'Database/QuestieDB.lua').read_text())
 
 fixture = r'''
+#include "QuestieBridgeProtocol.h"
 #include <algorithm>
 #include <cassert>
 #include <iomanip>
@@ -119,6 +127,7 @@ fixture = r'''
 #include <optional>
 #include <ranges>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -289,7 +298,8 @@ std::vector<std::string> Snapshot(Player* player, std::string caps, std::size_t 
         for (uint32 entry : common.RestrictedGiverTemplates)
             common.GiverTemplateRows->push_back("N:" + std::to_string(entry));
     }
-    std::vector<std::string> rows(existing, "E:1:0:0:0");
+    common.LiveRows.assign(existing, "U:21:50");
+    @LIVE@
     std::size_t const sharedRows = common.Rows.size();
     bool const _diagnostics = false;
     struct { Timing Conditions; } _performance;
@@ -441,15 +451,69 @@ int main()
     assert(!Has(rows, "C:8859") && !HasCapability(sentCaps, "QUESTCONDITIONS"));
     rows = Snapshot(&player, "EVENTS,QUESTDISABLES", 0, QuestConditions, {}, &sentCaps);
     assert(Has(rows, "D:8859") && Has(rows, "D:90000") && Has(rows, "D:90512"));
-    std::cout << "Questie era quests: conditions, hidden givers, protocol 21 visibility and complete catalogs passed\n";
+    // Serialize the production era restrictions after the shared catalog, including
+    // more than the bounded condition catalog's 512 quests and later unlocks.
+    auto const catalog = QuestieBridge::BuildSnapshotCatalog(std::string(64, 'A'), {"D:960"});
+    assert(catalog);
+    for (uint32 sequence = 1; sequence <= 4; ++sequence)
+    {
+        player.stage = sequence % 2 ? 3 : 99;
+        rows = Snapshot(&player, "QUESTDISABLES,HEARTBEAT", 0, QuestConditions);
+        auto const messages = QuestieBridge::BuildSnapshotMessages("fixture", sequence,
+            "QUESTDISABLES,HEARTBEAT", rows, *catalog, sequence > 1);
+        assert(messages);
+        for (auto const& message : *messages)
+            std::cout << "WIRE" << sequence << '\t' << message << '\n';
+    }
+    std::cout << "Questie era quests: conditions, hidden givers, protocol 22 visibility and complete catalogs passed\n";
 }
 '''.replace('@HELPERS@', helpers).replace('@CAPABILITY@', capability).replace('@DISABLED@', disabled).replace(
-    '@LATE@', late).replace('@LOCKED@', locked_block).replace('@GIVERS@', giver_block).replace('@CACHE@', cache).replace('@BOUNDED@', bounded_block)
+    '@LATE@', late).replace('@LIVE@', live_rows).replace('@LOCKED@', locked_block).replace('@GIVERS@', giver_block).replace('@CACHE@', cache).replace('@BOUNDED@', bounded_block)
 
 
 def build(directory, executable):
     return [cxx(), '-std=c++20', '-Wall', '-Wextra', '-Werror', '-Wno-unused-variable', '-Wno-unused-but-set-variable',
-            '-g', *SANITIZER_FLAGS, str(directory / 'Fixture.cpp'), '-o', str(executable)]
+            '-g', *SANITIZER_FLAGS, '-I', str(bridge), str(directory / 'Fixture.cpp'), '-o', str(executable)]
+
+
+consumer = r'''
+assert(_VERSION == "Lua 5.1", "exercise the Wrath Lua runtime")
+local modules, frame, token = {}, {}, nil
+QuestieLoader = {
+    CreateModule = function(_, name) modules[name] = modules[name] or {}; return modules[name] end,
+    ImportModule = function(_, name) modules[name] = modules[name] or {}; return modules[name] end,
+}
+modules.QuestieServerIntegrations = {Initialize = function() end, Refresh = function() end}
+function GetTime() return 1 end
+function UnitName() return "Tester" end
+function CreateFrame()
+    frame.RegisterEvent = function() end
+    frame.SetScript = function(_, name, callback) frame[name] = callback end
+    return frame
+end
+SlashCmdList = {}
+function SendAddonMessage(_, message)
+    token = message:match("^WATCH~22~([^~]+)~") or token
+end
+dofile(SOURCE)
+local server = modules.QuestieServer
+server:Initialize()
+assert(token)
+for index, batch in ipairs(BATCHES) do
+    for _, message in ipairs(batch) do
+        message = message:gsub("~fixture~", "~" .. token .. "~")
+        frame.OnEvent(frame, "CHAT_MSG_ADDON", "QSTSVR", message, "WHISPER", "Tester")
+    end
+    assert(server:HasCapability("HEARTBEAT"), "complete native snapshot was rejected")
+    assert(server:IsQuestDisabled(960) == true, "shared server disable was lost")
+    local restricted = index % 2 == 1
+    assert(server:IsQuestDisabled(90000) == restricted and server:IsQuestDisabled(90512) == restricted,
+        "personal restrictions were rejected or leaked into the reused catalog")
+    assert(#server:GetDisabledQuests() == (restricted and 516 or 3),
+        "full personal restrictions must survive the wire beyond the bounded catalog limit")
+end
+print("Questie native wire: full/reused catalogs preserve personal unlocks beyond 512 quests")
+'''
 
 
 with tempfile.TemporaryDirectory(prefix='questie-era-quests-') as temporary:
@@ -458,8 +522,37 @@ with tempfile.TemporaryDirectory(prefix='questie-era-quests-') as temporary:
     subprocess.run(build(work, work / 'fixture'), check=True)
     result = run_fixture([str(work / 'fixture')])
     assert result.returncode == 0, result.stdout + result.stderr
+    batches = [[], [], [], []]
+    for line in result.stdout.splitlines():
+        match = re.fullmatch(r'WIRE([1-4])\t(.+)', line)
+        if match:
+            batches[int(match[1]) - 1].append(match[2])
+        else:
+            print(line)
+    assert all(batches)
+    lua_batches = '{' + ','.join('{' + ','.join(json.dumps(message) for message in batch) + '}'
+                               for batch in batches) + '}'
+
+    def receive(source_file):
+        header = f'local SOURCE = {json.dumps(str(source_file))}\nlocal BATCHES = {lua_batches}\n'
+        return run_fixture([args.lua, '-'], input=header + consumer)
+
+    result = receive(questie / 'Modules/Network/QuestieServer.lua')
+    assert result.returncode == 0, result.stdout + result.stderr
     print(result.stdout, end='')
+    for label, before, after in (
+        ('personal rows rejected', 'row:sub(1, 2) ~= "D:" and ', ''),
+        ('personal rows leak into catalog', 'if key == "disabledQuests" then', 'if false then'),
+    ):
+        assert before in client, label
+        mutated = work / 'QuestieServer.lua'
+        mutated.write_text(client.replace(before, after))
+        result = receive(mutated)
+        assert result.returncode != 0, f'Questie native wire did not reject {label}'
+        print(f'Questie native wire mutation rejected: {label}')
     reject_mutants(work, (
+        ('shared live rows omitted from the era budget', 'Fixture.cpp', live_rows,
+         'std::vector<std::string> rows;'),
         ('refused quests not reported', 'Fixture.cpp', 'if (!disabled(questId) && !satisfied(questId))',
          'if (!disabled(questId) && !satisfied(questId) && false)'),
         ('duplicate bounded condition scan', 'Fixture.cpp', bounded_guard, 'if (capabilities & QuestConditions)'),

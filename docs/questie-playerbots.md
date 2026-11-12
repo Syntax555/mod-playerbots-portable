@@ -106,8 +106,10 @@ and Questie shows its usual quests.
 An unavailable giver does not hide a daily or weekly quest offered by another
 valid starter.
 
-Questie Bridge and Questie use matching protocol 21 builds. A version mismatch
-restores Questie's static behavior; `/qserver` reports the expected version.
+Questie Bridge and Questie use matching protocol 22 builds. Stable catalogs are
+cached while event activity, progress, selected quest pools and personal state
+update separately. A version mismatch restores Questie's static behavior;
+`/qserver` reports the expected version.
 
 ## Access and compatibility
 
